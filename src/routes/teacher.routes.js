@@ -20,12 +20,15 @@ import {
   getEarnings,
 } from "../controllers/teacherConnect.controller.js";
 import { verifyJWT } from "../middleware/auth.middleware.js";
-import { uploadPDF } from "../utils/multerConfig.js";
+import { uploadPDFAndImage } from "../utils/multerConfig.js";
 
 const router = Router();
 
 // Teacher Authentication Routes
-router.post("/signup", uploadPDF.single("resume"), signup);
+router.post("/signup", uploadPDFAndImage.fields([
+  { name: 'resume', maxCount: 1 },
+  { name: 'profileImage', maxCount: 1 }
+]), signup);
 router.post("/login", login);
 router.post("/logout", verifyJWT, logout);
 router.post("/forgot-password/request", requestForgotPasswordOTP);

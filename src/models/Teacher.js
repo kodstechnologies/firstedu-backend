@@ -38,6 +38,11 @@ const teacherSchema = new mongoose.Schema(
       default: null,
       trim: true,
     },
+    profileImage: {
+      type: String,
+      default: null,
+      trim: true,
+    },
     passwordResetOTP: { type: String, default: null },
     passwordResetOTPExpires: { type: Date, default: null },
     refreshToken: { type: String, default: null },

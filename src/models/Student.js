@@ -9,6 +9,7 @@ const studentSchema = new mongoose.Schema({
   email: { type: String, trim: true, lowercase: true, default: null },
   password: { type: String, required: true },
   occupation: { type: String, trim: true, default: null },
+  profileImage: { type: String, default: null, trim: true },
   passwordResetOTP: { type: String, default: null },
   passwordResetOTPExpires: { type: Date, default: null },
   // 👇 New fields for tokens

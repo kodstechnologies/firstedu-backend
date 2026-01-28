@@ -114,11 +114,12 @@ import {
   markAllNotificationsAsRead,
 } from "../controllers/notification.controller.js";
 import { verifyJWT } from "../middleware/auth.middleware.js";
+import { uploadImage } from "../utils/multerConfig.js";
 
 const router = Router();
 
 // Student Authentication Routes
-router.post("/signup", signup);
+router.post("/signup", uploadImage.single("profileImage"), signup);
 router.post("/login", login);
 router.post("/logout", verifyJWT, logout);
 router.post("/forgot-password/request", requestForgotPasswordOTP);

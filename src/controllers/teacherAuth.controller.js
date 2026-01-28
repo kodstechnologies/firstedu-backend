@@ -3,7 +3,7 @@ import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { generateOTP } from "../utils/otp.js";
 import { sendOTPEmail } from "../utils/sendEmail.js";
-import { uploadPDFToS3 } from "../utils/s3Upload.js";
+import { uploadPDFToS3, uploadImageToS3 } from "../utils/s3Upload.js";
 import teacherRepository from "../repository/teacher.repository.js";
 import teacherValidator from "../validation/teacher.validator.js";
 
@@ -22,11 +22,12 @@ export const signup = asyncHandler(async (req, res) => {
   const { name, email, password, phone, gender, skills } = value;
 
   // Check if resume PDF file is provided
-  if (!req.file) {
+  const resumeFile = req.files?.resume?.[0] || req.file; // Support both single and multiple file uploads
+  if (!resumeFile) {
     throw new ApiError(400, "Resume PDF file is required");
   }
 
-  if (req.file.mimetype !== "application/pdf") {
+  if (resumeFile.mimetype !== "application/pdf") {
     throw new ApiError(400, "Only PDF files are allowed for resume");
   }
 
@@ -34,12 +35,33 @@ export const signup = asyncHandler(async (req, res) => {
   let resumeUrl = null;
   try {
     resumeUrl = await uploadPDFToS3(
-      req.file.buffer,
-      req.file.originalname,
+      resumeFile.buffer,
+      resumeFile.originalname,
       "teacher-resumes"
     );
   } catch (uploadError) {
     throw new ApiError(500, `Failed to upload resume: ${uploadError.message}`);
+  }
+
+  // Handle profile image upload if provided
+  let profileImageUrl = null;
+  const profileImageFile = req.files?.profileImage?.[0];
+  if (profileImageFile) {
+    // Validate image file type
+    if (!profileImageFile.mimetype.startsWith('image/')) {
+      throw new ApiError(400, "Only image files are allowed for profile image");
+    }
+
+    try {
+      profileImageUrl = await uploadImageToS3(
+        profileImageFile.buffer,
+        profileImageFile.originalname,
+        "teacher-profile-images",
+        profileImageFile.mimetype
+      );
+    } catch (uploadError) {
+      throw new ApiError(500, `Failed to upload profile image: ${uploadError.message}`);
+    }
   }
 
   // Create teacher (status will be "pending" by default)
@@ -51,6 +73,7 @@ export const signup = asyncHandler(async (req, res) => {
     gender,
     skills,
     resumeUrl,
+    profileImage: profileImageUrl,
   });
 
   if (!createdTeacher) {

@@ -3,6 +3,7 @@ import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { generateOTP } from "../utils/otp.js";
 import { sendOTPEmail } from "../utils/sendEmail.js";
+import { uploadImageToS3 } from "../utils/s3Upload.js";
 import studentRepository from "../repository/student.repository.js";
 import userValidator from "../validation/student.validator.js";
 
@@ -17,6 +18,26 @@ export const signup = asyncHandler(async (req, res) => {
 
   const { email, password, name, occupation, phone } = value;
 
+  // Handle profile image upload if provided
+  let profileImageUrl = null;
+  if (req.file) {
+    // Validate image file type
+    if (!req.file.mimetype.startsWith('image/')) {
+      throw new ApiError(400, "Only image files are allowed for profile image");
+    }
+
+    try {
+      profileImageUrl = await uploadImageToS3(
+        req.file.buffer,
+        req.file.originalname,
+        "student-profile-images",
+        req.file.mimetype
+      );
+    } catch (uploadError) {
+      throw new ApiError(500, `Failed to upload profile image: ${uploadError.message}`);
+    }
+  }
+
   // Create student (Password hashing should be handled in the User model pre-save hook)
   const createdStudent = await studentRepository.create({
     email,
@@ -24,6 +45,7 @@ export const signup = asyncHandler(async (req, res) => {
     name,
     occupation,
     phone,
+    profileImage: profileImageUrl,
   });
 
   if (!createdStudent) {
