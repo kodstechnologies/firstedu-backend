@@ -1,0 +1,246 @@
+import notificationRepository from "../repository/notification.repository.js";
+import studentRepository from "../repository/student.repository.js";
+import {
+  sendNotificationToDevice,
+  sendNotificationToMultipleDevices,
+} from "./fcm.service.js";
+
+/**
+ * Send notification to a single student
+ */
+export const sendNotificationToStudent = async (studentId, title, body, data = {}, sentBy) => {
+  // Get student's FCM token
+  const student = await studentRepository.findById(studentId);
+  if (!student) {
+    throw new Error("Student not found");
+  }
+
+  // Create notification record
+  const notification = await notificationRepository.create({
+    title,
+    body,
+    recipient: studentId,
+    sentBy,
+    data,
+    type: data.type || "general",
+  });
+
+  // Send FCM notification if token exists
+  let fcmResult = null;
+  if (student.fcmToken) {
+    try {
+      fcmResult = await sendNotificationToDevice(
+        student.fcmToken,
+        title,
+        body,
+        {
+          ...data,
+          notificationId: notification._id.toString(),
+        }
+      );
+
+      // Update notification with FCM status
+      if (fcmResult.success) {
+        await notificationRepository.update(notification._id, {
+          fcmSent: true,
+          fcmSentAt: new Date(),
+        });
+      }
+    } catch (error) {
+      console.error("Error sending FCM notification:", error);
+      // If token is invalid, remove it
+      if (error.code === "messaging/invalid-registration-token" || 
+          error.code === "messaging/registration-token-not-registered") {
+        await studentRepository.updateById(studentId, { fcmToken: null });
+      }
+    }
+  }
+
+  return {
+    notification,
+    fcmSent: fcmResult?.success || false,
+  };
+};
+
+/**
+ * Send notification to multiple students
+ */
+export const sendNotificationToMultipleStudents = async (
+  studentIds,
+  title,
+  body,
+  data = {},
+  sentBy
+) => {
+  // Get all students with their FCM tokens
+  const students = await studentRepository.findAll(
+    { _id: { $in: studentIds } },
+    { limit: 1000 }
+  );
+
+  if (!students.students || students.students.length === 0) {
+    throw new Error("No students found");
+  }
+
+  // Create notification records for all students
+  const notifications = students.students.map((student) => ({
+    title,
+    body,
+    recipient: student._id,
+    sentBy,
+    data,
+    type: data.type || "general",
+  }));
+
+  const createdNotifications = await notificationRepository.createMany(notifications);
+
+  // Group students by FCM token
+  const fcmTokens = [];
+  const tokenToNotificationMap = new Map();
+
+  students.students.forEach((student, index) => {
+    if (student.fcmToken) {
+      fcmTokens.push(student.fcmToken);
+      tokenToNotificationMap.set(student.fcmToken, createdNotifications[index]._id);
+    }
+  });
+
+  // Send FCM notifications
+  let fcmResult = null;
+  if (fcmTokens.length > 0) {
+    try {
+      fcmResult = await sendNotificationToMultipleDevices(
+        fcmTokens,
+        title,
+        body,
+        {
+          ...data,
+        }
+      );
+
+      // Update notifications with FCM status for successful sends
+      if (fcmResult.success && fcmResult.responses) {
+        const updatePromises = [];
+        fcmResult.responses.forEach((response, index) => {
+          if (response.success) {
+            const notificationId = Array.from(tokenToNotificationMap.values())[index];
+            updatePromises.push(
+              notificationRepository.update(notificationId, {
+                fcmSent: true,
+                fcmSentAt: new Date(),
+              })
+            );
+          }
+        });
+        await Promise.all(updatePromises);
+      }
+    } catch (error) {
+      console.error("Error sending FCM notifications:", error);
+    }
+  }
+
+  return {
+    notifications: createdNotifications,
+    totalSent: createdNotifications.length,
+    fcmSent: fcmResult?.successCount || 0,
+    fcmFailed: fcmResult?.failureCount || 0,
+  };
+};
+
+/**
+ * Send notification to all students
+ */
+export const sendNotificationToAllStudents = async (title, body, data = {}, sentBy) => {
+  // Get all students with pagination
+  let allStudentIds = [];
+  let page = 1;
+  const limit = 100;
+
+  while (true) {
+    const result = await studentRepository.findAll({}, { page, limit });
+    if (!result.students || result.students.length === 0) break;
+
+    allStudentIds.push(...result.students.map((s) => s._id));
+    
+    if (result.students.length < limit) break;
+    page++;
+  }
+
+  if (allStudentIds.length === 0) {
+    throw new Error("No students found");
+  }
+
+  // Send in batches to avoid overwhelming the system
+  const batchSize = 500;
+  const batches = [];
+  
+  for (let i = 0; i < allStudentIds.length; i += batchSize) {
+    batches.push(allStudentIds.slice(i, i + batchSize));
+  }
+
+  const results = [];
+  for (const batch of batches) {
+    const result = await sendNotificationToMultipleStudents(
+      batch,
+      title,
+      body,
+      data,
+      sentBy
+    );
+    results.push(result);
+  }
+
+  // Aggregate results
+  return {
+    totalSent: results.reduce((sum, r) => sum + r.totalSent, 0),
+    fcmSent: results.reduce((sum, r) => sum + r.fcmSent, 0),
+    fcmFailed: results.reduce((sum, r) => sum + r.fcmFailed, 0),
+  };
+};
+
+/**
+ * Get notifications for a student
+ */
+export const getStudentNotifications = async (studentId, options = {}) => {
+  const query = { recipient: studentId };
+  
+  // Add isRead filter if provided
+  if (options.isRead !== undefined) {
+    query.isRead = options.isRead === true || options.isRead === "true";
+  }
+  
+  return await notificationRepository.findAll(query, options);
+};
+
+/**
+ * Mark notification as read
+ */
+export const markNotificationAsRead = async (notificationId, studentId) => {
+  const notification = await notificationRepository.findById(notificationId);
+  
+  if (!notification) {
+    throw new Error("Notification not found");
+  }
+
+  if (notification.recipient.toString() !== studentId.toString()) {
+    throw new Error("Unauthorized: This notification does not belong to you");
+  }
+
+  return await notificationRepository.markAsRead(notificationId);
+};
+
+/**
+ * Mark all notifications as read for a student
+ */
+export const markAllNotificationsAsRead = async (studentId) => {
+  return await notificationRepository.markAllAsRead(studentId);
+};
+
+/**
+ * Get unread notification count
+ */
+export const getUnreadCount = async (studentId) => {
+  const count = await notificationRepository.getUnreadCount(studentId);
+  return count;
+};
+

@@ -1,0 +1,102 @@
+import mongoose from "mongoose";
+
+const teacherSessionSchema = new mongoose.Schema(
+  {
+    student: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    teacher: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Teacher",
+      required: true,
+    },
+    status: {
+      type: String,
+      enum: ["pending", "accepted", "rejected", "ongoing", "completed", "cancelled"],
+      default: "pending",
+    },
+    subject: {
+      type: String,
+      trim: true,
+      required: true,
+    },
+    perMinuteRate: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+    // Call details
+    twilioCallSid: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    callStartTime: {
+      type: Date,
+      default: null,
+    },
+    callEndTime: {
+      type: Date,
+      default: null,
+    },
+    durationMinutes: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    // Billing
+    totalAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    amountDeducted: {
+      type: Boolean,
+      default: false,
+    },
+    // Recording
+    recordingUrl: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    recordingSid: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    // Request metadata
+    requestedAt: {
+      type: Date,
+      default: Date.now,
+    },
+    acceptedAt: {
+      type: Date,
+      default: null,
+    },
+    rejectedAt: {
+      type: Date,
+      default: null,
+    },
+    rejectionReason: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+  },
+  {
+    timestamps: true,
+  }
+);
+
+// Indexes for efficient queries
+teacherSessionSchema.index({ student: 1, createdAt: -1 });
+teacherSessionSchema.index({ teacher: 1, createdAt: -1 });
+teacherSessionSchema.index({ status: 1 });
+teacherSessionSchema.index({ twilioCallSid: 1 });
+
+export default mongoose.models.TeacherSession ||
+  mongoose.model("TeacherSession", teacherSessionSchema);
+
