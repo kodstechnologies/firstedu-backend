@@ -1,16 +1,16 @@
 import { ApiError } from "../utils/ApiError.js";
 import courseRepository from "../repository/course.repository.js";
-import { uploadPDFToS3, deleteFileFromS3 } from "../utils/s3Upload.js";
+import { uploadPDFToCloudinary, deleteFileFromCloudinary } from "../utils/cloudinaryUpload.js";
 
 export const createCourse = async (data, adminId, file) => {
   let contentUrl = data.contentUrl;
 
-  // If file is provided, upload to S3
+  // If file is provided, upload to Cloudinary
   if (file) {
     if (file.mimetype !== "application/pdf") {
       throw new ApiError(400, "Only PDF files are allowed");
     }
-    contentUrl = await uploadPDFToS3(file.buffer, file.originalname, "courses");
+    contentUrl = await uploadPDFToCloudinary(file.buffer, file.originalname, "courses");
   }
 
   if (!contentUrl) {
@@ -49,19 +49,19 @@ export const updateCourse = async (id, data, file) => {
 
   let contentUrl = data.contentUrl || existingCourse.contentUrl;
 
-  // If new file is provided, upload to S3 and delete old file
+  // If new file is provided, upload to Cloudinary and delete old file
   if (file) {
     if (file.mimetype !== "application/pdf") {
       throw new ApiError(400, "Only PDF files are allowed");
     }
 
-    // Delete old file from S3 if exists
+    // Delete old file from Cloudinary if exists
     if (existingCourse.contentUrl) {
-      await deleteFileFromS3(existingCourse.contentUrl);
+      await deleteFileFromCloudinary(existingCourse.contentUrl);
     }
 
     // Upload new file
-    contentUrl = await uploadPDFToS3(file.buffer, file.originalname, "courses");
+    contentUrl = await uploadPDFToCloudinary(file.buffer, file.originalname, "courses");
   }
 
   const updateData = {
@@ -85,9 +85,9 @@ export const deleteCourse = async (id) => {
     throw new ApiError(404, "Course not found");
   }
 
-  // Delete file from S3 if exists
+  // Delete file from Cloudinary if exists
   if (course.contentUrl) {
-    await deleteFileFromS3(course.contentUrl);
+    await deleteFileFromCloudinary(course.contentUrl);
   }
 
   await courseRepository.deleteById(id);

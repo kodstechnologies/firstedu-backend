@@ -5,6 +5,18 @@ import tournamentService from "../services/tournament.service.js";
 import eventRegistrationService from "../services/eventRegistration.service.js";
 import tournamentValidator from "../validation/tournament.validator.js";
 
+/** status = "open" (within registration), "close" (before), "completed" (after end) */
+const withRegistrationStatus = (item) => {
+  const obj = item?.toObject ? item.toObject() : { ...item };
+  const now = new Date();
+  const start = new Date(obj.registrationStartTime);
+  const end = new Date(obj.registrationEndTime);
+  if (now >= start && now <= end) obj.status = "open";
+  else if (now > end) obj.status = "completed";
+  else obj.status = "close";
+  return obj;
+};
+
 // ==================== ADMIN CONTROLLERS ====================
 
 export const createTournament = asyncHandler(async (req, res) => {
@@ -33,8 +45,9 @@ export const getTournaments = asyncHandler(async (req, res) => {
     isPublished,
   });
 
+  const tournamentsWithStatus = (result.tournaments || []).map(withRegistrationStatus);
   return res.status(200).json(
-    ApiResponse.success(result.tournaments, "Tournaments fetched successfully", result.pagination)
+    ApiResponse.success(tournamentsWithStatus, "Tournaments fetched successfully", result.pagination)
   );
 });
 
@@ -42,7 +55,7 @@ export const getTournamentById = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const tournament = await tournamentService.getTournamentById(id, true);
   return res.status(200).json(
-    ApiResponse.success(tournament, "Tournament fetched successfully")
+    ApiResponse.success(withRegistrationStatus(tournament), "Tournament fetched successfully")
   );
 });
 
@@ -102,6 +115,7 @@ export const getPublishedTournaments = asyncHandler(async (req, res) => {
         ...tournament.toObject(),
         isRegistered: !!registration,
         isRegistrationOpen,
+        status: isRegistrationOpen ? "open" : (now > new Date(tournament.registrationEndTime) ? "completed" : "close"),
       };
     })
   );
@@ -142,6 +156,7 @@ export const getTournamentDetails = asyncHandler(async (req, res) => {
         ...tournament.toObject(),
         isRegistered: !!registration,
         isRegistrationOpen,
+        status: isRegistrationOpen ? "open" : (now > new Date(tournament.registrationEndTime) ? "completed" : "close"),
         currentStage,
         qualifiedStages,
       },

@@ -39,6 +39,13 @@ const changePassword = Joi.object({
   confirmPassword: Joi.string().valid(Joi.ref("newPassword")).required(),
 });
 
+const contactUs = Joi.object({
+  name: Joi.string().trim().required(),
+  phone: Joi.string().trim().allow("").optional(),
+  email: Joi.string().email().trim().lowercase().required(),
+  message: Joi.string().trim().required(),
+});
+
 export default {
   studentSignup,
   studentLogin,
@@ -47,4 +54,5 @@ export default {
   confirmNewPassword,
   updateProfile,
   changePassword,
+  contactUs,
 };

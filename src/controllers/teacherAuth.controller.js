@@ -3,7 +3,7 @@ import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { generateOTP } from "../utils/otp.js";
 import { sendOTPEmail } from "../utils/sendEmail.js";
-import { uploadPDFToS3, uploadImageToS3 } from "../utils/s3Upload.js";
+import { uploadPDFToCloudinary, uploadImageToCloudinary } from "../utils/cloudinaryUpload.js";
 import teacherRepository from "../repository/teacher.repository.js";
 import teacherValidator from "../validation/teacher.validator.js";
 
@@ -31,10 +31,10 @@ export const signup = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Only PDF files are allowed for resume");
   }
 
-  // Upload resume to S3
+  // Upload resume to Cloudinary
   let resumeUrl = null;
   try {
-    resumeUrl = await uploadPDFToS3(
+    resumeUrl = await uploadPDFToCloudinary(
       resumeFile.buffer,
       resumeFile.originalname,
       "teacher-resumes"
@@ -53,7 +53,7 @@ export const signup = asyncHandler(async (req, res) => {
     }
 
     try {
-      profileImageUrl = await uploadImageToS3(
+      profileImageUrl = await uploadImageToCloudinary(
         profileImageFile.buffer,
         profileImageFile.originalname,
         "teacher-profile-images",

@@ -3,7 +3,7 @@ import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { generateOTP } from "../utils/otp.js";
 import { sendOTPEmail } from "../utils/sendEmail.js";
-import { uploadImageToS3 } from "../utils/s3Upload.js";
+import { uploadImageToCloudinary } from "../utils/cloudinaryUpload.js";
 import studentRepository from "../repository/student.repository.js";
 import userValidator from "../validation/student.validator.js";
 
@@ -27,7 +27,7 @@ export const signup = asyncHandler(async (req, res) => {
     }
 
     try {
-      profileImageUrl = await uploadImageToS3(
+      profileImageUrl = await uploadImageToCloudinary(
         req.file.buffer,
         req.file.originalname,
         "student-profile-images",

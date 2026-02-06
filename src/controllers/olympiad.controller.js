@@ -5,6 +5,18 @@ import olympiadService from "../services/olympiad.service.js";
 import eventRegistrationService from "../services/eventRegistration.service.js";
 import olympiadValidator from "../validation/olympiad.validator.js";
 
+/** status = "open" (within registration), "close" (before), "completed" (after end) */
+const withRegistrationStatus = (item) => {
+  const obj = item?.toObject ? item.toObject() : { ...item };
+  const now = new Date();
+  const start = new Date(obj.registrationStartTime);
+  const end = new Date(obj.registrationEndTime);
+  if (now >= start && now <= end) obj.status = "open";
+  else if (now > end) obj.status = "completed";
+  else obj.status = "close";
+  return obj;
+};
+
 // ==================== ADMIN CONTROLLERS ====================
 
 export const createOlympiad = asyncHandler(async (req, res) => {
@@ -33,8 +45,9 @@ export const getOlympiads = asyncHandler(async (req, res) => {
     isPublished,
   });
 
+  const olympiadsWithStatus = (result.olympiads || []).map(withRegistrationStatus);
   return res.status(200).json(
-    ApiResponse.success(result.olympiads, "Olympiads fetched successfully", result.pagination)
+    ApiResponse.success(olympiadsWithStatus, "Olympiads fetched successfully", result.pagination)
   );
 });
 
@@ -42,7 +55,7 @@ export const getOlympiadById = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const olympiad = await olympiadService.getOlympiadById(id, true);
   return res.status(200).json(
-    ApiResponse.success(olympiad, "Olympiad fetched successfully")
+    ApiResponse.success(withRegistrationStatus(olympiad), "Olympiad fetched successfully")
   );
 });
 
@@ -107,6 +120,7 @@ export const getPublishedOlympiads = asyncHandler(async (req, res) => {
         isRegistrationOpen,
         isEventLive,
         canJoin,
+        status: isRegistrationOpen ? "open" : "close",
       };
     })
   );
@@ -146,6 +160,7 @@ export const getOlympiadDetails = asyncHandler(async (req, res) => {
         isRegistrationOpen,
         isEventLive,
         canJoin,
+        status: isRegistrationOpen ? "open" : (now > new Date(olympiad.registrationEndTime) ? "completed" : "close"),
       },
       "Olympiad details fetched successfully"
     )

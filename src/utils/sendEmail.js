@@ -80,3 +80,50 @@ export const sendOTPEmail = async (email, otp, name) => {
     throw new ApiError(500, `Failed to send email: ${error.message}`);
   }
 };
+
+/**
+ * Send contact us form details to admin email (no JWT required).
+ * @param {Object} payload - { name, phone, email, message }
+ */
+export const sendContactUsEmail = async ({ name, phone, email, message }) => {
+  try {
+    if (!email || !name || !message) {
+      throw new ApiError(400, 'Name, email and message are required');
+    }
+    if (missingVars.length > 0) {
+      throw new ApiError(500, `SMTP configuration incomplete. Missing: ${missingVars.join(', ')}`);
+    }
+
+    const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_EMAIL;
+    if (!adminEmail) {
+      throw new ApiError(500, 'Admin email not configured (set ADMIN_EMAIL or SMTP_EMAIL)');
+    }
+
+    const mailOptions = {
+      from: `"FirstEdu Contact" <${process.env.SMTP_EMAIL}>`,
+      to: adminEmail,
+      replyTo: email,
+      subject: `Contact Us: ${name}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #333;">New Contact Form Submission</h2>
+          <table style="width: 100%; border-collapse: collapse; color: #666;">
+            <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Name</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${name}</td></tr>
+            <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Email</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${email}</td></tr>
+            <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Phone</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${phone || '—'}</td></tr>
+            <tr><td style="padding: 8px 0; vertical-align: top;"><strong>Message</strong></td><td style="padding: 8px 0;">${message.replace(/\n/g, '<br>')}</td></tr>
+          </table>
+          <p style="color: #999; font-size: 12px; margin-top: 20px;">Sent from FirstEdu Contact Us form.</p>
+        </div>
+      `,
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`✅ Contact form email sent to admin. Message ID: ${info.messageId}`);
+    return info;
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    console.error('❌ Error sending contact email:', error.message);
+    throw new ApiError(500, `Failed to send contact email: ${error.message}`);
+  }
+};

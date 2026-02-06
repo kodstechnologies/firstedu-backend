@@ -63,9 +63,9 @@ import {
 import {
   getHallOfFame,
 } from "../controllers/hallOfFame.controller.js";
-import {
-  getMyEventsDashboard,
-} from "../controllers/eventRegistration.controller.js";
+import { getMyEventsDashboard } from "../controllers/eventRegistration.controller.js";
+import { getAllEvents } from "../controllers/events.controller.js";
+import { contactUs } from "../controllers/contact.controller.js";
 import {
   startExam,
   getExamSession,
@@ -121,6 +121,9 @@ const router = Router();
 // Student Authentication Routes
 router.post("/signup", uploadImage.single("profileImage"), signup);
 router.post("/login", login);
+
+// Contact Us (no JWT)
+router.post("/contact-us", contactUs);
 router.post("/logout", verifyJWT, logout);
 router.post("/forgot-password/request", requestForgotPasswordOTP);
 router.post("/forgot-password/verify", verifyForgotPasswordOTP);
@@ -141,7 +144,7 @@ router.get("/tests/:id", verifyJWT, getTestById);
 router.post("/tests/:id/purchase", verifyJWT, purchaseTest);
 
 // Marketplace - Test Bundles
-router.get("/test-bundles", verifyJWT, getTestBundles);
+router.get("/test-bundles", getTestBundles);
 router.post("/test-bundles/:id/purchase", verifyJWT, purchaseTestBundle);
 
 // My Purchases
@@ -196,6 +199,9 @@ router.post("/forums/:forumId/threads/:threadId/posts/:postId/replies/:replyId/l
 
 // Community & Competitions - Hall of Fame
 router.get("/hall-of-fame", verifyJWT, getHallOfFame);
+
+// All Events (Olympiads, Tournaments, Workshops) - catalog, no registration filter
+router.get("/events",getAllEvents);
 
 // My Events Dashboard
 router.get("/my-events", verifyJWT, getMyEventsDashboard);
