@@ -63,11 +63,32 @@ const findPointsTransactions = async (studentId, options = {}) => {
   }
 };
 
-export default {
-  findWallet,
-  createWallet,
-  updateWallet,
-  createPointsTransaction,
-  findPointsTransactions,
+const convertRewardPoints = async (userId, userType, pointsToDeduct, currencyToAdd) => {
+  try {
+    return await Wallet.findOneAndUpdate(
+      {
+        user: userId,
+        userType: userType,
+        rewardPoints: { $gte: pointsToDeduct }, // Atomic check: must have enough points
+      },
+      {
+        $inc: {
+          rewardPoints: -pointsToDeduct,
+          monetaryBalance: currencyToAdd,
+        },
+      },
+      { new: true }
+    );
+  } catch (error) {
+    throw new ApiError(500, "Failed to convert reward points", error.message);
+  }
 };
 
+export default {
+  findWallet,              // ✅ ADD THIS
+  createWallet,            // ✅ ADD THIS
+  updateWallet,            // (optional but good)
+  createPointsTransaction,
+  findPointsTransactions,
+  convertRewardPoints,
+};
