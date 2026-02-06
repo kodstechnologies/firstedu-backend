@@ -7,6 +7,7 @@ const studentSignup = Joi.object({
   name: Joi.string().required(),
   occupation: Joi.string().required(),
   phone: Joi.string().required(),
+  referralCode: Joi.string().optional(),
 });
 
 // For student login

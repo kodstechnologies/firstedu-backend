@@ -6,6 +6,7 @@ import { sendOTPEmail } from "../utils/sendEmail.js";
 import { uploadImageToCloudinary } from "../utils/cloudinaryUpload.js";
 import studentRepository from "../repository/student.repository.js";
 import userValidator from "../validation/student.validator.js";
+import studentService from "../services/student.service.js";
 
 
 // Student Signup
@@ -16,7 +17,7 @@ export const signup = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Validation Error", error.details.map(x => x.message));
   }
 
-  const { email, password, name, occupation, phone } = value;
+  const { email, password, name, occupation, phone, referralCode: inputReferralCode } = value;
 
   // Handle profile image upload if provided
   let profileImageUrl = null;
@@ -38,6 +39,20 @@ export const signup = asyncHandler(async (req, res) => {
     }
   }
 
+  // 1. Generate Referral Code for the new user
+  const referralCode = await studentService.generateReferralCode(name);
+
+  // 2. Validate Referrer (if code provided)
+  let referredBy = null;
+  if (inputReferralCode) {
+    try {
+      referredBy = await studentService.validateAndGetReferrerId(inputReferralCode);
+    } catch (err) {
+      console.error("Error validating referral code:", err);
+      // Proceed without referrer (graceful failure)
+    }
+  }
+
   // Create student (Password hashing should be handled in the User model pre-save hook)
   const createdStudent = await studentRepository.create({
     email,
@@ -46,11 +61,32 @@ export const signup = asyncHandler(async (req, res) => {
     occupation,
     phone,
     profileImage: profileImageUrl,
+    referralCode,
+    referredBy,
   });
 
   if (!createdStudent) {
     throw new ApiError(500, "Something went wrong while registering the student");
   }
+
+  // 3. Update Referrer History and Handle Wallet Rewards (Async - don't block response)
+  // We can do both in parallel or sequence, independent of main response
+  (async () => {
+    if (referredBy) {
+      try {
+        await studentService.addReferralHistory(referredBy, createdStudent._id);
+      } catch (err) {
+        console.error("Error updating referral history:", err);
+      }
+    }
+
+    // Handle Wallet Rewards (New Wallet + Referrer Reward)
+    try {
+      await studentService.handlePostSignupWalletRewards(createdStudent._id, referredBy);
+    } catch (err) {
+      console.error("Error handling wallet rewards:", err);
+    }
+  })();
 
   return res
     .status(201)
@@ -262,9 +298,9 @@ export const updateProfile = asyncHandler(async (req, res) => {
 
   // Check if email is being updated and if it's already taken by another user
   if (email) {
-    const existingStudent = await studentRepository.findOne({ 
-      email, 
-      _id: { $ne: req.user._id } 
+    const existingStudent = await studentRepository.findOne({
+      email,
+      _id: { $ne: req.user._id }
     });
     if (existingStudent) {
       throw new ApiError(409, "Email is already taken by another student");
@@ -273,9 +309,9 @@ export const updateProfile = asyncHandler(async (req, res) => {
 
   // Check if phone is being updated and if it's already taken by another user
   if (phone) {
-    const existingStudent = await studentRepository.findOne({ 
-      phone, 
-      _id: { $ne: req.user._id } 
+    const existingStudent = await studentRepository.findOne({
+      phone,
+      _id: { $ne: req.user._id }
     });
     if (existingStudent) {
       throw new ApiError(409, "Phone number is already taken by another student");
@@ -336,5 +372,24 @@ export const changePassword = asyncHandler(async (req, res) => {
 
   return res.status(200).json(
     ApiResponse.success({}, "Password changed successfully")
+  );
+});
+
+// Convert Reward Points to Monetary Balance
+export const convertPoints = asyncHandler(async (req, res) => {
+  const { pointsToConvert } = req.body;
+  const studentId = req.user._id;
+
+  if (!pointsToConvert) {
+    throw new ApiError(400, "pointsToConvert is required");
+  }
+
+  const result = await studentService.convertPointsToMoney(studentId, parseInt(pointsToConvert));
+
+  return res.status(200).json(
+    ApiResponse.success(
+      result,
+      `Successfully converted ${pointsToConvert} points to ${pointsToConvert / 10} balance`
+    )
   );
 });

@@ -16,6 +16,10 @@ const studentSchema = new mongoose.Schema({
   refreshToken: { type: String, default: null },
   // FCM token for push notifications
   fcmToken: { type: String, default: null },
+  // 👇 Referral System Fields
+  referralCode: { type: String, unique: true, sparse: true }, // generated on signup
+  referredBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  referralHistory: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], // Array of users invited by this user
   createdAt: { type: Date, default: Date.now },
 });
 

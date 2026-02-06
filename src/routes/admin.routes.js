@@ -102,9 +102,17 @@ import {
   deleteCoupon,
 } from "../controllers/coupon.controller.js";
 import {
+ 
   getAllOrders,
   getOrderById,
 } from "../controllers/order.controller.js";
+import {
+  createOffer,
+  getOffers,
+  getOfferById,
+  updateOffer,
+  deleteOffer,
+} from "../controllers/offer.controller.js";
 import {
   createMerchandise,
   updateMerchandise,
@@ -241,6 +249,13 @@ router.get("/coupons", verifyJWT, getCoupons);
 router.get("/coupons/:id", verifyJWT, getCouponById);
 router.put("/coupons/:id", verifyJWT, updateCoupon);
 router.delete("/coupons/:id", verifyJWT, deleteCoupon);
+
+// Offer Management (Discount System)
+router.post("/offers", verifyJWT, createOffer);
+router.get("/offers", verifyJWT, getOffers);
+router.get("/offers/:id", verifyJWT, getOfferById);
+router.put("/offers/:id", verifyJWT, updateOffer);
+router.delete("/offers/:id", verifyJWT, deleteOffer);
 
 // Order History
 router.get("/orders", verifyJWT, getAllOrders);

@@ -7,7 +7,7 @@ import {
   verifyForgotPasswordOTP,
   resetPassword,
   updateProfile,
-  changePassword,
+  changePassword,convertPoints,
 } from "../controllers/studentAuth.controller.js";
 import {
   getCourses,
@@ -201,7 +201,7 @@ router.post("/forums/:forumId/threads/:threadId/posts/:postId/replies/:replyId/l
 router.get("/hall-of-fame", verifyJWT, getHallOfFame);
 
 // All Events (Olympiads, Tournaments, Workshops) - catalog, no registration filter
-router.get("/events",getAllEvents);
+router.get("/events", getAllEvents);
 
 // My Events Dashboard
 router.get("/my-events", verifyJWT, getMyEventsDashboard);
@@ -213,7 +213,7 @@ router.post("/tests/:testId/start-exam", verifyJWT, startExam);
 
 // Get Exam Session (with questions, timer, palette)
 router.get("/exam-sessions/:sessionId", verifyJWT, getExamSession);
- 
+
 // Save Answer
 router.put("/exam-sessions/:sessionId/questions/:questionId/answer", verifyJWT, saveAnswer);
 
@@ -241,6 +241,7 @@ router.get("/exam-sessions/:sessionId/palette", verifyJWT, getQuestionPalette);
 router.get("/wallet", verifyJWT, getWallet);
 router.post("/wallet/recharge", verifyJWT, rechargeWallet);
 router.get("/wallet/points-history", verifyJWT, getPointsHistory);
+router.post("/wallet/convert-points", verifyJWT, convertPoints);
 
 // Merchandise Store Routes
 router.get("/merchandise", verifyJWT, getMerchandiseItems);
