@@ -1,5 +1,7 @@
 import { ApiError } from "../utils/ApiError.js";
 import examSessionRepository from "../repository/examSession.repository.js";
+import orderRepository from "../repository/order.repository.js";
+import testRepository from "../repository/test.repository.js";
 import examAnalysisService from "./examAnalysis.service.js";
 import pointsService from "./points.service.js";
 
@@ -17,14 +19,24 @@ export const startExamSession = async (testId, studentId) => {
     throw new ApiError(403, "Test is not published");
   }
 
-  // Check if student has purchased the test (if test is paid)
+  // Check if student has purchased the test (if test is paid): direct purchase OR bundle purchase
   if (test.price > 0) {
-    const purchase = await examSessionRepository.findTestPurchase({
+    let purchase = await orderRepository.findTestPurchase({
       student: studentId,
       test: testId,
       paymentStatus: "completed",
     });
-
+    if (!purchase) {
+      const bundleIdsContainingTest =
+        await testRepository.findBundleIdsContainingTest(testId);
+      if (bundleIdsContainingTest.length > 0) {
+        purchase = await orderRepository.findTestPurchase({
+          student: studentId,
+          testBundle: { $in: bundleIdsContainingTest },
+          paymentStatus: "completed",
+        });
+      }
+    }
     if (!purchase) {
       throw new ApiError(403, "You need to purchase this test first");
     }

@@ -227,6 +227,18 @@ const createBundle = async (bundleData) => {
   }
 };
 
+/**
+ * Find bundle IDs that contain the given test (for access check when test is part of a bundle)
+ */
+const findBundleIdsContainingTest = async (testId) => {
+  try {
+    const bundles = await TestBundle.find({ tests: testId }).select("_id").lean();
+    return bundles.map((b) => b._id);
+  } catch (error) {
+    throw new ApiError(500, "Failed to fetch bundles for test", error.message);
+  }
+};
+
 const findBundleById = async (id, populateOptions = {}) => {
   try {
     let query = TestBundle.findById(id);
@@ -366,6 +378,7 @@ export default {
   // Bundle methods
   createBundle,
   findBundleById,
+  findBundleIdsContainingTest,
   findAllBundles,
   updateBundleById,
   deleteBundleById,

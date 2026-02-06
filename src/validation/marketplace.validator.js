@@ -1,18 +1,27 @@
 import Joi from "joi";
 
+const createCourseOrder = Joi.object({}).optional();
+
 const purchaseCourse = Joi.object({
-  paymentId: Joi.string().trim().optional(),
+  razorpayOrderId: Joi.string().trim().required(),
+  razorpayPaymentId: Joi.string().trim().required(),
+  razorpaySignature: Joi.string().trim().required(),
 });
 
 const purchaseTest = Joi.object({
-  paymentId: Joi.string().trim().optional(),
+  razorpayOrderId: Joi.string().trim().required(),
+  razorpayPaymentId: Joi.string().trim().required(),
+  razorpaySignature: Joi.string().trim().required(),
 });
 
 const purchaseTestBundle = Joi.object({
-  paymentId: Joi.string().trim().optional(),
+  razorpayOrderId: Joi.string().trim().required(),
+  razorpayPaymentId: Joi.string().trim().required(),
+  razorpaySignature: Joi.string().trim().required(),
 });
 
 export default {
+  createCourseOrder,
   purchaseCourse,
   purchaseTest,
   purchaseTestBundle,

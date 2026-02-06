@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import studentRoutes from "./routes/student.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
 import teacherRoutes from "./routes/teacher.routes.js";
+import webhooksRoutes from "./routes/webhooks.routes.js";
 import ApiError from "./utils/ApiError.js";
 
 dotenv.config();
@@ -30,6 +31,12 @@ app.use(
   })
 );
 
+// Webhooks: raw body required for signature verification (must be before express.json)
+app.use(
+  "/webhooks/razorpay",
+  express.raw({ type: "application/json", limit: "64kb" }),
+  webhooksRoutes
+);
 
 app.use(express.json({ limit: "16kb" }));
 

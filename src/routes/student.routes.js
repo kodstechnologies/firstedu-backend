@@ -12,13 +12,16 @@ import {
 import {
   getCourses,
   getCourseById,
+  createCourseOrder,
   purchaseCourse,
   getMyCourses,
   getCourseFollowUpTests,
   getTests,
   getTestById,
+  createTestOrder,
   purchaseTest,
   getTestBundles,
+  createTestBundleOrder,
   purchaseTestBundle,
   getMyTests,
 } from "../controllers/marketplace.controller.js";
@@ -134,6 +137,7 @@ router.put("/change-password", verifyJWT, changePassword);
 // Marketplace - Courses
 router.get("/courses", verifyJWT, getCourses);
 router.get("/courses/:id", verifyJWT, getCourseById);
+router.post("/courses/:id/create-order", verifyJWT, createCourseOrder);
 router.post("/courses/:id/purchase", verifyJWT, purchaseCourse);
 router.get("/my-courses", verifyJWT, getMyCourses);
 router.get("/courses/:id/follow-up-tests", verifyJWT, getCourseFollowUpTests);
@@ -141,10 +145,12 @@ router.get("/courses/:id/follow-up-tests", verifyJWT, getCourseFollowUpTests);
 // Marketplace - Tests
 router.get("/tests", verifyJWT, getTests);
 router.get("/tests/:id", verifyJWT, getTestById);
+router.post("/tests/:id/create-order", verifyJWT, createTestOrder);
 router.post("/tests/:id/purchase", verifyJWT, purchaseTest);
 
 // Marketplace - Test Bundles
 router.get("/test-bundles", getTestBundles);
+router.post("/test-bundles/:id/create-order", verifyJWT, createTestBundleOrder);
 router.post("/test-bundles/:id/purchase", verifyJWT, purchaseTestBundle);
 
 // My Purchases
