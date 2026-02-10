@@ -5,6 +5,7 @@ import orderRepository from "../repository/order.repository.js";
 import courseRepository from "../repository/course.repository.js";
 import testRepository from "../repository/test.repository.js";
 import pointsService from "./points.service.js";
+import eventRegistrationRepository from "../repository/eventRegistration.repository.js";
 
 const LOG_PREFIX = "[Razorpay Webhook]";
 
@@ -135,6 +136,26 @@ async function reconcilePaymentCaptured(orderId, paymentId, amountPaise) {
       purchasePrice: bundle.price,
       paymentId,
       paymentStatus: "completed",
+    });
+  } else if (type === "olympiad" || type === "tournament" || type === "workshop") {
+    const existing = await eventRegistrationRepository.findOne({
+      student: studentId,
+      eventType: type,
+      eventId,
+    });
+    if (existing) {
+      await razorpayOrderIntentRepository.markReconciled(orderId, paymentId);
+      return { reconciled: true, reason: "already_registered" };
+    }
+    const entityModel = type === "olympiad" ? "Olympiad" : type === "tournament" ? "Tournament" : "Workshop";
+    await eventRegistrationRepository.create({
+      student: studentId,
+      eventType: type,
+      eventId,
+      eventModel: entityModel,
+      status: "registered",
+      paymentStatus: "completed",
+      paymentId,
     });
   } else {
     return { reconciled: false, reason: "unknown_type" };

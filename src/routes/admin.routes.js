@@ -72,6 +72,8 @@ import {
   getOlympiadById,
   updateOlympiad,
   deleteOlympiad,
+  getOlympiadLeaderboard,
+  declareOlympiadWinners,
 } from "../controllers/olympiad.controller.js";
 import {
   createTournament,
@@ -79,6 +81,8 @@ import {
   getTournamentById,
   updateTournament,
   deleteTournament,
+  getTournamentLeaderboard,
+  declareTournamentWinners,
 } from "../controllers/tournament.controller.js";
 import {
   createWorkshop,
@@ -134,6 +138,30 @@ import {
   sendNotificationToMultipleStudents,
   sendNotificationToAllStudents,
 } from "../controllers/notification.controller.js";
+import {
+  createClassType,
+  getClassTypes,
+  getClassTypeById,
+  updateClassType,
+  deleteClassType,
+} from "../controllers/classType.controller.js";
+import {
+  createSubject,
+  getSubjects,
+  getSubjectsByClassType,
+  getSubjectById,
+  updateSubject,
+  deleteSubject,
+} from "../controllers/subject.controller.js";
+import {
+  createQuestionBank,
+  createQuestionBankWithQuestions,
+  getQuestionBanks,
+  getQuestionBankById,
+  getQuestionsByBankId,
+  updateQuestionBank,
+  deleteQuestionBank,
+} from "../controllers/questionBank.controller.js";
 import { verifyJWT } from "../middleware/auth.middleware.js";
 import { uploadPDF } from "../utils/multerConfig.js";
 
@@ -147,7 +175,31 @@ router.post("/forgot-password/verify", verifyForgotPasswordOTP);
 router.post("/forgot-password/reset", resetPassword);
 router.put("/change-password", verifyJWT, changePassword);
 
-// Question Bank Management Routes (All routes require authentication)
+// Class Types (e.g. JEE, NEET, Class 1-10)
+router.post("/class-types", verifyJWT, createClassType);
+router.get("/class-types", verifyJWT, getClassTypes);
+router.get("/class-types/:id", verifyJWT, getClassTypeById);
+router.put("/class-types/:id", verifyJWT, updateClassType);
+router.delete("/class-types/:id", verifyJWT, deleteClassType);
+
+// Subjects (per class type)
+router.post("/subjects", verifyJWT, createSubject);
+router.get("/subjects", verifyJWT, getSubjects);
+router.get("/class-types/:classTypeId/subjects", verifyJWT, getSubjectsByClassType);
+router.get("/subjects/:id", verifyJWT, getSubjectById);
+router.put("/subjects/:id", verifyJWT, updateSubject);
+router.delete("/subjects/:id", verifyJWT, deleteSubject);
+
+// Question Banks (create bank, create bank with questions, list, update name, delete)
+router.post("/question-banks", verifyJWT, createQuestionBank);
+router.post("/question-banks/with-questions", verifyJWT, createQuestionBankWithQuestions);
+router.get("/question-banks", verifyJWT, getQuestionBanks);
+router.get("/question-banks/:id", verifyJWT, getQuestionBankById);
+router.get("/question-banks/:id/questions", verifyJWT, getQuestionsByBankId);
+router.put("/question-banks/:id", verifyJWT, updateQuestionBank);
+router.delete("/question-banks/:id", verifyJWT, deleteQuestionBank);
+
+// Question Bank Management Routes (individual questions - create, list all, get, update, delete)
 router.post("/questions", verifyJWT, createQuestion);
 router.get("/questions", verifyJWT, getAllQuestions);
 router.get("/questions/:id", verifyJWT, getQuestionById);
@@ -219,6 +271,8 @@ router.get("/olympiads", verifyJWT, getOlympiads);
 router.get("/olympiads/:id", verifyJWT, getOlympiadById);
 router.put("/olympiads/:id", verifyJWT, updateOlympiad);
 router.delete("/olympiads/:id", verifyJWT, deleteOlympiad);
+router.get("/olympiads/:id/leaderboard", verifyJWT, getOlympiadLeaderboard);
+router.post("/olympiads/:id/winners", verifyJWT, declareOlympiadWinners);
 
 // Live Events Management - Tournaments
 router.post("/tournaments", verifyJWT, createTournament);
@@ -226,6 +280,8 @@ router.get("/tournaments", verifyJWT, getTournaments);
 router.get("/tournaments/:id", verifyJWT, getTournamentById);
 router.put("/tournaments/:id", verifyJWT, updateTournament);
 router.delete("/tournaments/:id", verifyJWT, deleteTournament);
+router.get("/tournaments/:id/leaderboard", verifyJWT, getTournamentLeaderboard);
+router.post("/tournaments/:id/winners", verifyJWT, declareTournamentWinners);
 
 // Live Events Management - Workshops
 router.post("/workshops", verifyJWT, createWorkshop);

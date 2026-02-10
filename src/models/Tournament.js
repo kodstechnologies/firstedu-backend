@@ -63,6 +63,26 @@ const tournamentSchema = new mongoose.Schema(
       type: Date,
       required: true,
     },
+    price: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    firstPlacePoints: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    secondPlacePoints: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    thirdPlacePoints: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     isPublished: {
       type: Boolean,
       default: false,

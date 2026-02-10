@@ -1,6 +1,9 @@
 import { ApiError } from "../utils/ApiError.js";
 import olympiadRepository from "../repository/olympiad.repository.js";
 import testRepository from "../repository/test.repository.js";
+import walletService from "./wallet.service.js";
+import eventRegistrationRepository from "../repository/eventRegistration.repository.js";
+import examSessionRepository from "../repository/examSession.repository.js";
 
 export const createOlympiad = async (data, adminId) => {
   const {
@@ -13,6 +16,10 @@ export const createOlympiad = async (data, adminId) => {
     testId,
     registrationStartTime,
     registrationEndTime,
+    price,
+    firstPlacePoints,
+    secondPlacePoints,
+    thirdPlacePoints,
     maxParticipants,
   } = data;
 
@@ -49,6 +56,10 @@ export const createOlympiad = async (data, adminId) => {
     test: testId,
     registrationStartTime,
     registrationEndTime,
+    price: price ?? 0,
+    firstPlacePoints: firstPlacePoints ?? 0,
+    secondPlacePoints: secondPlacePoints ?? 0,
+    thirdPlacePoints: thirdPlacePoints ?? 0,
     maxParticipants: maxParticipants || null,
     createdBy: adminId,
   });
@@ -144,11 +155,110 @@ export const deleteOlympiad = async (id) => {
   return await olympiadRepository.deleteById(id);
 };
 
+/**
+ * Get leaderboard for an olympiad: ranked list of registered participants by their best score on the olympiad test.
+ * Only students who completed the test and are registered (payment completed) are included.
+ * Tie-break: higher score first; if same score, earlier completedAt first.
+ */
+export const getOlympiadLeaderboard = async (olympiadId, limit = 20) => {
+  const olympiad = await olympiadRepository.findById(olympiadId);
+  if (!olympiad) {
+    throw new ApiError(404, "Olympiad not found");
+  }
+  const registrations = await eventRegistrationRepository.find(
+    {
+      eventType: "olympiad",
+      eventId: olympiadId,
+      paymentStatus: "completed",
+    },
+    { limit: 5000 }
+  );
+  const registeredStudentIds = [
+    ...new Set(
+      registrations
+        .map((r) => (r.student?._id ?? r.student)?.toString?.())
+        .filter(Boolean)
+    ),
+  ];
+  if (registeredStudentIds.length === 0) {
+    return { leaderboard: [], olympiadTitle: olympiad.title };
+  }
+  const ranked = await examSessionRepository.getRankedByTest(
+    olympiad.test,
+    registeredStudentIds,
+    limit
+  );
+  const leaderboard = ranked.map((r, index) => ({
+    rank: index + 1,
+    student: r.student,
+    name: r.name,
+    email: r.email,
+    score: r.score,
+    maxScore: r.maxScore,
+    completedAt: r.completedAt,
+  }));
+  return { leaderboard, olympiadTitle: olympiad.title };
+};
+
+/**
+ * Declare winners and credit points.
+ * Body: { firstPlace?, secondPlace?, thirdPlace? } (student IDs), or { autoCalculate: true } to set 1st/2nd/3rd from leaderboard by score.
+ */
+export const declareOlympiadWinners = async (olympiadId, winners) => {
+  const olympiad = await olympiadRepository.findById(olympiadId);
+  if (!olympiad) {
+    throw new ApiError(404, "Olympiad not found");
+  }
+
+  let firstPlace = winners.firstPlace;
+  let secondPlace = winners.secondPlace;
+  let thirdPlace = winners.thirdPlace;
+
+  if (winners.autoCalculate) {
+    const { leaderboard } = await getOlympiadLeaderboard(olympiadId, 3);
+    firstPlace = leaderboard[0]?.student?.toString?.() || leaderboard[0]?.student;
+    secondPlace = leaderboard[1]?.student?.toString?.() || leaderboard[1]?.student;
+    thirdPlace = leaderboard[2]?.student?.toString?.() || leaderboard[2]?.student;
+    if (!firstPlace && !secondPlace && !thirdPlace) {
+      throw new ApiError(400, "No completed attempts found to auto-calculate winners");
+    }
+  }
+
+  const results = [];
+  const places = [
+    { key: "firstPlace", points: olympiad.firstPlacePoints || 0, studentId: firstPlace },
+    { key: "secondPlace", points: olympiad.secondPlacePoints || 0, studentId: secondPlace },
+    { key: "thirdPlace", points: olympiad.thirdPlacePoints || 0, studentId: thirdPlace },
+  ];
+
+  for (const place of places) {
+    const studentId = place.studentId;
+    if (!studentId || place.points < 1) continue;
+    try {
+      await walletService.addRewardPoints(
+        studentId,
+        place.points,
+        "olympiad_win",
+        `Winner (${place.key.replace("Place", "")} place) - ${olympiad.title}`,
+        olympiadId,
+        "Olympiad"
+      );
+      results.push({ place: place.key, studentId, points: place.points });
+    } catch (e) {
+      throw new ApiError(400, `Failed to credit ${place.key}: ${e.message}`);
+    }
+  }
+
+  return { olympiad: olympiad.title, results };
+};
+
 export default {
   createOlympiad,
   getOlympiads,
   getOlympiadById,
   updateOlympiad,
   deleteOlympiad,
+  getOlympiadLeaderboard,
+  declareOlympiadWinners,
 };
 

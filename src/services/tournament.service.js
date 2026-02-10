@@ -1,6 +1,9 @@
 import { ApiError } from "../utils/ApiError.js";
 import tournamentRepository from "../repository/tournament.repository.js";
 import testRepository from "../repository/test.repository.js";
+import walletService from "./wallet.service.js";
+import eventRegistrationRepository from "../repository/eventRegistration.repository.js";
+import examSessionRepository from "../repository/examSession.repository.js";
 
 export const createTournament = async (data, adminId) => {
   const {
@@ -9,6 +12,10 @@ export const createTournament = async (data, adminId) => {
     stages,
     registrationStartTime,
     registrationEndTime,
+    price,
+    firstPlacePoints,
+    secondPlacePoints,
+    thirdPlacePoints,
   } = data;
 
   if (!title || !stages || !Array.isArray(stages) || stages.length === 0) {
@@ -54,6 +61,10 @@ export const createTournament = async (data, adminId) => {
     stages,
     registrationStartTime,
     registrationEndTime,
+    price: price ?? 0,
+    firstPlacePoints: firstPlacePoints ?? 0,
+    secondPlacePoints: secondPlacePoints ?? 0,
+    thirdPlacePoints: thirdPlacePoints ?? 0,
     createdBy: adminId,
   });
 };
@@ -147,11 +158,114 @@ export const deleteTournament = async (id) => {
   return await tournamentRepository.deleteById(id);
 };
 
+/**
+ * Get leaderboard for a tournament: ranked by score in the Final stage (or last stage by order).
+ * Only registered participants with payment completed are included.
+ */
+export const getTournamentLeaderboard = async (tournamentId, limit = 20) => {
+  const tournament = await tournamentRepository.findById(tournamentId);
+  if (!tournament) {
+    throw new ApiError(404, "Tournament not found");
+  }
+  const stages = tournament.stages || [];
+  const finalStage = stages.find((s) => s.name === "Final") || stages.slice().sort((a, b) => (b.order || 0) - (a.order || 0))[0];
+  if (!finalStage || !finalStage.test) {
+    return { leaderboard: [], tournamentTitle: tournament.title, stage: null };
+  }
+  const registrations = await eventRegistrationRepository.find(
+    {
+      eventType: "tournament",
+      eventId: tournamentId,
+      paymentStatus: "completed",
+    },
+    { limit: 5000 }
+  );
+  const registeredStudentIds = [
+    ...new Set(
+      registrations
+        .map((r) => (r.student?._id ?? r.student)?.toString?.())
+        .filter(Boolean)
+    ),
+  ];
+  if (registeredStudentIds.length === 0) {
+    return { leaderboard: [], tournamentTitle: tournament.title, stage: finalStage.name };
+  }
+  const ranked = await examSessionRepository.getRankedByTest(
+    finalStage.test,
+    registeredStudentIds,
+    limit
+  );
+  const leaderboard = ranked.map((r, index) => ({
+    rank: index + 1,
+    student: r.student,
+    name: r.name,
+    email: r.email,
+    score: r.score,
+    maxScore: r.maxScore,
+    completedAt: r.completedAt,
+  }));
+  return { leaderboard, tournamentTitle: tournament.title, stage: finalStage.name };
+};
+
+/**
+ * Declare winners and credit points.
+ * Body: { firstPlace?, secondPlace?, thirdPlace? } (student IDs), or { autoCalculate: true } to set 1st/2nd/3rd from leaderboard (Final stage score).
+ */
+export const declareTournamentWinners = async (tournamentId, winners) => {
+  const tournament = await tournamentRepository.findById(tournamentId);
+  if (!tournament) {
+    throw new ApiError(404, "Tournament not found");
+  }
+
+  let firstPlace = winners.firstPlace;
+  let secondPlace = winners.secondPlace;
+  let thirdPlace = winners.thirdPlace;
+
+  if (winners.autoCalculate) {
+    const { leaderboard } = await getTournamentLeaderboard(tournamentId, 3);
+    firstPlace = leaderboard[0]?.student?.toString?.() || leaderboard[0]?.student;
+    secondPlace = leaderboard[1]?.student?.toString?.() || leaderboard[1]?.student;
+    thirdPlace = leaderboard[2]?.student?.toString?.() || leaderboard[2]?.student;
+    if (!firstPlace && !secondPlace && !thirdPlace) {
+      throw new ApiError(400, "No completed attempts found for Final stage to auto-calculate winners");
+    }
+  }
+
+  const results = [];
+  const places = [
+    { key: "firstPlace", points: tournament.firstPlacePoints || 0, studentId: firstPlace },
+    { key: "secondPlace", points: tournament.secondPlacePoints || 0, studentId: secondPlace },
+    { key: "thirdPlace", points: tournament.thirdPlacePoints || 0, studentId: thirdPlace },
+  ];
+
+  for (const place of places) {
+    const studentId = place.studentId;
+    if (!studentId || place.points < 1) continue;
+    try {
+      await walletService.addRewardPoints(
+        studentId,
+        place.points,
+        "tournament_win",
+        `Winner (${place.key.replace("Place", "")} place) - ${tournament.title}`,
+        tournamentId,
+        "Tournament"
+      );
+      results.push({ place: place.key, studentId, points: place.points });
+    } catch (e) {
+      throw new ApiError(400, `Failed to credit ${place.key}: ${e.message}`);
+    }
+  }
+
+  return { tournament: tournament.title, results };
+};
+
 export default {
   createTournament,
   getTournaments,
   getTournamentById,
   updateTournament,
   deleteTournament,
+  getTournamentLeaderboard,
+  declareTournamentWinners,
 };
 

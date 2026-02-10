@@ -23,11 +23,21 @@ const questionSchema = new mongoose.Schema(
     },
     explanation: { type: String, trim: true },
     subject: { type: String, trim: true },
+    subjectRef: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Subject",
+    },
+    questionBank: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "QuestionBank",
+    },
+    sectionIndex: { type: Number, min: 0 },
+    orderInBank: { type: Number, min: 0 },
     topic: { type: String, trim: true },
     difficulty: {
       type: String,
       enum: ["easy", "medium", "hard"],
-      default: "medium",
+      default: "easy",
     },
     marks: { type: Number, default: 1 },
     negativeMarks: { type: Number, default: 0 },
@@ -85,6 +95,7 @@ questionSchema.index({ subject: 1, topic: 1 });
 questionSchema.index({ createdBy: 1 });
 questionSchema.index({ parentQuestionId: 1 });
 questionSchema.index({ isActive: 1 });
+questionSchema.index({ questionBank: 1, orderInBank: 1 });
 
 // Virtual to populate child questions
 questionSchema.virtual("childQuestionsDetails", {

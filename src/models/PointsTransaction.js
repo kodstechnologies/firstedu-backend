@@ -25,6 +25,8 @@ const pointsTransactionSchema = new mongoose.Schema(
         "merchandise_redemption",
         "admin_adjustment",
         "expiration",
+        "olympiad_win",
+        "tournament_win",
       ],
       required: true,
     },
@@ -38,7 +40,7 @@ const pointsTransactionSchema = new mongoose.Schema(
     },
     referenceType: {
       type: String,
-      enum: ["Course", "Test", "MerchandiseClaim", null],
+      enum: ["Course", "Test", "MerchandiseClaim", "Olympiad", "Tournament", null],
     },
     balanceAfter: {
       type: Number,

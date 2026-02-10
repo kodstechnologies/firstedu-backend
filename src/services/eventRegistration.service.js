@@ -4,14 +4,24 @@ import olympiadRepository from "../repository/olympiad.repository.js";
 import tournamentRepository from "../repository/tournament.repository.js";
 import workshopRepository from "../repository/workshop.repository.js";
 import examSessionRepository from "../repository/examSession.repository.js";
+import walletService from "./wallet.service.js";
+import razorpayOrderIntentRepository from "../repository/razorpayOrderIntent.repository.js";
+import { createRazorpayOrder } from "../utils/razorpayUtils.js";
 
-export const registerForEvent = async (eventType, eventId, studentId, paymentStatus = "completed", paymentId = null) => {
-  const eventModelMap = {
-    olympiad: "Olympiad",
-    tournament: "Tournament",
-    workshop: "Workshop",
-    challenge: "Challenge",
-  };
+const EVENT_MODEL_MAP = {
+  olympiad: "Olympiad",
+  tournament: "Tournament",
+  workshop: "Workshop",
+  challenge: "Challenge",
+};
+
+export const registerForEvent = async (
+  eventType,
+  eventId,
+  studentId,
+  options = {}
+) => {
+  const { paymentStatus = "completed", paymentId = null, paymentMethod = null } = options;
 
   // Check if already registered
   const existingRegistration = await eventRegistrationRepository.findOne({
@@ -38,7 +48,6 @@ export const registerForEvent = async (eventType, eventId, studentId, paymentSta
     throw new ApiError(404, `${eventType} not found`);
   }
 
-  // Check registration window
   const now = new Date();
   if (
     now < new Date(event.registrationStartTime) ||
@@ -47,26 +56,44 @@ export const registerForEvent = async (eventType, eventId, studentId, paymentSta
     throw new ApiError(400, `Registration is not open for this ${eventType}`);
   }
 
-  // Check max participants
-  if (event.maxParticipants) {
-    const registeredCount = await eventRegistrationRepository.count({
-      eventType,
-      eventId,
-      status: { $ne: "disqualified" },
-    });
+  const registeredCount = await eventRegistrationRepository.count({
+    eventType,
+    eventId,
+    paymentStatus: "completed",
+  });
+  if (event.maxParticipants && registeredCount >= event.maxParticipants) {
+    throw new ApiError(400, "Maximum participants reached");
+  }
 
-    if (registeredCount >= event.maxParticipants) {
-      throw new ApiError(400, "Maximum participants reached");
+  const price = Number(event.price) || 0;
+
+  // When event has a price, payment is required before registration
+  if (price > 0) {
+    if (paymentMethod === "wallet") {
+      await walletService.deductMonetaryBalance(studentId, price, "User");
+      return await eventRegistrationRepository.create({
+        student: studentId,
+        eventType,
+        eventId,
+        eventModel: EVENT_MODEL_MAP[eventType],
+        status: "registered",
+        paymentStatus: "completed",
+        paymentId: paymentId || "wallet",
+      });
     }
+    throw new ApiError(
+      400,
+      "Payment required. Use initiate-payment endpoint to pay via gateway, or send paymentMethod: 'wallet' to pay with wallet balance."
+    );
   }
 
   return await eventRegistrationRepository.create({
     student: studentId,
     eventType,
     eventId,
-    eventModel: eventModelMap[eventType],
+    eventModel: EVENT_MODEL_MAP[eventType],
     status: "registered",
-    paymentStatus,
+    paymentStatus: "completed",
     paymentId: paymentId || undefined,
   });
 };
@@ -208,6 +235,90 @@ export const updateRegistration = async (id, updateData) => {
   return await eventRegistrationRepository.updateById(id, updateData);
 };
 
+const EVENT_TYPE_TO_MODEL = {
+  olympiad: "Olympiad",
+  tournament: "Tournament",
+  workshop: "Workshop",
+};
+
+/**
+ * Initiate gateway payment for event registration. Returns Razorpay order details.
+ * Student pays via Razorpay; webhook will create EventRegistration on success.
+ */
+export const initiateEventPayment = async (eventType, eventId, studentId) => {
+  const existing = await eventRegistrationRepository.findOne({
+    student: studentId,
+    eventType,
+    eventId,
+  });
+  if (existing) {
+    throw new ApiError(400, `Already registered for this ${eventType}`);
+  }
+
+  let event;
+  if (eventType === "olympiad") {
+    event = await olympiadRepository.findById(eventId);
+  } else if (eventType === "tournament") {
+    event = await tournamentRepository.findById(eventId);
+  } else if (eventType === "workshop") {
+    event = await workshopRepository.findById(eventId);
+  } else {
+    throw new ApiError(400, "Invalid event type");
+  }
+
+  if (!event || !event.isPublished) {
+    throw new ApiError(404, `${eventType} not found`);
+  }
+
+  const price = Number(event.price) || 0;
+  if (price < 1) {
+    throw new ApiError(400, "This event is free. Use register endpoint without payment.");
+  }
+
+  const now = new Date();
+  if (now < new Date(event.registrationStartTime) || now > new Date(event.registrationEndTime)) {
+    throw new ApiError(400, "Registration is not open for this event");
+  }
+
+  const registeredCount = await eventRegistrationRepository.count({
+    eventType,
+    eventId,
+    paymentStatus: "completed",
+  });
+  if (event.maxParticipants && registeredCount >= event.maxParticipants) {
+    throw new ApiError(400, "Maximum participants reached");
+  }
+
+  const receipt = `${eventType}_${eventId}_${studentId}_${Date.now()}`.substring(0, 40);
+  const order = await createRazorpayOrder(price, receipt);
+
+  await razorpayOrderIntentRepository.create({
+    orderId: order.orderId,
+    studentId,
+    type: eventType,
+    entityId: eventId,
+    entityModel: EVENT_TYPE_TO_MODEL[eventType],
+    amountPaise: order.amount,
+    currency: order.currency || "INR",
+    receipt,
+  });
+
+  const razorpayKeyId = process.env.RAZORPAY_KEY_ID;
+  if (!razorpayKeyId) {
+    throw new ApiError(500, "Payment gateway not configured");
+  }
+
+  return {
+    orderId: order.orderId,
+    amount: order.amount,
+    currency: order.currency,
+    key: razorpayKeyId,
+    eventType,
+    eventId,
+    eventTitle: event.title,
+  };
+};
+
 export default {
   registerForEvent,
   getRegistrations,
@@ -216,5 +327,6 @@ export default {
   getMyEventsDashboard,
   getTournamentProgress,
   updateRegistration,
+  initiateEventPayment,
 };
 

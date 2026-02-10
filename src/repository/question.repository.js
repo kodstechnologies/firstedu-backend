@@ -15,7 +15,9 @@ const findById = async (id) => {
     return await Question.findById(id)
       .populate("parentQuestionId", "questionText passage")
       .populate("childQuestions", "questionText options correctAnswer")
-      .populate("createdBy", "name email");
+      .populate("createdBy", "name email")
+      .populate("subjectRef", "name")
+      .populate("questionBank", "name");
   } catch (error) {
     throw new ApiError(500, "Failed to fetch question", error.message);
   }
@@ -34,9 +36,14 @@ const findAll = async (filter = {}, options = {}) => {
       difficulty,
       questionType,
       isParent,
+      questionBank,
     } = options;
 
     const query = { ...filter };
+
+    if (questionBank) {
+      query.questionBank = questionBank;
+    }
 
     // Search functionality
     if (search) {
@@ -79,6 +86,8 @@ const findAll = async (filter = {}, options = {}) => {
       .populate("parentQuestionId", "questionText passage")
       .populate("childQuestions", "questionText options correctAnswer")
       .populate("createdBy", "name email")
+      .populate("subjectRef", "name")
+      .populate("questionBank", "name")
       .sort(sort)
       .skip(skip)
       .limit(parseInt(limit));
@@ -109,7 +118,9 @@ const updateById = async (id, updateData) => {
     )
       .populate("parentQuestionId", "questionText passage")
       .populate("childQuestions", "questionText options correctAnswer")
-      .populate("createdBy", "name email");
+      .populate("createdBy", "name email")
+      .populate("subjectRef", "name")
+      .populate("questionBank", "name");
   } catch (error) {
     throw new ApiError(500, "Failed to update question", error.message);
   }

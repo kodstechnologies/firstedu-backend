@@ -44,6 +44,7 @@ export const getAllQuestions = asyncHandler(async (req, res) => {
     difficulty,
     questionType,
     isParent,
+    questionBank,
   } = req.query;
 
   const filterOptions = {
@@ -57,6 +58,7 @@ export const getAllQuestions = asyncHandler(async (req, res) => {
     difficulty,
     questionType,
     isParent,
+    questionBank,
   };
 
   const result = await questionService.getAllQuestions(filterOptions);

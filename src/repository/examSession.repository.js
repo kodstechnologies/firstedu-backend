@@ -169,6 +169,60 @@ const findExpiredInProgressSessions = async () => {
   }
 };
 
+/**
+ * Get top N students by best score for a test (one entry per student, best score wins; tie-break: earlier completedAt).
+ * studentIds: optional array; if provided, only these students are considered.
+ */
+const getRankedByTest = async (testId, studentIds = null, limit = 10) => {
+  try {
+    const match = {
+      test: testId,
+      status: "completed",
+      score: { $ne: null, $gte: 0 },
+    };
+    if (Array.isArray(studentIds) && studentIds.length) {
+      match.student = { $in: studentIds };
+    }
+    const ranked = await ExamSession.aggregate([
+      { $match: match },
+      { $sort: { score: -1, completedAt: 1 } },
+      {
+        $group: {
+          _id: "$student",
+          score: { $first: "$score" },
+          maxScore: { $first: "$maxScore" },
+          completedAt: { $first: "$completedAt" },
+        },
+      },
+      { $sort: { score: -1, completedAt: 1 } },
+      { $limit: limit },
+      {
+        $lookup: {
+          from: "users",
+          localField: "_id",
+          foreignField: "_id",
+          as: "studentDoc",
+          pipeline: [{ $project: { name: 1, email: 1 } }],
+        },
+      },
+      { $unwind: { path: "$studentDoc", preserveNullAndEmptyArrays: true } },
+      {
+        $project: {
+          student: "$_id",
+          score: 1,
+          maxScore: 1,
+          completedAt: 1,
+          name: "$studentDoc.name",
+          email: "$studentDoc.email",
+        },
+      },
+    ]);
+    return ranked;
+  } catch (error) {
+    throw new ApiError(500, "Failed to fetch rankings", error.message);
+  }
+};
+
 export default {
   create,
   findById,
@@ -181,5 +235,6 @@ export default {
   findTestPurchase,
   findAllCompletedSessions,
   findExpiredInProgressSessions,
+  getRankedByTest,
 };
 

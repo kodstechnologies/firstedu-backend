@@ -85,6 +85,31 @@ export const deleteOlympiad = asyncHandler(async (req, res) => {
   );
 });
 
+export const getOlympiadLeaderboard = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+  const result = await olympiadService.getOlympiadLeaderboard(id, limit);
+  return res.status(200).json(
+    ApiResponse.success(result, "Olympiad leaderboard fetched successfully")
+  );
+});
+
+export const declareOlympiadWinners = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { error, value } = olympiadValidator.declareWinners.validate(req.body);
+  if (error) {
+    throw new ApiError(
+      400,
+      "Validation Error",
+      error.details.map((x) => x.message)
+    );
+  }
+  const result = await olympiadService.declareOlympiadWinners(id, value);
+  return res.status(200).json(
+    ApiResponse.success(result, "Winners declared and points credited")
+  );
+});
+
 // ==================== STUDENT CONTROLLERS ====================
 
 export const getPublishedOlympiads = asyncHandler(async (req, res) => {
@@ -183,12 +208,27 @@ export const registerForOlympiad = asyncHandler(async (req, res) => {
     "olympiad",
     id,
     req.user._id,
-    "completed",
-    value.paymentId
+    {
+      paymentStatus: "completed",
+      paymentId: value.paymentId,
+      paymentMethod: value.paymentMethod,
+    }
   );
 
   return res.status(201).json(
     ApiResponse.success(registration, "Successfully registered for olympiad")
+  );
+});
+
+export const initiateOlympiadPayment = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const data = await eventRegistrationService.initiateEventPayment(
+    "olympiad",
+    id,
+    req.user._id
+  );
+  return res.status(200).json(
+    ApiResponse.success(data, "Payment order created. Complete payment to register.")
   );
 });
 
@@ -235,9 +275,12 @@ export default {
   getOlympiadById,
   updateOlympiad,
   deleteOlympiad,
+  getOlympiadLeaderboard,
+  declareOlympiadWinners,
   getPublishedOlympiads,
   getOlympiadDetails,
   registerForOlympiad,
+  initiateOlympiadPayment,
   getOlympiadLobby,
 };
 
