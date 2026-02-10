@@ -18,6 +18,10 @@ const createTournament = Joi.object({
   stages: Joi.array().items(tournamentStageSchema).min(1).required(),
   registrationStartTime: Joi.date().required(),
   registrationEndTime: Joi.date().required(),
+  price: Joi.number().min(0).default(0).optional(),
+  firstPlacePoints: Joi.number().min(0).default(0).optional(),
+  secondPlacePoints: Joi.number().min(0).default(0).optional(),
+  thirdPlacePoints: Joi.number().min(0).default(0).optional(),
   isPublished: Joi.boolean().optional(),
 });
 
@@ -27,16 +31,29 @@ const updateTournament = Joi.object({
   stages: Joi.array().items(tournamentStageSchema).optional(),
   registrationStartTime: Joi.date().optional(),
   registrationEndTime: Joi.date().optional(),
+  price: Joi.number().min(0).optional(),
+  firstPlacePoints: Joi.number().min(0).optional(),
+  secondPlacePoints: Joi.number().min(0).optional(),
+  thirdPlacePoints: Joi.number().min(0).optional(),
   isPublished: Joi.boolean().optional(),
 });
 
 const registerForTournament = Joi.object({
   paymentId: Joi.string().trim().optional(),
+  paymentMethod: Joi.string().valid("wallet", "gateway").optional(),
 });
+
+const declareWinners = Joi.object({
+  firstPlace: objectId.optional().allow(null, ""),
+  secondPlace: objectId.optional().allow(null, ""),
+  thirdPlace: objectId.optional().allow(null, ""),
+  autoCalculate: Joi.boolean().optional(),
+}).min(1);
 
 export default {
   createTournament,
   updateTournament,
   registerForTournament,
+  declareWinners,
 };
 

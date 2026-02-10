@@ -33,17 +33,20 @@ import {
   getPublishedOlympiads,
   getOlympiadDetails,
   registerForOlympiad,
+  initiateOlympiadPayment,
   getOlympiadLobby,
 } from "../controllers/olympiad.controller.js";
 import {
   getPublishedTournaments,
   getTournamentDetails,
   registerForTournament,
+  initiateTournamentPayment,
 } from "../controllers/tournament.controller.js";
 import {
   getPublishedWorkshops,
   getWorkshopDetails,
   registerForWorkshop,
+  initiateWorkshopPayment,
 } from "../controllers/workshop.controller.js";
 import {
   createChallenge,
@@ -171,17 +174,20 @@ router.post(
 // Community & Competitions - Olympiads
 router.get("/olympiads", verifyJWT, getPublishedOlympiads);
 router.get("/olympiads/:id", verifyJWT, getOlympiadDetails);
+router.post("/olympiads/:id/initiate-payment", verifyJWT, initiateOlympiadPayment);
 router.post("/olympiads/:id/register", verifyJWT, registerForOlympiad);
 router.get("/olympiads/:id/lobby", verifyJWT, getOlympiadLobby);
 
 // Community & Competitions - Tournaments
 router.get("/tournaments", verifyJWT, getPublishedTournaments);
 router.get("/tournaments/:id", verifyJWT, getTournamentDetails);
+router.post("/tournaments/:id/initiate-payment", verifyJWT, initiateTournamentPayment);
 router.post("/tournaments/:id/register", verifyJWT, registerForTournament);
 
 // Community & Competitions - Workshops
 router.get("/workshops", verifyJWT, getPublishedWorkshops);
 router.get("/workshops/:id", verifyJWT, getWorkshopDetails);
+router.post("/workshops/:id/initiate-payment", verifyJWT, initiateWorkshopPayment);
 router.post("/workshops/:id/register", verifyJWT, registerForWorkshop);
 
 // Community & Competitions - Challenges

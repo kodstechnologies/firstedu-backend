@@ -41,6 +41,7 @@ const updateWorkshop = Joi.object({
 
 const registerForWorkshop = Joi.object({
   paymentId: Joi.string().trim().optional(),
+  paymentMethod: Joi.string().valid("wallet", "gateway").optional(),
 });
 
 export default {

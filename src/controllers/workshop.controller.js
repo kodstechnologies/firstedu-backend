@@ -188,19 +188,31 @@ export const registerForWorkshop = asyncHandler(async (req, res) => {
     );
   }
   
-  const workshop = await workshopService.getWorkshopById(id);
-  const paymentStatus = workshop.price > 0 ? "pending" : "completed";
-  
   const registration = await eventRegistrationService.registerForEvent(
     "workshop",
     id,
     req.user._id,
-    paymentStatus,
-    value.paymentId
+    {
+      paymentStatus: "completed",
+      paymentId: value.paymentId,
+      paymentMethod: value.paymentMethod,
+    }
   );
 
   return res.status(201).json(
     ApiResponse.success(registration, "Successfully registered for workshop")
+  );
+});
+
+export const initiateWorkshopPayment = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const data = await eventRegistrationService.initiateEventPayment(
+    "workshop",
+    id,
+    req.user._id
+  );
+  return res.status(200).json(
+    ApiResponse.success(data, "Payment order created. Complete payment to register.")
   );
 });
 
@@ -213,5 +225,6 @@ export default {
   getPublishedWorkshops,
   getWorkshopDetails,
   registerForWorkshop,
+  initiateWorkshopPayment,
 };
 

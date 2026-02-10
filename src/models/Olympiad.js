@@ -40,6 +40,26 @@ const olympiadSchema = new mongoose.Schema(
       type: Date,
       required: true,
     },
+    price: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    firstPlacePoints: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    secondPlacePoints: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    thirdPlacePoints: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     maxParticipants: {
       type: Number,
       default: null, // null means unlimited

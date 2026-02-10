@@ -49,6 +49,7 @@ export const getAllQuestions = async (filterOptions) => {
     difficulty,
     questionType,
     isParent,
+    questionBank,
   } = filterOptions;
 
   const options = {
@@ -62,6 +63,7 @@ export const getAllQuestions = async (filterOptions) => {
     difficulty,
     questionType,
     isParent,
+    questionBank,
   };
 
   const result = await questionRepository.findAll({ isActive: true }, options);
