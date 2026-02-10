@@ -1,8 +1,8 @@
-import { asyncHandler } from "../utils/asyncHandler.js";
-import { ApiError } from "../utils/ApiError.js";
-import { ApiResponse } from "../utils/ApiResponse.js";
-import testValidator from "../validation/test.validator.js";
-import testService from "../services/test.service.js";
+import { asyncHandler } from '../utils/asyncHandler.js';
+import { ApiError } from '../utils/ApiError.js';
+import { ApiResponse } from '../utils/ApiResponse.js';
+import testValidator from '../validation/test.validator.js';
+import testService from '../services/test.service.js';
 
 // -------- Categories --------
 
@@ -11,8 +11,8 @@ export const createCategory = asyncHandler(async (req, res) => {
   if (error) {
     throw new ApiError(
       400,
-      "Validation Error",
-      error.details.map((x) => x.message)
+      'Validation Error',
+      error.details.map((x) => x.message),
     );
   }
 
@@ -20,9 +20,7 @@ export const createCategory = asyncHandler(async (req, res) => {
 
   return res
     .status(201)
-    .json(
-      ApiResponse.success(category, "Category created successfully")
-    );
+    .json(ApiResponse.success(category, 'Category created successfully'));
 });
 
 export const getCategories = asyncHandler(async (req, res) => {
@@ -42,9 +40,9 @@ export const getCategories = asyncHandler(async (req, res) => {
     .json(
       ApiResponse.success(
         result.categories,
-        "Categories fetched successfully",
-        result.pagination
-      )
+        'Categories fetched successfully',
+        result.pagination,
+      ),
     );
 });
 
@@ -55,9 +53,7 @@ export const getCategoryById = asyncHandler(async (req, res) => {
 
   return res
     .status(200)
-    .json(
-      ApiResponse.success(category, "Category fetched successfully")
-    );
+    .json(ApiResponse.success(category, 'Category fetched successfully'));
 });
 
 export const updateCategory = asyncHandler(async (req, res) => {
@@ -67,8 +63,8 @@ export const updateCategory = asyncHandler(async (req, res) => {
   if (error) {
     throw new ApiError(
       400,
-      "Validation Error",
-      error.details.map((x) => x.message)
+      'Validation Error',
+      error.details.map((x) => x.message),
     );
   }
 
@@ -76,9 +72,7 @@ export const updateCategory = asyncHandler(async (req, res) => {
 
   return res
     .status(200)
-    .json(
-      ApiResponse.success(updated, "Category updated successfully")
-    );
+    .json(ApiResponse.success(updated, 'Category updated successfully'));
 });
 
 export const deleteCategory = asyncHandler(async (req, res) => {
@@ -88,7 +82,7 @@ export const deleteCategory = asyncHandler(async (req, res) => {
 
   return res
     .status(200)
-    .json(ApiResponse.success(null, "Category deleted successfully"));
+    .json(ApiResponse.success(null, 'Category deleted successfully'));
 });
 
 // -------- Tests / Test Builder --------
@@ -99,8 +93,8 @@ export const createTest = asyncHandler(async (req, res) => {
   if (error) {
     throw new ApiError(
       400,
-      "Validation Error",
-      error.details.map((x) => x.message)
+      'Validation Error',
+      error.details.map((x) => x.message),
     );
   }
 
@@ -108,7 +102,7 @@ export const createTest = asyncHandler(async (req, res) => {
 
   return res
     .status(201)
-    .json(ApiResponse.success(test, "Test created successfully"));
+    .json(ApiResponse.success(test, 'Test created successfully'));
 });
 
 export const getTests = asyncHandler(async (req, res) => {
@@ -141,9 +135,9 @@ export const getTests = asyncHandler(async (req, res) => {
     .json(
       ApiResponse.success(
         result.tests,
-        "Tests fetched successfully",
-        result.pagination
-      )
+        'Tests fetched successfully',
+        result.pagination,
+      ),
     );
 });
 
@@ -154,7 +148,7 @@ export const getTestById = asyncHandler(async (req, res) => {
 
   return res
     .status(200)
-    .json(ApiResponse.success(test, "Test fetched successfully"));
+    .json(ApiResponse.success(test, 'Test fetched successfully'));
 });
 
 export const updateTest = asyncHandler(async (req, res) => {
@@ -164,8 +158,8 @@ export const updateTest = asyncHandler(async (req, res) => {
   if (error) {
     throw new ApiError(
       400,
-      "Validation Error",
-      error.details.map((x) => x.message)
+      'Validation Error',
+      error.details.map((x) => x.message),
     );
   }
 
@@ -173,7 +167,7 @@ export const updateTest = asyncHandler(async (req, res) => {
 
   return res
     .status(200)
-    .json(ApiResponse.success(updated, "Test updated successfully"));
+    .json(ApiResponse.success(updated, 'Test updated successfully'));
 });
 
 export const deleteTest = asyncHandler(async (req, res) => {
@@ -183,7 +177,7 @@ export const deleteTest = asyncHandler(async (req, res) => {
 
   return res
     .status(200)
-    .json(ApiResponse.success(null, "Test deleted successfully"));
+    .json(ApiResponse.success(null, 'Test deleted successfully'));
 });
 
 // -------- Bundles --------
@@ -194,8 +188,8 @@ export const createBundle = asyncHandler(async (req, res) => {
   if (error) {
     throw new ApiError(
       400,
-      "Validation Error",
-      error.details.map((x) => x.message)
+      'Validation Error',
+      error.details.map((x) => x.message),
     );
   }
 
@@ -203,19 +197,12 @@ export const createBundle = asyncHandler(async (req, res) => {
 
   return res
     .status(201)
-    .json(ApiResponse.success(bundle, "Bundle created successfully"));
+    .json(ApiResponse.success(bundle, 'Bundle created successfully'));
 });
 
 export const getBundles = asyncHandler(async (req, res) => {
-  const {
-    page,
-    limit,
-    search,
-    category,
-    isActive,
-    sortBy,
-    sortOrder,
-  } = req.query;
+  const { page, limit, search, category, isActive, sortBy, sortOrder } =
+    req.query;
 
   const result = await testService.getBundles({
     page,
@@ -232,9 +219,9 @@ export const getBundles = asyncHandler(async (req, res) => {
     .json(
       ApiResponse.success(
         result.bundles,
-        "Bundles fetched successfully",
-        result.pagination
-      )
+        'Bundles fetched successfully',
+        result.pagination,
+      ),
     );
 });
 
@@ -245,9 +232,7 @@ export const getBundleById = asyncHandler(async (req, res) => {
 
   return res
     .status(200)
-    .json(
-      ApiResponse.success(bundle, "Bundle fetched successfully")
-    );
+    .json(ApiResponse.success(bundle, 'Bundle fetched successfully'));
 });
 
 export const updateBundle = asyncHandler(async (req, res) => {
@@ -257,8 +242,8 @@ export const updateBundle = asyncHandler(async (req, res) => {
   if (error) {
     throw new ApiError(
       400,
-      "Validation Error",
-      error.details.map((x) => x.message)
+      'Validation Error',
+      error.details.map((x) => x.message),
     );
   }
 
@@ -266,7 +251,7 @@ export const updateBundle = asyncHandler(async (req, res) => {
 
   return res
     .status(200)
-    .json(ApiResponse.success(updated, "Bundle updated successfully"));
+    .json(ApiResponse.success(updated, 'Bundle updated successfully'));
 });
 
 export const deleteBundle = asyncHandler(async (req, res) => {
@@ -276,7 +261,7 @@ export const deleteBundle = asyncHandler(async (req, res) => {
 
   return res
     .status(200)
-    .json(ApiResponse.success(null, "Bundle deleted successfully"));
+    .json(ApiResponse.success(null, 'Bundle deleted successfully'));
 });
 
 export default {
@@ -296,5 +281,3 @@ export default {
   updateBundle,
   deleteBundle,
 };
-
-
