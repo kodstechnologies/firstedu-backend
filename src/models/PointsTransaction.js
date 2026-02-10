@@ -25,7 +25,7 @@ const pointsTransactionSchema = new mongoose.Schema(
         "merchandise_redemption",
         "admin_adjustment",
         "expiration",
-          "referral",
+          "referral", 
         "olympiad_win",
         "tournament_win",
       ],
