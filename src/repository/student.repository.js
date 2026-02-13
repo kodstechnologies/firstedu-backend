@@ -39,6 +39,18 @@ const findById = async (userId, includePassword = false) => {
   }
 };
 
+const getCounts = async () => {
+  try {
+    const [totalUsers, totalBannedUsers] = await Promise.all([
+      User.countDocuments(),
+      User.countDocuments({ status: "banned" }),
+    ]);
+    return { totalUsers, totalBannedUsers };
+  } catch (error) {
+    throw new ApiError(500, "Failed to fetch student counts", error.message);
+  }
+};
+
 const findAll = async (filter = {}, options = {}) => {
   try {
     const {
@@ -86,7 +98,15 @@ const findAll = async (filter = {}, options = {}) => {
 
 const updateById = async (userId, updateData) => {
   try {
-    return await User.findByIdAndUpdate(userId, updateData, { new: true });
+    const update = Object.keys(updateData).some((k) => k.startsWith("$"))
+      ? updateData
+      : { $set: updateData };
+    const updated = await User.findByIdAndUpdate(userId, update, { new: true });
+    return updated
+      ? await User.findById(updated._id).select(
+          "-password -refreshToken -passwordResetOTP -passwordResetOTPExpires"
+        )
+      : null;
   } catch (err) {
     throw new ApiError(500, err.message || "Failed to update user");
   }
@@ -107,4 +127,5 @@ export default {
   findAll,
   updateById,
   save,
+  getCounts,
 };

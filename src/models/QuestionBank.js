@@ -19,15 +19,10 @@ const questionBankSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
-    classType: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "ClassType",
-      required: true,
-    },
-    subjects: [
+    categories: [
       {
         type: mongoose.Schema.Types.ObjectId,
-        ref: "Subject",
+        ref: "Category",
       },
     ],
     useSectionWiseDifficulty: {
@@ -49,7 +44,7 @@ const questionBankSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-questionBankSchema.index({ classType: 1 });
+questionBankSchema.index({ categories: 1 });
 questionBankSchema.index({ createdBy: 1, createdAt: -1 });
 
 export default mongoose.models.QuestionBank ||

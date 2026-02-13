@@ -15,9 +15,9 @@ const find = async (filter = {}, options = {}) => {
   let query = Olympiad.find(filter);
   
   populate.forEach((pop) => {
-    query = query.populate(pop.path, pop.select);
+    query = query.populate(pop.populate ? pop : { path: pop.path, select: pop.select });
   });
-  
+
   return query.sort(sort).skip(skip).limit(limit);
 };
 
@@ -25,17 +25,17 @@ const findOne = async (filter, populate = []) => {
   let query = Olympiad.findOne(filter);
   
   populate.forEach((pop) => {
-    query = query.populate(pop.path, pop.select);
+    query = query.populate(pop.populate ? pop : { path: pop.path, select: pop.select });
   });
-  
+
   return query;
 };
 
 const findById = async (id, populate = []) => {
   let query = Olympiad.findById(id);
-  
+
   populate.forEach((pop) => {
-    query = query.populate(pop.path, pop.select);
+    query = query.populate(pop.populate ? pop : { path: pop.path, select: pop.select });
   });
   
   return query;

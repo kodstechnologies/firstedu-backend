@@ -1,21 +1,10 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
+import { getEventStatus, withEventStatus } from "../utils/eventStatus.js";
 import olympiadService from "../services/olympiad.service.js";
 import eventRegistrationService from "../services/eventRegistration.service.js";
 import olympiadValidator from "../validation/olympiad.validator.js";
-
-/** status = "open" (within registration), "close" (before), "completed" (after end) */
-const withRegistrationStatus = (item) => {
-  const obj = item?.toObject ? item.toObject() : { ...item };
-  const now = new Date();
-  const start = new Date(obj.registrationStartTime);
-  const end = new Date(obj.registrationEndTime);
-  if (now >= start && now <= end) obj.status = "open";
-  else if (now > end) obj.status = "completed";
-  else obj.status = "close";
-  return obj;
-};
 
 // ==================== ADMIN CONTROLLERS ====================
 
@@ -45,7 +34,10 @@ export const getOlympiads = asyncHandler(async (req, res) => {
     isPublished,
   });
 
-  const olympiadsWithStatus = (result.olympiads || []).map(withRegistrationStatus);
+  const olympiadsWithStatus = (result.olympiads || []).map((o) => ({
+    ...(o?.toObject ? o.toObject() : o),
+    status: getEventStatus(o),
+  }));
   return res.status(200).json(
     ApiResponse.success(olympiadsWithStatus, "Olympiads fetched successfully", result.pagination)
   );
@@ -55,7 +47,10 @@ export const getOlympiadById = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const olympiad = await olympiadService.getOlympiadById(id, true);
   return res.status(200).json(
-    ApiResponse.success(withRegistrationStatus(olympiad), "Olympiad fetched successfully")
+    ApiResponse.success(
+      { ...(olympiad?.toObject ? olympiad.toObject() : olympiad), status: getEventStatus(olympiad) },
+      "Olympiad fetched successfully"
+    )
   );
 });
 
@@ -122,7 +117,6 @@ export const getPublishedOlympiads = asyncHandler(async (req, res) => {
     isPublished: true,
   });
 
-  // Check registration status for each olympiad
   const olympiadsWithStatus = await Promise.all(
     result.olympiads.map(async (olympiad) => {
       const registration = await eventRegistrationService.getRegistrationByEvent(
@@ -130,23 +124,8 @@ export const getPublishedOlympiads = asyncHandler(async (req, res) => {
         olympiad._id,
         req.user._id
       );
-
-      const now = new Date();
-      const isRegistrationOpen =
-        now >= new Date(olympiad.registrationStartTime) &&
-        now <= new Date(olympiad.registrationEndTime);
-      const isEventLive =
-        now >= new Date(olympiad.startTime) && now <= new Date(olympiad.endTime);
-      const canJoin = registration && isEventLive;
-
-      return {
-        ...olympiad.toObject(),
-        isRegistered: !!registration,
-        isRegistrationOpen,
-        isEventLive,
-        canJoin,
-        status: isRegistrationOpen ? "open" : "close",
-      };
+      const obj = withEventStatus(olympiad, !!registration);
+      return { ...obj, isRegistered: !!registration };
     })
   );
 
@@ -168,25 +147,10 @@ export const getOlympiadDetails = asyncHandler(async (req, res) => {
     olympiad._id,
     req.user._id
   );
-
-  const now = new Date();
-  const isRegistrationOpen =
-    now >= new Date(olympiad.registrationStartTime) &&
-    now <= new Date(olympiad.registrationEndTime);
-  const isEventLive =
-    now >= new Date(olympiad.startTime) && now <= new Date(olympiad.endTime);
-  const canJoin = registration && isEventLive;
-
+  const obj = withEventStatus(olympiad, !!registration);
   return res.status(200).json(
     ApiResponse.success(
-      {
-        ...olympiad.toObject(),
-        isRegistered: !!registration,
-        isRegistrationOpen,
-        isEventLive,
-        canJoin,
-        status: isRegistrationOpen ? "open" : (now > new Date(olympiad.registrationEndTime) ? "completed" : "close"),
-      },
+      { ...obj, isRegistered: !!registration },
       "Olympiad details fetched successfully"
     )
   );

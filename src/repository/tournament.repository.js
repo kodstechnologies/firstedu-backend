@@ -15,9 +15,9 @@ const find = async (filter = {}, options = {}) => {
   let query = Tournament.find(filter);
   
   populate.forEach((pop) => {
-    query = query.populate(pop.path, pop.select);
+    query = query.populate(pop.populate ? pop : { path: pop.path, select: pop.select });
   });
-  
+
   return query.sort(sort).skip(skip).limit(limit);
 };
 
@@ -25,17 +25,17 @@ const findOne = async (filter, populate = []) => {
   let query = Tournament.findOne(filter);
   
   populate.forEach((pop) => {
-    query = query.populate(pop.path, pop.select);
+    query = query.populate(pop.populate ? pop : { path: pop.path, select: pop.select });
   });
-  
+
   return query;
 };
 
 const findById = async (id, populate = []) => {
   let query = Tournament.findById(id);
-  
+
   populate.forEach((pop) => {
-    query = query.populate(pop.path, pop.select);
+    query = query.populate(pop.populate ? pop : { path: pop.path, select: pop.select });
   });
   
   return query;

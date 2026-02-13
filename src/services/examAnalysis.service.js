@@ -1,7 +1,5 @@
 import { ApiError } from "../utils/ApiError.js";
 import examSessionRepository from "../repository/examSession.repository.js";
-import questionRepository from "../repository/question.repository.js";
-import testRepository from "../repository/test.repository.js";
 import olympiadRepository from "../repository/olympiad.repository.js";
 import tournamentRepository from "../repository/tournament.repository.js";
 import hallOfFameRepository from "../repository/hallOfFame.repository.js";
@@ -13,9 +11,9 @@ import hallOfFameService from "./hallOfFame.service.js";
  */
 export const calculateDetailedAnalysis = async (sessionId) => {
   const session = await examSessionRepository.findById(sessionId, {
-    test: "title questions",
+    test: "title",
     answers: {
-      select: "subject topic marks correctAnswer options",
+      select: "subject topic marks correctAnswer options negativeMarks",
     },
   });
 
@@ -27,23 +25,13 @@ export const calculateDetailedAnalysis = async (sessionId) => {
     throw new ApiError(400, "Exam session is not completed yet");
   }
 
-  // Get all questions from the test
-  const test = await testRepository.findTestById(session.test._id);
-
-  if (!test) {
-    throw new ApiError(404, "Test not found");
-  }
-
-  // Create maps for analysis
+  // Create maps for analysis (questions come from populated answer.questionId)
   const topicMap = new Map(); // key: "subject|topic"
   const subjectMap = new Map(); // key: "subject"
 
   // Process each answer
   for (const answerEntry of session.answers) {
-    const question = test.questions.find(
-      (q) => q._id.toString() === answerEntry.questionId._id.toString()
-    );
-
+    const question = answerEntry.questionId;
     if (!question) continue;
 
     const subject = question.subject || "Unknown";

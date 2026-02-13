@@ -138,11 +138,7 @@ export const getForumsAdmin = asyncHandler(async (req, res) => {
   const { page, limit, search } = req.query;
   const result = await forumService.getForumsForAdmin({ page, limit, search });
   return res.status(200).json(
-    ApiResponse.success(
-      result.forums,
-      "Forums fetched successfully for admin",
-      result.pagination
-    )
+    ApiResponse.success(result.forums, "Forums fetched successfully for admin", result.pagination)
   );
 });
 

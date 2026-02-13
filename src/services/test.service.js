@@ -1,165 +1,70 @@
 import { ApiError } from "../utils/ApiError.js";
 import testRepository from "../repository/test.repository.js";
-
-// ------- Categories -------
-
-export const createCategory = async (data, adminId) => {
-  const category = await testRepository.createCategory({
-    ...data,
-    createdBy: adminId,
-  });
-  return category;
-};
-
-export const getCategories = async (options = {}) => {
-  return await testRepository.findAllCategories({}, options);
-};
-
-export const getCategoryById = async (id) => {
-  const category = await testRepository.findCategoryById(id);
-  if (!category) {
-    throw new ApiError(404, "Category not found");
-  }
-  return category;
-};
-
-export const updateCategory = async (id, data) => {
-  const updated = await testRepository.updateCategoryById(id, data);
-  if (!updated) {
-    throw new ApiError(404, "Category not found");
-  }
-  return updated;
-};
-
-export const deleteCategory = async (id) => {
-  const deleted = await testRepository.deleteCategoryById(id);
-  if (!deleted) {
-    throw new ApiError(404, "Category not found");
-  }
-  return true;
-};
+import questionBankRepository from "../repository/questionBank.repository.js";
 
 // ------- Tests / Test Builder -------
 
-const buildRandomQuestions = async (randomConfig) => {
-  const docs = await testRepository.sampleRandomQuestions(randomConfig.count);
-  if (!docs.length) {
-    throw new ApiError(400, "No questions found for the given random config");
-  }
-
-  return docs;
-};
-
-const calculateTotalMarks = (questions) => {
-  return questions.reduce((sum, q) => sum + (q.marks || 0), 0);
-};
-
 export const createTest = async (data, adminId) => {
-  const selectionMode = data.selectionMode || "manual";
-  let questions = [];
-
-  if (selectionMode === "manual") {
-    if (data.questions && data.questions.length > 60) {
-      throw new ApiError(400, "A test can have maximum 60 questions");
-    }
-    questions = await testRepository.findQuestionsByIds(data.questions, { isActive: true });
-    if (!questions.length) {
-      throw new ApiError(400, "No valid questions found for this test");
-    }
-  } else if (selectionMode === "random") {
-    if (data.randomConfig && data.randomConfig.count > 60) {
-      throw new ApiError(400, "Random test can have maximum 60 questions");
-    }
-    if (!data.randomConfig || !data.randomConfig.count) {
-      throw new ApiError(400, "randomConfig.count is required for random selection");
-    }
-    const randomQuestions = await buildRandomQuestions(data.randomConfig);
-    questions = randomQuestions;
-  } else {
-    throw new ApiError(400, "Invalid selectionMode. Use 'manual' or 'random'.");
-  }
-
-  const totalMarks = calculateTotalMarks(questions);
+  const bank = await questionBankRepository.findById(data.questionBank);
+  if (!bank) throw new ApiError(404, "Question bank not found");
 
   const test = await testRepository.createTest({
     ...data,
-    selectionMode,
-    questions: questions.map((q) => q._id),
-    totalMarks,
     createdBy: adminId,
   });
-
+  await enrichTestsWithBankStats(test);
   return test;
 };
 
+const enrichTestsWithBankStats = async (tests) => {
+  const items = Array.isArray(tests) ? tests : [tests];
+  const bankIds = items
+    .map((t) => t?.questionBank?._id)
+    .filter(Boolean)
+    .map((id) => id.toString());
+  const uniqueIds = [...new Set(bankIds)];
+  const statsMap = await questionBankRepository.getBanksStatsBatch(uniqueIds);
+
+  items.forEach((t) => {
+    if (t?.questionBank?._id) {
+      const key = t.questionBank._id.toString();
+      const stats = statsMap.get(key) || { totalQuestions: 0, totalMarks: 0 };
+      t.questionBank.totalQuestions = stats.totalQuestions;
+      t.questionBank.totalMarks = stats.totalMarks;
+    }
+  });
+
+  return tests;
+};
+
 export const getTests = async (options = {}) => {
-  return await testRepository.findAllTests({}, options);
+  const result = await testRepository.findAllTests({}, options);
+  await enrichTestsWithBankStats(result.tests);
+  return result;
 };
 
 export const getTestById = async (id) => {
   const test = await testRepository.findTestById(id, {
-    category: "name slug",
-    questions: "questionText subject topic difficulty marks",
+    questionBank: "name categories",
   });
   if (!test) {
     throw new ApiError(404, "Test not found");
   }
+  await enrichTestsWithBankStats(test);
   return test;
 };
 
 export const updateTest = async (id, data) => {
-  let updatePayload = { ...data };
+  const existing = await testRepository.findTestById(id);
+  if (!existing) throw new ApiError(404, "Test not found");
 
-  // If questions or selectionMode/randomConfig changed, recompute questions + totalMarks
-  if (
-    data.questions ||
-    data.selectionMode ||
-    (data.randomConfig && Object.keys(data.randomConfig).length > 0)
-  ) {
-    let questions = [];
-
-    const selectionMode = data.selectionMode || "manual";
-
-    if (selectionMode === "manual") {
-      if (!data.questions || !data.questions.length) {
-        throw new ApiError(
-          400,
-          "questions array is required for manual selection"
-        );
-      }
-      if (data.questions.length > 60) {
-        throw new ApiError(400, "A test can have maximum 60 questions");
-      }
-      questions = await testRepository.findQuestionsByIds(data.questions, { isActive: true });
-      if (!questions.length) {
-        throw new ApiError(400, "No valid questions found for this test");
-      }
-      updatePayload.questions = questions.map((q) => q._id);
-      updatePayload.randomConfig = undefined;
-    } else {
-      if (!data.randomConfig || !data.randomConfig.count) {
-        throw new ApiError(
-          400,
-          "randomConfig with valid count is required for random selection"
-        );
-      }
-      if (data.randomConfig.count > 60) {
-        throw new ApiError(400, "Random test can have maximum 60 questions");
-      }
-      const randomQuestions = await buildRandomQuestions(data.randomConfig);
-      questions = randomQuestions;
-      updatePayload.questions = questions.map((q) => q._id);
-      updatePayload.randomConfig = data.randomConfig;
-    }
-
-    updatePayload.totalMarks = calculateTotalMarks(questions);
+  if (data.questionBank) {
+    const bank = await questionBankRepository.findById(data.questionBank);
+    if (!bank) throw new ApiError(404, "Question bank not found");
   }
 
-  const updated = await testRepository.updateTestById(id, updatePayload);
-
-  if (!updated) {
-    throw new ApiError(404, "Test not found");
-  }
+  const updated = await testRepository.updateTestById(id, data);
+  if (updated) await enrichTestsWithBankStats(updated);
   return updated;
 };
 
@@ -173,26 +78,38 @@ export const deleteTest = async (id) => {
 
 // ------- Bundles -------
 
+const enrichBundlesTests = async (bundles) => {
+  const items = Array.isArray(bundles) ? bundles : [bundles];
+  for (const bundle of items) {
+    if (bundle?.tests?.length) {
+      await enrichTestsWithBankStats(bundle.tests);
+    }
+  }
+};
+
 export const createBundle = async (data, adminId) => {
   const bundle = await testRepository.createBundle({
     ...data,
     createdBy: adminId,
   });
+  await enrichBundlesTests(bundle);
   return bundle;
 };
 
 export const getBundles = async (options = {}) => {
-  return await testRepository.findAllBundles({}, options);
+  const result = await testRepository.findAllBundles({}, options);
+  await enrichBundlesTests(result.bundles);
+  return result;
 };
 
 export const getBundleById = async (id) => {
   const bundle = await testRepository.findBundleById(id, {
-    category: "name slug",
-    tests: "title durationMinutes totalMarks",
+    tests: "title durationMinutes questionBank",
   });
   if (!bundle) {
     throw new ApiError(404, "Bundle not found");
   }
+  await enrichBundlesTests(bundle);
   return bundle;
 };
 
@@ -201,6 +118,7 @@ export const updateBundle = async (id, data) => {
   if (!updated) {
     throw new ApiError(404, "Bundle not found");
   }
+  await enrichBundlesTests(updated);
   return updated;
 };
 
@@ -213,11 +131,6 @@ export const deleteBundle = async (id) => {
 };
 
 export default {
-  createCategory,
-  getCategories,
-  getCategoryById,
-  updateCategory,
-  deleteCategory,
   createTest,
   getTests,
   getTestById,

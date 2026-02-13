@@ -1,21 +1,10 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
+import { getEventStatus, withEventStatus } from "../utils/eventStatus.js";
 import tournamentService from "../services/tournament.service.js";
 import eventRegistrationService from "../services/eventRegistration.service.js";
 import tournamentValidator from "../validation/tournament.validator.js";
-
-/** status = "open" (within registration), "close" (before), "completed" (after end) */
-const withRegistrationStatus = (item) => {
-  const obj = item?.toObject ? item.toObject() : { ...item };
-  const now = new Date();
-  const start = new Date(obj.registrationStartTime);
-  const end = new Date(obj.registrationEndTime);
-  if (now >= start && now <= end) obj.status = "open";
-  else if (now > end) obj.status = "completed";
-  else obj.status = "close";
-  return obj;
-};
 
 // ==================== ADMIN CONTROLLERS ====================
 
@@ -45,7 +34,10 @@ export const getTournaments = asyncHandler(async (req, res) => {
     isPublished,
   });
 
-  const tournamentsWithStatus = (result.tournaments || []).map(withRegistrationStatus);
+  const tournamentsWithStatus = (result.tournaments || []).map((t) => ({
+    ...(t?.toObject ? t.toObject() : t),
+    status: getEventStatus(t),
+  }));
   return res.status(200).json(
     ApiResponse.success(tournamentsWithStatus, "Tournaments fetched successfully", result.pagination)
   );
@@ -55,7 +47,10 @@ export const getTournamentById = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const tournament = await tournamentService.getTournamentById(id, true);
   return res.status(200).json(
-    ApiResponse.success(withRegistrationStatus(tournament), "Tournament fetched successfully")
+    ApiResponse.success(
+      { ...(tournament?.toObject ? tournament.toObject() : tournament), status: getEventStatus(tournament) },
+      "Tournament fetched successfully"
+    )
   );
 });
 
@@ -122,7 +117,6 @@ export const getPublishedTournaments = asyncHandler(async (req, res) => {
     isPublished: true,
   });
 
-  // Check registration status
   const tournamentsWithStatus = await Promise.all(
     result.tournaments.map(async (tournament) => {
       const registration = await eventRegistrationService.getRegistrationByEvent(
@@ -130,18 +124,8 @@ export const getPublishedTournaments = asyncHandler(async (req, res) => {
         tournament._id,
         req.user._id
       );
-
-      const now = new Date();
-      const isRegistrationOpen =
-        now >= new Date(tournament.registrationStartTime) &&
-        now <= new Date(tournament.registrationEndTime);
-
-      return {
-        ...tournament.toObject(),
-        isRegistered: !!registration,
-        isRegistrationOpen,
-        status: isRegistrationOpen ? "open" : (now > new Date(tournament.registrationEndTime) ? "completed" : "close"),
-      };
+      const obj = withEventStatus(tournament, !!registration);
+      return { ...obj, isRegistered: !!registration };
     })
   );
 
@@ -163,28 +147,14 @@ export const getTournamentDetails = asyncHandler(async (req, res) => {
     tournament._id,
     req.user._id
   );
-
-  const now = new Date();
-  const isRegistrationOpen =
-    now >= new Date(tournament.registrationStartTime) &&
-    now <= new Date(tournament.registrationEndTime);
-
-  // Get student's progress through stages
   const { qualifiedStages, currentStage } = await eventRegistrationService.getTournamentProgress(
     tournament._id,
     req.user._id
   );
-
+  const obj = withEventStatus(tournament, !!registration);
   return res.status(200).json(
     ApiResponse.success(
-      {
-        ...tournament.toObject(),
-        isRegistered: !!registration,
-        isRegistrationOpen,
-        status: isRegistrationOpen ? "open" : (now > new Date(tournament.registrationEndTime) ? "completed" : "close"),
-        currentStage,
-        qualifiedStages,
-      },
+      { ...obj, isRegistered: !!registration, currentStage, qualifiedStages },
       "Tournament details fetched successfully"
     )
   );

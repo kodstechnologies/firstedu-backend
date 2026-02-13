@@ -48,12 +48,12 @@ export const createQuestionBankWithQuestions = asyncHandler(async (req, res) => 
 });
 
 export const getQuestionBanks = asyncHandler(async (req, res) => {
-  const { page, limit, search, classType, sortBy, sortOrder } = req.query;
+  const { page, limit, search, category, sortBy, sortOrder } = req.query;
   const result = await questionBankService.getQuestionBanks({
     page,
     limit,
     search,
-    classType,
+    category,
     sortBy,
     sortOrder,
   });

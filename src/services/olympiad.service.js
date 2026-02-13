@@ -1,9 +1,39 @@
 import { ApiError } from "../utils/ApiError.js";
 import olympiadRepository from "../repository/olympiad.repository.js";
 import testRepository from "../repository/test.repository.js";
+import questionBankRepository from "../repository/questionBank.repository.js";
 import walletService from "./wallet.service.js";
 import eventRegistrationRepository from "../repository/eventRegistration.repository.js";
 import examSessionRepository from "../repository/examSession.repository.js";
+
+const testWithQuestionBankPopulate = {
+  path: "test",
+  select: "title durationMinutes questionBank",
+  populate: {
+    path: "questionBank",
+    select: "name categories",
+    populate: { path: "categories", select: "name _id" },
+  },
+};
+
+const enrichOlympiadTestsWithBankStats = async (olympiads) => {
+  const items = Array.isArray(olympiads) ? olympiads : [olympiads];
+  const bankIds = items
+    .map((o) => o?.test?.questionBank?._id)
+    .filter(Boolean)
+    .map((id) => id.toString());
+  const uniqueIds = [...new Set(bankIds)];
+  const statsMap = await questionBankRepository.getBanksStatsBatch(uniqueIds);
+
+  items.forEach((o) => {
+    if (o?.test?.questionBank?._id) {
+      const key = o.test.questionBank._id.toString();
+      const stats = statsMap.get(key) || { totalQuestions: 0, totalMarks: 0 };
+      o.test.questionBank.totalQuestions = stats.totalQuestions;
+      o.test.questionBank.totalMarks = stats.totalMarks;
+    }
+  });
+};
 
 export const createOlympiad = async (data, adminId) => {
   const {
@@ -87,7 +117,7 @@ export const getOlympiads = async (options = {}) => {
   const [olympiads, total] = await Promise.all([
     olympiadRepository.find(query, {
       populate: [
-        { path: "test", select: "title durationMinutes totalMarks" },
+        testWithQuestionBankPopulate,
         { path: "createdBy", select: "name email" },
       ],
       sort: { createdAt: -1 },
@@ -96,6 +126,8 @@ export const getOlympiads = async (options = {}) => {
     }),
     olympiadRepository.count(query),
   ]);
+
+  await enrichOlympiadTestsWithBankStats(olympiads);
 
   return {
     olympiads,
@@ -110,7 +142,7 @@ export const getOlympiads = async (options = {}) => {
 
 export const getOlympiadById = async (id, isAdmin = false) => {
   const populateFields = [
-    { path: "test", select: isAdmin ? "title durationMinutes totalMarks questions" : "title durationMinutes totalMarks" },
+    testWithQuestionBankPopulate,
     { path: "createdBy", select: "name email" },
   ];
 
@@ -118,6 +150,7 @@ export const getOlympiadById = async (id, isAdmin = false) => {
   if (!olympiad) {
     throw new ApiError(404, "Olympiad not found");
   }
+  await enrichOlympiadTestsWithBankStats(olympiad);
   return olympiad;
 };
 

@@ -236,7 +236,7 @@ export const getForumsForAdmin = async (options = {}) => {
   const limitNum = parseInt(limit);
   const skip = (pageNum - 1) * limitNum;
 
-  const [forums, total] = await Promise.all([
+  const [forums, total, stats] = await Promise.all([
     forumRepository.find(query, {
       populate: [
         { path: "createdBy", select: "name email" },
@@ -248,6 +248,7 @@ export const getForumsForAdmin = async (options = {}) => {
       limit: limitNum,
     }),
     forumRepository.count(query),
+    forumRepository.getForumStats(),
   ]);
 
   return {
@@ -257,6 +258,9 @@ export const getForumsForAdmin = async (options = {}) => {
       limit: limitNum,
       total,
       pages: Math.ceil(total / limitNum) || 1,
+      totalForums: stats.totalForums,
+      totalReplies: stats.totalReplies,
+      totalLikes: stats.totalLikes,
     },
   };
 };

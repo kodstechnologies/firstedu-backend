@@ -117,8 +117,7 @@ export const getTests = asyncHandler(async (req, res) => {
     page = 1,
     limit = 10,
     search,
-    category,
-    testType,
+    questionBank,
     sortBy = "createdAt",
     sortOrder = "desc",
   } = req.query;
@@ -127,8 +126,7 @@ export const getTests = asyncHandler(async (req, res) => {
     page,
     limit,
     search,
-    category,
-    testType,
+    questionBank,
     sortBy,
     sortOrder,
   });

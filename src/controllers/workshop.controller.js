@@ -1,21 +1,10 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
+import { getEventStatus, withEventStatus } from "../utils/eventStatus.js";
 import workshopService from "../services/workshop.service.js";
 import eventRegistrationService from "../services/eventRegistration.service.js";
 import workshopValidator from "../validation/workshop.validator.js";
-
-/** status = "open" (within registration), "close" (before), "completed" (after end) */
-const withRegistrationStatus = (item) => {
-  const obj = item?.toObject ? item.toObject() : { ...item };
-  const now = new Date();
-  const start = new Date(obj.registrationStartTime);
-  const end = new Date(obj.registrationEndTime);
-  if (now >= start && now <= end) obj.status = "open";
-  else if (now > end) obj.status = "completed";
-  else obj.status = "close";
-  return obj;
-};
 
 // ==================== ADMIN CONTROLLERS ====================
 
@@ -47,7 +36,10 @@ export const getWorkshops = asyncHandler(async (req, res) => {
     teacherId,
   });
 
-  const workshopsWithStatus = (result.workshops || []).map(withRegistrationStatus);
+  const workshopsWithStatus = (result.workshops || []).map((w) => ({
+    ...(w?.toObject ? w.toObject() : w),
+    status: getEventStatus(w),
+  }));
   return res.status(200).json(
     ApiResponse.success(workshopsWithStatus, "Workshops fetched successfully", result.pagination)
   );
@@ -57,7 +49,10 @@ export const getWorkshopById = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const workshop = await workshopService.getWorkshopById(id);
   return res.status(200).json(
-    ApiResponse.success(withRegistrationStatus(workshop), "Workshop fetched successfully")
+    ApiResponse.success(
+      { ...(workshop?.toObject ? workshop.toObject() : workshop), status: getEventStatus(workshop) },
+      "Workshop fetched successfully"
+    )
   );
 });
 
@@ -100,7 +95,6 @@ export const getPublishedWorkshops = asyncHandler(async (req, res) => {
     eventType,
   });
 
-  // Check registration status
   const workshopsWithStatus = await Promise.all(
     result.workshops.map(async (workshop) => {
       const registration = await eventRegistrationService.getRegistrationByEvent(
@@ -108,23 +102,11 @@ export const getPublishedWorkshops = asyncHandler(async (req, res) => {
         workshop._id,
         req.user._id
       );
-
-      const now = new Date();
-      const isRegistrationOpen =
-        now >= new Date(workshop.registrationStartTime) &&
-        now <= new Date(workshop.registrationEndTime);
-      const isEventLive =
-        now >= new Date(workshop.startTime) && now <= new Date(workshop.endTime);
-      const canJoin = registration && isEventLive;
-
+      const obj = withEventStatus(workshop, !!registration);
+      const canJoin = obj.canJoin;
       return {
-        ...workshop.toObject(),
+        ...obj,
         isRegistered: !!registration,
-        isRegistrationOpen,
-        isEventLive,
-        canJoin,
-        status: isRegistrationOpen ? "open" : (now > new Date(workshop.registrationEndTime) ? "completed" : "close"),
-        // Only show meeting link if registered and event is live
         meetingLink: canJoin ? workshop.meetingLink : undefined,
         meetingPassword: canJoin ? workshop.meetingPassword : undefined,
       };
@@ -149,25 +131,13 @@ export const getWorkshopDetails = asyncHandler(async (req, res) => {
     workshop._id,
     req.user._id
   );
-
-  const now = new Date();
-  const isRegistrationOpen =
-    now >= new Date(workshop.registrationStartTime) &&
-    now <= new Date(workshop.registrationEndTime);
-  const isEventLive =
-    now >= new Date(workshop.startTime) && now <= new Date(workshop.endTime);
-  const canJoin = registration && isEventLive;
-
+  const obj = withEventStatus(workshop, !!registration);
+  const canJoin = obj.canJoin;
   return res.status(200).json(
     ApiResponse.success(
       {
-        ...workshop.toObject(),
+        ...obj,
         isRegistered: !!registration,
-        isRegistrationOpen,
-        isEventLive,
-        canJoin,
-        status: isRegistrationOpen ? "open" : (now > new Date(workshop.registrationEndTime) ? "completed" : "close"),
-        // Only show meeting link if registered and event is live
         meetingLink: canJoin ? workshop.meetingLink : undefined,
         meetingPassword: canJoin ? workshop.meetingPassword : undefined,
       },

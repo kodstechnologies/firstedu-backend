@@ -21,11 +21,6 @@ import {
   getBulkAnalytics,
 } from "../controllers/question.controller.js";
 import {
-  createCategory,
-  getCategories,
-  getCategoryById,
-  updateCategory,
-  deleteCategory,
   createTest,
   getTests,
   getTestById,
@@ -49,6 +44,7 @@ import {
   getStudentById,
   getStudentTestHistory,
   getProctorLogs,
+  updateStudentStatus,
 } from "../controllers/adminUser.controller.js";
 import {
   getTeachers,
@@ -139,20 +135,15 @@ import {
   sendNotificationToAllStudents,
 } from "../controllers/notification.controller.js";
 import {
-  createClassType,
-  getClassTypes,
-  getClassTypeById,
-  updateClassType,
-  deleteClassType,
-} from "../controllers/classType.controller.js";
-import {
-  createSubject,
-  getSubjects,
-  getSubjectsByClassType,
-  getSubjectById,
-  updateSubject,
-  deleteSubject,
-} from "../controllers/subject.controller.js";
+  createCategory as createTaxonomyCategory,
+  createCategoryWithSubcategories as createTaxonomyCategoryWithSubcategories,
+  getCategories as getTaxonomyCategories,
+  getCategoryTree as getTaxonomyCategoryTree,
+  getCategoryById as getTaxonomyCategoryById,
+  getCategoryChildren as getTaxonomyCategoryChildren,
+  updateCategory as updateTaxonomyCategory,
+  deleteCategory as deleteTaxonomyCategory,
+} from "../controllers/category.controller.js";
 import {
   createQuestionBank,
   createQuestionBankWithQuestions,
@@ -175,20 +166,15 @@ router.post("/forgot-password/verify", verifyForgotPasswordOTP);
 router.post("/forgot-password/reset", resetPassword);
 router.put("/change-password", verifyJWT, changePassword);
 
-// Class Types (e.g. JEE, NEET, Class 1-10)
-router.post("/class-types", verifyJWT, createClassType);
-router.get("/class-types", verifyJWT, getClassTypes);
-router.get("/class-types/:id", verifyJWT, getClassTypeById);
-router.put("/class-types/:id", verifyJWT, updateClassType);
-router.delete("/class-types/:id", verifyJWT, deleteClassType);
-
-// Subjects (per class type)
-router.post("/subjects", verifyJWT, createSubject);
-router.get("/subjects", verifyJWT, getSubjects);
-router.get("/class-types/:classTypeId/subjects", verifyJWT, getSubjectsByClassType);
-router.get("/subjects/:id", verifyJWT, getSubjectById);
-router.put("/subjects/:id", verifyJWT, updateSubject);
-router.delete("/subjects/:id", verifyJWT, deleteSubject);
+// Categories (hierarchical: School -> Classes -> Class 1-12, Subjects -> Physics, Chem, Math)
+router.get("/categories/tree", verifyJWT, getTaxonomyCategoryTree);
+router.post("/categories", verifyJWT, createTaxonomyCategory);
+router.post("/categories/with-subcategories", verifyJWT, createTaxonomyCategoryWithSubcategories);
+router.get("/categories", verifyJWT, getTaxonomyCategories);
+router.get("/categories/:id/children", verifyJWT, getTaxonomyCategoryChildren);
+router.get("/categories/:id", verifyJWT, getTaxonomyCategoryById);
+router.put("/categories/:id", verifyJWT, updateTaxonomyCategory);
+router.delete("/categories/:id", verifyJWT, deleteTaxonomyCategory);
 
 // Question Banks (create bank, create bank with questions, list, update name, delete)
 router.post("/question-banks", verifyJWT, createQuestionBank);
@@ -214,13 +200,6 @@ router.delete("/questions/:id/child-questions/:childId", verifyJWT, removeChildQ
 router.get("/questions/:id/analytics", verifyJWT, getQuestionAnalytics);
 router.post("/questions/:id/analytics/calculate", verifyJWT, calculateAnalytics);
 router.post("/questions/analytics/bulk", verifyJWT, getBulkAnalytics);
-
-// Test Categories
-router.post("/test-categories", verifyJWT, createCategory);
-router.get("/test-categories", verifyJWT, getCategories);
-router.get("/test-categories/:id", verifyJWT, getCategoryById);
-router.put("/test-categories/:id", verifyJWT, updateCategory);
-router.delete("/test-categories/:id", verifyJWT, deleteCategory);
 
 // Tests (Test Builder)
 router.post("/tests", verifyJWT, createTest);
@@ -256,6 +235,7 @@ router.delete("/teachers/:id", verifyJWT, deleteTeacher);
 // Student Management & Proctoring
 router.get("/students", verifyJWT, getStudents);
 router.get("/students/:id", verifyJWT, getStudentById);
+router.put("/students/:id/status", verifyJWT, updateStudentStatus);
 router.get("/students/:id/test-history", verifyJWT, getStudentTestHistory);
 router.get("/exam-sessions/:sessionId/proctor-logs", verifyJWT, getProctorLogs);
 

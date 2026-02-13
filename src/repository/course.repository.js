@@ -9,13 +9,9 @@ const create = async (courseData) => {
   }
 };
 
-const findById = async (id, populateOptions = {}) => {
+const findById = async (id) => {
   try {
-    let query = Course.findById(id);
-    if (populateOptions.category) {
-      query = query.populate("category", populateOptions.category);
-    }
-    return await query;
+    return await Course.findById(id);
   } catch (error) {
     throw new ApiError(500, "Failed to fetch course", error.message);
   }
@@ -55,7 +51,6 @@ const findAll = async (filter = {}, options = {}) => {
 
     const [courses, total] = await Promise.all([
       Course.find(query)
-        .populate("category", "name slug")
         .sort(sort)
         .skip(skip)
         .limit(limitNum),
@@ -82,7 +77,7 @@ const updateById = async (id, updateData) => {
       id,
       { $set: updateData },
       { new: true, runValidators: true }
-    ).populate("category", "name slug");
+    );
   } catch (error) {
     throw new ApiError(500, "Failed to update course", error.message);
   }

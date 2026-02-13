@@ -39,7 +39,8 @@ const questionItemSchema = Joi.object({
     }),
   }),
   explanation: Joi.string().trim().optional(),
-  subjectId: Joi.string().optional(),
+  categoryId: Joi.string().optional(),
+  subject: Joi.string().trim().optional(),
   topic: Joi.string().trim().optional(),
   marks: Joi.number().min(0).default(1),
   negativeMarks: Joi.number().min(0).default(0),
@@ -48,8 +49,7 @@ const questionItemSchema = Joi.object({
 
 const createQuestionBank = Joi.object({
   name: Joi.string().required().trim(),
-  classType: Joi.string().required(),
-  subjects: Joi.array().items(Joi.string()).min(1).required(),
+  categories: Joi.array().items(Joi.string()).min(1).required(),
   useSectionWiseDifficulty: Joi.boolean().default(false),
   overallDifficulty: Joi.string()
     .valid("easy", "medium", "hard")
@@ -63,8 +63,7 @@ const createQuestionBank = Joi.object({
 
 const createQuestionBankWithQuestions = Joi.object({
   name: Joi.string().required().trim(),
-  classType: Joi.string().required(),
-  subjects: Joi.array().items(Joi.string()).min(1).required(),
+  categories: Joi.array().items(Joi.string()).min(1).required(),
   useSectionWiseDifficulty: Joi.boolean().default(false),
   overallDifficulty: Joi.string()
     .valid("easy", "medium", "hard")
@@ -79,6 +78,7 @@ const createQuestionBankWithQuestions = Joi.object({
 
 const updateQuestionBank = Joi.object({
   name: Joi.string().trim().optional(),
+  categories: Joi.array().items(Joi.string()).min(1).optional(),
   useSectionWiseDifficulty: Joi.boolean().optional(),
   overallDifficulty: Joi.string().valid("easy", "medium", "hard").optional(),
   sections: Joi.array().items(sectionSchema).optional(),

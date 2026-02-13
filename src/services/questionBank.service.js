@@ -1,8 +1,7 @@
 import { ApiError } from "../utils/ApiError.js";
 import questionBankRepository from "../repository/questionBank.repository.js";
 import questionRepository from "../repository/question.repository.js";
-import subjectRepository from "../repository/subject.repository.js";
-import classTypeRepository from "../repository/classType.repository.js";
+import categoryRepository from "../repository/category.repository.js";
 
 const validateQuestionOptions = (questionType, options) => {
   if (
@@ -23,23 +22,14 @@ const validateQuestionOptions = (questionType, options) => {
 };
 
 export const createQuestionBank = async (data, createdBy) => {
-  const classType = await classTypeRepository.findById(data.classType);
-  if (!classType) throw new ApiError(404, "Class type not found");
-  for (const subId of data.subjects || []) {
-    const sub = await subjectRepository.findById(subId);
-    if (!sub) throw new ApiError(404, `Subject not found: ${subId}`);
-    const ctId =
-      typeof sub.classType === "object" && sub.classType?._id
-        ? sub.classType._id.toString()
-        : sub.classType?.toString?.() || sub.classType;
-    if (ctId !== data.classType) {
-      throw new ApiError(400, "Subject does not belong to selected class type");
-    }
+  const categoryIds = data.categories || [];
+  for (const catId of categoryIds) {
+    const cat = await categoryRepository.findById(catId);
+    if (!cat) throw new ApiError(404, `Category not found: ${catId}`);
   }
   const payload = {
     name: data.name,
-    classType: data.classType,
-    subjects: data.subjects || [],
+    categories: categoryIds,
     useSectionWiseDifficulty: data.useSectionWiseDifficulty ?? false,
     overallDifficulty: data.overallDifficulty || "medium",
     sections: data.sections || [],
@@ -49,21 +39,10 @@ export const createQuestionBank = async (data, createdBy) => {
 };
 
 export const createQuestionBankWithQuestions = async (data, createdBy) => {
-  const classType = await classTypeRepository.findById(data.classType);
-  if (!classType) throw new ApiError(404, "Class type not found");
-  const subjectIds = data.subjects || [];
-  const subjectMap = new Map();
-  for (const subId of subjectIds) {
-    const sub = await subjectRepository.findById(subId);
-    if (!sub) throw new ApiError(404, `Subject not found: ${subId}`);
-    const ctId =
-      typeof sub.classType === "object" && sub.classType?._id
-        ? sub.classType._id.toString()
-        : sub.classType?.toString?.() || sub.classType;
-    if (ctId !== data.classType) {
-      throw new ApiError(400, "Subject does not belong to selected class type");
-    }
-    subjectMap.set(subId, sub);
+  const categoryIds = data.categories || [];
+  for (const catId of categoryIds) {
+    const cat = await categoryRepository.findById(catId);
+    if (!cat) throw new ApiError(404, `Category not found: ${catId}`);
   }
 
   const useSectionWise = data.useSectionWiseDifficulty ?? false;
@@ -86,8 +65,7 @@ export const createQuestionBankWithQuestions = async (data, createdBy) => {
 
   const bankPayload = {
     name: data.name,
-    classType: data.classType,
-    subjects: subjectIds,
+    categories: categoryIds,
     useSectionWiseDifficulty: useSectionWise,
     overallDifficulty,
     sections,
@@ -120,16 +98,11 @@ export const createQuestionBankWithQuestions = async (data, createdBy) => {
   };
 
   const createdQuestions = [];
-  const subjectIdList = Array.from(subjectMap.keys());
   for (let i = 0; i < questionsInput.length; i++) {
     questionIndex = i;
     const q = questionsInput[i];
     validateQuestionOptions(q.questionType, q.options);
     const { difficulty, sectionIndex, orderInBank } = buildDifficultyAndSection();
-    const subjectId =
-      q.subjectId && subjectMap.has(q.subjectId)
-        ? q.subjectId
-        : subjectIdList[i % subjectIdList.length];
     const questionData = {
       questionText: q.questionText,
       questionType: q.questionType || "single",
@@ -141,7 +114,8 @@ export const createQuestionBankWithQuestions = async (data, createdBy) => {
       marks: q.marks ?? 1,
       negativeMarks: q.negativeMarks ?? 0,
       tags: q.tags,
-      subjectRef: subjectId,
+      categoryRef: q.categoryId || undefined,
+      subject: q.subject || undefined,
       questionBank: bank._id,
       sectionIndex,
       orderInBank,
@@ -177,6 +151,12 @@ export const getQuestionsByBankId = async (bankId) => {
 export const updateQuestionBank = async (id, updateData) => {
   const existing = await questionBankRepository.findById(id);
   if (!existing) throw new ApiError(404, "Question bank not found");
+  if (updateData.categories && updateData.categories.length > 0) {
+    for (const catId of updateData.categories) {
+      const cat = await categoryRepository.findById(catId);
+      if (!cat) throw new ApiError(404, `Category not found: ${catId}`);
+    }
+  }
   return await questionBankRepository.updateById(id, updateData);
 };
 

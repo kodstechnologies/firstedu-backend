@@ -118,8 +118,8 @@ const save = async (session) => {
 const findTestById = async (id, populateOptions = {}) => {
   try {
     let query = Test.findById(id);
-    if (populateOptions.questions) {
-      query = query.populate("questions", populateOptions.questions);
+    if (populateOptions.questionBank) {
+      query = query.populate("questionBank", populateOptions.questionBank);
     }
     return await query;
   } catch (error) {

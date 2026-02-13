@@ -1,122 +1,31 @@
-import TestCategory from "../models/TestCategory.js";
 import Test from "../models/Test.js";
 import TestBundle from "../models/TestBundle.js";
 import Question from "../models/Question.js";
 import { ApiError } from "../utils/ApiError.js";
 
-// ========== TestCategory Repository ==========
-const createCategory = async (categoryData) => {
-  try {
-    const exists = await TestCategory.findOne({ slug: categoryData.slug });
-    if (exists) {
-      throw new ApiError(400, "Category with this slug already exists");
-    }
-    return await TestCategory.create(categoryData);
-  } catch (error) {
-    if (error instanceof ApiError) throw error;
-    throw new ApiError(500, "Failed to create category", error.message);
-  }
-};
-
-const findCategoryById = async (id) => {
-  try {
-    return await TestCategory.findById(id);
-  } catch (error) {
-    throw new ApiError(500, "Failed to fetch category", error.message);
-  }
-};
-
-const findAllCategories = async (filter = {}, options = {}) => {
-  try {
-    const {
-      page = 1,
-      limit = 10,
-      sortBy = "createdAt",
-      sortOrder = "desc",
-      search,
-      isActive,
-    } = options;
-
-    const query = { ...filter };
-
-    if (typeof isActive !== "undefined") {
-      query.isActive = isActive === "true" || isActive === true;
-    }
-
-    if (search) {
-      const regex = { $regex: search, $options: "i" };
-      query.$or = [{ name: regex }, { slug: regex }, { description: regex }];
-    }
-
-    const pageNum = parseInt(page);
-    const limitNum = parseInt(limit);
-    const skip = (pageNum - 1) * limitNum;
-    const sort = { [sortBy]: sortOrder === "desc" ? -1 : 1 };
-
-    const [categories, total] = await Promise.all([
-      TestCategory.find(query).sort(sort).skip(skip).limit(limitNum),
-      TestCategory.countDocuments(query),
-    ]);
-
-    return {
-      categories,
-      pagination: {
-        page: pageNum,
-        limit: limitNum,
-        total,
-        pages: Math.ceil(total / limitNum) || 1,
-      },
-    };
-  } catch (error) {
-    throw new ApiError(500, "Failed to fetch categories", error.message);
-  }
-};
-
-const updateCategoryById = async (id, updateData) => {
-  try {
-    return await TestCategory.findByIdAndUpdate(
-      id,
-      { $set: updateData },
-      { new: true, runValidators: true }
-    );
-  } catch (error) {
-    throw new ApiError(500, "Failed to update category", error.message);
-  }
-};
-
-const deleteCategoryById = async (id) => {
-  try {
-    const deleted = await TestCategory.findByIdAndDelete(id);
-    if (!deleted) {
-      throw new ApiError(404, "Category not found");
-    }
-    return deleted;
-  } catch (error) {
-    if (error instanceof ApiError) throw error;
-    throw new ApiError(500, "Failed to delete category", error.message);
-  }
-};
-
 // ========== Test Repository ==========
 const createTest = async (testData) => {
   try {
     const test = await Test.create(testData);
-    return await Test.findById(test._id)
-      .populate("category", "name slug")
-      .populate("questions", "questionText subject topic difficulty marks");
+    return await populateQuestionBankWithCategories(Test.findById(test._id));
   } catch (error) {
     throw new ApiError(500, "Failed to create test", error.message);
   }
 };
 
+const populateQuestionBankWithCategories = (query) => {
+  return query.populate({
+    path: "questionBank",
+    select: "name categories",
+    populate: { path: "categories", select: "name _id" },
+  });
+};
+
 const findTestById = async (id, populateOptions = {}) => {
   try {
     let query = Test.findById(id);
-    if (populateOptions.category) {
-      query = query.populate("category", populateOptions.category);
-    }
-    if (populateOptions.questions) {
-      query = query.populate("questions", populateOptions.questions);
+    if (populateOptions.questionBank) {
+      query = populateQuestionBankWithCategories(query);
     }
     return await query;
   } catch (error) {
@@ -132,28 +41,18 @@ const findAllTests = async (filter = {}, options = {}) => {
       sortBy = "createdAt",
       sortOrder = "desc",
       search,
-      category,
+      questionBank,
       isPublished,
-      selectionMode,
-      testType,
     } = options;
 
     const query = { ...filter };
 
-    if (category) {
-      query.category = category;
-    }
-
-    if (testType) {
-      query.testType = testType;
+    if (questionBank) {
+      query.questionBank = questionBank;
     }
 
     if (typeof isPublished !== "undefined") {
       query.isPublished = isPublished === "true" || isPublished === true;
-    }
-
-    if (selectionMode) {
-      query.selectionMode = selectionMode;
     }
 
     if (search) {
@@ -167,12 +66,9 @@ const findAllTests = async (filter = {}, options = {}) => {
     const sort = { [sortBy]: sortOrder === "desc" ? -1 : 1 };
 
     const [tests, total] = await Promise.all([
-      Test.find(query)
-        .populate("category", "name slug")
-        .populate("questions", "questionText subject topic difficulty marks")
-        .sort(sort)
-        .skip(skip)
-        .limit(limitNum),
+      populateQuestionBankWithCategories(
+        Test.find(query).sort(sort).skip(skip).limit(limitNum)
+      ),
       Test.countDocuments(query),
     ]);
 
@@ -192,13 +88,14 @@ const findAllTests = async (filter = {}, options = {}) => {
 
 const updateTestById = async (id, updateData) => {
   try {
-    return await Test.findByIdAndUpdate(
+    const updated = await Test.findByIdAndUpdate(
       id,
       { $set: updateData },
       { new: true, runValidators: true }
-    )
-      .populate("category", "name slug")
-      .populate("questions", "questionText subject topic difficulty marks");
+    );
+    return updated
+      ? await populateQuestionBankWithCategories(Test.findById(updated._id))
+      : null;
   } catch (error) {
     throw new ApiError(500, "Failed to update test", error.message);
   }
@@ -218,10 +115,22 @@ const deleteTestById = async (id) => {
 };
 
 // ========== TestBundle Repository ==========
+const populateBundleTests = (query) => {
+  return query.populate({
+    path: "tests",
+    select: "title durationMinutes questionBank",
+    populate: {
+      path: "questionBank",
+      select: "name categories",
+      populate: { path: "categories", select: "name _id" },
+    },
+  });
+};
+
 const createBundle = async (bundleData) => {
   try {
     const bundle = await TestBundle.create(bundleData);
-    return await bundle.populate("tests", "title durationMinutes totalMarks");
+    return await populateBundleTests(TestBundle.findById(bundle._id));
   } catch (error) {
     throw new ApiError(500, "Failed to create bundle", error.message);
   }
@@ -246,7 +155,7 @@ const findBundleById = async (id, populateOptions = {}) => {
       query = query.populate("category", populateOptions.category);
     }
     if (populateOptions.tests) {
-      query = query.populate("tests", populateOptions.tests);
+      query = populateBundleTests(query);
     }
     return await query;
   } catch (error) {
@@ -262,15 +171,10 @@ const findAllBundles = async (filter = {}, options = {}) => {
       sortBy = "createdAt",
       sortOrder = "desc",
       search,
-      category,
       isActive,
     } = options;
 
     const query = { ...filter };
-
-    if (category) {
-      query.category = category;
-    }
 
     if (typeof isActive !== "undefined") {
       query.isActive = isActive === "true" || isActive === true;
@@ -287,12 +191,9 @@ const findAllBundles = async (filter = {}, options = {}) => {
     const sort = { [sortBy]: sortOrder === "desc" ? -1 : 1 };
 
     const [bundles, total] = await Promise.all([
-      TestBundle.find(query)
-        .populate("category", "name slug")
-        .populate("tests", "title durationMinutes totalMarks")
-        .sort(sort)
-        .skip(skip)
-        .limit(limitNum),
+      populateBundleTests(
+        TestBundle.find(query).sort(sort).skip(skip).limit(limitNum)
+      ),
       TestBundle.countDocuments(query),
     ]);
 
@@ -312,13 +213,14 @@ const findAllBundles = async (filter = {}, options = {}) => {
 
 const updateBundleById = async (id, updateData) => {
   try {
-    return await TestBundle.findByIdAndUpdate(
+    const updated = await TestBundle.findByIdAndUpdate(
       id,
       { $set: updateData },
       { new: true, runValidators: true }
-    )
-      .populate("category", "name slug")
-      .populate("tests", "title durationMinutes totalMarks");
+    );
+    return updated
+      ? await populateBundleTests(TestBundle.findById(updated._id))
+      : null;
   } catch (error) {
     throw new ApiError(500, "Failed to update bundle", error.message);
   }
@@ -362,13 +264,21 @@ const sampleRandomQuestions = async (count) => {
   }
 };
 
+/** Sample random questions from a specific question bank */
+const sampleRandomQuestionsFromBank = async (questionBankId, count) => {
+  try {
+    const pipeline = [
+      { $match: { questionBank: questionBankId, isActive: true } },
+      { $sample: { size: count } },
+      { $project: { _id: 1, marks: 1 } },
+    ];
+    return await Question.aggregate(pipeline);
+  } catch (error) {
+    throw new ApiError(500, "Failed to sample questions from bank", error.message);
+  }
+};
+
 export default {
-  // Category methods
-  createCategory,
-  findCategoryById,
-  findAllCategories,
-  updateCategoryById,
-  deleteCategoryById,
   // Test methods
   createTest,
   findTestById,
@@ -385,5 +295,6 @@ export default {
   // Question helper methods
   findQuestionsByIds,
   sampleRandomQuestions,
+  sampleRandomQuestionsFromBank,
 };
 

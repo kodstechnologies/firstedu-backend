@@ -1,9 +1,45 @@
 import { ApiError } from "../utils/ApiError.js";
 import tournamentRepository from "../repository/tournament.repository.js";
 import testRepository from "../repository/test.repository.js";
+import questionBankRepository from "../repository/questionBank.repository.js";
 import walletService from "./wallet.service.js";
 import eventRegistrationRepository from "../repository/eventRegistration.repository.js";
 import examSessionRepository from "../repository/examSession.repository.js";
+
+const stagesTestWithQuestionBankPopulate = {
+  path: "stages.test",
+  select: "title durationMinutes questionBank",
+  populate: {
+    path: "questionBank",
+    select: "name categories",
+    populate: { path: "categories", select: "name _id" },
+  },
+};
+
+const enrichTournamentStagesWithBankStats = async (tournaments) => {
+  const items = Array.isArray(tournaments) ? tournaments : [tournaments];
+  const bankIds = [];
+  items.forEach((t) => {
+    (t?.stages || []).forEach((s) => {
+      if (s?.test?.questionBank?._id) {
+        bankIds.push(s.test.questionBank._id.toString());
+      }
+    });
+  });
+  const uniqueIds = [...new Set(bankIds)];
+  const statsMap = await questionBankRepository.getBanksStatsBatch(uniqueIds);
+
+  items.forEach((t) => {
+    (t?.stages || []).forEach((s) => {
+      if (s?.test?.questionBank?._id) {
+        const key = s.test.questionBank._id.toString();
+        const stats = statsMap.get(key) || { totalQuestions: 0, totalMarks: 0 };
+        s.test.questionBank.totalQuestions = stats.totalQuestions;
+        s.test.questionBank.totalMarks = stats.totalMarks;
+      }
+    });
+  });
+};
 
 export const createTournament = async (data, adminId) => {
   const {
@@ -90,7 +126,7 @@ export const getTournaments = async (options = {}) => {
   const [tournaments, total] = await Promise.all([
     tournamentRepository.find(query, {
       populate: [
-        { path: "stages.test", select: "title durationMinutes totalMarks" },
+        stagesTestWithQuestionBankPopulate,
         { path: "createdBy", select: "name email" },
       ],
       sort: { createdAt: -1 },
@@ -99,6 +135,8 @@ export const getTournaments = async (options = {}) => {
     }),
     tournamentRepository.count(query),
   ]);
+
+  await enrichTournamentStagesWithBankStats(tournaments);
 
   return {
     tournaments,
@@ -113,10 +151,7 @@ export const getTournaments = async (options = {}) => {
 
 export const getTournamentById = async (id, isAdmin = false) => {
   const populateFields = [
-    { 
-      path: "stages.test", 
-      select: isAdmin ? "title durationMinutes totalMarks questions" : "title durationMinutes totalMarks subject" 
-    },
+    stagesTestWithQuestionBankPopulate,
     { path: "createdBy", select: "name email" },
   ];
 
@@ -124,6 +159,7 @@ export const getTournamentById = async (id, isAdmin = false) => {
   if (!tournament) {
     throw new ApiError(404, "Tournament not found");
   }
+  await enrichTournamentStagesWithBankStats(tournament);
   return tournament;
 };
 

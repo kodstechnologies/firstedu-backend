@@ -1,6 +1,47 @@
 import QuestionBank from "../models/QuestionBank.js";
 import Question from "../models/Question.js";
+import mongoose from "mongoose";
 import { ApiError } from "../utils/ApiError.js";
+
+/**
+ * Get total questions and total marks for multiple question banks in one query.
+ * Returns Map<bankIdString, { totalQuestions, totalMarks }>
+ */
+const getBanksStatsBatch = async (bankIds) => {
+  if (!bankIds?.length) return new Map();
+  try {
+    const objectIds = bankIds.map((id) =>
+      typeof id === "string" ? new mongoose.Types.ObjectId(id) : id
+    );
+    const results = await Question.aggregate([
+      { $match: { questionBank: { $in: objectIds } } },
+      {
+        $group: {
+          _id: "$questionBank",
+          totalQuestions: { $sum: 1 },
+          totalMarks: { $sum: { $ifNull: ["$marks", 1] } },
+        },
+      },
+    ]);
+    const map = new Map();
+    results.forEach((r) => {
+      map.set(r._id.toString(), {
+        totalQuestions: r.totalQuestions,
+        totalMarks: r.totalMarks,
+      });
+    });
+    // Ensure all bank IDs have an entry (banks with zero questions)
+    objectIds.forEach((oid) => {
+      const key = oid.toString();
+      if (!map.has(key)) {
+        map.set(key, { totalQuestions: 0, totalMarks: 0 });
+      }
+    });
+    return map;
+  } catch (error) {
+    throw new ApiError(500, "Failed to fetch bank stats", error.message);
+  }
+};
 
 const create = async (data) => {
   try {
@@ -15,9 +56,7 @@ const findById = async (id, populate = true) => {
   try {
     let q = QuestionBank.findById(id);
     if (populate) {
-      q = q
-        .populate("classType", "name")
-        .populate("subjects", "name");
+      q = q.populate("categories", "name parent order");
     }
     return await q;
   } catch (error) {
@@ -33,11 +72,11 @@ const findAll = async (filter = {}, options = {}) => {
       sortBy = "createdAt",
       sortOrder = "desc",
       search,
-      classType,
+      category,
     } = options;
 
     const query = { ...filter };
-    if (classType) query.classType = classType;
+    if (category) query.categories = category;
     if (search) {
       query.name = { $regex: search, $options: "i" };
     }
@@ -49,8 +88,7 @@ const findAll = async (filter = {}, options = {}) => {
 
     const [items, total] = await Promise.all([
       QuestionBank.find(query)
-        .populate("classType", "name")
-        .populate("subjects", "name")
+        .populate("categories", "name parent order")
         .sort(sort)
         .skip(skip)
         .limit(limitNum),
@@ -78,8 +116,7 @@ const updateById = async (id, updateData) => {
       { $set: updateData },
       { new: true, runValidators: true }
     )
-      .populate("classType", "name")
-      .populate("subjects", "name");
+      .populate("categories", "name parent order");
   } catch (error) {
     if (error instanceof ApiError) throw error;
     throw new ApiError(500, "Failed to update question bank", error.message);
@@ -102,7 +139,7 @@ const getQuestionsByBankId = async (bankId, options = {}) => {
     const { sortBy = "orderInBank", sortOrder = "asc" } = options;
     const sort = { [sortBy]: sortOrder === "desc" ? -1 : 1 };
     return await Question.find({ questionBank: bankId })
-      .populate("subjectRef", "name")
+      .populate("categoryRef", "name")
       .populate("createdBy", "name email")
       .sort(sort)
       .lean();
@@ -137,4 +174,5 @@ export default {
   getQuestionsByBankId,
   countQuestionsByBankId,
   deleteQuestionsByBankId,
+  getBanksStatsBatch,
 };

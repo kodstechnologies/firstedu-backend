@@ -43,6 +43,61 @@ const count = async (filter = {}) => {
   return Forum.countDocuments(filter);
 };
 
+/**
+ * Get aggregate counts: totalForums, totalReplies, totalLikes
+ */
+const getForumStats = async () => {
+  try {
+    const [totalForums, statsResult] = await Promise.all([
+      Forum.countDocuments(),
+      Forum.aggregate([
+        { $unwind: { path: "$threads", preserveNullAndEmptyArrays: true } },
+        { $unwind: { path: "$threads.posts", preserveNullAndEmptyArrays: true } },
+        {
+          $group: {
+            _id: null,
+            totalReplies: {
+              $sum: { $size: { $ifNull: ["$threads.posts.replies", []] } },
+            },
+            postLikes: {
+              $sum: { $size: { $ifNull: ["$threads.posts.likes", []] } },
+            },
+            replyLikes: {
+              $sum: {
+                $reduce: {
+                  input: { $ifNull: ["$threads.posts.replies", []] },
+                  initialValue: 0,
+                  in: {
+                    $add: [
+                      "$$value",
+                      { $size: { $ifNull: ["$$this.likes", []] } },
+                    ],
+                  },
+                },
+              },
+            },
+          },
+        },
+        {
+          $project: {
+            totalReplies: 1,
+            totalLikes: { $add: ["$postLikes", "$replyLikes"] },
+          },
+        },
+      ]),
+    ]);
+
+    const stats = statsResult[0] || { totalReplies: 0, totalLikes: 0 };
+    return {
+      totalForums,
+      totalReplies: stats.totalReplies || 0,
+      totalLikes: stats.totalLikes || 0,
+    };
+  } catch (error) {
+    throw new ApiError(500, "Failed to fetch forum stats", error.message);
+  }
+};
+
 export default {
   create,
   find,
@@ -50,5 +105,6 @@ export default {
   updateById,
   deleteById,
   count,
+  getForumStats,
 };
 

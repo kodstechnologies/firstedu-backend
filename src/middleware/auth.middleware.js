@@ -4,6 +4,7 @@ import { ApiError } from "../utils/ApiError.js";
 import Admin from "../models/Admin.js";
 import User from "../models/Student.js";
 import Teacher from "../models/Teacher.js";
+import studentRepository from "../repository/student.repository.js";
 
 export const verifyJWT = asyncHandler(async (req, _, next) => {
   const token =
@@ -24,13 +25,20 @@ export const verifyJWT = asyncHandler(async (req, _, next) => {
 
     const decodedToken = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
 
-    const user =
+    let user =
       (await User.findById(decodedToken?._id).select("-password")) ||
       (await Admin.findById(decodedToken?._id).select("-password")) ||
       (await Teacher.findById(decodedToken?._id).select("-password"));
 
     if (!user) {
       throw new ApiError(401, "Invalid Access Token");
+    }
+
+    if (user.status === "banned") {
+      await studentRepository.updateById(user._id, {
+        $unset: { refreshToken: 1 },
+      });
+      throw new ApiError(403, "You are banned by the admin");
     }
 
     req.user = user;

@@ -17,7 +17,7 @@ export const signup = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Validation Error", error.details.map(x => x.message));
   }
 
-  const { email, password, name, occupation, phone, referralCode: inputReferralCode } = value;
+  const { email, password, name, schoolOrCollege, classOrGrade, phone, referralCode: inputReferralCode } = value;
 
   // Handle profile image upload if provided
   let profileImageUrl = null;
@@ -58,7 +58,8 @@ export const signup = asyncHandler(async (req, res) => {
     email,
     password,
     name,
-    occupation,
+    schoolOrCollege,
+    classOrGrade,
     phone,
     profileImage: profileImageUrl,
     referralCode,
@@ -109,6 +110,10 @@ export const login = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Student does not exist");
   }
 
+  if (student.status === "banned") {
+    throw new ApiError(403, "You are banned by the admin");
+  }
+
   const isPasswordValid = await student.isPasswordCorrect(password);
 
   if (!isPasswordValid) {
@@ -119,6 +124,7 @@ export const login = asyncHandler(async (req, res) => {
   const refreshToken = student.generateRefreshToken();
 
   student.refreshToken = refreshToken;
+  student.lastLogin = new Date();
   await studentRepository.save(student);
 
   const loggedInStudent = await studentRepository.findById(student._id);
@@ -294,7 +300,7 @@ export const updateProfile = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Validation Error", error.details.map(x => x.message));
   }
 
-  const { name, phone, email, occupation } = value;
+  const { name, phone, email, schoolOrCollege, classOrGrade } = value;
 
   // Check if email is being updated and if it's already taken by another user
   if (email) {
@@ -323,7 +329,8 @@ export const updateProfile = asyncHandler(async (req, res) => {
   if (name !== undefined) updateData.name = name;
   if (phone !== undefined) updateData.phone = phone;
   if (email !== undefined) updateData.email = email;
-  if (occupation !== undefined) updateData.occupation = occupation;
+  if (schoolOrCollege !== undefined) updateData.schoolOrCollege = schoolOrCollege;
+  if (classOrGrade !== undefined) updateData.classOrGrade = classOrGrade;
 
   // Update the student
   const updatedStudent = await studentRepository.updateById(req.user._id, updateData);

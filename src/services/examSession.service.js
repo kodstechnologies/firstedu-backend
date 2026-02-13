@@ -2,6 +2,8 @@ import { ApiError } from "../utils/ApiError.js";
 import examSessionRepository from "../repository/examSession.repository.js";
 import orderRepository from "../repository/order.repository.js";
 import testRepository from "../repository/test.repository.js";
+import questionBankRepository from "../repository/questionBank.repository.js";
+import questionRepository from "../repository/question.repository.js";
 import examAnalysisService from "./examAnalysis.service.js";
 import pointsService from "./points.service.js";
 
@@ -10,13 +12,23 @@ import pointsService from "./points.service.js";
  */
 export const startExamSession = async (testId, studentId) => {
   // Check if test exists and is published
-  const test = await examSessionRepository.findTestById(testId, { questions: "" });
+  const test = await examSessionRepository.findTestById(testId, { questionBank: "name" });
   if (!test) {
     throw new ApiError(404, "Test not found");
   }
 
   if (!test.isPublished) {
     throw new ApiError(403, "Test is not published");
+  }
+
+  if (!test.questionBank) {
+    throw new ApiError(400, "Test has no question bank configured");
+  }
+
+  // Get all questions from the question bank
+  const questions = await questionBankRepository.getQuestionsByBankId(test.questionBank._id);
+  if (!questions || questions.length === 0) {
+    throw new ApiError(400, "Question bank has no questions");
   }
 
   // Check if student has purchased the test (if test is paid): direct purchase OR bundle purchase
@@ -70,13 +82,15 @@ export const startExamSession = async (testId, studentId) => {
   const durationMs = test.durationMinutes * 60 * 1000;
   const endTime = new Date(now.getTime() + durationMs);
 
-  // Initialize answers array for all questions
-  const answers = test.questions.map((question) => ({
+  // Initialize answers array for all questions from the bank
+  const answers = questions.map((question) => ({
     questionId: question._id,
     answer: null,
     status: "not_visited",
     answeredAt: null,
   }));
+
+  const maxScore = questions.reduce((sum, q) => sum + (q.marks || 0), 0);
 
   const session = await examSessionRepository.create({
     student: studentId,
@@ -86,7 +100,7 @@ export const startExamSession = async (testId, studentId) => {
     status: "in_progress",
     answers: answers,
     proctoringEvents: [],
-    maxScore: test.totalMarks,
+    maxScore,
   });
 
   return await getExamSession(session._id, studentId);
@@ -102,7 +116,7 @@ export const getExamSession = async (sessionId, studentId) => {
       student: studentId,
     },
     {
-      test: "title description durationMinutes totalMarks proctoringInstructions",
+      test: "title description durationMinutes proctoringInstructions",
       answers: {
         select: "questionText questionType options subject topic marks negativeMarks isParent passage parentQuestionId childQuestions",
         populate: {
@@ -130,7 +144,7 @@ export const getExamSession = async (sessionId, studentId) => {
           student: studentId,
         },
         {
-          test: "title description durationMinutes totalMarks proctoringInstructions",
+          test: "title description durationMinutes proctoringInstructions",
           answers: {
             select: "questionText questionType options subject topic marks negativeMarks isParent passage parentQuestionId childQuestions",
             populate: {
@@ -193,6 +207,7 @@ export const getExamSession = async (sessionId, studentId) => {
       startTime: session.startTime,
       endTime: session.endTime,
       status: session.status,
+      maxScore: session.maxScore,
       remainingTime, // in milliseconds
       remainingTimeFormatted: formatTime(remainingTime),
     },
@@ -501,8 +516,9 @@ export const autoSubmitExpiredSessions = async () => {
  * Calculate score for exam session
  */
 const calculateScore = async (session) => {
-  const test = await examSessionRepository.findTestById(session.test, { questions: "" });
-  if (!test) return;
+  const questionIds = session.answers.map((a) => a.questionId);
+  const questions = await questionRepository.findByIds(questionIds);
+  const questionMap = new Map(questions.map((q) => [q._id.toString(), q]));
 
   let totalScore = 0;
   let correctCount = 0;
@@ -510,10 +526,7 @@ const calculateScore = async (session) => {
   let skippedCount = 0;
 
   for (const answerEntry of session.answers) {
-    const question = test.questions.find(
-      (q) => q._id.toString() === answerEntry.questionId.toString()
-    );
-
+    const question = questionMap.get(answerEntry.questionId.toString());
     if (!question) continue;
 
     if (answerEntry.status === "skipped" || answerEntry.answer === null) {
@@ -540,7 +553,7 @@ const calculateScore = async (session) => {
   session.correctCount = correctCount;
   session.wrongCount = wrongCount;
   session.skippedCount = skippedCount;
-  session.maxScore = test.totalMarks;
+  // maxScore already stored when session was created
 
   // Calculate percentile
   await calculatePercentile(session);
@@ -593,7 +606,7 @@ export const getExamResults = async (sessionId, studentId) => {
       status: "completed",
     },
     {
-      test: "title description durationMinutes totalMarks",
+      test: "title description durationMinutes",
       answers: {
         select: "questionText questionType options correctAnswer explanation subject topic marks negativeMarks isParent passage parentQuestionId childQuestions",
         populate: {

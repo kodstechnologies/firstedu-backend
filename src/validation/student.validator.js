@@ -5,7 +5,8 @@ const studentSignup = Joi.object({
   email: Joi.string().email().required(),
   password: Joi.string().min(6).required(),
   name: Joi.string().required(),
-  occupation: Joi.string().required(),
+  schoolOrCollege: Joi.string().trim().required(),
+  classOrGrade: Joi.string().trim().required(),
   phone: Joi.string().required(),
   referralCode: Joi.string().optional(),
 });
@@ -30,7 +31,8 @@ const confirmNewPassword = Joi.object({
 const updateProfile = Joi.object({
   email: Joi.string().email().trim().lowercase().optional(),
   name: Joi.string().trim().optional(),
-  occupation: Joi.string().trim().optional(),
+  schoolOrCollege: Joi.string().trim().optional(),
+  classOrGrade: Joi.string().trim().optional(),
   phone: Joi.string().trim().optional(),
 });
 

@@ -11,10 +11,6 @@ const testBundleSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
-    category: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "TestCategory",
-    },
     tests: [
       {
         type: mongoose.Schema.Types.ObjectId,

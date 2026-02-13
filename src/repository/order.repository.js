@@ -115,7 +115,7 @@ const createTestPurchase = async (purchaseData) => {
   try {
     const purchase = await TestPurchase.create(purchaseData);
     return await TestPurchase.findById(purchase._id)
-      .populate("test", "title description durationMinutes totalMarks testType")
+      .populate("test", "title description durationMinutes questionBank")
       .populate("testBundle", "name description tests price")
       .populate("student", "name email");
   } catch (error) {

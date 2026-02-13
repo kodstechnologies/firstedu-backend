@@ -6,18 +6,32 @@ import examSessionRepository from "../repository/examSession.repository.js";
 
 // List Students with pagination/search
 export const getStudents = asyncHandler(async (req, res) => {
-  const { page = 1, limit = 10, search } = req.query;
+  const { page = 1, limit = 10, search, status } = req.query;
 
-  const result = await studentRepository.findAll({}, {
-    page,
-    limit,
-    search,
-    sortBy: "createdAt",
-    sortOrder: "desc",
-  });
+  const filter = {};
+  if (status && ["active", "banned"].includes(status)) {
+    filter.status = status;
+  }
+
+  const [result, counts] = await Promise.all([
+    studentRepository.findAll(filter, {
+      page,
+      limit,
+      search,
+      sortBy: "createdAt",
+      sortOrder: "desc",
+    }),
+    studentRepository.getCounts(),
+  ]);
+
+  const meta = {
+    ...result.pagination,
+    totalUsers: counts.totalUsers,
+    totalBannedUsers: counts.totalBannedUsers,
+  };
 
   return res.status(200).json(
-    ApiResponse.success(result.students, "Students fetched successfully", result.pagination)
+    ApiResponse.success(result.students, "Students fetched successfully", meta)
   );
 });
 
@@ -63,7 +77,7 @@ export const getStudentTestHistory = asyncHandler(async (req, res) => {
   const sessions = await Promise.all(
     result.sessions.map(async (session) => {
       const populated = await examSessionRepository.findById(session._id, {
-        test: "title testType durationMinutes",
+        test: "title durationMinutes questionBank",
       });
       return populated;
     })
@@ -71,6 +85,31 @@ export const getStudentTestHistory = asyncHandler(async (req, res) => {
 
   return res.status(200).json(
     ApiResponse.success(sessions, "Test history fetched successfully", result.pagination)
+  );
+});
+
+// Update student status (ban/unban)
+export const updateStudentStatus = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+
+  if (!status || !["active", "banned"].includes(status)) {
+    throw new ApiError(400, "status must be 'active' or 'banned'");
+  }
+
+  const student = await studentRepository.findById(id);
+  if (!student) {
+    throw new ApiError(404, "Student not found");
+  }
+
+  const updateData =
+    status === "banned"
+      ? { $set: { status: "banned" }, $unset: { refreshToken: 1 } }
+      : { $set: { status: "active" } };
+
+  const updated = await studentRepository.updateById(id, updateData);
+  return res.status(200).json(
+    ApiResponse.success(updated, `Student ${status === "banned" ? "banned" : "activated"} successfully`)
   );
 });
 
@@ -105,6 +144,7 @@ export default {
   getStudentById,
   getStudentTestHistory,
   getProctorLogs,
+  updateStudentStatus,
 };
 
 

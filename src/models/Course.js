@@ -16,10 +16,6 @@ const courseSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
-    category: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "TestCategory",
-    },
     price: {
       type: Number,
       default: 0,

@@ -8,7 +8,8 @@ const studentSchema = new mongoose.Schema({
   phone: { type: String, required: true, unique: true, trim: true },
   email: { type: String, trim: true, lowercase: true, default: null },
   password: { type: String, required: true },
-  occupation: { type: String, trim: true, default: null },
+  schoolOrCollege: { type: String, trim: true, default: null },
+  classOrGrade: { type: String, trim: true, default: null },
   profileImage: { type: String, default: null, trim: true },
   passwordResetOTP: { type: String, default: null },
   passwordResetOTPExpires: { type: Date, default: null },
@@ -20,6 +21,9 @@ const studentSchema = new mongoose.Schema({
   referralCode: { type: String, unique: true, sparse: true }, // generated on signup
   referredBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   referralHistory: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], // Array of users invited by this user
+  // 👇 Admin: status (active/banned) and last login
+  status: { type: String, enum: ["active", "banned"], default: "active" },
+  lastLogin: { type: Date, default: null },
   createdAt: { type: Date, default: Date.now },
 });
 

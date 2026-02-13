@@ -177,7 +177,7 @@ export const getMyEventsDashboard = async (studentId) => {
 
 export const getTournamentProgress = async (tournamentId, studentId) => {
   const tournament = await tournamentRepository.findById(tournamentId, [
-    { path: "stages.test", select: "title durationMinutes totalMarks subject" },
+    { path: "stages.test", select: "title durationMinutes questionBank" },
   ]);
 
   if (!tournament) {

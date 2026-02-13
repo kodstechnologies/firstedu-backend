@@ -64,9 +64,7 @@ export const getCourses = async (options = {}) => {
  * Get course by ID with purchase status for student
  */
 export const getCourseById = async (courseId, studentId) => {
-  const course = await courseRepository.findById(courseId, {
-    category: "name slug",
-  });
+  const course = await courseRepository.findById(courseId);
 
   if (!course) throw new ApiError(404, "Course not found");
   if (!course.isPublished) throw new ApiError(404, "Course not found");
@@ -244,15 +242,13 @@ export const getTests = async (options = {}) => {
     page = 1,
     limit = 10,
     search,
-    category,
-    testType,
+    questionBank,
     sortBy = "createdAt",
     sortOrder = "desc",
   } = options;
 
   const query = { isPublished: true };
-  if (category) query.category = category;
-  if (testType) query.testType = testType;
+  if (questionBank) query.questionBank = questionBank;
   if (search) {
     const regex = { $regex: search, $options: "i" };
     query.$or = [{ title: regex }, { description: regex }];
@@ -267,8 +263,7 @@ export const getTests = async (options = {}) => {
     sortBy,
     sortOrder,
     search,
-    category,
-    testType,
+    questionBank,
     isPublished: true,
   });
 
@@ -349,8 +344,7 @@ export const createTestOrder = async (testId, studentId) => {
  */
 export const getTestById = async (testId, studentId) => {
   const test = await testRepository.findTestById(testId, {
-    category: "name slug",
-    questions: "questionText questionType options marks subject topic difficulty",
+    questionBank: "name categories",
   });
 
   if (!test) throw new ApiError(404, "Test not found");
@@ -452,8 +446,7 @@ export const getTestBundles = async (options = {}) => {
  */
 export const createTestBundleOrder = async (bundleId, studentId) => {
   const bundle = await testRepository.findBundleById(bundleId, {
-    category: "name slug",
-    tests: "title durationMinutes totalMarks testType",
+    tests: "title durationMinutes questionBank",
   });
 
   if (!bundle || !bundle.isActive) {
@@ -512,8 +505,7 @@ export const purchaseTestBundle = async (
   { razorpayOrderId, razorpayPaymentId, razorpaySignature }
 ) => {
   const bundle = await testRepository.findBundleById(bundleId, {
-    category: "name slug",
-    tests: "title durationMinutes totalMarks testType",
+    tests: "title durationMinutes questionBank",
   });
 
   if (!bundle || !bundle.isActive) {

@@ -8,7 +8,7 @@ const create = async (linkData) => {
     const link = await CourseTestLink.create(linkData);
     return await CourseTestLink.findById(link._id)
       .populate("course", "title description")
-      .populate("test", "title description durationMinutes totalMarks");
+      .populate("test", "title description durationMinutes questionBank");
   } catch (error) {
     throw new ApiError(500, "Failed to create course test link", error.message);
   }
@@ -50,7 +50,7 @@ const findAll = async (filter = {}, options = {}) => {
     const sort = { [sortBy]: sortOrder === "asc" ? 1 : -1 };
 
     return await CourseTestLink.find(filter)
-      .populate("test", "title description durationMinutes totalMarks testType")
+      .populate("test", "title description durationMinutes questionBank")
       .sort(sort);
   } catch (error) {
     throw new ApiError(500, "Failed to fetch course test links", error.message);
@@ -65,7 +65,7 @@ const updateById = async (id, updateData) => {
       { new: true, runValidators: true }
     )
       .populate("course", "title description")
-      .populate("test", "title description durationMinutes totalMarks");
+      .populate("test", "title description durationMinutes questionBank");
   } catch (error) {
     throw new ApiError(500, "Failed to update course test link", error.message);
   }

@@ -20,7 +20,6 @@ export const createCourse = async (data, adminId, file) => {
   const course = await courseRepository.create({
     title: data.title,
     description: data.description,
-    category: data.category,
     contentUrl,
     price: data.price || 0,
     isPublished: data.isPublished,
@@ -34,7 +33,7 @@ export const getCourses = async (options = {}) => {
 };
 
 export const getCourseById = async (id) => {
-  const course = await courseRepository.findById(id, { category: "name slug" });
+  const course = await courseRepository.findById(id);
   if (!course) {
     throw new ApiError(404, "Course not found");
   }

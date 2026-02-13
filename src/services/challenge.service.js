@@ -74,7 +74,7 @@ export const getChallenges = async (options = {}) => {
   const [challenges, total] = await Promise.all([
     challengeRepository.find(query, {
       populate: [
-        { path: "test", select: "title durationMinutes totalMarks" },
+        { path: "test", select: "title durationMinutes questionBank" },
         { path: "createdBy", select: "name email" },
         { path: "invitedFriends", select: "name email" },
         { path: "participants.student", select: "name email" },
@@ -99,7 +99,7 @@ export const getChallenges = async (options = {}) => {
 
 export const getChallengeById = async (id) => {
   const challenge = await challengeRepository.findById(id, [
-    { path: "test", select: "title durationMinutes totalMarks questions" },
+    { path: "test", select: "title durationMinutes questionBank" },
     { path: "createdBy", select: "name email" },
     { path: "invitedFriends", select: "name email" },
     { path: "participants.student", select: "name email" },

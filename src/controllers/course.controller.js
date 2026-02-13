@@ -33,7 +33,6 @@ export const getCourses = asyncHandler(async (req, res) => {
     page,
     limit,
     search,
-    category,
     isPublished,
     sortBy,
     sortOrder,
@@ -43,7 +42,6 @@ export const getCourses = asyncHandler(async (req, res) => {
     page,
     limit,
     search,
-    category,
     isPublished,
     sortBy,
     sortOrder,
@@ -72,7 +70,7 @@ export const getCourseById = asyncHandler(async (req, res) => {
 
 export const updateCourse = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { error, value } = testValidator.updateCourse.validate(req.body);
+  const { error, value } = courseValidator.updateCourse.validate(req.body);
 
   if (error) {
     throw new ApiError(

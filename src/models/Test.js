@@ -1,16 +1,5 @@
 import mongoose from "mongoose";
 
-const randomConfigSchema = new mongoose.Schema(
-  {
-    count: {
-      type: Number,
-      required: true,
-      min: 1,
-    },
-  },
-  { _id: false }
-);
-
 const testSchema = new mongoose.Schema(
   {
     title: {
@@ -22,21 +11,11 @@ const testSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
-    category: {
+    questionBank: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "TestCategory",
+      ref: "QuestionBank",
+      required: true,
     },
-    testType: {
-      type: String,
-      enum: ["School", "Competitive", "Olympiads", "Skill Development"],
-      default: "Competitive",
-    },
-    questions: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Question",
-      },
-    ],
     proctoringInstructions: {
       type: String,
       trim: true,
@@ -52,22 +31,11 @@ const testSchema = new mongoose.Schema(
       required: true,
       min: 1,
     },
-    totalMarks: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
     negativeMarksPerQuestion: {
       type: Number,
       default: 0,
       min: 0,
     },
-    selectionMode: {
-      type: String,
-      enum: ["manual", "random"],
-      default: "manual",
-    },
-    randomConfig: randomConfigSchema,
     isPublished: {
       type: Boolean,
       default: false,
@@ -83,16 +51,8 @@ const testSchema = new mongoose.Schema(
   }
 );
 
-// Validate max 60 questions
-testSchema.pre("save", function (next) {
-  if (this.questions && this.questions.length > 60) {
-    return next(new Error("A test can have maximum 60 questions"));
-  }
-  next();
-});
-
 testSchema.index({ title: 1, createdBy: 1 });
-testSchema.index({ testType: 1 });
+testSchema.index({ questionBank: 1 });
 
 export default mongoose.models.Test || mongoose.model("Test", testSchema);
 

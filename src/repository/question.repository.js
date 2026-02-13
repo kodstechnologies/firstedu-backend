@@ -10,13 +10,22 @@ const create = async (questionData) => {
   }
 };
 
+const findByIds = async (ids) => {
+  try {
+    if (!ids || ids.length === 0) return [];
+    return await Question.find({ _id: { $in: ids } }).lean();
+  } catch (error) {
+    throw new ApiError(500, "Failed to fetch questions", error.message);
+  }
+};
+
 const findById = async (id) => {
   try {
     return await Question.findById(id)
       .populate("parentQuestionId", "questionText passage")
       .populate("childQuestions", "questionText options correctAnswer")
       .populate("createdBy", "name email")
-      .populate("subjectRef", "name")
+      .populate("categoryRef", "name")
       .populate("questionBank", "name");
   } catch (error) {
     throw new ApiError(500, "Failed to fetch question", error.message);
@@ -86,7 +95,7 @@ const findAll = async (filter = {}, options = {}) => {
       .populate("parentQuestionId", "questionText passage")
       .populate("childQuestions", "questionText options correctAnswer")
       .populate("createdBy", "name email")
-      .populate("subjectRef", "name")
+      .populate("categoryRef", "name")
       .populate("questionBank", "name")
       .sort(sort)
       .skip(skip)
@@ -119,7 +128,7 @@ const updateById = async (id, updateData) => {
       .populate("parentQuestionId", "questionText passage")
       .populate("childQuestions", "questionText options correctAnswer")
       .populate("createdBy", "name email")
-      .populate("subjectRef", "name")
+      .populate("categoryRef", "name")
       .populate("questionBank", "name");
   } catch (error) {
     throw new ApiError(500, "Failed to update question", error.message);
@@ -259,6 +268,7 @@ const updateAnalytics = async (questionId, analyticsData) => {
 export default {
   create,
   findById,
+  findByIds,
   findAll,
   updateById,
   deleteById,
