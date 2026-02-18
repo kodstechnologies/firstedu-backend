@@ -97,13 +97,40 @@ function parseCloudinaryUrl(cloudinaryUrl) {
     return null;
   }
   const isRaw = cloudinaryUrl.includes("/raw/upload/");
-  const resourceType = isRaw ? "raw" : "image";
+  const isVideo = cloudinaryUrl.includes("/video/upload/");
+  const resourceType = isRaw ? "raw" : isVideo ? "video" : "image";
   const match = cloudinaryUrl.match(/\/upload\/(?:v\d+\/)?(.+)$/);
   if (!match) return null;
-  // For image, public_id has no extension; for raw, it may include extension
-  const publicId = isRaw ? match[1] : match[1].replace(/\.[^.]+$/, "");
+  // For image, public_id has no extension; for raw and video, it may include extension
+  const publicId = (isRaw || isVideo) ? match[1] : match[1].replace(/\.[^.]+$/, "");
   return { public_id: publicId, resource_type: resourceType };
 }
+
+/**
+ * Upload video to Cloudinary.
+ * @param {Buffer} fileBuffer - File buffer from multer
+ * @param {String} originalName - Original filename
+ * @param {String} folder - Folder in Cloudinary (e.g. "success-stories")
+ * @returns {Promise<String>} Secure URL of uploaded video
+ */
+export const uploadVideoToCloudinary = async (fileBuffer, originalName, folder = "videos") => {
+  if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+    throw new Error("Cloudinary credentials not configured (CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET)");
+  }
+  if (!fileBuffer) {
+    throw new Error("File buffer is required");
+  }
+
+  const publicId = `${folder}/${nanoid()}-${Date.now()}`;
+
+  const result = await uploadBufferToCloudinary(fileBuffer, {
+    folder,
+    resource_type: "video",
+    public_id: publicId,
+  });
+
+  return result.secure_url;
+};
 
 /**
  * Delete file from Cloudinary by URL.
@@ -130,5 +157,6 @@ export const deleteFileFromCloudinary = async (cloudinaryUrl) => {
 export default {
   uploadImageToCloudinary,
   uploadPDFToCloudinary,
+  uploadVideoToCloudinary,
   deleteFileFromCloudinary,
 };

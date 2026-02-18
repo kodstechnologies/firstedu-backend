@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router } from 'express';
 
 import {
   adminLogin,
@@ -7,7 +7,7 @@ import {
   verifyForgotPasswordOTP,
   resetPassword,
   changePassword,
-} from "../controllers/adminAuth.controller.js";
+} from '../controllers/adminAuth.controller.js';
 import {
   createQuestion,
   getAllQuestions,
@@ -19,7 +19,7 @@ import {
   getQuestionAnalytics,
   calculateAnalytics,
   getBulkAnalytics,
-} from "../controllers/question.controller.js";
+} from '../controllers/question.controller.js';
 import {
   createCategory,
   getCategories,
@@ -36,20 +36,20 @@ import {
   getBundleById,
   updateBundle,
   deleteBundle,
-} from "../controllers/test.controller.js";
+} from '../controllers/test.controller.js';
 import {
   createCourse,
   getCourses,
   getCourseById,
   updateCourse,
   deleteCourse,
-} from "../controllers/course.controller.js";
+} from '../controllers/course.controller.js';
 import {
   getStudents,
   getStudentById,
   getStudentTestHistory,
   getProctorLogs,
-} from "../controllers/adminUser.controller.js";
+} from '../controllers/adminUser.controller.js';
 import {
   getTeachers,
   getTeacherById,
@@ -59,13 +59,13 @@ import {
   updatePerMinuteRate,
   updateTeacher,
   deleteTeacher,
-} from "../controllers/teacher.controller.js";
+} from '../controllers/teacher.controller.js';
 import {
   createCourseTestLink,
   getCourseTestLinks,
   updateCourseTestLink,
   deleteCourseTestLink,
-} from "../controllers/courseTestLink.controller.js";
+} from '../controllers/courseTestLink.controller.js';
 import {
   createOlympiad,
   getOlympiads,
@@ -74,7 +74,7 @@ import {
   deleteOlympiad,
   getOlympiadLeaderboard,
   declareOlympiadWinners,
-} from "../controllers/olympiad.controller.js";
+} from '../controllers/olympiad.controller.js';
 import {
   createTournament,
   getTournaments,
@@ -83,47 +83,43 @@ import {
   deleteTournament,
   getTournamentLeaderboard,
   declareTournamentWinners,
-} from "../controllers/tournament.controller.js";
+} from '../controllers/tournament.controller.js';
 import {
   createWorkshop,
   getWorkshops,
   getWorkshopById,
   updateWorkshop,
   deleteWorkshop,
-} from "../controllers/workshop.controller.js";
+} from '../controllers/workshop.controller.js';
 import {
   getForumsAdmin,
   deletePostAdmin,
   deleteReplyAdmin,
   deleteThreadAdmin,
   deleteForumAdmin,
-} from "../controllers/forum.controller.js";
+} from '../controllers/forum.controller.js';
 import {
   createCoupon,
   getCoupons,
   getCouponById,
   updateCoupon,
   deleteCoupon,
-} from "../controllers/coupon.controller.js";
-import {
- 
-  getAllOrders,
-  getOrderById,
-} from "../controllers/order.controller.js";
+} from '../controllers/coupon.controller.js';
+import { getAllOrders, getOrderById } from '../controllers/order.controller.js';
 import {
   createOffer,
   getOffers,
   getOfferById,
   updateOffer,
   deleteOffer,
-} from "../controllers/offer.controller.js";
+} from '../controllers/offer.controller.js';
 import {
   createMerchandise,
   updateMerchandise,
   deleteMerchandise,
   getMerchandiseRequests,
   updateClaimStatus,
-} from "../controllers/adminMerchandise.controller.js";
+} from '../controllers/adminMerchandise.controller.js';
 import {
   getAllTickets,
   getTicketById,
@@ -132,19 +128,36 @@ import {
   addInternalNote,
   getTicketMessages,
   sendMessage,
-} from "../controllers/adminSupport.controller.js";
+} from '../controllers/adminSupport.controller.js';
+import {
+  getAllSupport,
+  replyToSupport,
+} from '../controllers/contactSupport.controller.js';
+import {
+  getAllBlogRequests,
+  getBlogRequestById,
+  updateBlogRequestStatus,
+} from '../controllers/blogRequest.controller.js';
 import {
   sendNotificationToStudent,
   sendNotificationToMultipleStudents,
   sendNotificationToAllStudents,
-} from "../controllers/notification.controller.js";
+} from '../controllers/notification.controller.js';
+import {
+  addSuccessStory,
+  getAllStoriesAdmin,
+  getStoryByIdAdmin,
+  updateSuccessStory,
+  updateStoryStatus,
+  deleteSuccessStory,
+} from '../controllers/successStory.controller.js';
 import {
   createClassType,
   getClassTypes,
   getClassTypeById,
   updateClassType,
   deleteClassType,
-} from "../controllers/classType.controller.js";
+} from '../controllers/classType.controller.js';
 import {
   createSubject,
   getSubjects,
@@ -152,7 +165,7 @@ import {
   getSubjectById,
   updateSubject,
   deleteSubject,
-} from "../controllers/subject.controller.js";
+} from '../controllers/subject.controller.js';
 import {
   createQuestionBank,
   createQuestionBankWithQuestions,
@@ -161,193 +174,289 @@ import {
   getQuestionsByBankId,
   updateQuestionBank,
   deleteQuestionBank,
-} from "../controllers/questionBank.controller.js";
-import { verifyJWT } from "../middleware/auth.middleware.js";
-import { uploadPDF } from "../utils/multerConfig.js";
+} from '../controllers/questionBank.controller.js';
+import {
+  generateQuestions,
+  saveGeneratedQuestions,
+} from '../controllers/aiQuestion.controller.js';
+import { verifyJWT } from '../middleware/auth.middleware.js';
+import { uploadPDF, uploadSuccessStory } from '../utils/multerConfig.js';
 
 const router = Router();
 
 // Admin Authentication Routes
-router.post("/login", adminLogin);
-router.post("/logout", verifyJWT, adminLogout);
-router.post("/forgot-password/request", requestForgotPasswordOTP);
-router.post("/forgot-password/verify", verifyForgotPasswordOTP);
-router.post("/forgot-password/reset", resetPassword);
-router.put("/change-password", verifyJWT, changePassword);
+router.post('/login', adminLogin);
+router.post('/logout', verifyJWT, adminLogout);
+router.post('/forgot-password/request', requestForgotPasswordOTP);
+router.post('/forgot-password/verify', verifyForgotPasswordOTP);
+router.post('/forgot-password/reset', resetPassword);
+router.put('/change-password', verifyJWT, changePassword);
 
 // Class Types (e.g. JEE, NEET, Class 1-10)
-router.post("/class-types", verifyJWT, createClassType);
-router.get("/class-types", verifyJWT, getClassTypes);
-router.get("/class-types/:id", verifyJWT, getClassTypeById);
-router.put("/class-types/:id", verifyJWT, updateClassType);
-router.delete("/class-types/:id", verifyJWT, deleteClassType);
+router.post('/class-types', verifyJWT, createClassType);
+router.get('/class-types', verifyJWT, getClassTypes);
+router.get('/class-types/:id', verifyJWT, getClassTypeById);
+router.put('/class-types/:id', verifyJWT, updateClassType);
+router.delete('/class-types/:id', verifyJWT, deleteClassType);
 
 // Subjects (per class type)
-router.post("/subjects", verifyJWT, createSubject);
-router.get("/subjects", verifyJWT, getSubjects);
-router.get("/class-types/:classTypeId/subjects", verifyJWT, getSubjectsByClassType);
-router.get("/subjects/:id", verifyJWT, getSubjectById);
-router.put("/subjects/:id", verifyJWT, updateSubject);
-router.delete("/subjects/:id", verifyJWT, deleteSubject);
+router.post('/subjects', verifyJWT, createSubject);
+router.get('/subjects', verifyJWT, getSubjects);
+router.get(
+  '/class-types/:classTypeId/subjects',
+  verifyJWT,
+  getSubjectsByClassType,
+);
+router.get('/subjects/:id', verifyJWT, getSubjectById);
+router.put('/subjects/:id', verifyJWT, updateSubject);
+router.delete('/subjects/:id', verifyJWT, deleteSubject);
 
 // Question Banks (create bank, create bank with questions, list, update name, delete)
-router.post("/question-banks", verifyJWT, createQuestionBank);
-router.post("/question-banks/with-questions", verifyJWT, createQuestionBankWithQuestions);
-router.get("/question-banks", verifyJWT, getQuestionBanks);
-router.get("/question-banks/:id", verifyJWT, getQuestionBankById);
-router.get("/question-banks/:id/questions", verifyJWT, getQuestionsByBankId);
-router.put("/question-banks/:id", verifyJWT, updateQuestionBank);
-router.delete("/question-banks/:id", verifyJWT, deleteQuestionBank);
+router.post('/question-banks', verifyJWT, createQuestionBank);
+router.post(
+  '/question-banks/with-questions',
+  verifyJWT,
+  createQuestionBankWithQuestions,
+);
+router.get('/question-banks', verifyJWT, getQuestionBanks);
+router.get('/question-banks/:id', verifyJWT, getQuestionBankById);
+router.get('/question-banks/:id/questions', verifyJWT, getQuestionsByBankId);
+router.put('/question-banks/:id', verifyJWT, updateQuestionBank);
+router.delete('/question-banks/:id', verifyJWT, deleteQuestionBank);
 
 // Question Bank Management Routes (individual questions - create, list all, get, update, delete)
-router.post("/questions", verifyJWT, createQuestion);
-router.get("/questions", verifyJWT, getAllQuestions);
-router.get("/questions/:id", verifyJWT, getQuestionById);
-router.put("/questions/:id", verifyJWT, updateQuestion);
-router.delete("/questions/:id", verifyJWT, deleteQuestion);
+router.post('/questions', verifyJWT, createQuestion);
+router.get('/questions', verifyJWT, getAllQuestions);
+router.get('/questions/:id', verifyJWT, getQuestionById);
+router.put('/questions/:id', verifyJWT, updateQuestion);
+router.delete('/questions/:id', verifyJWT, deleteQuestion);
 
 // Connected Questions Routes
-router.post("/questions/:id/child-questions", verifyJWT, addChildQuestion);
-router.delete("/questions/:id/child-questions/:childId", verifyJWT, removeChildQuestion);
+router.post('/questions/:id/child-questions', verifyJWT, addChildQuestion);
+router.delete(
+  '/questions/:id/child-questions/:childId',
+  verifyJWT,
+  removeChildQuestion,
+);
 
 // Analytics Routes
-router.get("/questions/:id/analytics", verifyJWT, getQuestionAnalytics);
-router.post("/questions/:id/analytics/calculate", verifyJWT, calculateAnalytics);
-router.post("/questions/analytics/bulk", verifyJWT, getBulkAnalytics);
+router.get('/questions/:id/analytics', verifyJWT, getQuestionAnalytics);
+router.post(
+  '/questions/:id/analytics/calculate',
+  verifyJWT,
+  calculateAnalytics,
+);
+router.post('/questions/analytics/bulk', verifyJWT, getBulkAnalytics);
 
 // Test Categories
-router.post("/test-categories", verifyJWT, createCategory);
-router.get("/test-categories", verifyJWT, getCategories);
-router.get("/test-categories/:id", verifyJWT, getCategoryById);
-router.put("/test-categories/:id", verifyJWT, updateCategory);
-router.delete("/test-categories/:id", verifyJWT, deleteCategory);
+router.post('/test-categories', verifyJWT, createCategory);
+router.get('/test-categories', verifyJWT, getCategories);
+router.get('/test-categories/:id', verifyJWT, getCategoryById);
+router.put('/test-categories/:id', verifyJWT, updateCategory);
+router.delete('/test-categories/:id', verifyJWT, deleteCategory);
 
 // Tests (Test Builder)
-router.post("/tests", verifyJWT, createTest);
-router.get("/tests", verifyJWT, getTests);
-router.get("/tests/:id", verifyJWT, getTestById);
-router.put("/tests/:id", verifyJWT, updateTest);
-router.delete("/tests/:id", verifyJWT, deleteTest);
+router.post('/tests', verifyJWT, createTest);
+router.get('/tests', verifyJWT, getTests);
+router.get('/tests/:id', verifyJWT, getTestById);
+router.put('/tests/:id', verifyJWT, updateTest);
+router.delete('/tests/:id', verifyJWT, deleteTest);
 
 // Test Bundles (Test Series)
-router.post("/test-bundles", verifyJWT, createBundle);
-router.get("/test-bundles", verifyJWT, getBundles);
-router.get("/test-bundles/:id", verifyJWT, getBundleById);
-router.put("/test-bundles/:id", verifyJWT, updateBundle);
-router.delete("/test-bundles/:id", verifyJWT, deleteBundle);
+router.post('/test-bundles', verifyJWT, createBundle);
+router.get('/test-bundles', verifyJWT, getBundles);
+router.get('/test-bundles/:id', verifyJWT, getBundleById);
+router.put('/test-bundles/:id', verifyJWT, updateBundle);
+router.delete('/test-bundles/:id', verifyJWT, deleteBundle);
 
 // Courses
-router.post("/courses", verifyJWT, uploadPDF.single("pdf"), createCourse);
-router.get("/courses", verifyJWT, getCourses);
-router.get("/courses/:id", verifyJWT, getCourseById);
-router.put("/courses/:id", verifyJWT, uploadPDF.single("pdf"), updateCourse);
-router.delete("/courses/:id", verifyJWT, deleteCourse);
+router.post('/courses', verifyJWT, uploadPDF.single('pdf'), createCourse);
+router.get('/courses', verifyJWT, getCourses);
+router.get('/courses/:id', verifyJWT, getCourseById);
+router.put('/courses/:id', verifyJWT, uploadPDF.single('pdf'), updateCourse);
+router.delete('/courses/:id', verifyJWT, deleteCourse);
 
 // Teacher Management
-router.get("/teachers", verifyJWT, getTeachers);
-router.get("/teachers/:id", verifyJWT, getTeacherById);
-router.get("/teachers/:id/resume", verifyJWT, getTeacherResume);
-router.post("/teachers/:id/approve", verifyJWT, approveTeacher);
-router.post("/teachers/:id/reject", verifyJWT, rejectTeacher);
-router.put("/teachers/:id/rate", verifyJWT, updatePerMinuteRate);
-router.put("/teachers/:id", verifyJWT, updateTeacher);
-router.delete("/teachers/:id", verifyJWT, deleteTeacher);
+router.get('/teachers', verifyJWT, getTeachers);
+router.get('/teachers/:id', verifyJWT, getTeacherById);
+router.get('/teachers/:id/resume', verifyJWT, getTeacherResume);
+router.post('/teachers/:id/approve', verifyJWT, approveTeacher);
+router.post('/teachers/:id/reject', verifyJWT, rejectTeacher);
+router.put('/teachers/:id/rate', verifyJWT, updatePerMinuteRate);
+router.put('/teachers/:id', verifyJWT, updateTeacher);
+router.delete('/teachers/:id', verifyJWT, deleteTeacher);
 
 // Student Management & Proctoring
-router.get("/students", verifyJWT, getStudents);
-router.get("/students/:id", verifyJWT, getStudentById);
-router.get("/students/:id/test-history", verifyJWT, getStudentTestHistory);
-router.get("/exam-sessions/:sessionId/proctor-logs", verifyJWT, getProctorLogs);
+router.get('/students', verifyJWT, getStudents);
+router.get('/students/:id', verifyJWT, getStudentById);
+router.get('/students/:id/test-history', verifyJWT, getStudentTestHistory);
+router.get('/exam-sessions/:sessionId/proctor-logs', verifyJWT, getProctorLogs);
 
 // Course-Test Links (Follow-up Tests)
-router.post("/course-test-links", verifyJWT, createCourseTestLink);
-router.get("/courses/:courseId/test-links", verifyJWT, getCourseTestLinks);
-router.put("/course-test-links/:id", verifyJWT, updateCourseTestLink);
-router.delete("/course-test-links/:id", verifyJWT, deleteCourseTestLink);
+router.post('/course-test-links', verifyJWT, createCourseTestLink);
+router.get('/courses/:courseId/test-links', verifyJWT, getCourseTestLinks);
+router.put('/course-test-links/:id', verifyJWT, updateCourseTestLink);
+router.delete('/course-test-links/:id', verifyJWT, deleteCourseTestLink);
 
 // Live Events Management - Olympiads
-router.post("/olympiads", verifyJWT, createOlympiad);
-router.get("/olympiads", verifyJWT, getOlympiads);
-router.get("/olympiads/:id", verifyJWT, getOlympiadById);
-router.put("/olympiads/:id", verifyJWT, updateOlympiad);
-router.delete("/olympiads/:id", verifyJWT, deleteOlympiad);
-router.get("/olympiads/:id/leaderboard", verifyJWT, getOlympiadLeaderboard);
-router.post("/olympiads/:id/winners", verifyJWT, declareOlympiadWinners);
+router.post('/olympiads', verifyJWT, createOlympiad);
+router.get('/olympiads', verifyJWT, getOlympiads);
+router.get('/olympiads/:id', verifyJWT, getOlympiadById);
+router.put('/olympiads/:id', verifyJWT, updateOlympiad);
+router.delete('/olympiads/:id', verifyJWT, deleteOlympiad);
+router.get('/olympiads/:id/leaderboard', verifyJWT, getOlympiadLeaderboard);
+router.post('/olympiads/:id/winners', verifyJWT, declareOlympiadWinners);
 
 // Live Events Management - Tournaments
-router.post("/tournaments", verifyJWT, createTournament);
-router.get("/tournaments", verifyJWT, getTournaments);
-router.get("/tournaments/:id", verifyJWT, getTournamentById);
-router.put("/tournaments/:id", verifyJWT, updateTournament);
-router.delete("/tournaments/:id", verifyJWT, deleteTournament);
-router.get("/tournaments/:id/leaderboard", verifyJWT, getTournamentLeaderboard);
-router.post("/tournaments/:id/winners", verifyJWT, declareTournamentWinners);
+router.post('/tournaments', verifyJWT, createTournament);
+router.get('/tournaments', verifyJWT, getTournaments);
+router.get('/tournaments/:id', verifyJWT, getTournamentById);
+router.put('/tournaments/:id', verifyJWT, updateTournament);
+router.delete('/tournaments/:id', verifyJWT, deleteTournament);
+router.get('/tournaments/:id/leaderboard', verifyJWT, getTournamentLeaderboard);
+router.post('/tournaments/:id/winners', verifyJWT, declareTournamentWinners);
 
 // Live Events Management - Workshops
-router.post("/workshops", verifyJWT, createWorkshop);
-router.get("/workshops", verifyJWT, getWorkshops);
-router.get("/workshops/:id", verifyJWT, getWorkshopById);
-router.put("/workshops/:id", verifyJWT, updateWorkshop);
-router.delete("/workshops/:id", verifyJWT, deleteWorkshop);
+router.post('/workshops', verifyJWT, createWorkshop);
+router.get('/workshops', verifyJWT, getWorkshops);
+router.get('/workshops/:id', verifyJWT, getWorkshopById);
+router.put('/workshops/:id', verifyJWT, updateWorkshop);
+router.delete('/workshops/:id', verifyJWT, deleteWorkshop);
 
 // Forum Moderation (Admin Monitoring)
-router.get("/forums", verifyJWT, getForumsAdmin);
-router.delete("/forums/:forumId", verifyJWT, deleteForumAdmin);
-router.delete("/forums/:forumId/threads/:threadId", verifyJWT, deleteThreadAdmin);
-router.delete("/forums/:forumId/threads/:threadId/posts/:postId", verifyJWT, deletePostAdmin);
-router.delete("/forums/:forumId/threads/:threadId/posts/:postId/replies/:replyId", verifyJWT, deleteReplyAdmin);
+router.get('/forums', verifyJWT, getForumsAdmin);
+router.delete('/forums/:forumId', verifyJWT, deleteForumAdmin);
+router.delete(
+  '/forums/:forumId/threads/:threadId',
+  verifyJWT,
+  deleteThreadAdmin,
+);
+router.delete(
+  '/forums/:forumId/threads/:threadId/posts/:postId',
+  verifyJWT,
+  deletePostAdmin,
+);
+router.delete(
+  '/forums/:forumId/threads/:threadId/posts/:postId/replies/:replyId',
+  verifyJWT,
+  deleteReplyAdmin,
+);
 
 // ==================== E-COMMERCE & WALLET ====================
 
 // Coupon Management
-router.post("/coupons", verifyJWT, createCoupon);
-router.get("/coupons", verifyJWT, getCoupons);
-router.get("/coupons/:id", verifyJWT, getCouponById);
-router.put("/coupons/:id", verifyJWT, updateCoupon);
-router.delete("/coupons/:id", verifyJWT, deleteCoupon);
+router.post('/coupons', verifyJWT, createCoupon);
+router.get('/coupons', verifyJWT, getCoupons);
+router.get('/coupons/:id', verifyJWT, getCouponById);
+router.put('/coupons/:id', verifyJWT, updateCoupon);
+router.delete('/coupons/:id', verifyJWT, deleteCoupon);
 
 // Offer Management (Discount System)
-router.post("/offers", verifyJWT, createOffer);
-router.get("/offers", verifyJWT, getOffers);
-router.get("/offers/:id", verifyJWT, getOfferById);
-router.put("/offers/:id", verifyJWT, updateOffer);
-router.delete("/offers/:id", verifyJWT, deleteOffer);
+router.post('/offers', verifyJWT, createOffer);
+router.get('/offers', verifyJWT, getOffers);
+router.get('/offers/:id', verifyJWT, getOfferById);
+router.put('/offers/:id', verifyJWT, updateOffer);
+router.delete('/offers/:id', verifyJWT, deleteOffer);
 
 // Order History
-router.get("/orders", verifyJWT, getAllOrders);
-router.get("/orders/:id", verifyJWT, getOrderById);
+router.get('/orders', verifyJWT, getAllOrders);
+router.get('/orders/:id', verifyJWT, getOrderById);
 
 // Merchandise Management
-router.post("/merchandise", verifyJWT, createMerchandise);
-router.put("/merchandise/:id", verifyJWT, updateMerchandise);
-router.delete("/merchandise/:id", verifyJWT, deleteMerchandise);
+router.post('/merchandise', verifyJWT, createMerchandise);
+router.put('/merchandise/:id', verifyJWT, updateMerchandise);
+router.delete('/merchandise/:id', verifyJWT, deleteMerchandise);
 
 // Merchandise Requests (Claims)
-router.get("/merchandise-requests", verifyJWT, getMerchandiseRequests);
-router.put("/merchandise-requests/:id/status", verifyJWT, updateClaimStatus);
+router.get('/merchandise-requests', verifyJWT, getMerchandiseRequests);
+router.put('/merchandise-requests/:id/status', verifyJWT, updateClaimStatus);
 
 // ==================== SUPPORT DESK ====================
 
+// Simple Support Messages
+router.get('/contact-support', verifyJWT, getAllSupport);
+router.patch('/contact-support/:id', verifyJWT, replyToSupport);
+
+// Blog Requests
+router.get('/blog-request', verifyJWT, getAllBlogRequests);
+router.get('/blog-request/:id', verifyJWT, getBlogRequestById);
+router.patch('/blog-request/:id', verifyJWT, updateBlogRequestStatus);
+
 // Ticket Management
-router.get("/support/tickets", verifyJWT, getAllTickets);
-router.get("/support/tickets/:ticketId", verifyJWT, getTicketById);
-router.post("/support/tickets/:ticketId/assign", verifyJWT, assignTicket);
-router.put("/support/tickets/:ticketId/status", verifyJWT, updateTicketStatus);
-router.post("/support/tickets/:ticketId/internal-notes", verifyJWT, addInternalNote);
+router.get('/support/tickets', verifyJWT, getAllTickets);
+router.get('/support/tickets/:ticketId', verifyJWT, getTicketById);
+router.post('/support/tickets/:ticketId/assign', verifyJWT, assignTicket);
+router.put('/support/tickets/:ticketId/status', verifyJWT, updateTicketStatus);
+router.post(
+  '/support/tickets/:ticketId/internal-notes',
+  verifyJWT,
+  addInternalNote,
+);
 
 // Chat Management
-router.get("/support/tickets/:ticketId/messages", verifyJWT, getTicketMessages);
-router.post("/support/tickets/:ticketId/messages", verifyJWT, sendMessage);
+router.get('/support/tickets/:ticketId/messages', verifyJWT, getTicketMessages);
+router.post('/support/tickets/:ticketId/messages', verifyJWT, sendMessage);
 
 // ==================== NOTIFICATIONS ====================
 
 // Send notification to a single student
-router.post("/notifications/send", verifyJWT, sendNotificationToStudent);
+router.post('/notifications/send', verifyJWT, sendNotificationToStudent);
 
 // Send notification to multiple students
-router.post("/notifications/send-multiple", verifyJWT, sendNotificationToMultipleStudents);
+router.post(
+  '/notifications/send-multiple',
+  verifyJWT,
+  sendNotificationToMultipleStudents,
+);
 
 // Send notification to all students
-router.post("/notifications/send-all", verifyJWT, sendNotificationToAllStudents);
+router.post(
+  '/notifications/send-all',
+  verifyJWT,
+  sendNotificationToAllStudents,
+);
+
+// ==================== SUCCESS STORIES ====================
+
+// Success Stories Management
+router.post(
+  '/success-stories',
+  verifyJWT,
+  uploadSuccessStory.fields([
+    { name: 'media', maxCount: 1 },
+    { name: 'thumbnail', maxCount: 1 },
+  ]),
+  addSuccessStory,
+);
+router.get('/success-stories', verifyJWT, getAllStoriesAdmin);
+router.get('/success-stories/:id', verifyJWT, getStoryByIdAdmin);
+router.put(
+  '/success-stories/:id',
+  verifyJWT,
+  uploadSuccessStory.fields([
+    { name: 'media', maxCount: 1 },
+    { name: 'thumbnail', maxCount: 1 },
+  ]),
+  updateSuccessStory,
+);
+router.patch('/success-stories/:id/status', verifyJWT, updateStoryStatus);
+router.delete('/success-stories/:id', verifyJWT, deleteSuccessStory);
+
+/* ==================== AI QUESTION GENERATION ==================== */
+
+// Generate questions using Gemini 2.5 Flash
+router.post(
+  '/ai/generate-questions',
+  verifyJWT,
+  generateQuestions
+);
+
+// Save generated questions to Question Bank
+router.post(
+  '/ai/save-generated-questions',
+  verifyJWT,
+  saveGeneratedQuestions
+);
+
 
 export default router;

@@ -36,11 +36,14 @@ const addInternalNote = Joi.object({
   note: Joi.string().trim().required().min(1).max(1000),
 });
 
+
+
 export default {
   createTicket,
   sendMessage,
   updateTicketStatus,
   assignTicket,
   addInternalNote,
+ 
 };
 
