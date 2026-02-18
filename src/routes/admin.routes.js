@@ -153,8 +153,43 @@ import {
   updateQuestionBank,
   deleteQuestionBank,
 } from "../controllers/questionBank.controller.js";
+
+import {
+  getAllSupport,
+  replyToSupport,
+} from '../controllers/contactSupport.controller.js';
+
+
+import {
+  getAllBlogRequests,
+  getBlogRequestById,
+  updateBlogRequestStatus,
+} from '../controllers/blogRequest.controller.js';
+
+
+import {
+  addSuccessStory,
+  getAllStoriesAdmin,
+  getStoryByIdAdmin,
+  updateSuccessStory,
+  updateStoryStatus,
+  deleteSuccessStory,
+} from '../controllers/successStory.controller.js';
+
+
+import {
+  generateQuestions,
+  saveGeneratedQuestions,
+} from '../controllers/aiQuestion.controller.js';
 import { verifyJWT } from "../middleware/auth.middleware.js";
-import { uploadPDF } from "../utils/multerConfig.js";
+
+
+
+
+import { uploadPDF, uploadSuccessStory } from '../utils/multerConfig.js';
+
+
+
 
 const router = Router();
 
@@ -308,12 +343,26 @@ router.put("/merchandise-requests/:id/status", verifyJWT, updateClaimStatus);
 
 // ==================== SUPPORT DESK ====================
 
+
+
+// Simple Support Messages
+router.get('/contact-support', verifyJWT, getAllSupport);
+router.patch('/contact-support/:id', verifyJWT, replyToSupport);
+
+// Blog Requests
+router.get('/blog-request', verifyJWT, getAllBlogRequests);
+router.get('/blog-request/:id', verifyJWT, getBlogRequestById);
+router.patch('/blog-request/:id', verifyJWT, updateBlogRequestStatus);
+
 // Ticket Management
 router.get("/support/tickets", verifyJWT, getAllTickets);
 router.get("/support/tickets/:ticketId", verifyJWT, getTicketById);
 router.post("/support/tickets/:ticketId/assign", verifyJWT, assignTicket);
 router.put("/support/tickets/:ticketId/status", verifyJWT, updateTicketStatus);
 router.post("/support/tickets/:ticketId/internal-notes", verifyJWT, addInternalNote);
+
+
+
 
 // Chat Management
 router.get("/support/tickets/:ticketId/messages", verifyJWT, getTicketMessages);
@@ -329,5 +378,51 @@ router.post("/notifications/send-multiple", verifyJWT, sendNotificationToMultipl
 
 // Send notification to all students
 router.post("/notifications/send-all", verifyJWT, sendNotificationToAllStudents);
+
+
+
+
+// ==================== SUCCESS STORIES ====================
+
+// Success Stories Management
+router.post(
+  '/success-stories',
+  verifyJWT,
+  uploadSuccessStory.fields([
+    { name: 'media', maxCount: 1 },
+    { name: 'thumbnail', maxCount: 1 },
+  ]),
+  addSuccessStory,
+);
+router.get('/success-stories', verifyJWT, getAllStoriesAdmin);
+router.get('/success-stories/:id', verifyJWT, getStoryByIdAdmin);
+router.put(
+  '/success-stories/:id',
+  verifyJWT,
+  uploadSuccessStory.fields([
+    { name: 'media', maxCount: 1 },
+    { name: 'thumbnail', maxCount: 1 },
+  ]),
+  updateSuccessStory,
+);
+router.patch('/success-stories/:id/status', verifyJWT, updateStoryStatus);
+router.delete('/success-stories/:id', verifyJWT, deleteSuccessStory);
+
+
+/* ==================== AI QUESTION GENERATION ==================== */
+
+// Generate questions using Gemini 2.5 Flash
+router.post(
+  '/ai/generate-questions',
+  verifyJWT,
+  generateQuestions
+);
+
+// Save generated questions to Question Bank
+router.post(
+  '/ai/save-generated-questions',
+  verifyJWT,
+  saveGeneratedQuestions
+);
 
 export default router;
