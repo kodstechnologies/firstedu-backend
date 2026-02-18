@@ -223,6 +223,7 @@ export const getUnreadCount = async (ticketId, userId, userType) => {
   return await supportMessageRepository.getUnreadCount(ticketId, userId, userType);
 };
 
+
 export default {
   createTicket,
   getStudentTickets,
@@ -234,5 +235,6 @@ export default {
   sendMessage,
   getTicketMessages,
   getUnreadCount,
+ 
 };
 

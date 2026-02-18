@@ -21,6 +21,7 @@ import {
 } from "../controllers/teacherConnect.controller.js";
 import { verifyJWT } from "../middleware/auth.middleware.js";
 import { uploadPDFAndImage } from "../utils/multerConfig.js";
+import { submitSupport } from "../controllers/contactSupport.controller.js";
 
 const router = Router();
 
@@ -35,6 +36,11 @@ router.post("/forgot-password/request", requestForgotPasswordOTP);
 router.post("/forgot-password/verify", verifyForgotPasswordOTP);
 router.post("/forgot-password/reset", resetPassword);
 router.put("/change-password", verifyJWT, changePassword);
+
+// ==================== SUPPORT ====================
+
+// Simple Support Message (no JWT required)
+router.post("/contact-support",verifyJWT, submitSupport);
 
 // ==================== TEACHER CONNECT MODULE ====================
 

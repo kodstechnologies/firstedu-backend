@@ -7,7 +7,7 @@ import {
   verifyForgotPasswordOTP,
   resetPassword,
   updateProfile,
-  changePassword,convertPoints,
+  changePassword, convertPoints,
 } from "../controllers/studentAuth.controller.js";
 import {
   getCourses,
@@ -113,12 +113,23 @@ import {
   sendMessage,
 } from "../controllers/studentSupport.controller.js";
 import {
+  submitSupport,
+} from "../controllers/contactSupport.controller.js";
+import {
+  submitBlogRequest,
+} from "../controllers/blogRequest.controller.js";
+import {
   registerFCMToken,
   getMyNotifications,
   getUnreadCount,
   markNotificationAsRead,
   markAllNotificationsAsRead,
 } from "../controllers/notification.controller.js";
+import {
+  getFeaturedStories,
+  getAllStoriesStudent,
+  getStoryDetailStudent,
+} from "../controllers/successStory.controller.js";
 import { verifyJWT } from "../middleware/auth.middleware.js";
 import { uploadImage } from "../utils/multerConfig.js";
 
@@ -278,6 +289,12 @@ router.post("/teacher-sessions/:sessionId/cancel", verifyJWT, cancelCallRequest)
 
 // ==================== SUPPORT DESK ====================
 
+// Simple Support Message (no JWT required)
+router.post("/contact-support", verifyJWT, submitSupport);
+
+// Blog Request
+router.post("/blog-request", verifyJWT, submitBlogRequest);
+
 // Ticket Management
 router.post("/support/tickets", verifyJWT, createTicket);
 router.get("/support/tickets", verifyJWT, getMyTickets);
@@ -301,5 +318,12 @@ router.put("/notifications/:notificationId/read", verifyJWT, markNotificationAsR
 
 // Mark all notifications as read
 router.put("/notifications/read-all", verifyJWT, markAllNotificationsAsRead);
+
+// ==================== SUCCESS STORIES ====================
+
+// Success Stories (Public)
+router.get("/success-stories/featured", getFeaturedStories);
+router.get("/success-stories", getAllStoriesStudent);
+router.get("/success-stories/:id", getStoryDetailStudent);
 
 export default router;
