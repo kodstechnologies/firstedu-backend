@@ -1,20 +1,17 @@
 import Joi from "joi";
 
-const subCategorySchema = Joi.object({
-  name: Joi.string().required().trim(),
-  options: Joi.array().items(Joi.string().trim()).min(1).required(),
-});
-
-const createCategory = Joi.object({
+// Recursive schema: each category can have optional nested children (unlimited depth)
+// Joi 17+ uses link() + id() instead of lazy() for self-referencing schemas
+const createCategorySchema = Joi.object({
   name: Joi.string().required().trim(),
   parent: Joi.string().optional().allow(null, ""),
   order: Joi.number().min(0).optional(),
-});
+  children: Joi.array()
+    .items(Joi.link("#category"))
+    .optional(),
+}).id("category");
 
-const createCategoryWithSubcategories = Joi.object({
-  name: Joi.string().required().trim(),
-  subCategories: Joi.array().items(subCategorySchema).min(1).required(),
-});
+const createCategory = createCategorySchema;
 
 const updateCategory = Joi.object({
   name: Joi.string().trim().optional(),
@@ -25,6 +22,5 @@ const updateCategory = Joi.object({
 
 export default {
   createCategory,
-  createCategoryWithSubcategories,
   updateCategory,
 };

@@ -1,64 +1,69 @@
 import { ApiError } from "../utils/ApiError.js";
 import categoryRepository from "../repository/category.repository.js";
+import QuestionBank from "../models/QuestionBank.js";
+import Test from "../models/Test.js";
+import TestBundle from "../models/TestBundle.js";
 
+/**
+ * Recursively create children under a parent category.
+ * Supports unlimited nesting: School -> Classes -> Class 1 -> Subjects -> Math -> Geometry, etc.
+ */
+const createChildrenRecursive = async (children, parentId, createdBy, orderStart = 0) => {
+  const created = [];
+  let order = orderStart;
+  for (const child of children) {
+    const { name, children: nestedChildren } = child;
+    const category = await categoryRepository.create({
+      name,
+      parent: parentId,
+      order: order++,
+      createdBy,
+    });
+    created.push(category);
+
+    if (nestedChildren && nestedChildren.length > 0) {
+      await createChildrenRecursive(
+        nestedChildren,
+        category._id,
+        createdBy,
+        0
+      );
+    }
+  }
+  return created;
+};
+
+/**
+ * Create category - single or with unlimited nested children.
+ * - Single: { name: "School" } or { name: "Classes", parent: "parentId" }
+ * - Nested: { name: "School", children: [{ name: "Classes", children: [{ name: "Class 1", children: [...] }] }] }
+ */
 export const createCategory = async (data, createdBy) => {
   if (data.parent) {
     const parent = await categoryRepository.findById(data.parent);
     if (!parent) throw new ApiError(404, "Parent category not found");
   }
+
   const payload = {
     name: data.name,
     parent: data.parent || null,
     order: data.order ?? 0,
     createdBy,
   };
-  return await categoryRepository.create(payload);
-};
+  const created = await categoryRepository.create(payload);
 
-/**
- * Create a category with sub-categories and options in one call.
- * Structure: Category (e.g. School) -> Sub-categories (e.g. Classes, Subjects) -> Options (e.g. Class 1, Physics)
- */
-export const createCategoryWithSubcategories = async (data, createdBy) => {
-  const root = await categoryRepository.create({
-    name: data.name,
-    parent: null,
-    order: 0,
-    createdBy,
-  });
-
-  const result = {
-    category: root,
-    subCategories: [],
-  };
-
-  let subOrder = 0;
-  for (const sub of data.subCategories) {
-    const subCategory = await categoryRepository.create({
-      name: sub.name,
-      parent: root._id,
-      order: subOrder++,
+  if (data.children && data.children.length > 0) {
+    const children = await createChildrenRecursive(
+      data.children,
+      created._id,
       createdBy,
-    });
-    result.subCategories.push({
-      subCategory,
-      options: [],
-    });
-
-    let optionOrder = 0;
-    for (const optionName of sub.options) {
-      const option = await categoryRepository.create({
-        name: optionName,
-        parent: subCategory._id,
-        order: optionOrder++,
-        createdBy,
-      });
-      result.subCategories[result.subCategories.length - 1].options.push(option);
-    }
+      0
+    );
+    return { category: created, children };
   }
 
-  return result;
-}
+  return created;
+};
 
 export const getCategories = async (options = {}) => {
   return await categoryRepository.findAll({}, options);
@@ -76,6 +81,136 @@ export const getCategoryById = async (id) => {
 
 export const getChildren = async (parentId) => {
   return await categoryRepository.findChildren(parentId);
+};
+
+/**
+ * Get category IDs connected to question banks, tests, and/or test bundles.
+ * linkedTo: "questionBank" | "test" | "testBundle" | "both" | null (null = all)
+ * - questionBank: categories on any question bank
+ * - test: categories on question banks of published tests
+ * - testBundle: categories on question banks of tests that are in at least one active bundle
+ * - both: union of test + testBundle
+ */
+const getConnectedCategoryIds = async (linkedTo) => {
+  if (!linkedTo) return null;
+
+  let categoryIds = new Set();
+
+  if (linkedTo === "questionBank") {
+    const fromBanks = await QuestionBank.distinct("categories");
+    fromBanks.forEach((id) => categoryIds.add(id?.toString?.() || id));
+  }
+
+  if (linkedTo === "test" || linkedTo === "both") {
+    const publishedBankIds = await Test.find({ isPublished: true }).distinct("questionBank");
+    if (publishedBankIds.length > 0) {
+      const fromTests = await QuestionBank.find({ _id: { $in: publishedBankIds } }).distinct("categories");
+      fromTests.forEach((id) => categoryIds.add(id?.toString?.() || id));
+    }
+  }
+
+  if (linkedTo === "testBundle" || linkedTo === "both") {
+    const activeBundles = await TestBundle.find({ isActive: true }).select("tests").lean();
+    const allTestIds = activeBundles.flatMap((b) => b.tests || []);
+    if (allTestIds.length > 0) {
+      const bankIdsFromBundles = await Test.find({ _id: { $in: allTestIds } }).distinct("questionBank");
+      if (bankIdsFromBundles.length > 0) {
+        const fromBundles = await QuestionBank.find({ _id: { $in: bankIdsFromBundles } }).distinct("categories");
+        fromBundles.forEach((id) => categoryIds.add(id?.toString?.() || id));
+      }
+    }
+  }
+
+  return categoryIds.size > 0 ? categoryIds : new Set();
+};
+
+/**
+ * Build id -> parentId map from tree (for ancestor lookup).
+ */
+const buildIdToParentFromTree = (nodes, map = new Map()) => {
+  nodes.forEach((node) => {
+    const id = node._id?.toString?.();
+    const parentId = node.parent?._id?.toString?.() || node.parent?.toString?.() || null;
+    if (id) map.set(id, parentId);
+    if (node.children?.length) buildIdToParentFromTree(node.children, map);
+  });
+  return map;
+};
+
+/**
+ * Include category and all its ancestors (for path context).
+ */
+const getAncestorIds = (categoryId, idToParent) => {
+  const ids = new Set();
+  let current = categoryId?.toString?.();
+  while (current) {
+    ids.add(current);
+    current = idToParent.get(current) || null;
+  }
+  return ids;
+};
+
+/**
+ * Filter tree to keep only nodes that are connected (or ancestors of connected).
+ */
+const filterTreeByConnected = (nodes, allowedIds) => {
+  if (!allowedIds || allowedIds.size === 0) return nodes;
+
+  return nodes
+    .map((node) => {
+      const id = node._id?.toString?.();
+      const filteredChildren = node.children?.length
+        ? filterTreeByConnected(node.children, allowedIds)
+        : [];
+      const hasRelevantDescendant = filteredChildren.length > 0;
+      const isRelevant = allowedIds.has(id) || hasRelevantDescendant;
+
+      if (!isRelevant) return null;
+      return { ...node, children: filteredChildren };
+    })
+    .filter(Boolean);
+};
+
+/**
+ * Student-facing: Get all categories (tree) with optional filter by question bank / test / test bundle.
+ * linkedTo: "questionBank" | "test" | "testBundle" | "both" | omit = show all
+ * - test: only categories used by published tests
+ * - testBundle: only categories used by tests that are in an active test bundle
+ * - both: union of test + testBundle
+ * format: "tree" | "flat"
+ */
+export const getCategoriesForStudent = async (options = {}) => {
+  const { linkedTo, format = "tree" } = options;
+
+  let tree = await categoryRepository.findTree({});
+
+  if (linkedTo) {
+    const connectedIds = await getConnectedCategoryIds(linkedTo);
+    if (connectedIds && connectedIds.size > 0) {
+      const idToParent = buildIdToParentFromTree(tree);
+      const allowedIds = new Set(connectedIds);
+      for (const cid of connectedIds) {
+        const ancestors = getAncestorIds(cid, idToParent);
+        ancestors.forEach((a) => allowedIds.add(a));
+      }
+      tree = filterTreeByConnected(tree, allowedIds);
+    } else {
+      tree = [];
+    }
+  }
+
+  if (format === "flat") {
+    const flatten = (nodes, acc = []) => {
+      nodes.forEach((n) => {
+        acc.push(n);
+        if (n.children?.length) flatten(n.children, acc);
+      });
+      return acc;
+    };
+    return flatten(tree);
+  }
+
+  return tree;
 };
 
 export const updateCategory = async (id, updateData) => {
@@ -109,11 +244,11 @@ export const deleteCategory = async (id, cascade = true) => {
 
 export default {
   createCategory,
-  createCategoryWithSubcategories,
   getCategories,
   getCategoryTree,
   getCategoryById,
   getChildren,
+  getCategoriesForStudent,
   updateCategory,
   deleteCategory,
 };

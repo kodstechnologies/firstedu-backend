@@ -17,6 +17,7 @@ import {
   getMyCourses,
   getCourseFollowUpTests,
   getTests,
+  getTestsAndBundles,
   getTestById,
   createTestOrder,
   purchaseTest,
@@ -130,6 +131,7 @@ import {
   getAllStoriesStudent,
   getStoryDetailStudent,
 } from "../controllers/successStory.controller.js";
+import { getCategoriesForStudent } from "../controllers/category.controller.js";
 import { verifyJWT } from "../middleware/auth.middleware.js";
 import { uploadImage } from "../utils/multerConfig.js";
 
@@ -158,6 +160,7 @@ router.get("/courses/:id/follow-up-tests", verifyJWT, getCourseFollowUpTests);
 
 // Marketplace - Tests
 router.get("/tests", verifyJWT, getTests);
+router.get("/tests-and-bundles", verifyJWT, getTestsAndBundles);
 router.get("/tests/:id", verifyJWT, getTestById);
 router.post("/tests/:id/create-order", verifyJWT, createTestOrder);
 router.post("/tests/:id/purchase", verifyJWT, purchaseTest);
@@ -166,6 +169,9 @@ router.post("/tests/:id/purchase", verifyJWT, purchaseTest);
 router.get("/test-bundles", getTestBundles);
 router.post("/test-bundles/:id/create-order", verifyJWT, createTestBundleOrder);
 router.post("/test-bundles/:id/purchase", verifyJWT, purchaseTestBundle);
+
+// Categories (taxonomy for filtering tests/question banks)
+router.get("/categories", verifyJWT, getCategoriesForStudent);
 
 // My Purchases
 router.get("/my-tests", verifyJWT, getMyTests);

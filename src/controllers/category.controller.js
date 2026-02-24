@@ -19,28 +19,6 @@ export const createCategory = asyncHandler(async (req, res) => {
     .json(ApiResponse.success(created, "Category created successfully"));
 });
 
-export const createCategoryWithSubcategories = asyncHandler(async (req, res) => {
-  const { error, value } =
-    categoryValidator.createCategoryWithSubcategories.validate(req.body);
-  if (error) {
-    throw new ApiError(
-      400,
-      "Validation Error",
-      error.details.map((x) => x.message)
-    );
-  }
-  const result = await categoryService.createCategoryWithSubcategories(
-    value,
-    req.user._id
-  );
-  return res.status(201).json(
-    ApiResponse.success(
-      result,
-      "Category with sub-categories and options created successfully"
-    )
-  );
-});
-
 export const getCategories = asyncHandler(async (req, res) => {
   const { page, limit, search, parent, isActive, sortBy, sortOrder } =
     req.query;
@@ -67,6 +45,34 @@ export const getCategoryTree = asyncHandler(async (req, res) => {
   return res
     .status(200)
     .json(ApiResponse.success(tree, "Category tree fetched successfully"));
+});
+
+/**
+ * Student-facing: Get all categories (tree or flat) with optional filter.
+ * Query: linkedTo=questionBank|test|testBundle|both, format=tree|flat
+ * - test: only categories used by published tests
+ * - testBundle: only categories used by tests inside active test bundles
+ * - both: categories used by either tests or test bundles
+ */
+export const getCategoriesForStudent = asyncHandler(async (req, res) => {
+  const { linkedTo, format = "tree" } = req.query;
+
+  const validLinkedTo = ["questionBank", "test", "testBundle", "both"].includes(linkedTo) ? linkedTo : null;
+  const validFormat = ["tree", "flat"].includes(format) ? format : "tree";
+
+  const result = await categoryService.getCategoriesForStudent({
+    linkedTo: validLinkedTo,
+    format: validFormat,
+  });
+
+  return res.status(200).json(
+    ApiResponse.success(
+      result,
+      validLinkedTo
+        ? `Categories filtered by ${validLinkedTo} fetched successfully`
+        : "Categories fetched successfully"
+    )
+  );
 });
 
 export const getCategoryById = asyncHandler(async (req, res) => {

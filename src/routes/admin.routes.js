@@ -136,7 +136,6 @@ import {
 } from "../controllers/notification.controller.js";
 import {
   createCategory as createTaxonomyCategory,
-  createCategoryWithSubcategories as createTaxonomyCategoryWithSubcategories,
   getCategories as getTaxonomyCategories,
   getCategoryTree as getTaxonomyCategoryTree,
   getCategoryById as getTaxonomyCategoryById,
@@ -201,13 +200,12 @@ router.post("/forgot-password/verify", verifyForgotPasswordOTP);
 router.post("/forgot-password/reset", resetPassword);
 router.put("/change-password", verifyJWT, changePassword);
 
-// Categories (hierarchical: School -> Classes -> Class 1-12, Subjects -> Physics, Chem, Math)
-router.get("/categories/tree", verifyJWT, getTaxonomyCategoryTree);
+// Categories (hierarchical, unlimited nesting: School -> Classes -> Class 1 -> Subjects -> Math -> Geometry)
 router.post("/categories", verifyJWT, createTaxonomyCategory);
-router.post("/categories/with-subcategories", verifyJWT, createTaxonomyCategoryWithSubcategories);
 router.get("/categories", verifyJWT, getTaxonomyCategories);
-router.get("/categories/:id/children", verifyJWT, getTaxonomyCategoryChildren);
+router.get("/categories/tree", verifyJWT, getTaxonomyCategoryTree);
 router.get("/categories/:id", verifyJWT, getTaxonomyCategoryById);
+router.get("/categories/:id/children", verifyJWT, getTaxonomyCategoryChildren);
 router.put("/categories/:id", verifyJWT, updateTaxonomyCategory);
 router.delete("/categories/:id", verifyJWT, deleteTaxonomyCategory);
 
