@@ -102,7 +102,7 @@ import {
   deleteCoupon,
 } from "../controllers/coupon.controller.js";
 import {
- 
+
   getAllOrders,
   getOrderById,
 } from "../controllers/order.controller.js";
@@ -181,6 +181,13 @@ import {
   generateQuestions,
   saveGeneratedQuestions,
 } from '../controllers/aiQuestion.controller.js';
+import {
+  createCompetition,
+  getCompetitions,
+  getCompetitionByIdOrSlug,
+  updateCompetition,
+  deleteCompetition,
+} from '../controllers/competition.controller.js';
 import { verifyJWT } from "../middleware/auth.middleware.js";
 
 
@@ -237,10 +244,10 @@ router.post("/questions/:id/analytics/calculate", verifyJWT, calculateAnalytics)
 router.post("/questions/analytics/bulk", verifyJWT, getBulkAnalytics);
 
 // Tests (Test Builder)
-router.post("/tests", verifyJWT, createTest);
-router.get("/tests", verifyJWT, getTests);
-router.get("/tests/:id", verifyJWT, getTestById);
-router.put("/tests/:id", verifyJWT, updateTest);
+router.post("/tests",  createTest);
+router.get("/tests", getTests);
+router.get("/tests/:id",getTestById);
+router.put("/tests/:id", updateTest);
 router.delete("/tests/:id", verifyJWT, deleteTest);
 
 // Test Bundles (Test Series)
@@ -304,6 +311,13 @@ router.get("/workshops", verifyJWT, getWorkshops);
 router.get("/workshops/:id", verifyJWT, getWorkshopById);
 router.put("/workshops/:id", verifyJWT, updateWorkshop);
 router.delete("/workshops/:id", verifyJWT, deleteWorkshop);
+
+// ==================== COMPETITION MANAGEMENT ====================
+router.post("/competitions", createCompetition);
+router.get("/competitions", getCompetitions);
+router.get("/competitions/:idOrSlug", getCompetitionByIdOrSlug);
+router.put("/competitions/:id",  updateCompetition);
+router.delete("/competitions/:id",  deleteCompetition);
 
 // Forum Moderation (Admin Monitoring)
 router.get("/forums", verifyJWT, getForumsAdmin);
