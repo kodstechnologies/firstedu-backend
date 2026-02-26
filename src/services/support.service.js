@@ -1,18 +1,25 @@
-import { ApiError } from "../utils/ApiError.js";
-import supportTicketRepository from "../repository/supportTicket.repository.js";
-import supportMessageRepository from "../repository/supportMessage.repository.js";
+import { ApiError } from '../utils/ApiError.js';
+import supportTicketRepository from '../repository/supportTicket.repository.js';
+import supportMessageRepository from '../repository/supportMessage.repository.js';
 
 /**
  * Create a new support ticket
  */
 export const createTicket = async (studentId, ticketData) => {
   const ticket = await supportTicketRepository.create({
+    ticketNumber: ticketData.ticketNumber, // ✅ REQUIRED
+
     student: studentId,
+
     subject: ticketData.subject,
+
     description: ticketData.description,
-    category: ticketData.category || "other",
-    priority: ticketData.priority || "medium",
-    status: "open",
+
+    category: ticketData.category || 'other',
+
+    priority: ticketData.priority || 'medium',
+
+    status: 'open',
   });
 
   return ticket;
@@ -21,7 +28,12 @@ export const createTicket = async (studentId, ticketData) => {
 /**
  * Get student's tickets
  */
-export const getStudentTickets = async (studentId, page = 1, limit = 10, status = null) => {
+export const getStudentTickets = async (
+  studentId,
+  page = 1,
+  limit = 10,
+  status = null,
+) => {
   return await supportTicketRepository.findStudentTickets(studentId, {
     page,
     limit,
@@ -36,12 +48,15 @@ export const getTicketById = async (ticketId, userId, userType) => {
   const ticket = await supportTicketRepository.findById(ticketId);
 
   if (!ticket) {
-    throw new ApiError(404, "Ticket not found");
+    throw new ApiError(404, 'Ticket not found');
   }
 
   // Check authorization
-  if (userType === "User" && ticket.student._id.toString() !== userId.toString()) {
-    throw new ApiError(403, "Unauthorized to access this ticket");
+  if (
+    userType === 'User' &&
+    ticket.student._id.toString() !== userId.toString()
+  ) {
+    throw new ApiError(403, 'Unauthorized to access this ticket');
   }
 
   return ticket;
@@ -79,12 +94,12 @@ export const assignTicket = async (ticketId, adminId) => {
   const ticket = await supportTicketRepository.findById(ticketId);
 
   if (!ticket) {
-    throw new ApiError(404, "Ticket not found");
+    throw new ApiError(404, 'Ticket not found');
   }
 
   const updatedTicket = await supportTicketRepository.updateById(ticketId, {
     assignedTo: adminId,
-    status: ticket.status === "open" ? "in_progress" : ticket.status,
+    status: ticket.status === 'open' ? 'in_progress' : ticket.status,
   });
 
   return updatedTicket;
@@ -94,36 +109,40 @@ export const assignTicket = async (ticketId, adminId) => {
  * Update ticket status
  */
 export const updateTicketStatus = async (ticketId, status, adminId = null) => {
-  const validStatuses = ["open", "in_progress", "resolved", "closed"];
+  const validStatuses = ['open', 'in_progress', 'resolved', 'closed'];
   if (!validStatuses.includes(status)) {
-    throw new ApiError(400, "Invalid status");
+    throw new ApiError(400, 'Invalid status');
   }
 
   const ticket = await supportTicketRepository.findById(ticketId);
 
   if (!ticket) {
-    throw new ApiError(404, "Ticket not found");
+    throw new ApiError(404, 'Ticket not found');
   }
 
   const updateData = { status };
 
-  if (status === "resolved" && !ticket.resolvedAt) {
+  if (status === 'resolved' && !ticket.resolvedAt) {
     updateData.resolvedAt = new Date();
   }
 
-  if (status === "closed" && !ticket.closedAt) {
+  if (status === 'closed' && !ticket.closedAt) {
     updateData.closedAt = new Date();
+    await supportMessageRepository.deleteTicketMessages(ticketId);
   }
 
-  if (status === "open" && ticket.resolvedAt) {
+  if (status === 'open' && ticket.resolvedAt) {
     updateData.resolvedAt = null;
   }
 
-  if (status === "open" && ticket.closedAt) {
+  if (status === 'open' && ticket.closedAt) {
     updateData.closedAt = null;
   }
 
-  const updatedTicket = await supportTicketRepository.updateById(ticketId, updateData);
+  const updatedTicket = await supportTicketRepository.updateById(
+    ticketId,
+    updateData,
+  );
 
   return updatedTicket;
 };
@@ -135,13 +154,13 @@ export const addInternalNote = async (ticketId, note, adminId) => {
   const ticket = await supportTicketRepository.findById(ticketId);
 
   if (!ticket) {
-    throw new ApiError(404, "Ticket not found");
+    throw new ApiError(404, 'Ticket not found');
   }
 
   const updatedTicket = await supportTicketRepository.addInternalNote(
     ticketId,
     note,
-    adminId
+    adminId,
   );
 
   return updatedTicket;
@@ -150,23 +169,32 @@ export const addInternalNote = async (ticketId, note, adminId) => {
 /**
  * Send message in ticket
  */
-export const sendMessage = async (ticketId, senderId, senderType, message, attachments = []) => {
+export const sendMessage = async (
+  ticketId,
+  senderId,
+  senderType,
+  message,
+  attachments = [],
+) => {
   const ticket = await supportTicketRepository.findById(ticketId);
 
   if (!ticket) {
-    throw new ApiError(404, "Ticket not found");
+    throw new ApiError(404, 'Ticket not found');
   }
 
   // Check authorization
-  if (senderType === "User" && ticket.student._id.toString() !== senderId.toString()) {
-    throw new ApiError(403, "Unauthorized to send message in this ticket");
+  if (
+    senderType === 'User' &&
+    ticket.student._id.toString() !== senderId.toString()
+  ) {
+    throw new ApiError(403, 'Unauthorized to send message in this ticket');
   }
 
   // Create message
   const messageData = {
     ticket: ticketId,
     sender: senderId,
-    senderType: senderType === "admin" ? "Admin" : "User",
+    senderType: senderType === 'admin' ? 'Admin' : 'User',
     message,
     attachments,
   };
@@ -177,9 +205,9 @@ export const sendMessage = async (ticketId, senderId, senderType, message, attac
   await supportTicketRepository.updateLastMessageAt(ticketId);
 
   // If ticket is closed/resolved and new message comes, reopen it
-  if (ticket.status === "closed" || ticket.status === "resolved") {
+  if (ticket.status === 'closed' || ticket.status === 'resolved') {
     await supportTicketRepository.updateById(ticketId, {
-      status: "in_progress",
+      status: 'in_progress',
       resolvedAt: null,
       closedAt: null,
     });
@@ -191,27 +219,40 @@ export const sendMessage = async (ticketId, senderId, senderType, message, attac
 /**
  * Get ticket messages
  */
-export const getTicketMessages = async (ticketId, userId, userType, page = 1, limit = 50) => {
+export const getTicketMessages = async (
+  ticketId,
+  userId,
+  userType,
+  page = 1,
+  limit = 50,
+) => {
   const ticket = await supportTicketRepository.findById(ticketId);
 
   if (!ticket) {
-    throw new ApiError(404, "Ticket not found");
+    throw new ApiError(404, 'Ticket not found');
   }
 
   // Check authorization
-  if (userType === "User" && ticket.student._id.toString() !== userId.toString()) {
-    throw new ApiError(403, "Unauthorized to access messages in this ticket");
+  if (
+    userType === 'User' &&
+    ticket.student._id.toString() !== userId.toString()
+  ) {
+    throw new ApiError(403, 'Unauthorized to access messages in this ticket');
   }
 
   const result = await supportMessageRepository.findTicketMessages(ticketId, {
     page,
     limit,
-    sortBy: "createdAt",
-    sortOrder: "asc",
+    sortBy: 'createdAt',
+    sortOrder: 'asc',
   });
 
   // Mark messages as read
-  await supportMessageRepository.markTicketMessagesAsRead(ticketId, userId, userType);
+  await supportMessageRepository.markTicketMessagesAsRead(
+    ticketId,
+    userId,
+    userType,
+  );
 
   return result;
 };
@@ -220,9 +261,12 @@ export const getTicketMessages = async (ticketId, userId, userType, page = 1, li
  * Get unread message count for a ticket
  */
 export const getUnreadCount = async (ticketId, userId, userType) => {
-  return await supportMessageRepository.getUnreadCount(ticketId, userId, userType);
+  return await supportMessageRepository.getUnreadCount(
+    ticketId,
+    userId,
+    userType,
+  );
 };
-
 
 export default {
   createTicket,
@@ -235,6 +279,4 @@ export default {
   sendMessage,
   getTicketMessages,
   getUnreadCount,
- 
 };
-

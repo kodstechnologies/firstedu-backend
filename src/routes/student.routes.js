@@ -8,6 +8,7 @@ import {
   resetPassword,
   updateProfile,
   changePassword, convertPoints,
+  getProfile,
 } from "../controllers/studentAuth.controller.js";
 import {
   getCourses,
@@ -136,7 +137,7 @@ import {
 
   getCompetitions,
   getCompetitionByIdOrSlug,
-  
+
 } from '../controllers/competition.controller.js';
 
 const router = Router();
@@ -153,6 +154,7 @@ router.post("/forgot-password/verify", verifyForgotPasswordOTP);
 router.post("/forgot-password/reset", resetPassword);
 router.put("/update-profile", verifyJWT, updateProfile);
 router.put("/change-password", verifyJWT, changePassword);
+router.get("/profile", verifyJWT, getProfile);
 
 // Marketplace - Courses
 router.get("/courses", verifyJWT, getCourses);
@@ -338,7 +340,7 @@ router.get("/success-stories/:id", getStoryDetailStudent);
 // ==================== COMPETITION MANAGEMENT ====================
 
 router.get("/competitions", getCompetitions);
-router.get("/competitions/:idOrSlug",getCompetitionByIdOrSlug);
+router.get("/competitions/:idOrSlug", getCompetitionByIdOrSlug);
 
 
 export default router;
