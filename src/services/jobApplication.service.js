@@ -1,26 +1,11 @@
 import jobApplicationRepository from "../repository/jobApplication.repository.js";
 import applyJobRepository from "../repository/applyJob.repository.js";
-import teacherRepository from "../repository/teacher.repository.js";
 import ApiError from "../utils/ApiError.js";
 import {
   sendInterviewScheduledEmail,
-  sendTeacherApprovalWithCredentialsEmail,
+  sendTeacherApprovalConfirmationEmail,
   sendTeacherRejectionEmail,
 } from "../utils/sendEmail.js";
-import crypto from "crypto";
-
-/**
- * Generate a random password (alphanumeric, 12 chars).
- */
-function generateRandomPassword() {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
-  let password = "";
-  const bytes = crypto.randomBytes(12);
-  for (let i = 0; i < 12; i++) {
-    password += chars[bytes[i] % chars.length];
-  }
-  return password;
-}
 
 const createApplication = async (data, resumeUrl) => {
   const job = await applyJobRepository.findById(data.jobId);
@@ -91,31 +76,11 @@ const approveApplication = async (applicationId) => {
     throw new ApiError(400, "Cannot approve a rejected application");
   }
 
-  const existingTeacher = await teacherRepository.findOne({ email: application.email });
-  if (existingTeacher) {
-    throw new ApiError(409, "A teacher with this email already exists");
-  }
-
-  const password = generateRandomPassword();
-  const job = application.job?.skills ? application.job : await applyJobRepository.findById(application.job);
-  const skills = Array.isArray(job?.skills) ? job.skills : [];
-
-  await teacherRepository.create({
-    name: application.name,
-    email: application.email,
-    password,
-    phone: application.phone,
-    gender: "other",
-    skills,
-    status: "approved",
-    resumeUrl: application.resume || null,
-  });
-
-  await sendTeacherApprovalWithCredentialsEmail({
+  const jobTitle = application.job?.title || "Teacher Position";
+  await sendTeacherApprovalConfirmationEmail({
     toEmail: application.email,
     teacherName: application.name,
-    email: application.email,
-    password,
+    jobTitle,
   });
 
   return await jobApplicationRepository.updateById(applicationId, { status: "approved" });

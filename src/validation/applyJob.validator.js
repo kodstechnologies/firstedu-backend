@@ -20,11 +20,12 @@ const createApplyJob = Joi.object({
       "any.only": `hiringFor must be one of: ${HIRING_FOR_OPTIONS.join(", ")}`,
       "any.required": "Hiring for (role) is required",
     }),
-  salary: Joi.string().trim().required().messages({
-    "string.empty": "Salary is required",
-    "any.required": "Salary is required",
+  perMinuteRate: Joi.number().min(0).required().messages({
+    "number.base": "Per minute rate is required",
+    "any.required": "Per minute rate is required",
   }),
   location: Joi.string().trim().allow("").optional(),
+  language: Joi.string().trim().allow("").optional(),
 });
 
 const updateApplyJob = Joi.object({
@@ -37,8 +38,9 @@ const updateApplyJob = Joi.object({
     .messages({
       "any.only": `hiringFor must be one of: ${HIRING_FOR_OPTIONS.join(", ")}`,
     }),
-  salary: Joi.string().trim().optional(),
+  perMinuteRate: Joi.number().min(0).optional(),
   location: Joi.string().trim().allow("").optional(),
+  language: Joi.string().trim().allow("").optional(),
 });
 
 export default { createApplyJob, updateApplyJob };

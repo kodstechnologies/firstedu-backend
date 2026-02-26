@@ -180,7 +180,48 @@ export const sendInterviewScheduledEmail = async ({
 };
 
 /**
- * Send approval and login credentials to teacher (Teacher Connect Apply Job).
+ * Send approval confirmation only (no credentials) – e.g. after Apply Job approval.
+ * @param {Object} payload - { toEmail, teacherName, jobTitle? }
+ */
+export const sendTeacherApprovalConfirmationEmail = async ({
+  toEmail,
+  teacherName,
+  jobTitle,
+}) => {
+  try {
+    if (!toEmail) {
+      throw new ApiError(400, "Recipient email is required");
+    }
+    if (missingVars.length > 0) {
+      throw new ApiError(500, `SMTP configuration incomplete. Missing: ${missingVars.join(", ")}`);
+    }
+
+    const mailOptions = {
+      from: `"FirstEdu Teacher Connect" <${process.env.SMTP_EMAIL}>`,
+      to: toEmail,
+      subject: "Congratulations – You have been selected as a Teacher",
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #333;">Hello ${teacherName || "Candidate"},</h2>
+          <p style="color: #666;">Congratulations! You have been selected for ${jobTitle ? `<strong>${jobTitle}</strong>` : "the teacher position"}.</p>
+          <p style="color: #666;">You will receive your login credentials separately. Please check your email or contact the admin if you have any questions.</p>
+          <p style="color: #999; font-size: 12px; margin-top: 20px;">FirstEdu Teacher Connect</p>
+        </div>
+      `,
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`✅ Teacher approval confirmation email sent to ${toEmail}. Message ID: ${info.messageId}`);
+    return info;
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    console.error("❌ Error sending approval confirmation email:", error.message);
+    throw new ApiError(500, `Failed to send approval confirmation email: ${error.message}`);
+  }
+};
+
+/**
+ * Send login credentials to teacher (admin-triggered only).
  * @param {Object} payload - { toEmail, teacherName, email, password }
  */
 export const sendTeacherApprovalWithCredentialsEmail = async ({

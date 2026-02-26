@@ -7,11 +7,20 @@ const teacherSchema = new mongoose.Schema(
     name: { type: String, required: true, trim: true },
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     password: { type: String, required: true },
-    phone: { type: String, required: true, trim: true },
+    phone: { type: String, default: null, trim: true },
     gender: {
       type: String,
       enum: ["male", "female", "other"],
       required: true,
+    },
+    about: { type: String, default: null, trim: true },
+    experience: { type: String, default: null, trim: true },
+    language: { type: String, default: null, trim: true },
+    hiringFor: {
+      type: String,
+      enum: ["fulltime", "internship", "freelancing"],
+      default: null,
+      trim: true,
     },
     skills: [
       {
@@ -33,15 +42,21 @@ const teacherSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
-    resumeUrl: {
-      type: String,
-      default: null,
-      trim: true,
-    },
     profileImage: {
       type: String,
       default: null,
       trim: true,
+    },
+    averageRating: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 5,
+    },
+    ratingCount: {
+      type: Number,
+      default: 0,
+      min: 0,
     },
     passwordResetOTP: { type: String, default: null },
     passwordResetOTPExpires: { type: Date, default: null },

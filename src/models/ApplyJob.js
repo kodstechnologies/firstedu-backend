@@ -33,12 +33,17 @@ const applyJobSchema = new mongoose.Schema(
       required: [true, "Hiring for (role) is required"],
       trim: true,
     },
-    salary: {
-      type: String,
-      required: [true, "Salary is required"],
-      trim: true,
+    perMinuteRate: {
+      type: Number,
+      required: [true, "Per minute rate is required"],
+      min: 0,
     },
     location: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    language: {
       type: String,
       trim: true,
       default: "",

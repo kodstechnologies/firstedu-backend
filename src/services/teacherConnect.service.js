@@ -1,15 +1,26 @@
 import { ApiError } from "../utils/ApiError.js";
 import teacherRepository from "../repository/teacher.repository.js";
 import teacherSessionRepository from "../repository/teacherSession.repository.js";
+import teacherRatingRepository from "../repository/teacherRating.repository.js";
 import walletService from "./wallet.service.js";
+import Teacher from "../models/Teacher.js";
+
+/** Strip phone and email from teacher object for student-facing responses */
+const omitContactFromTeacher = (teacher) => {
+  const obj = teacher.toObject ? teacher.toObject() : { ...teacher };
+  delete obj.phone;
+  delete obj.email;
+  return obj;
+};
 
 /**
- * Get available teachers by subject
+ * Get available teachers by subject.
+ * Returns all approved teachers (live or not). Each teacher includes isOnline and averageRating.
+ * Phone and email are excluded from response.
  */
 export const getAvailableTeachers = async (subject, page = 1, limit = 10) => {
   const filter = {
     status: "approved",
-    isLive: true,
   };
 
   if (subject) {
@@ -23,18 +34,44 @@ export const getAvailableTeachers = async (subject, page = 1, limit = 10) => {
     sortOrder: "asc",
   };
 
-  const result = await teacherRepository.findAll(filter, options);
+  const [result, totalOnline] = await Promise.all([
+    teacherRepository.findAll(filter, options),
+    Teacher.countDocuments({ ...filter, isLive: true }),
+  ]);
 
-  // Add live status indicator
   const teachers = result.teachers.map((teacher) => ({
-    ...teacher.toObject(),
+    ...omitContactFromTeacher(teacher),
     isOnline: teacher.isLive,
+    averageRating: teacher.averageRating ?? 0,
+    ratingCount: teacher.ratingCount ?? 0,
   }));
 
   return {
     teachers,
     pagination: result.pagination,
+    totalTeachers: result.pagination.total,
+    totalOnline,
   };
+};
+
+/**
+ * Get a single teacher's details by ID (for students). Only approved teachers. Phone and email excluded.
+ */
+export const getTeacherById = async (teacherId) => {
+  const teacher = await teacherRepository.findById(teacherId);
+  if (!teacher) {
+    throw new ApiError(404, "Teacher not found");
+  }
+  if (teacher.status !== "approved") {
+    throw new ApiError(404, "Teacher not found");
+  }
+  const result = {
+    ...omitContactFromTeacher(teacher),
+    isOnline: teacher.isLive,
+    averageRating: teacher.averageRating ?? 0,
+    ratingCount: teacher.ratingCount ?? 0,
+  };
+  return result;
 };
 
 /**
@@ -293,8 +330,30 @@ export const getTeacherEarnings = async (teacherId, startDate = null, endDate = 
   return await teacherSessionRepository.calculateTeacherEarnings(teacherId, startDate, endDate);
 };
 
+/**
+ * Rate a teacher (1-5). Replaces previous rating if student already rated. Auto-updates teacher's averageRating.
+ */
+export const rateTeacher = async (teacherId, studentId, rating) => {
+  const teacher = await teacherRepository.findById(teacherId);
+  if (!teacher) {
+    throw new ApiError(404, "Teacher not found");
+  }
+  if (teacher.status !== "approved") {
+    throw new ApiError(400, "Cannot rate a teacher who is not approved");
+  }
+
+  await teacherRatingRepository.upsert(teacherId, studentId, rating);
+  const { averageRating, ratingCount } = await teacherRatingRepository.getAggregationForTeacher(
+    teacherId
+  );
+  await teacherRatingRepository.updateTeacherRatingFields(teacherId, averageRating, ratingCount);
+
+  return { averageRating, ratingCount };
+};
+
 export default {
   getAvailableTeachers,
+  getTeacherById,
   initiateCallRequest,
   acceptCallRequest,
   rejectCallRequest,
@@ -306,5 +365,6 @@ export default {
   getTeacherPendingRequests,
   getTeacherSessionHistory,
   getTeacherEarnings,
+  rateTeacher,
 };
 

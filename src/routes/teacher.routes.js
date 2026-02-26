@@ -1,6 +1,5 @@
 import { Router } from "express";
 import {
-  signup,
   login,
   logout,
   requestForgotPasswordOTP,
@@ -20,16 +19,12 @@ import {
   getEarnings,
 } from "../controllers/teacherConnect.controller.js";
 import { verifyJWT } from "../middleware/auth.middleware.js";
-import { uploadPDFAndImage } from "../utils/multerConfig.js";
+import { uploadImage } from "../utils/multerConfig.js";
 import { submitSupport } from "../controllers/contactSupport.controller.js";
 
 const router = Router();
 
-// Teacher Authentication Routes
-router.post("/signup", uploadPDFAndImage.fields([
-  { name: 'resume', maxCount: 1 },
-  { name: 'profileImage', maxCount: 1 }
-]), signup);
+// Teacher Authentication Routes (no signup – teachers are created by admin)
 router.post("/login", login);
 router.post("/logout", verifyJWT, logout);
 router.post("/forgot-password/request", requestForgotPasswordOTP);
@@ -44,8 +39,8 @@ router.post("/contact-support",verifyJWT, submitSupport);
 
 // ==================== TEACHER CONNECT MODULE ====================
 
-// Profile Management
-router.put("/profile", verifyJWT, updateProfile);
+// Profile Management (teacher can update only: name, email, gender, about, profileImage)
+router.put("/profile", verifyJWT, uploadImage.single("profileImage"), updateProfile);
 router.put("/availability", verifyJWT, toggleAvailability);
 
 // Call Requests

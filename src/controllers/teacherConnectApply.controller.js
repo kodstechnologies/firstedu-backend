@@ -139,7 +139,7 @@ export const approveApplication = asyncHandler(async (req, res) => {
   const application = await jobApplicationService.approveApplication(id);
   return res
     .status(200)
-    .json(ApiResponse.success(application, "Application approved; teacher account created and credentials sent via email"));
+    .json(ApiResponse.success(application, "Application approved; confirmation email sent to candidate"));
 });
 
 /**

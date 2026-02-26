@@ -16,7 +16,7 @@ const findAllPaginated = async (filters = {}, options = {}) => {
 
   const [list, total] = await Promise.all([
     JobApplication.find(query)
-      .populate("job", "title skills experience hiringFor salary createdAt")
+      .populate("job", "title skills experience hiringFor perMinuteRate createdAt")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limitNum)
@@ -38,14 +38,14 @@ const findAllPaginated = async (filters = {}, options = {}) => {
 const findById = async (id) => {
   return await JobApplication.findById(id).populate(
     "job",
-    "title skills experience hiringFor salary createdAt"
+    "title skills experience hiringFor perMinuteRate createdAt"
   );
 };
 
 const updateById = async (id, updateData) => {
   return await JobApplication.findByIdAndUpdate(id, updateData, {
     new: true,
-  }).populate("job", "title skills experience hiringFor salary createdAt");
+  }).populate("job", "title skills experience hiringFor perMinuteRate createdAt");
 };
 
 const deleteById = async (id) => {

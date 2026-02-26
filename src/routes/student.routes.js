@@ -6,6 +6,7 @@ import {
   requestForgotPasswordOTP,
   verifyForgotPasswordOTP,
   resetPassword,
+  getProfile,
   updateProfile,
   changePassword, convertPoints,
 } from "../controllers/studentAuth.controller.js";
@@ -103,11 +104,13 @@ import {
 } from "../controllers/order.controller.js";
 import {
   getAvailableTeachers,
+  getTeacherById,
   initiateCallRequest,
   getCallHistory,
   getCallRecordings,
   cancelCallRequest,
   checkWalletBalance,
+  rateTeacher,
 } from "../controllers/studentTeacherConnect.controller.js";
 import {
   createTicket,
@@ -172,6 +175,7 @@ router.post("/login", login);
 // Contact Us (no JWT)
 router.post("/contact-us", contactUs);
 router.post("/logout", verifyJWT, logout);
+router.get("/profile", verifyJWT, getProfile);
 router.post("/forgot-password/request", requestForgotPasswordOTP);
 router.post("/forgot-password/verify", verifyForgotPasswordOTP);
 router.post("/forgot-password/reset", resetPassword);
@@ -315,6 +319,8 @@ router.get("/orders", verifyJWT, getMyOrders);
 
 // Teacher Listing & Availability
 router.get("/teachers", verifyJWT, getAvailableTeachers);
+router.get("/teachers/:teacherId", verifyJWT, getTeacherById);
+router.post("/teachers/:teacherId/rate", verifyJWT, rateTeacher);
 router.get("/teachers/:teacherId/check-balance", verifyJWT, checkWalletBalance);
 
 // Call Management

@@ -47,14 +47,15 @@ import {
   updateStudentStatus,
 } from "../controllers/adminUser.controller.js";
 import {
+  createTeacher,
   getTeachers,
   getTeacherById,
-  getTeacherResume,
   approveTeacher,
   rejectTeacher,
   updatePerMinuteRate,
   updateTeacher,
   deleteTeacher,
+  sendLoginCredentials,
 } from "../controllers/teacher.controller.js";
 import {
   createCourseTestLink,
@@ -290,14 +291,15 @@ router.get("/courses/:id", verifyJWT, getCourseById);
 router.put("/courses/:id", verifyJWT, uploadCourseMaterial, updateCourse);
 router.delete("/courses/:id", verifyJWT, deleteCourse);
 
-// Teacher Management
+// Teacher Management (admin creates/updates teachers; teachers can only login and update limited profile)
+router.post("/teachers", verifyJWT, uploadImage.single("profileImage"), createTeacher);
 router.get("/teachers", verifyJWT, getTeachers);
 router.get("/teachers/:id", verifyJWT, getTeacherById);
-router.get("/teachers/:id/resume", verifyJWT, getTeacherResume);
 router.post("/teachers/:id/approve", verifyJWT, approveTeacher);
 router.post("/teachers/:id/reject", verifyJWT, rejectTeacher);
+router.post("/teachers/:id/send-credentials", verifyJWT, sendLoginCredentials);
 router.put("/teachers/:id/rate", verifyJWT, updatePerMinuteRate);
-router.put("/teachers/:id", verifyJWT, updateTeacher);
+router.put("/teachers/:id", verifyJWT, uploadImage.single("profileImage"), updateTeacher);
 router.delete("/teachers/:id", verifyJWT, deleteTeacher);
 
 // Student Management & Proctoring
