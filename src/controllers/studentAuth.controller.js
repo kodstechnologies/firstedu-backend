@@ -411,22 +411,3 @@ export const convertPoints = asyncHandler(async (req, res) => {
     )
   );
 });
-
-// Get Logged-in Student Profile
-export const getProfile = asyncHandler(async (req, res) => {
-  const studentId = req.user?._id;
-
-  if (!studentId) {
-    throw new ApiError(401, "Unauthorized request");
-  }
-
-  const student = await studentRepository.findById(studentId);
-
-  if (!student) {
-    throw new ApiError(404, "Student not found");
-  }
-
-  return res
-    .status(200)
-    .json(ApiResponse.success(student, "Profile fetched successfully"));
-});
