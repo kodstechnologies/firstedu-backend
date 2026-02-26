@@ -19,7 +19,7 @@ export const createTournament = asyncHandler(async (req, res) => {
     );
   }
 
-  const tournament = await tournamentService.createTournament(value, req.user._id);
+  const tournament = await tournamentService.createTournament(value, req.user._id, req.file);
   return res.status(201).json(
     ApiResponse.success(tournament, "Tournament created successfully")
   );
@@ -66,7 +66,7 @@ export const updateTournament = asyncHandler(async (req, res) => {
     );
   }
 
-  const tournament = await tournamentService.updateTournament(id, value);
+  const tournament = await tournamentService.updateTournament(id, value, req.file);
   return res.status(200).json(
     ApiResponse.success(tournament, "Tournament updated successfully")
   );

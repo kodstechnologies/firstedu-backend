@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 
-const forumPostSchema = new mongoose.Schema(
+const forumReplySchema = new mongoose.Schema(
   {
     content: {
       type: String,
@@ -12,91 +12,68 @@ const forumPostSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
-    likes: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
-      },
-    ],
-    replies: [
-      {
-        content: {
-          type: String,
-          required: true,
-          trim: true,
-        },
-        author: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: "User",
-          required: true,
-        },
-        likes: [
-          {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: "User",
-          },
-        ],
-        createdAt: {
-          type: Date,
-          default: Date.now,
-        },
-      },
-    ],
+    likes: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
   },
   { timestamps: true }
 );
 
-const forumThreadSchema = new mongoose.Schema(
+const forumCommentSchema = new mongoose.Schema(
   {
-    title: {
+    content: {
       type: String,
       required: true,
       trim: true,
     },
-    category: {
-      type: String,
-      trim: true,
-      default: "general",
+    author: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
     },
-    posts: [forumPostSchema],
-    isPinned: {
-      type: Boolean,
-      default: false,
-    },
-    isLocked: {
-      type: Boolean,
-      default: false,
-    },
+    likes: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+    replies: [forumReplySchema],
   },
   { timestamps: true }
 );
 
 const forumSchema = new mongoose.Schema(
   {
-    name: {
+    title: {
       type: String,
-      required: true,
+      required: [true, "Title is required"],
       trim: true,
     },
     description: {
       type: String,
       trim: true,
+      default: "",
     },
-    threads: [forumThreadSchema],
+    tags: {
+      type: [String],
+      default: [],
+    },
+    topic: {
+      type: String,
+      required: [true, "Topic is required"],
+      trim: true,
+    },
+    attachment: {
+      type: String,
+      trim: true,
+      default: null,
+    },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
     },
+    likes: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+    comments: [forumCommentSchema],
   },
-  {
-    timestamps: true,
-  }
+  { timestamps: true }
 );
 
-forumSchema.index({ "threads.createdAt": -1 });
-forumSchema.index({ "threads.isPinned": 1 });
-forumSchema.index({ createdBy: 1 });
+forumSchema.index({ createdBy: 1, createdAt: -1 });
+forumSchema.index({ topic: 1 });
+forumSchema.index({ createdAt: -1 });
 
 export default mongoose.models.Forum || mongoose.model("Forum", forumSchema);
-

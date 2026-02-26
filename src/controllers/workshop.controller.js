@@ -19,7 +19,7 @@ export const createWorkshop = asyncHandler(async (req, res) => {
     );
   }
 
-  const workshop = await workshopService.createWorkshop(value, req.user._id);
+  const workshop = await workshopService.createWorkshop(value, req.user._id, req.file);
   return res.status(201).json(
     ApiResponse.success(workshop, "Workshop created successfully")
   );
@@ -68,7 +68,7 @@ export const updateWorkshop = asyncHandler(async (req, res) => {
     );
   }
 
-  const workshop = await workshopService.updateWorkshop(id, value);
+  const workshop = await workshopService.updateWorkshop(id, value, req.file);
   return res.status(200).json(
     ApiResponse.success(workshop, "Workshop updated successfully")
   );
@@ -102,14 +102,18 @@ export const getPublishedWorkshops = asyncHandler(async (req, res) => {
         workshop._id,
         req.user._id
       );
+      const hasPurchased = registration?.paymentStatus === "completed";
       const obj = withEventStatus(workshop, !!registration);
-      const canJoin = obj.canJoin;
-      return {
-        ...obj,
-        isRegistered: !!registration,
-        meetingLink: canJoin ? workshop.meetingLink : undefined,
-        meetingPassword: canJoin ? workshop.meetingPassword : undefined,
-      };
+      const showMeetingDetails = hasPurchased && obj.isEventLive;
+      const item = { ...obj, isRegistered: !!registration };
+      if (showMeetingDetails) {
+        item.meetingLink = workshop.meetingLink;
+        item.meetingPassword = workshop.meetingPassword;
+      } else {
+        delete item.meetingLink;
+        delete item.meetingPassword;
+      }
+      return item;
     })
   );
 
@@ -131,18 +135,19 @@ export const getWorkshopDetails = asyncHandler(async (req, res) => {
     workshop._id,
     req.user._id
   );
+  const hasPurchased = registration?.paymentStatus === "completed";
   const obj = withEventStatus(workshop, !!registration);
-  const canJoin = obj.canJoin;
+  const showMeetingDetails = hasPurchased && obj.isEventLive;
+  const response = { ...obj, isRegistered: !!registration };
+  if (showMeetingDetails) {
+    response.meetingLink = workshop.meetingLink;
+    response.meetingPassword = workshop.meetingPassword;
+  } else {
+    delete response.meetingLink;
+    delete response.meetingPassword;
+  }
   return res.status(200).json(
-    ApiResponse.success(
-      {
-        ...obj,
-        isRegistered: !!registration,
-        meetingLink: canJoin ? workshop.meetingLink : undefined,
-        meetingPassword: canJoin ? workshop.meetingPassword : undefined,
-      },
-      "Workshop details fetched successfully"
-    )
+    ApiResponse.success(response, "Workshop details fetched successfully")
   );
 });
 

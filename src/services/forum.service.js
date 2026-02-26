@@ -1,203 +1,113 @@
 import { ApiError } from "../utils/ApiError.js";
 import forumRepository from "../repository/forum.repository.js";
+import { uploadImageToCloudinary, deleteFileFromCloudinary } from "../utils/cloudinaryUpload.js";
 
-export const createForum = async (data, userId) => {
-  const { name, description } = data;
+const FORUM_IMAGE_FOLDER = "forums";
 
-  if (!name) {
-    throw new ApiError(400, "Forum name is required");
+const defaultPopulate = [
+  { path: "createdBy", select: "name email" },
+  { path: "comments.author", select: "name email" },
+  { path: "comments.replies.author", select: "name email" },
+];
+
+export const createForum = async (data, userId, file) => {
+  const { title, description, tags, topic } = data;
+  if (!title || !topic) {
+    throw new ApiError(400, "Title and topic are required");
+  }
+
+  let attachmentUrl = null;
+  if (file?.buffer) {
+    attachmentUrl = await uploadImageToCloudinary(
+      file.buffer,
+      file.originalname,
+      FORUM_IMAGE_FOLDER,
+      file.mimetype
+    );
   }
 
   return await forumRepository.create({
-    name,
-    description,
-    threads: [],
+    title,
+    description: description || "",
+    tags: Array.isArray(tags) ? tags : [],
+    topic,
+    attachment: attachmentUrl,
     createdBy: userId,
+    likes: [],
+    comments: [],
   });
 };
 
-export const getForums = async () => {
-  return await forumRepository.find({}, {
-    populate: [
-      { path: "createdBy", select: "name email" },
-      { path: "threads.posts.author", select: "name email" },
-      { path: "threads.posts.replies.author", select: "name email" },
-    ],
-    sort: { createdAt: -1 },
-  });
+export const getForums = async (userId, options = {}) => {
+  const { search, page = 1, limit = 10 } = options;
+  const query = {};
+  if (search && search.trim()) {
+    query.$or = [
+      { title: { $regex: search.trim(), $options: "i" } },
+      { description: { $regex: search.trim(), $options: "i" } },
+      { topic: { $regex: search.trim(), $options: "i" } },
+    ];
+  }
+
+  const [all, total] = await Promise.all([
+    forumRepository.find(query, {
+      populate: defaultPopulate,
+      sort: { createdAt: -1 },
+    }),
+    forumRepository.count(query),
+  ]);
+
+  let sorted = all;
+  if (userId && all.length) {
+    const mine = all.filter((f) => f.createdBy?._id?.toString() === userId.toString());
+    const others = all.filter((f) => f.createdBy?._id?.toString() !== userId.toString());
+    sorted = [...mine, ...others];
+  }
+
+  const pageNum = Math.max(1, parseInt(page) || 1);
+  const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 10));
+  const skip = (pageNum - 1) * limitNum;
+  const forums = sorted.slice(skip, skip + limitNum);
+
+  return {
+    forums,
+    pagination: {
+      page: pageNum,
+      limit: limitNum,
+      total,
+      pages: Math.ceil(total / limitNum) || 1,
+    },
+  };
 };
 
 export const getForumById = async (id) => {
-  const forum = await forumRepository.findById(id, [
-    { path: "createdBy", select: "name email" },
-    { path: "threads.posts.author", select: "name email" },
-    { path: "threads.posts.replies.author", select: "name email" },
-  ]);
-
-  if (!forum) {
-    throw new ApiError(404, "Forum not found");
-  }
+  const forum = await forumRepository.findById(id, defaultPopulate);
+  if (!forum) throw new ApiError(404, "Forum not found");
   return forum;
 };
 
-export const createForumThread = async (forumId, data, userId) => {
-  const { title, category, content } = data;
-
-  if (!title || !content) {
-    throw new ApiError(400, "Title and content are required");
-  }
-
-  const forum = await forumRepository.findById(forumId);
-  if (!forum) {
-    throw new ApiError(404, "Forum not found");
-  }
-
-  const newThread = {
-    title,
-    category: category || "general",
-    posts: [
-      {
-        content,
-        author: userId,
-        likes: [],
-        replies: [],
-      },
-    ],
-    isPinned: false,
-    isLocked: false,
-  };
-
-  forum.threads.push(newThread);
-  await forum.save();
-
-  return forum;
-};
-
-export const addPostToThread = async (forumId, threadId, content, userId) => {
-  if (!content) {
-    throw new ApiError(400, "Content is required");
-  }
-
-  const forum = await forumRepository.findById(forumId);
-  if (!forum) {
-    throw new ApiError(404, "Forum not found");
-  }
-
-  const thread = forum.threads.id(threadId);
-  if (!thread) {
-    throw new ApiError(404, "Thread not found");
-  }
-
-  if (thread.isLocked) {
-    throw new ApiError(403, "Thread is locked");
-  }
-
-  thread.posts.push({
-    content,
-    author: userId,
-    likes: [],
-    replies: [],
-  });
-
-  await forum.save();
-
-  return forum;
-};
-
-export const replyToPost = async (forumId, threadId, postId, content, userId) => {
-  if (!content) {
-    throw new ApiError(400, "Content is required");
-  }
-
-  const forum = await forumRepository.findById(forumId);
-  if (!forum) {
-    throw new ApiError(404, "Forum not found");
-  }
-
-  const thread = forum.threads.id(threadId);
-  if (!thread) {
-    throw new ApiError(404, "Thread not found");
-  }
-
-  if (thread.isLocked) {
-    throw new ApiError(403, "Thread is locked");
-  }
-
-  const post = thread.posts.id(postId);
-  if (!post) {
-    throw new ApiError(404, "Post not found");
-  }
-
-  post.replies.push({
-    content,
-    author: userId,
-    likes: [],
-  });
-
-  await forum.save();
-
-  return forum;
-};
-
-export const likePost = async (forumId, threadId, postId, replyId, userId) => {
-  const forum = await forumRepository.findById(forumId);
-  if (!forum) {
-    throw new ApiError(404, "Forum not found");
-  }
-
-  const thread = forum.threads.id(threadId);
-  if (!thread) {
-    throw new ApiError(404, "Thread not found");
-  }
-
-  const post = thread.posts.id(postId);
-  if (!post) {
-    throw new ApiError(404, "Post not found");
-  }
-
-  if (replyId) {
-    // Like a reply
-    const reply = post.replies.id(replyId);
-    if (!reply) {
-      throw new ApiError(404, "Reply not found");
-    }
-
-    const likeIndex = reply.likes.findIndex(
-      (id) => id.toString() === userId.toString()
-    );
-
-    if (likeIndex > -1) {
-      reply.likes.splice(likeIndex, 1);
-    } else {
-      reply.likes.push(userId);
-    }
-  } else {
-    // Like a post
-    const likeIndex = post.likes.findIndex(
-      (id) => id.toString() === userId.toString()
-    );
-
-    if (likeIndex > -1) {
-      post.likes.splice(likeIndex, 1);
-    } else {
-      post.likes.push(userId);
-    }
-  }
-
-  await forum.save();
-
-  return forum;
-};
-
-export const updateForum = async (id, updateData, userId) => {
+export const updateForum = async (id, data, userId, file) => {
   const forum = await forumRepository.findById(id);
-  if (!forum) {
-    throw new ApiError(404, "Forum not found");
-  }
-
-  // Check if user is the creator
+  if (!forum) throw new ApiError(404, "Forum not found");
   if (forum.createdBy.toString() !== userId.toString()) {
     throw new ApiError(403, "You can only update forums you created");
+  }
+
+  const updateData = {
+    ...(data.title !== undefined && { title: data.title }),
+    ...(data.description !== undefined && { description: data.description }),
+    ...(data.tags !== undefined && { tags: Array.isArray(data.tags) ? data.tags : [] }),
+    ...(data.topic !== undefined && { topic: data.topic }),
+  };
+
+  if (file?.buffer) {
+    if (forum.attachment) await deleteFileFromCloudinary(forum.attachment);
+    updateData.attachment = await uploadImageToCloudinary(
+      file.buffer,
+      file.originalname,
+      FORUM_IMAGE_FOLDER,
+      file.mimetype
+    );
   }
 
   return await forumRepository.updateById(id, updateData);
@@ -205,44 +115,128 @@ export const updateForum = async (id, updateData, userId) => {
 
 export const deleteForum = async (id, userId) => {
   const forum = await forumRepository.findById(id);
-  if (!forum) {
-    throw new ApiError(404, "Forum not found");
-  }
-
-  // Check if user is the creator
+  if (!forum) throw new ApiError(404, "Forum not found");
   if (forum.createdBy.toString() !== userId.toString()) {
     throw new ApiError(403, "You can only delete forums you created");
   }
-
+  if (forum.attachment) await deleteFileFromCloudinary(forum.attachment);
   return await forumRepository.deleteById(id);
 };
 
-// ==================== ADMIN MODERATION FUNCTIONS ====================
+export const addComment = async (forumId, content, userId) => {
+  const forum = await forumRepository.findById(forumId);
+  if (!forum) throw new ApiError(404, "Forum not found");
+  if (!content || !content.trim()) throw new ApiError(400, "Content is required");
 
-// Get all forums for admin monitoring
+  forum.comments.push({
+    content: content.trim(),
+    author: userId,
+    likes: [],
+    replies: [],
+  });
+  await forum.save();
+  return await forumRepository.findById(forumId, defaultPopulate);
+};
+
+export const replyToComment = async (forumId, commentId, content, userId) => {
+  const forum = await forumRepository.findById(forumId);
+  if (!forum) throw new ApiError(404, "Forum not found");
+  const comment = forum.comments.id(commentId);
+  if (!comment) throw new ApiError(404, "Comment not found");
+  if (!content || !content.trim()) throw new ApiError(400, "Content is required");
+
+  comment.replies.push({
+    content: content.trim(),
+    author: userId,
+    likes: [],
+  });
+  await forum.save();
+  return await forumRepository.findById(forumId, defaultPopulate);
+};
+
+const toggleLike = (arr, userId) => {
+  const idx = arr.findIndex((id) => id.toString() === userId.toString());
+  if (idx > -1) arr.splice(idx, 1);
+  else arr.push(userId);
+};
+
+export const likeForum = async (forumId, userId) => {
+  const forum = await forumRepository.findById(forumId);
+  if (!forum) throw new ApiError(404, "Forum not found");
+  toggleLike(forum.likes, userId);
+  await forum.save();
+  return await forumRepository.findById(forumId, defaultPopulate);
+};
+
+export const likeComment = async (forumId, commentId, userId) => {
+  const forum = await forumRepository.findById(forumId);
+  if (!forum) throw new ApiError(404, "Forum not found");
+  const comment = forum.comments.id(commentId);
+  if (!comment) throw new ApiError(404, "Comment not found");
+  toggleLike(comment.likes, userId);
+  await forum.save();
+  return await forumRepository.findById(forumId, defaultPopulate);
+};
+
+export const likeReply = async (forumId, commentId, replyId, userId) => {
+  const forum = await forumRepository.findById(forumId);
+  if (!forum) throw new ApiError(404, "Forum not found");
+  const comment = forum.comments.id(commentId);
+  if (!comment) throw new ApiError(404, "Comment not found");
+  const reply = comment.replies.id(replyId);
+  if (!reply) throw new ApiError(404, "Reply not found");
+  toggleLike(reply.likes, userId);
+  await forum.save();
+  return await forumRepository.findById(forumId, defaultPopulate);
+};
+
+export const deleteComment = async (forumId, commentId, userId) => {
+  const forum = await forumRepository.findById(forumId);
+  if (!forum) throw new ApiError(404, "Forum not found");
+  const comment = forum.comments.id(commentId);
+  if (!comment) throw new ApiError(404, "Comment not found");
+  if (comment.author.toString() !== userId.toString()) {
+    throw new ApiError(403, "You can only delete your own comment");
+  }
+  forum.comments.pull(commentId);
+  await forum.save();
+  return await forumRepository.findById(forumId, defaultPopulate);
+};
+
+export const deleteReply = async (forumId, commentId, replyId, userId) => {
+  const forum = await forumRepository.findById(forumId);
+  if (!forum) throw new ApiError(404, "Forum not found");
+  const comment = forum.comments.id(commentId);
+  if (!comment) throw new ApiError(404, "Comment not found");
+  const reply = comment.replies.id(replyId);
+  if (!reply) throw new ApiError(404, "Reply not found");
+  if (reply.author.toString() !== userId.toString()) {
+    throw new ApiError(403, "You can only delete your own reply");
+  }
+  comment.replies.pull(replyId);
+  await forum.save();
+  return await forumRepository.findById(forumId, defaultPopulate);
+};
+
+// ==================== ADMIN ====================
+
 export const getForumsForAdmin = async (options = {}) => {
   const { page = 1, limit = 10, search } = options;
-  
   const query = {};
   if (search) {
     query.$or = [
-      { name: { $regex: search, $options: "i" } },
+      { title: { $regex: search, $options: "i" } },
       { description: { $regex: search, $options: "i" } },
-      { "threads.title": { $regex: search, $options: "i" } },
+      { topic: { $regex: search, $options: "i" } },
     ];
   }
-
   const pageNum = parseInt(page);
   const limitNum = parseInt(limit);
   const skip = (pageNum - 1) * limitNum;
 
   const [forums, total, stats] = await Promise.all([
     forumRepository.find(query, {
-      populate: [
-        { path: "createdBy", select: "name email" },
-        { path: "threads.posts.author", select: "name email" },
-        { path: "threads.posts.replies.author", select: "name email" },
-      ],
+      populate: defaultPopulate,
       sort: { createdAt: -1 },
       skip,
       limit: limitNum,
@@ -258,110 +252,55 @@ export const getForumsForAdmin = async (options = {}) => {
       limit: limitNum,
       total,
       pages: Math.ceil(total / limitNum) || 1,
-      totalForums: stats.totalForums,
-      totalReplies: stats.totalReplies,
-      totalLikes: stats.totalLikes,
+      ...stats,
     },
   };
 };
 
-// Delete a post from a thread (Admin only)
-export const deleteForumPost = async (forumId, threadId, postId) => {
-  const forum = await forumRepository.findById(forumId);
-  if (!forum) {
-    throw new ApiError(404, "Forum not found");
-  }
-
-  const thread = forum.threads.id(threadId);
-  if (!thread) {
-    throw new ApiError(404, "Thread not found");
-  }
-
-  const post = thread.posts.id(postId);
-  if (!post) {
-    throw new ApiError(404, "Post not found");
-  }
-
-  // Remove the post
-  thread.posts.pull(postId);
-  await forum.save();
-
-  return forum;
-};
-
-// Delete a reply from a post (Admin only)
-export const deleteForumReply = async (forumId, threadId, postId, replyId) => {
-  const forum = await forumRepository.findById(forumId);
-  if (!forum) {
-    throw new ApiError(404, "Forum not found");
-  }
-
-  const thread = forum.threads.id(threadId);
-  if (!thread) {
-    throw new ApiError(404, "Thread not found");
-  }
-
-  const post = thread.posts.id(postId);
-  if (!post) {
-    throw new ApiError(404, "Post not found");
-  }
-
-  const reply = post.replies.id(replyId);
-  if (!reply) {
-    throw new ApiError(404, "Reply not found");
-  }
-
-  // Remove the reply
-  post.replies.pull(replyId);
-  await forum.save();
-
-  return forum;
-};
-
-// Delete an entire thread (Admin only)
-export const deleteForumThread = async (forumId, threadId) => {
-  const forum = await forumRepository.findById(forumId);
-  if (!forum) {
-    throw new ApiError(404, "Forum not found");
-  }
-
-  const thread = forum.threads.id(threadId);
-  if (!thread) {
-    throw new ApiError(404, "Thread not found");
-  }
-
-  // Remove the thread
-  forum.threads.pull(threadId);
-  await forum.save();
-
-  return forum;
-};
-
-// Delete entire forum (Admin only - for moderation)
 export const deleteForumByAdmin = async (forumId) => {
   const forum = await forumRepository.findById(forumId);
-  if (!forum) {
-    throw new ApiError(404, "Forum not found");
-  }
-
+  if (!forum) throw new ApiError(404, "Forum not found");
+  if (forum.attachment) await deleteFileFromCloudinary(forum.attachment);
   return await forumRepository.deleteById(forumId);
+};
+
+export const deleteCommentAdmin = async (forumId, commentId) => {
+  const forum = await forumRepository.findById(forumId);
+  if (!forum) throw new ApiError(404, "Forum not found");
+  const comment = forum.comments.id(commentId);
+  if (!comment) throw new ApiError(404, "Comment not found");
+  forum.comments.pull(commentId);
+  await forum.save();
+  return await forumRepository.findById(forumId, defaultPopulate);
+};
+
+export const deleteReplyAdmin = async (forumId, commentId, replyId) => {
+  const forum = await forumRepository.findById(forumId);
+  if (!forum) throw new ApiError(404, "Forum not found");
+  const comment = forum.comments.id(commentId);
+  if (!comment) throw new ApiError(404, "Comment not found");
+  const reply = comment.replies.id(replyId);
+  if (!reply) throw new ApiError(404, "Reply not found");
+  comment.replies.pull(replyId);
+  await forum.save();
+  return await forumRepository.findById(forumId, defaultPopulate);
 };
 
 export default {
   createForum,
   getForums,
   getForumById,
-  createForumThread,
-  addPostToThread,
-  replyToPost,
-  likePost,
   updateForum,
   deleteForum,
-  // Admin functions
+  addComment,
+  replyToComment,
+  likeForum,
+  likeComment,
+  likeReply,
+  deleteComment,
+  deleteReply,
   getForumsForAdmin,
-  deleteForumPost,
-  deleteForumReply,
-  deleteForumThread,
   deleteForumByAdmin,
+  deleteCommentAdmin,
+  deleteReplyAdmin,
 };
-

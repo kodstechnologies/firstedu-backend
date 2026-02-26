@@ -11,10 +11,20 @@ const courseSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    imageUrl: {
+      type: String,
+      trim: true,
+      default: null,
+    },
     contentUrl: {
       type: String,
       required: true,
       trim: true,
+    },
+    contentType: {
+      type: String,
+      enum: ["pdf", "video", "audio"],
+      default: "pdf",
     },
     price: {
       type: Number,

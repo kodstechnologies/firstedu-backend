@@ -5,6 +5,12 @@ import questionBankRepository from "../repository/questionBank.repository.js";
 import walletService from "./wallet.service.js";
 import eventRegistrationRepository from "../repository/eventRegistration.repository.js";
 import examSessionRepository from "../repository/examSession.repository.js";
+import {
+  uploadImageToCloudinary,
+  deleteFileFromCloudinary,
+} from "../utils/cloudinaryUpload.js";
+
+const TOURNAMENTS_IMAGE_FOLDER = "tournaments";
 
 const stagesTestWithQuestionBankPopulate = {
   path: "stages.test",
@@ -41,7 +47,7 @@ const enrichTournamentStagesWithBankStats = async (tournaments) => {
   });
 };
 
-export const createTournament = async (data, adminId) => {
+export const createTournament = async (data, adminId, file) => {
   const {
     title,
     description,
@@ -53,6 +59,16 @@ export const createTournament = async (data, adminId) => {
     secondPlacePoints,
     thirdPlacePoints,
   } = data;
+
+  let imageUrl = null;
+  if (file) {
+    imageUrl = await uploadImageToCloudinary(
+      file.buffer,
+      file.originalname,
+      TOURNAMENTS_IMAGE_FOLDER,
+      file.mimetype
+    );
+  }
 
   if (!title || !stages || !Array.isArray(stages) || stages.length === 0) {
     throw new ApiError(400, "Missing required fields: title and stages");
@@ -94,6 +110,7 @@ export const createTournament = async (data, adminId) => {
   return await tournamentRepository.create({
     title,
     description,
+    imageUrl,
     stages,
     registrationStartTime,
     registrationEndTime,
@@ -163,10 +180,22 @@ export const getTournamentById = async (id, isAdmin = false) => {
   return tournament;
 };
 
-export const updateTournament = async (id, updateData) => {
+export const updateTournament = async (id, updateData, file) => {
   const tournament = await tournamentRepository.findById(id);
   if (!tournament) {
     throw new ApiError(404, "Tournament not found");
+  }
+
+  if (file) {
+    if (tournament.imageUrl) {
+      await deleteFileFromCloudinary(tournament.imageUrl);
+    }
+    updateData.imageUrl = await uploadImageToCloudinary(
+      file.buffer,
+      file.originalname,
+      TOURNAMENTS_IMAGE_FOLDER,
+      file.mimetype
+    );
   }
 
   // Validate stages if provided
@@ -190,6 +219,9 @@ export const deleteTournament = async (id) => {
   const tournament = await tournamentRepository.findById(id);
   if (!tournament) {
     throw new ApiError(404, "Tournament not found");
+  }
+  if (tournament.imageUrl) {
+    await deleteFileFromCloudinary(tournament.imageUrl);
   }
   return await tournamentRepository.deleteById(id);
 };

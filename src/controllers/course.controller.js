@@ -16,12 +16,12 @@ export const createCourse = asyncHandler(async (req, res) => {
     );
   }
 
-  // Check if PDF file is provided
-  if (!req.file) {
-    throw new ApiError(400, "PDF file is required");
+  const files = req.files || {};
+  if (!files.pdf || !files.pdf[0]) {
+    throw new ApiError(400, "Study material file is required (PDF, video, or audio). Use field 'pdf'.");
   }
 
-  const course = await courseService.createCourse(value, req.user._id, req.file);
+  const course = await courseService.createCourse(value, req.user._id, files);
 
   return res
     .status(201)
@@ -80,8 +80,8 @@ export const updateCourse = asyncHandler(async (req, res) => {
     );
   }
 
-  // req.file is optional for update (can update other fields without changing PDF)
-  const updated = await courseService.updateCourse(id, value, req.file);
+  const files = req.files || {};
+  const updated = await courseService.updateCourse(id, value, files);
 
   return res
     .status(200)

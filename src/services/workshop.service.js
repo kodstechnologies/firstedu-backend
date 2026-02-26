@@ -1,8 +1,14 @@
 import { ApiError } from "../utils/ApiError.js";
 import workshopRepository from "../repository/workshop.repository.js";
 import teacherRepository from "../repository/teacher.repository.js";
+import {
+  uploadImageToCloudinary,
+  deleteFileFromCloudinary,
+} from "../utils/cloudinaryUpload.js";
 
-export const createWorkshop = async (data, adminId) => {
+const WORKSHOPS_IMAGE_FOLDER = "workshops";
+
+export const createWorkshop = async (data, adminId, file) => {
   const {
     title,
     description,
@@ -45,9 +51,20 @@ export const createWorkshop = async (data, adminId) => {
     throw new ApiError(400, "Registration must end before event starts");
   }
 
+  let imageUrl = null;
+  if (file) {
+    imageUrl = await uploadImageToCloudinary(
+      file.buffer,
+      file.originalname,
+      WORKSHOPS_IMAGE_FOLDER,
+      file.mimetype
+    );
+  }
+
   return await workshopRepository.create({
     title,
     description,
+    imageUrl,
     teacher: teacherId,
     startTime,
     endTime,
@@ -122,10 +139,22 @@ export const getWorkshopById = async (id) => {
   return workshop;
 };
 
-export const updateWorkshop = async (id, updateData) => {
+export const updateWorkshop = async (id, updateData, file) => {
   const workshop = await workshopRepository.findById(id);
   if (!workshop) {
     throw new ApiError(404, "Workshop not found");
+  }
+
+  if (file) {
+    if (workshop.imageUrl) {
+      await deleteFileFromCloudinary(workshop.imageUrl);
+    }
+    updateData.imageUrl = await uploadImageToCloudinary(
+      file.buffer,
+      file.originalname,
+      WORKSHOPS_IMAGE_FOLDER,
+      file.mimetype
+    );
   }
 
   // Validate teacher if provided
@@ -152,6 +181,9 @@ export const deleteWorkshop = async (id) => {
   const workshop = await workshopRepository.findById(id);
   if (!workshop) {
     throw new ApiError(404, "Workshop not found");
+  }
+  if (workshop.imageUrl) {
+    await deleteFileFromCloudinary(workshop.imageUrl);
   }
   return await workshopRepository.deleteById(id);
 };

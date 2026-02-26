@@ -11,6 +11,11 @@ const olympiadSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    imageUrl: {
+      type: String,
+      trim: true,
+      default: null,
+    },
     subject: {
       type: String,
       trim: true,

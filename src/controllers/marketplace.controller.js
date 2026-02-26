@@ -6,6 +6,7 @@ import marketplaceValidator from "../validation/marketplace.validator.js";
 import marketplaceService from "../services/marketplace.service.js";
 
 // Get All Published Courses (Marketplace)
+// Query: type (pdf | video | audio), access (free | paid | both)
 export const getCourses = asyncHandler(async (req, res) => {
   const {
     page = 1,
@@ -14,6 +15,8 @@ export const getCourses = asyncHandler(async (req, res) => {
     category,
     sortBy = "createdAt",
     sortOrder = "desc",
+    type,
+    access,
   } = req.query;
 
   const { courses, pagination } = await marketplaceService.getCourses({
@@ -23,6 +26,8 @@ export const getCourses = asyncHandler(async (req, res) => {
     category,
     sortBy,
     sortOrder,
+    type,
+    access,
   });
 
   return res.status(200).json(

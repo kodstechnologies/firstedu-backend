@@ -100,3 +100,52 @@ export const uploadSuccessStory = multer({
   fileFilter: imageAndVideoFileFilter,
   limits: { fileSize: 500 * 1024 * 1024 }, // 500MB
 });
+
+// Course: image = cover/thumbnail only; pdf = study material (PDF, video, audio only)
+const courseImageTypes = ["image/jpeg", "image/png", "image/jpg", "image/webp"];
+const courseStudyMaterialTypes = [
+  "application/pdf",
+  "video/mp4",
+  "video/mpeg",
+  "video/quicktime",
+  "video/x-msvideo",
+  "video/webm",
+  "video/x-ms-wmv",
+  "video/3gpp",
+  "audio/mpeg",
+  "audio/mp3",
+  "audio/wav",
+  "audio/webm",
+  "audio/ogg",
+  "audio/mp4",
+  "audio/x-wav",
+];
+
+const courseUploadFileFilter = (req, file, cb) => {
+  const field = file.fieldname;
+  if (field === "image") {
+    if (courseImageTypes.includes(file.mimetype)) {
+      return cb(null, true);
+    }
+    return cb(new Error("Course image must be JPEG, PNG, or WEBP"), false);
+  }
+  if (field === "pdf") {
+    if (courseStudyMaterialTypes.includes(file.mimetype)) {
+      return cb(null, true);
+    }
+    return cb(
+      new Error("Study material must be PDF, video, or audio (MP4, MP3, WAV, etc.)"),
+      false
+    );
+  }
+  cb(new Error("Unexpected field"), false);
+};
+
+export const uploadCourseMaterial = multer({
+  storage,
+  fileFilter: courseUploadFileFilter,
+  limits: { fileSize: 500 * 1024 * 1024 }, // 500MB
+}).fields([
+  { name: "image", maxCount: 1 },
+  { name: "pdf", maxCount: 1 },
+]);

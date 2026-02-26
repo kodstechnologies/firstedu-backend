@@ -62,10 +62,13 @@ import {
   getForumById,
   updateForum,
   deleteForum,
-  createForumThread,
-  addPostToThread,
-  replyToPost,
-  likePost,
+  addComment,
+  replyToComment,
+  likeForum,
+  likeComment,
+  likeReply,
+  deleteComment,
+  deleteReply,
 } from "../controllers/forum.controller.js";
 import {
   getHallOfFame,
@@ -120,6 +123,25 @@ import {
   submitBlogRequest,
 } from "../controllers/blogRequest.controller.js";
 import {
+  getAllBlogs,
+  getBlogById,
+} from "../controllers/blog.controller.js";
+import {
+  getAllQnAUser,
+  getQnAByIdUser,
+  submitQnARequest,
+  getMyQnARequests,
+} from "../controllers/qna.controller.js";
+import {
+  getAllPressAnnouncementsUser,
+  getPressAnnouncementByIdUser,
+} from "../controllers/pressAnnouncement.controller.js";
+import {
+  getAllApplyJobsUser,
+  getApplyJobByIdUser,
+  applyForJob,
+} from "../controllers/teacherConnectApply.controller.js";
+import {
   registerFCMToken,
   getMyNotifications,
   getUnreadCount,
@@ -133,12 +155,12 @@ import {
 } from "../controllers/successStory.controller.js";
 import { getCategoriesForStudent } from "../controllers/category.controller.js";
 import { verifyJWT } from "../middleware/auth.middleware.js";
-import { uploadImage } from "../utils/multerConfig.js";
+import { uploadImage, uploadPDF } from "../utils/multerConfig.js";
 import {
 
   getCompetitions,
   getCompetitionByIdOrSlug,
-  
+
 } from '../controllers/competition.controller.js';
 
 const router = Router();
@@ -220,23 +242,25 @@ router.get("/challenges/:id", verifyJWT, getChallengeById);
 router.post("/challenges/:id/join", verifyJWT, joinChallenge);
 router.post("/challenges/:id/invite", verifyJWT, inviteFriendsToChallenge);
 
-// Community & Competitions - Forums
-router.post("/forums", verifyJWT, createForum);
+// Community - Forums (title, description, tags, topic, attachment; comments & replies)
+router.post("/forums", verifyJWT, uploadImage.single("attachment"), createForum);
 router.get("/forums", verifyJWT, getForums);
 router.get("/forums/:id", verifyJWT, getForumById);
-router.put("/forums/:id", verifyJWT, updateForum);
+router.put("/forums/:id", verifyJWT, uploadImage.single("attachment"), updateForum);
 router.delete("/forums/:id", verifyJWT, deleteForum);
-router.post("/forums/:forumId/threads", verifyJWT, createForumThread);
-router.post("/forums/:forumId/threads/:threadId/posts", verifyJWT, addPostToThread);
-router.post("/forums/:forumId/threads/:threadId/posts/:postId/replies", verifyJWT, replyToPost);
-router.post("/forums/:forumId/threads/:threadId/posts/:postId/like", verifyJWT, likePost);
-router.post("/forums/:forumId/threads/:threadId/posts/:postId/replies/:replyId/like", verifyJWT, likePost);
+router.post("/forums/:forumId/comments", verifyJWT, addComment);
+router.post("/forums/:forumId/comments/:commentId/replies", verifyJWT, replyToComment);
+router.post("/forums/:forumId/like", verifyJWT, likeForum);
+router.post("/forums/:forumId/comments/:commentId/like", verifyJWT, likeComment);
+router.post("/forums/:forumId/comments/:commentId/replies/:replyId/like", verifyJWT, likeReply);
+router.delete("/forums/:forumId/comments/:commentId", verifyJWT, deleteComment);
+router.delete("/forums/:forumId/comments/:commentId/replies/:replyId", verifyJWT, deleteReply);
 
 // Community & Competitions - Hall of Fame
 router.get("/hall-of-fame", verifyJWT, getHallOfFame);
 
-// All Events (Olympiads, Tournaments, Workshops) - catalog, no registration filter
-router.get("/events", getAllEvents);
+// All Events (Olympiads, Tournaments) - catalog, no registration filter
+router.get("/events", verifyJWT, getAllEvents);
 
 // My Events Dashboard
 router.get("/my-events", verifyJWT, getMyEventsDashboard);
@@ -304,8 +328,27 @@ router.post("/teacher-sessions/:sessionId/cancel", verifyJWT, cancelCallRequest)
 // Simple Support Message (no JWT required)
 router.post("/contact-support", verifyJWT, submitSupport);
 
-// Blog Request
-router.post("/blog-request", verifyJWT, submitBlogRequest);
+// Blog Request (optional image)
+router.post("/blog-request", verifyJWT, uploadImage.single("image"), submitBlogRequest);
+
+// Approved blogs (approved by admin + admin-added blogs)
+router.get("/blogs", verifyJWT, getAllBlogs);
+router.get("/blogs/:id", verifyJWT, getBlogById);
+
+// Q&A – view admin-created Q&A and submit requests
+router.get("/qna", verifyJWT, getAllQnAUser);
+router.get("/qna/:id", verifyJWT, getQnAByIdUser);
+router.post("/qna-request", verifyJWT, submitQnARequest);
+router.get("/qna-requests", verifyJWT, getMyQnARequests);
+
+// Press announcements (read only)
+router.get("/press-announcements", verifyJWT, getAllPressAnnouncementsUser);
+router.get("/press-announcements/:id", verifyJWT, getPressAnnouncementByIdUser);
+
+// Teacher Connect – Apply Job (teachers can view jobs and apply; apply is public so candidates without account can apply)
+router.get("/teacher-connect/jobs", getAllApplyJobsUser);
+router.get("/teacher-connect/jobs/:id", getApplyJobByIdUser);
+router.post("/teacher-connect/apply", uploadPDF.single("resume"), applyForJob);
 
 // Ticket Management
 router.post("/support/tickets", verifyJWT, createTicket);
@@ -338,13 +381,10 @@ router.get("/success-stories/featured", getFeaturedStories);
 router.get("/success-stories", getAllStoriesStudent);
 router.get("/success-stories/:id", getStoryDetailStudent);
 
-
-
-
 // ==================== COMPETITION MANAGEMENT ====================
 
 router.get("/competitions", getCompetitions);
-router.get("/competitions/:idOrSlug",getCompetitionByIdOrSlug);
+router.get("/competitions/:idOrSlug", getCompetitionByIdOrSlug);
 
 
 export default router;

@@ -107,6 +107,29 @@ function parseCloudinaryUrl(cloudinaryUrl) {
 }
 
 /**
+ * Upload audio to Cloudinary (as raw resource).
+ * @param {Buffer} fileBuffer - File buffer from multer
+ * @param {String} originalName - Original filename
+ * @param {String} folder - Folder in Cloudinary (e.g. "courses")
+ * @returns {Promise<String>} Secure URL of uploaded file
+ */
+export const uploadAudioToCloudinary = async (fileBuffer, originalName, folder = "courses") => {
+  if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+    throw new Error("Cloudinary credentials not configured (CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET)");
+  }
+  if (!fileBuffer) {
+    throw new Error("File buffer is required");
+  }
+  const publicId = `${folder}/${nanoid()}-${Date.now()}`;
+  const result = await uploadBufferToCloudinary(fileBuffer, {
+    folder,
+    resource_type: "raw",
+    public_id: publicId,
+  });
+  return result.secure_url;
+};
+
+/**
  * Upload video to Cloudinary.
  * @param {Buffer} fileBuffer - File buffer from multer
  * @param {String} originalName - Original filename
@@ -158,5 +181,6 @@ export default {
   uploadImageToCloudinary,
   uploadPDFToCloudinary,
   uploadVideoToCloudinary,
+  uploadAudioToCloudinary,
   deleteFileFromCloudinary,
 };

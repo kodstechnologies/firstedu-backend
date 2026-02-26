@@ -12,6 +12,8 @@ import {
 
 /**
  * Get all published courses (marketplace listing)
+ * Filters: type (pdf | video | audio), access (free | paid | both)
+ * - free: price === 0, paid: price > 0, both: no filter
  */
 export const getCourses = async (options = {}) => {
   const {
@@ -21,6 +23,8 @@ export const getCourses = async (options = {}) => {
     category,
     sortBy = "createdAt",
     sortOrder = "desc",
+    type,
+    access,
   } = options;
 
   const query = { isPublished: true };
@@ -40,6 +44,8 @@ export const getCourses = async (options = {}) => {
     sortOrder,
     search,
     category,
+    type,
+    access,
   });
 
   const courses = result.courses.map((course) => {

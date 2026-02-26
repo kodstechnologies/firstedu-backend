@@ -1,39 +1,46 @@
 import Joi from "joi";
 
-const objectId = Joi.string().regex(/^[0-9a-fA-F]{24}$/);
-
 const createForum = Joi.object({
-  title: Joi.string().trim().required(),
+  title: Joi.string().trim().required().messages({
+    "string.empty": "Title is required",
+    "any.required": "Title is required",
+  }),
   description: Joi.string().trim().allow("", null).optional(),
-  category: Joi.string().trim().optional(),
-  tags: Joi.array().items(Joi.string().trim()).optional(),
+  tags: Joi.array().items(Joi.string().trim()).optional().default([]),
+  topic: Joi.string().trim().required().messages({
+    "string.empty": "Topic is required",
+    "any.required": "Topic is required",
+  }),
 });
 
 const updateForum = Joi.object({
-  title: Joi.string().trim().optional(),
+  title: Joi.string().trim().optional().messages({
+    "string.empty": "Title cannot be empty",
+  }),
   description: Joi.string().trim().allow("", null).optional(),
-  category: Joi.string().trim().optional(),
   tags: Joi.array().items(Joi.string().trim()).optional(),
+  topic: Joi.string().trim().optional().messages({
+    "string.empty": "Topic cannot be empty",
+  }),
 });
 
-const createForumThread = Joi.object({
-  title: Joi.string().trim().required(),
-  content: Joi.string().trim().required(),
+const addComment = Joi.object({
+  content: Joi.string().trim().required().messages({
+    "string.empty": "Content is required",
+    "any.required": "Content is required",
+  }),
 });
 
-const addPostToThread = Joi.object({
-  content: Joi.string().trim().required(),
-});
-
-const replyToPost = Joi.object({
-  content: Joi.string().trim().required(),
+const replyToComment = Joi.object({
+  content: Joi.string().trim().required().messages({
+    "string.empty": "Content is required",
+    "any.required": "Content is required",
+  }),
 });
 
 export default {
   createForum,
   updateForum,
-  createForumThread,
-  addPostToThread,
-  replyToPost,
+  addComment,
+  replyToComment,
 };
-

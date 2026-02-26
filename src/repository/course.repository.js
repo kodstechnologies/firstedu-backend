@@ -27,6 +27,8 @@ const findAll = async (filter = {}, options = {}) => {
       search,
       category,
       isPublished,
+      type,
+      access,
     } = options;
 
     const query = { ...filter };
@@ -37,6 +39,23 @@ const findAll = async (filter = {}, options = {}) => {
 
     if (typeof isPublished !== "undefined") {
       query.isPublished = isPublished === "true" || isPublished === true;
+    }
+
+    if (type) {
+      const allowedTypes = ["pdf", "video", "audio"];
+      if (allowedTypes.includes(type.toLowerCase())) {
+        query.contentType = type.toLowerCase();
+      }
+    }
+
+    if (access) {
+      const accessLower = access.toLowerCase();
+      if (accessLower === "free") {
+        query.price = 0;
+      } else if (accessLower === "paid") {
+        query.price = { $gt: 0 };
+      }
+      // "both" = no price filter
     }
 
     if (search) {

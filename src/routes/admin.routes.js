@@ -89,9 +89,8 @@ import {
 } from "../controllers/workshop.controller.js";
 import {
   getForumsAdmin,
-  deletePostAdmin,
+  deleteCommentAdmin,
   deleteReplyAdmin,
-  deleteThreadAdmin,
   deleteForumAdmin,
 } from "../controllers/forum.controller.js";
 import {
@@ -164,6 +163,7 @@ import {
   getBlogRequestById,
   updateBlogRequestStatus,
 } from '../controllers/blogRequest.controller.js';
+import { createBlog, updateBlog, deleteBlog } from '../controllers/blog.controller.js';
 
 
 import {
@@ -187,12 +187,40 @@ import {
   updateCompetition,
   deleteCompetition,
 } from '../controllers/competition.controller.js';
+import {
+  createQnA,
+  getAllQnAAdmin,
+  getQnAByIdAdmin,
+  updateQnA,
+  deleteQnA,
+  getAllQnARequests,
+  getQnARequestById,
+} from '../controllers/qna.controller.js';
+import {
+  createPressAnnouncement,
+  getAllPressAnnouncementsAdmin,
+  getPressAnnouncementByIdAdmin,
+  updatePressAnnouncement,
+  deletePressAnnouncement,
+} from '../controllers/pressAnnouncement.controller.js';
+import {
+  createApplyJob,
+  getAllApplyJobsAdmin,
+  getApplyJobByIdAdmin,
+  updateApplyJob,
+  deleteApplyJob,
+  getAllApplicationsAdmin,
+  getApplicationByIdAdmin,
+  scheduleInterview,
+  approveApplication,
+  rejectApplication,
+} from '../controllers/teacherConnectApply.controller.js';
 import { verifyJWT } from "../middleware/auth.middleware.js";
 
 
 
 
-import { uploadPDF, uploadSuccessStory } from '../utils/multerConfig.js';
+import { uploadCourseMaterial, uploadImage, uploadSuccessStory } from '../utils/multerConfig.js';
 
 
 
@@ -241,25 +269,25 @@ router.get("/questions/:id/analytics", verifyJWT, getQuestionAnalytics);
 router.post("/questions/:id/analytics/calculate", verifyJWT, calculateAnalytics);
 router.post("/questions/analytics/bulk", verifyJWT, getBulkAnalytics);
 
-// Tests (Test Builder)
-router.post("/tests",  createTest);
-router.get("/tests", getTests);
-router.get("/tests/:id",getTestById);
-router.put("/tests/:id", updateTest);
+// Tests (Test Builder) - optional image = cover/thumbnail
+router.post("/tests", verifyJWT, uploadImage.single("image"), createTest);
+router.get("/tests", verifyJWT, getTests);
+router.get("/tests/:id", verifyJWT, getTestById);
+router.put("/tests/:id", verifyJWT, uploadImage.single("image"), updateTest);
 router.delete("/tests/:id", verifyJWT, deleteTest);
 
-// Test Bundles (Test Series)
-router.post("/test-bundles", verifyJWT, createBundle);
+// Test Bundles (Test Series) - optional image = cover/thumbnail
+router.post("/test-bundles", verifyJWT, uploadImage.single("image"), createBundle);
 router.get("/test-bundles", verifyJWT, getBundles);
 router.get("/test-bundles/:id", verifyJWT, getBundleById);
-router.put("/test-bundles/:id", verifyJWT, updateBundle);
+router.put("/test-bundles/:id", verifyJWT, uploadImage.single("image"), updateBundle);
 router.delete("/test-bundles/:id", verifyJWT, deleteBundle);
 
 // Courses
-router.post("/courses", verifyJWT, uploadPDF.single("pdf"), createCourse);
+router.post("/courses", verifyJWT, uploadCourseMaterial, createCourse);
 router.get("/courses", verifyJWT, getCourses);
 router.get("/courses/:id", verifyJWT, getCourseById);
-router.put("/courses/:id", verifyJWT, uploadPDF.single("pdf"), updateCourse);
+router.put("/courses/:id", verifyJWT, uploadCourseMaterial, updateCourse);
 router.delete("/courses/:id", verifyJWT, deleteCourse);
 
 // Teacher Management
@@ -286,10 +314,10 @@ router.put("/course-test-links/:id", verifyJWT, updateCourseTestLink);
 router.delete("/course-test-links/:id", verifyJWT, deleteCourseTestLink);
 
 // Live Events Management - Olympiads
-router.post("/olympiads", verifyJWT, createOlympiad);
+router.post("/olympiads", verifyJWT, uploadImage.single("image"), createOlympiad);
 router.get("/olympiads", verifyJWT, getOlympiads);
 router.get("/olympiads/:id", verifyJWT, getOlympiadById);
-router.put("/olympiads/:id", verifyJWT, updateOlympiad);
+router.put("/olympiads/:id", verifyJWT, uploadImage.single("image"), updateOlympiad);
 router.delete("/olympiads/:id", verifyJWT, deleteOlympiad);
 router.get("/olympiads/:id/leaderboard", verifyJWT, getOlympiadLeaderboard);
 router.post("/olympiads/:id/winners", verifyJWT, declareOlympiadWinners);
@@ -304,10 +332,10 @@ router.get("/tournaments/:id/leaderboard", verifyJWT, getTournamentLeaderboard);
 router.post("/tournaments/:id/winners", verifyJWT, declareTournamentWinners);
 
 // Live Events Management - Workshops
-router.post("/workshops", verifyJWT, createWorkshop);
+router.post("/workshops", verifyJWT, uploadImage.single("image"), createWorkshop);
 router.get("/workshops", verifyJWT, getWorkshops);
 router.get("/workshops/:id", verifyJWT, getWorkshopById);
-router.put("/workshops/:id", verifyJWT, updateWorkshop);
+router.put("/workshops/:id", verifyJWT, uploadImage.single("image"), updateWorkshop);
 router.delete("/workshops/:id", verifyJWT, deleteWorkshop);
 
 // ==================== COMPETITION MANAGEMENT ====================
@@ -317,12 +345,11 @@ router.get("/competitions/:idOrSlug", getCompetitionByIdOrSlug);
 router.put("/competitions/:id",  updateCompetition);
 router.delete("/competitions/:id",  deleteCompetition);
 
-// Forum Moderation (Admin Monitoring)
+// Forum Moderation (Admin)
 router.get("/forums", verifyJWT, getForumsAdmin);
 router.delete("/forums/:forumId", verifyJWT, deleteForumAdmin);
-router.delete("/forums/:forumId/threads/:threadId", verifyJWT, deleteThreadAdmin);
-router.delete("/forums/:forumId/threads/:threadId/posts/:postId", verifyJWT, deletePostAdmin);
-router.delete("/forums/:forumId/threads/:threadId/posts/:postId/replies/:replyId", verifyJWT, deleteReplyAdmin);
+router.delete("/forums/:forumId/comments/:commentId", verifyJWT, deleteCommentAdmin);
+router.delete("/forums/:forumId/comments/:commentId/replies/:replyId", verifyJWT, deleteReplyAdmin);
 
 // ==================== E-COMMERCE & WALLET ====================
 
@@ -366,15 +393,17 @@ router.get('/blog-request', verifyJWT, getAllBlogRequests);
 router.get('/blog-request/:id', verifyJWT, getBlogRequestById);
 router.patch('/blog-request/:id', verifyJWT, updateBlogRequestStatus);
 
+// Admin-added blogs (create, update, delete - admin-created or approved)
+router.post('/blogs', verifyJWT, uploadImage.single('image'), createBlog);
+router.put('/blogs/:id', verifyJWT, uploadImage.single('image'), updateBlog);
+router.delete('/blogs/:id', verifyJWT, deleteBlog);
+
 // Ticket Management
 router.get("/support/tickets", verifyJWT, getAllTickets);
 router.get("/support/tickets/:ticketId", verifyJWT, getTicketById);
 router.post("/support/tickets/:ticketId/assign", verifyJWT, assignTicket);
 router.put("/support/tickets/:ticketId/status", verifyJWT, updateTicketStatus);
 router.post("/support/tickets/:ticketId/internal-notes", verifyJWT, addInternalNote);
-
-
-
 
 // Chat Management
 router.get("/support/tickets/:ticketId/messages", verifyJWT, getTicketMessages);
@@ -436,5 +465,35 @@ router.post(
   verifyJWT,
   saveGeneratedQuestions
 );
+
+// ==================== Q&A ====================
+// Admin-created Q&A (question, answer, subject)
+router.post('/qna', verifyJWT, createQnA);
+router.get('/qna', verifyJWT, getAllQnAAdmin);
+router.get('/qna/:id', verifyJWT, getQnAByIdAdmin);
+router.put('/qna/:id', verifyJWT, updateQnA);
+router.delete('/qna/:id', verifyJWT, deleteQnA);
+// User Q&A requests (admin can view)
+router.get('/qna-requests', verifyJWT, getAllQnARequests);
+router.get('/qna-requests/:id', verifyJWT, getQnARequestById);
+
+// ==================== PRESS ANNOUNCEMENTS ====================
+router.post('/press-announcements', verifyJWT, uploadImage.single('image'), createPressAnnouncement);
+router.get('/press-announcements', verifyJWT, getAllPressAnnouncementsAdmin);
+router.get('/press-announcements/:id', verifyJWT, getPressAnnouncementByIdAdmin);
+router.put('/press-announcements/:id', verifyJWT, uploadImage.single('image'), updatePressAnnouncement);
+router.delete('/press-announcements/:id', verifyJWT, deletePressAnnouncement);
+
+// ==================== TEACHER CONNECT – APPLY JOB ====================
+router.post('/teacher-connect/jobs', verifyJWT, createApplyJob);
+router.get('/teacher-connect/jobs', verifyJWT, getAllApplyJobsAdmin);
+router.get('/teacher-connect/jobs/:id', verifyJWT, getApplyJobByIdAdmin);
+router.put('/teacher-connect/jobs/:id', verifyJWT, updateApplyJob);
+router.delete('/teacher-connect/jobs/:id', verifyJWT, deleteApplyJob);
+router.get('/teacher-connect/applications', verifyJWT, getAllApplicationsAdmin);
+router.get('/teacher-connect/applications/:id', verifyJWT, getApplicationByIdAdmin);
+router.post('/teacher-connect/applications/:id/schedule-interview', verifyJWT, scheduleInterview);
+router.post('/teacher-connect/applications/:id/approve', verifyJWT, approveApplication);
+router.post('/teacher-connect/applications/:id/reject', verifyJWT, rejectApplication);
 
 export default router;

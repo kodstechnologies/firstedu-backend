@@ -19,7 +19,7 @@ export const createOlympiad = asyncHandler(async (req, res) => {
     );
   }
 
-  const olympiad = await olympiadService.createOlympiad(value, req.user._id);
+  const olympiad = await olympiadService.createOlympiad(value, req.user._id, req.file);
   return res.status(201).json(
     ApiResponse.success(olympiad, "Olympiad created successfully")
   );
@@ -66,7 +66,7 @@ export const updateOlympiad = asyncHandler(async (req, res) => {
     );
   }
 
-  const olympiad = await olympiadService.updateOlympiad(id, value);
+  const olympiad = await olympiadService.updateOlympiad(id, value, req.file);
   return res.status(200).json(
     ApiResponse.success(olympiad, "Olympiad updated successfully")
   );

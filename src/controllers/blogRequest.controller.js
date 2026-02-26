@@ -4,12 +4,25 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import blogRequestService from "../services/blogRequest.service.js";
 import blogRequestValidator from "../validation/blogRequest.validator.js";
 
+function normalizeBlogRequestBody(body) {
+    const b = { ...body };
+    if (typeof b.keyTakeaways === "string") {
+        try {
+            b.keyTakeaways = JSON.parse(b.keyTakeaways);
+        } catch {
+            b.keyTakeaways = b.keyTakeaways ? b.keyTakeaways.split(",").map((s) => s.trim()) : [];
+        }
+    }
+    return b;
+}
+
 /**
- * Submit blog request (for students and teachers)
- * POST /api/blog-request
+ * Submit blog request (for users - with optional image)
+ * POST /user/blog-request
  */
 export const submitBlogRequest = asyncHandler(async (req, res) => {
-    const { error, value } = blogRequestValidator.submitBlogRequest.validate(req.body);
+    const body = normalizeBlogRequestBody(req.body);
+    const { error, value } = blogRequestValidator.submitBlogRequest.validate(body);
 
     if (error) {
         throw new ApiError(
@@ -19,7 +32,14 @@ export const submitBlogRequest = asyncHandler(async (req, res) => {
         );
     }
 
-    const blogRequest = await blogRequestService.submitBlogRequest(value);
+    const payload = {
+        ...value,
+        name: req.user.name,
+        email: req.user.email || req.user.phone,
+        requestedBy: req.user._id,
+    };
+
+    const blogRequest = await blogRequestService.submitBlogRequest(payload, req.file);
 
     return res
         .status(201)
@@ -76,17 +96,19 @@ export const updateBlogRequestStatus = asyncHandler(async (req, res) => {
     }
 
     const { id } = req.params;
-    const { status, adminComment } = value;
+    const { status } = value;
 
-    const updatedBlogRequest = await blogRequestService.updateBlogRequestStatus(
-        id,
-        status,
-        adminComment
-    );
+    const result = await blogRequestService.updateBlogRequestStatus(id, status);
+
+    if (result?.deleted) {
+        return res
+            .status(200)
+            .json(ApiResponse.success(null, "Blog request rejected and removed"));
+    }
 
     return res
         .status(200)
-        .json(ApiResponse.success(updatedBlogRequest, "Blog request updated successfully"));
+        .json(ApiResponse.success(result, "Blog request approved successfully"));
 });
 
 export default {

@@ -1,15 +1,32 @@
 import { ApiError } from "../utils/ApiError.js";
 import testRepository from "../repository/test.repository.js";
 import questionBankRepository from "../repository/questionBank.repository.js";
+import {
+  uploadImageToCloudinary,
+  deleteFileFromCloudinary,
+} from "../utils/cloudinaryUpload.js";
+
+const TESTS_IMAGE_FOLDER = "tests";
 
 // ------- Tests / Test Builder -------
 
-export const createTest = async (data, adminId) => {
+export const createTest = async (data, adminId, file) => {
   const bank = await questionBankRepository.findById(data.questionBank);
   if (!bank) throw new ApiError(404, "Question bank not found");
 
+  let imageUrl = null;
+  if (file) {
+    imageUrl = await uploadImageToCloudinary(
+      file.buffer,
+      file.originalname,
+      TESTS_IMAGE_FOLDER,
+      file.mimetype
+    );
+  }
+
   const test = await testRepository.createTest({
     ...data,
+    imageUrl,
     createdBy: adminId,
   });
   await enrichTestsWithBankStats(test);
@@ -54,7 +71,7 @@ export const getTestById = async (id) => {
   return test;
 };
 
-export const updateTest = async (id, data) => {
+export const updateTest = async (id, data, file) => {
   const existing = await testRepository.findTestById(id);
   if (!existing) throw new ApiError(404, "Test not found");
 
@@ -63,12 +80,29 @@ export const updateTest = async (id, data) => {
     if (!bank) throw new ApiError(404, "Question bank not found");
   }
 
+  if (file) {
+    if (existing.imageUrl) {
+      await deleteFileFromCloudinary(existing.imageUrl);
+    }
+    data.imageUrl = await uploadImageToCloudinary(
+      file.buffer,
+      file.originalname,
+      TESTS_IMAGE_FOLDER,
+      file.mimetype
+    );
+  }
+
   const updated = await testRepository.updateTestById(id, data);
   if (updated) await enrichTestsWithBankStats(updated);
   return updated;
 };
 
 export const deleteTest = async (id) => {
+  const existing = await testRepository.findTestById(id);
+  if (!existing) throw new ApiError(404, "Test not found");
+  if (existing.imageUrl) {
+    await deleteFileFromCloudinary(existing.imageUrl);
+  }
   const deleted = await testRepository.deleteTestById(id);
   if (!deleted) {
     throw new ApiError(404, "Test not found");
@@ -77,6 +111,8 @@ export const deleteTest = async (id) => {
 };
 
 // ------- Bundles -------
+
+const BUNDLES_IMAGE_FOLDER = "test-bundles";
 
 const enrichBundlesTests = async (bundles) => {
   const items = Array.isArray(bundles) ? bundles : [bundles];
@@ -87,9 +123,19 @@ const enrichBundlesTests = async (bundles) => {
   }
 };
 
-export const createBundle = async (data, adminId) => {
+export const createBundle = async (data, adminId, file) => {
+  let imageUrl = null;
+  if (file) {
+    imageUrl = await uploadImageToCloudinary(
+      file.buffer,
+      file.originalname,
+      BUNDLES_IMAGE_FOLDER,
+      file.mimetype
+    );
+  }
   const bundle = await testRepository.createBundle({
     ...data,
+    imageUrl,
     createdBy: adminId,
   });
   await enrichBundlesTests(bundle);
@@ -113,7 +159,20 @@ export const getBundleById = async (id) => {
   return bundle;
 };
 
-export const updateBundle = async (id, data) => {
+export const updateBundle = async (id, data, file) => {
+  const existing = await testRepository.findBundleById(id);
+  if (!existing) throw new ApiError(404, "Bundle not found");
+  if (file) {
+    if (existing.imageUrl) {
+      await deleteFileFromCloudinary(existing.imageUrl);
+    }
+    data.imageUrl = await uploadImageToCloudinary(
+      file.buffer,
+      file.originalname,
+      BUNDLES_IMAGE_FOLDER,
+      file.mimetype
+    );
+  }
   const updated = await testRepository.updateBundleById(id, data);
   if (!updated) {
     throw new ApiError(404, "Bundle not found");
@@ -123,6 +182,11 @@ export const updateBundle = async (id, data) => {
 };
 
 export const deleteBundle = async (id) => {
+  const existing = await testRepository.findBundleById(id);
+  if (!existing) throw new ApiError(404, "Bundle not found");
+  if (existing.imageUrl) {
+    await deleteFileFromCloudinary(existing.imageUrl);
+  }
   const deleted = await testRepository.deleteBundleById(id);
   if (!deleted) {
     throw new ApiError(404, "Bundle not found");

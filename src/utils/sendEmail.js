@@ -127,3 +127,137 @@ export const sendContactUsEmail = async ({ name, phone, email, message }) => {
     throw new ApiError(500, `Failed to send contact email: ${error.message}`);
   }
 };
+
+/**
+ * Send interview schedule details to teacher (Teacher Connect Apply Job).
+ * @param {Object} payload - { toEmail, teacherName, jobTitle, interviewDate, interviewTime, interviewProvider, providerLink }
+ */
+export const sendInterviewScheduledEmail = async ({
+  toEmail,
+  teacherName,
+  jobTitle,
+  interviewDate,
+  interviewTime,
+  interviewProvider,
+  providerLink,
+}) => {
+  try {
+    if (!toEmail || !jobTitle) {
+      throw new ApiError(400, "Recipient email and job title are required");
+    }
+    if (missingVars.length > 0) {
+      throw new ApiError(500, `SMTP configuration incomplete. Missing: ${missingVars.join(", ")}`);
+    }
+
+    const dateStr = interviewDate ? new Date(interviewDate).toLocaleDateString("en-IN", { dateStyle: "long" }) : "—";
+    const mailOptions = {
+      from: `"FirstEdu Teacher Connect" <${process.env.SMTP_EMAIL}>`,
+      to: toEmail,
+      subject: `Interview Scheduled – ${jobTitle}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #333;">Hello ${teacherName || "Candidate"},</h2>
+          <p style="color: #666;">Your interview has been scheduled for the position: <strong>${jobTitle}</strong>.</p>
+          <table style="width: 100%; border-collapse: collapse; color: #666;">
+            <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Date</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${dateStr}</td></tr>
+            <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Time</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${interviewTime || "—"}</td></tr>
+            <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Platform</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${interviewProvider || "—"}</td></tr>
+            <tr><td style="padding: 8px 0;"><strong>Join Link</strong></td><td style="padding: 8px 0;">${providerLink ? `<a href="${providerLink}">${providerLink}</a>` : "—"}</td></tr>
+          </table>
+          <p style="color: #999; font-size: 12px; margin-top: 20px;">FirstEdu Teacher Connect</p>
+        </div>
+      `,
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`✅ Interview scheduled email sent to ${toEmail}. Message ID: ${info.messageId}`);
+    return info;
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    console.error("❌ Error sending interview email:", error.message);
+    throw new ApiError(500, `Failed to send interview email: ${error.message}`);
+  }
+};
+
+/**
+ * Send approval and login credentials to teacher (Teacher Connect Apply Job).
+ * @param {Object} payload - { toEmail, teacherName, email, password }
+ */
+export const sendTeacherApprovalWithCredentialsEmail = async ({
+  toEmail,
+  teacherName,
+  email,
+  password,
+}) => {
+  try {
+    if (!toEmail || !email || !password) {
+      throw new ApiError(400, "Recipient email, login email and password are required");
+    }
+    if (missingVars.length > 0) {
+      throw new ApiError(500, `SMTP configuration incomplete. Missing: ${missingVars.join(", ")}`);
+    }
+
+    const mailOptions = {
+      from: `"FirstEdu Teacher Connect" <${process.env.SMTP_EMAIL}>`,
+      to: toEmail,
+      subject: "Congratulations – You have been selected as a Teacher",
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #333;">Hello ${teacherName || "Teacher"},</h2>
+          <p style="color: #666;">Congratulations! You have been selected. Please use the following credentials to log in to the teacher portal.</p>
+          <table style="width: 100%; border-collapse: collapse; color: #666;">
+            <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Email</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${email}</td></tr>
+            <tr><td style="padding: 8px 0;"><strong>Password</strong></td><td style="padding: 8px 0;"><code style="background: #f4f4f4; padding: 4px 8px;">${password}</code></td></tr>
+          </table>
+          <p style="color: #666;">Please change your password after first login.</p>
+          <p style="color: #999; font-size: 12px; margin-top: 20px;">FirstEdu Teacher Connect</p>
+        </div>
+      `,
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`✅ Teacher approval email sent to ${toEmail}. Message ID: ${info.messageId}`);
+    return info;
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    console.error("❌ Error sending approval email:", error.message);
+    throw new ApiError(500, `Failed to send approval email: ${error.message}`);
+  }
+};
+
+/**
+ * Send rejection email to teacher (Teacher Connect Apply Job).
+ * @param {Object} payload - { toEmail, teacherName, jobTitle }
+ */
+export const sendTeacherRejectionEmail = async ({ toEmail, teacherName, jobTitle }) => {
+  try {
+    if (!toEmail) {
+      throw new ApiError(400, "Recipient email is required");
+    }
+    if (missingVars.length > 0) {
+      throw new ApiError(500, `SMTP configuration incomplete. Missing: ${missingVars.join(", ")}`);
+    }
+
+    const mailOptions = {
+      from: `"FirstEdu Teacher Connect" <${process.env.SMTP_EMAIL}>`,
+      to: toEmail,
+      subject: `Update on your application – ${jobTitle || "Teacher Position"}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #333;">Hello ${teacherName || "Candidate"},</h2>
+          <p style="color: #666;">Thank you for your interest. After careful consideration, we have decided not to move forward with your application for ${jobTitle ? `<strong>${jobTitle}</strong>` : "this position"}.</p>
+          <p style="color: #666;">We encourage you to apply for other openings in the future.</p>
+          <p style="color: #999; font-size: 12px; margin-top: 20px;">FirstEdu Teacher Connect</p>
+        </div>
+      `,
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`✅ Teacher rejection email sent to ${toEmail}. Message ID: ${info.messageId}`);
+    return info;
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    console.error("❌ Error sending rejection email:", error.message);
+    throw new ApiError(500, `Failed to send rejection email: ${error.message}`);
+  }
+};

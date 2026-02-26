@@ -54,6 +54,11 @@ const tournamentSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    imageUrl: {
+      type: String,
+      trim: true,
+      default: null,
+    },
     stages: [tournamentStageSchema],
     registrationStartTime: {
       type: Date,
