@@ -109,6 +109,26 @@ const getUnreadCount = async (ticketId, userId, userType) => {
   }
 };
 
+const deleteTicketMessages = async (ticketId) => {
+  try {
+
+    await SupportMessage.deleteMany({
+      ticket: ticketId
+    });
+
+    return true;
+
+  } catch (error) {
+
+    throw new ApiError(
+      500,
+      "Failed to delete ticket messages",
+      error.message
+    );
+
+  }
+};
+
 export default {
   create,
   findById,
@@ -116,5 +136,6 @@ export default {
   markAsRead,
   markTicketMessagesAsRead,
   getUnreadCount,
+  deleteTicketMessages
 };
 
