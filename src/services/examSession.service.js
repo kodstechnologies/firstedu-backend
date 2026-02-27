@@ -764,6 +764,24 @@ const formatTime = (ms) => {
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 };
 
+/**
+ * Get in-progress sessions for a student
+ */
+export const getInProgressSessions = async (studentId, page = 1, limit = 10) => {
+  return await examSessionRepository.findAll(
+    {
+      student: studentId,
+      status: "in_progress",
+    },
+    {
+      page,
+      limit,
+      sortBy: "startTime",
+      sortOrder: "desc",
+    }
+  );
+};
+
 export default {
   startExamSession,
   getExamSession,
@@ -775,5 +793,5 @@ export default {
   getExamResults,
   getQuestionPalette,
   autoSubmitExpiredSessions,
+  getInProgressSessions,
 };
-

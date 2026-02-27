@@ -272,6 +272,58 @@ export const getMyTests = asyncHandler(async (req, res) => {
   );
 });
 
+// Get All Resources (Courses, Tests, Bundles) combined
+export const getAllResources = asyncHandler(async (req, res) => {
+  const { search, page = 1, limit = 10 } = req.query;
+  const pageNum = parseInt(page, 10);
+  const limitNum = parseInt(limit, 10);
+
+  const [coursesData, testsData, bundlesData] = await Promise.all([
+    marketplaceService.getCourses({
+      page: pageNum,
+      limit: limitNum,
+      search,
+      sortBy: "createdAt",
+      sortOrder: "desc",
+    }),
+    marketplaceService.getTests({
+      page: pageNum,
+      limit: limitNum,
+      search,
+      sortBy: "createdAt",
+      sortOrder: "desc",
+    }),
+    marketplaceService.getTestBundles({
+      page: pageNum,
+      limit: limitNum,
+      search,
+      sortBy: "createdAt",
+      sortOrder: "desc",
+    }),
+  ]);
+
+  const totalResources = coursesData.pagination.total + testsData.pagination.total + bundlesData.pagination.total;
+
+  return res.status(200).json(
+    ApiResponse.success(
+      {
+        courses: coursesData.courses,
+        tests: testsData.tests,
+        bundles: bundlesData.bundles,
+      },
+      "All resources fetched successfully",
+      {
+        page: pageNum,
+        limit: limitNum,
+        total: totalResources,
+        courses: { total: coursesData.pagination.total, pages: coursesData.pagination.pages },
+        tests: { total: testsData.pagination.total, pages: testsData.pagination.pages },
+        bundles: { total: bundlesData.pagination.total, pages: bundlesData.pagination.pages },
+      }
+    )
+  );
+});
+
 export default {
   getCourses,
   getCourseById,
@@ -287,4 +339,5 @@ export default {
   createTestBundleOrder,
   purchaseTestBundle,
   getMyTests,
+  getAllResources,
 };

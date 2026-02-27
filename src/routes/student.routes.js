@@ -7,7 +7,7 @@ import {
   verifyForgotPasswordOTP,
   resetPassword,
   updateProfile,
-  changePassword, convertPoints,
+  changePassword, convertPoints, getProfile,
 } from "../controllers/studentAuth.controller.js";
 import {
   getCourses,
@@ -24,6 +24,7 @@ import {
   createTestBundleOrder,
   purchaseTestBundle,
   getMyTests,
+  getAllResources,
 } from "../controllers/marketplace.controller.js";
 import {
   getDetailedAnalysis,
@@ -82,6 +83,7 @@ import {
   submitExam,
   getExamResults,
   getQuestionPalette,
+  getInProgressExams,
 } from "../controllers/examSession.controller.js";
 import {
   getWallet,
@@ -142,11 +144,16 @@ router.post("/login", login);
 // Contact Us (no JWT)
 router.post("/contact-us", contactUs);
 router.post("/logout", verifyJWT, logout);
+router.get('/profile', verifyJWT, getProfile);
+router.get('/get-profile', verifyJWT, getProfile);
 router.post("/forgot-password/request", requestForgotPasswordOTP);
 router.post("/forgot-password/verify", verifyForgotPasswordOTP);
 router.post("/forgot-password/reset", resetPassword);
 router.put("/update-profile", verifyJWT, updateProfile);
 router.put("/change-password", verifyJWT, changePassword);
+
+// Marketplace - All Resources (Combined)
+router.get("/marketplace/all", verifyJWT, getAllResources);
 
 // Marketplace - Courses
 router.get("/courses", verifyJWT, getCourses);
@@ -233,6 +240,9 @@ router.get("/my-events", verifyJWT, getMyEventsDashboard);
 
 // Start Exam Session
 router.post("/tests/:testId/start-exam", verifyJWT, startExam);
+
+// Get In-Progress Exams
+router.get("/exam-sessions/in-progress", verifyJWT, getInProgressExams);
 
 // Get Exam Session (with questions, timer, palette)
 router.get("/exam-sessions/:sessionId", verifyJWT, getExamSession);
@@ -327,3 +337,5 @@ router.get("/success-stories", getAllStoriesStudent);
 router.get("/success-stories/:id", getStoryDetailStudent);
 
 export default router;
+
+
