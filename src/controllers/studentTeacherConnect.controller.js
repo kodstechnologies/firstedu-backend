@@ -11,10 +11,6 @@ import teacherRepository from "../repository/teacher.repository.js";
  */
 export const getAvailableTeachers = asyncHandler(async (req, res) => {
   const { subject, page = 1, limit = 10 } = req.query;
-  const studentId = req.user._id;
-
-  // Check wallet balance
-  const wallet = await walletService.getWalletBalance(studentId, "User");
 
   const result = await teacherConnectService.getAvailableTeachers(
     subject,
@@ -26,12 +22,24 @@ export const getAvailableTeachers = asyncHandler(async (req, res) => {
     ApiResponse.success(
       {
         teachers: result.teachers,
-        walletBalance: wallet.monetaryBalance,
+        totalTeachers: result.totalTeachers,
+        totalOnline: result.totalOnline,
       },
       "Available teachers fetched successfully",
       result.pagination
     )
   );
+});
+
+/**
+ * Get a single teacher's details by ID (for students). Phone and email excluded from response.
+ */
+export const getTeacherById = asyncHandler(async (req, res) => {
+  const { teacherId } = req.params;
+  const teacher = await teacherConnectService.getTeacherById(teacherId);
+  return res
+    .status(200)
+    .json(ApiResponse.success(teacher, "Teacher details fetched successfully"));
 });
 
 /**
@@ -157,12 +165,37 @@ export const checkWalletBalance = asyncHandler(async (req, res) => {
   );
 });
 
+/**
+ * Rate a teacher (1-5). Updates or sets the student's rating for the teacher; teacher's average rating is recalculated.
+ */
+export const rateTeacher = asyncHandler(async (req, res) => {
+  const { error, value } = teacherConnectValidator.rateTeacher.validate(req.body);
+  if (error) {
+    throw new ApiError(
+      400,
+      "Validation Error",
+      error.details.map((x) => x.message)
+    );
+  }
+  const studentId = req.user._id;
+  const { teacherId } = req.params;
+  const { rating } = value;
+
+  const result = await teacherConnectService.rateTeacher(teacherId, studentId, rating);
+
+  return res
+    .status(200)
+    .json(ApiResponse.success(result, "Rating submitted successfully"));
+});
+
 export default {
   getAvailableTeachers,
+  getTeacherById,
   initiateCallRequest,
   getCallHistory,
   getCallRecordings,
   cancelCallRequest,
   checkWalletBalance,
+  rateTeacher,
 };
 

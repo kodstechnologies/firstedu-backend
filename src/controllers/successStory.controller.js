@@ -35,17 +35,13 @@ export const addSuccessStory = asyncHandler(async (req, res) => {
  * Get all success stories (Admin)
  * GET /admin/success-stories
  * GET /admin/success-stories?status=PUBLISHED
- * GET /admin/success-stories?examCategory=JEE
  */
 export const getAllStoriesAdmin = asyncHandler(async (req, res) => {
-    const { status, examCategory } = req.query;
+    const { status } = req.query;
 
     const filters = {};
     if (status) {
         filters.status = status;
-    }
-    if (examCategory) {
-        filters.examCategory = examCategory;
     }
 
     const stories = await successStoryService.getAllStories(filters);
@@ -86,6 +82,10 @@ export const updateSuccessStory = asyncHandler(async (req, res) => {
 
     const { id } = req.params;
     const files = req.files;
+    const hasFiles = files?.media?.[0] || files?.thumbnail?.[0];
+    if (Object.keys(value).length === 0 && !hasFiles) {
+        throw new ApiError(400, "At least one field (name, description, achievement, achieveIn) or file (media, thumbnail) is required");
+    }
 
     const updatedStory = await successStoryService.updateSuccessStory(id, value, files);
 
@@ -152,17 +152,9 @@ export const getFeaturedStories = asyncHandler(async (req, res) => {
 /**
  * Get all published success stories (Student)
  * GET /success-stories
- * GET /success-stories?examCategory=JEE
  */
 export const getAllStoriesStudent = asyncHandler(async (req, res) => {
-    const { examCategory } = req.query;
-
-    const filters = {};
-    if (examCategory) {
-        filters.examCategory = examCategory;
-    }
-
-    const stories = await successStoryService.getAllPublishedStories(filters);
+    const stories = await successStoryService.getAllPublishedStories({});
 
     return res
         .status(200)

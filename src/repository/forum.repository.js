@@ -10,29 +10,38 @@ const create = async (forumData) => {
 };
 
 const find = async (filter = {}, options = {}) => {
-  const { populate = [], sort = { createdAt: -1 } } = options;
-  
+  const {
+    populate = [],
+    sort = { createdAt: -1 },
+    skip,
+    limit,
+  } = options;
+
   let query = Forum.find(filter);
-  
+
   populate.forEach((pop) => {
     query = query.populate(pop.path, pop.select);
   });
-  
-  return query.sort(sort);
+
+  query = query.sort(sort);
+  if (skip != null) query = query.skip(skip);
+  if (limit != null) query = query.limit(limit);
+
+  return query;
 };
 
 const findById = async (id, populate = []) => {
   let query = Forum.findById(id);
-  
+
   populate.forEach((pop) => {
     query = query.populate(pop.path, pop.select);
   });
-  
+
   return query;
 };
 
 const updateById = async (id, updateData) => {
-  return Forum.findByIdAndUpdate(id, { $set: updateData }, { new: true });
+  return Forum.findByIdAndUpdate(id, updateData, { new: true });
 };
 
 const deleteById = async (id) => {
@@ -43,55 +52,27 @@ const count = async (filter = {}) => {
   return Forum.countDocuments(filter);
 };
 
-/**
- * Get aggregate counts: totalForums, totalReplies, totalLikes
- */
 const getForumStats = async () => {
   try {
-    const [totalForums, statsResult] = await Promise.all([
-      Forum.countDocuments(),
-      Forum.aggregate([
-        { $unwind: { path: "$threads", preserveNullAndEmptyArrays: true } },
-        { $unwind: { path: "$threads.posts", preserveNullAndEmptyArrays: true } },
-        {
-          $group: {
-            _id: null,
-            totalReplies: {
-              $sum: { $size: { $ifNull: ["$threads.posts.replies", []] } },
-            },
-            postLikes: {
-              $sum: { $size: { $ifNull: ["$threads.posts.likes", []] } },
-            },
-            replyLikes: {
-              $sum: {
-                $reduce: {
-                  input: { $ifNull: ["$threads.posts.replies", []] },
-                  initialValue: 0,
-                  in: {
-                    $add: [
-                      "$$value",
-                      { $size: { $ifNull: ["$$this.likes", []] } },
-                    ],
-                  },
-                },
-              },
-            },
-          },
-        },
-        {
-          $project: {
-            totalReplies: 1,
-            totalLikes: { $add: ["$postLikes", "$replyLikes"] },
-          },
-        },
-      ]),
-    ]);
-
-    const stats = statsResult[0] || { totalReplies: 0, totalLikes: 0 };
+    const totalForums = await Forum.countDocuments();
+    const forums = await Forum.find({}).select("likes comments").lean();
+    let totalReplies = 0;
+    let totalLikes = 0;
+    forums.forEach((f) => {
+      totalLikes += (f.likes && f.likes.length) || 0;
+      (f.comments || []).forEach((c) => {
+        totalLikes += (c.likes && c.likes.length) || 0;
+        totalReplies += (c.replies && c.replies.length) || 0;
+        (c.replies || []).forEach((r) => {
+          totalLikes += (r.likes && r.likes.length) || 0;
+        });
+      });
+    });
+    totalReplies += forums.reduce((acc, f) => acc + (f.comments ? f.comments.length : 0), 0);
     return {
       totalForums,
-      totalReplies: stats.totalReplies || 0,
-      totalLikes: stats.totalLikes || 0,
+      totalReplies,
+      totalLikes,
     };
   } catch (error) {
     throw new ApiError(500, "Failed to fetch forum stats", error.message);
@@ -107,4 +88,3 @@ export default {
   count,
   getForumStats,
 };
-

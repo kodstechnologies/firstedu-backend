@@ -12,6 +12,8 @@ import {
 
 /**
  * Get all published courses (marketplace listing)
+ * Filters: type (pdf | video | audio), access (free | paid | both)
+ * - free: price === 0, paid: price > 0, both: no filter
  */
 export const getCourses = async (options = {}) => {
   const {
@@ -21,6 +23,8 @@ export const getCourses = async (options = {}) => {
     category,
     sortBy = "createdAt",
     sortOrder = "desc",
+    type,
+    access,
   } = options;
 
   const query = { isPublished: true };
@@ -40,6 +44,8 @@ export const getCourses = async (options = {}) => {
     sortOrder,
     search,
     category,
+    type,
+    access,
   });
 
   const courses = result.courses.map((course) => {
@@ -235,6 +241,116 @@ export const getCourseFollowUpTests = async (courseId, studentId) => {
 };
 
 /**
+ * Get tests and/or test bundles in one API (student marketplace).
+ * type: "test" | "testBundle" | "both" — filter to tests only, bundles only, or both (default: both)
+ */
+export const getTestsAndBundles = async (options = {}) => {
+  const {
+    type = "both",
+    page = 1,
+    limit = 10,
+    search,
+    category,
+    sortBy = "createdAt",
+    sortOrder = "desc",
+    questionBank,
+  } = options;
+
+  const pageNum = parseInt(page);
+  const limitNum = parseInt(limit);
+
+  if (type === "test") {
+    const result = await getTests({
+      page: pageNum,
+      limit: limitNum,
+      search,
+      category,
+      questionBank,
+      sortBy,
+      sortOrder,
+    });
+    return {
+      items: result.tests.map((t) => ({ ...toTestItem(t), itemType: "test" })),
+      pagination: result.pagination,
+    };
+  }
+
+  if (type === "testBundle") {
+    const result = await getTestBundles({
+      page: pageNum,
+      limit: limitNum,
+      search,
+      category,
+      sortBy,
+      sortOrder,
+    });
+    return {
+      items: result.bundles.map((b) => ({ ...toBundleItem(b), itemType: "testBundle" })),
+      pagination: result.pagination,
+    };
+  }
+
+  // type === "both" — single merged list + one pagination
+  const fetchSize = pageNum * limitNum;
+  const [testsResult, bundlesResult] = await Promise.all([
+    getTests({
+      page: 1,
+      limit: fetchSize,
+      search,
+      category,
+      questionBank,
+      sortBy,
+      sortOrder,
+    }),
+    getTestBundles({
+      page: 1,
+      limit: fetchSize,
+      search,
+      category,
+      sortBy,
+      sortOrder,
+    }),
+  ]);
+
+  const testsTotal = testsResult.pagination.total;
+  const bundlesTotal = bundlesResult.pagination.total;
+  const total = testsTotal + bundlesTotal;
+  const sortDesc = sortOrder === "desc";
+
+  const testItems = testsResult.tests.map((t) => ({ ...toTestItem(t), itemType: "test" }));
+  const bundleItems = bundlesResult.bundles.map((b) => ({ ...toBundleItem(b), itemType: "testBundle" }));
+  const merged = [...testItems, ...bundleItems].sort((a, b) => {
+    const dateA = new Date(a.createdAt || 0).getTime();
+    const dateB = new Date(b.createdAt || 0).getTime();
+    return sortDesc ? dateB - dateA : dateA - dateB;
+  });
+
+  const start = (pageNum - 1) * limitNum;
+  const items = merged.slice(start, start + limitNum);
+
+  return {
+    items,
+    pagination: {
+      page: pageNum,
+      limit: limitNum,
+      total,
+      pages: Math.ceil(total / limitNum) || 1,
+    },
+  };
+};
+
+const toTestItem = (test) => {
+  const obj = test?.toObject ? test.toObject() : { ...test };
+  delete obj.questions;
+  delete obj.randomConfig;
+  return obj;
+};
+
+const toBundleItem = (bundle) => {
+  return bundle?.toObject ? bundle.toObject() : { ...bundle };
+};
+
+/**
  * Get all published tests (marketplace listing)
  */
 export const getTests = async (options = {}) => {
@@ -243,6 +359,7 @@ export const getTests = async (options = {}) => {
     limit = 10,
     search,
     questionBank,
+    category,
     sortBy = "createdAt",
     sortOrder = "desc",
   } = options;
@@ -264,6 +381,7 @@ export const getTests = async (options = {}) => {
     sortOrder,
     search,
     questionBank,
+    category,
     isPublished: true,
   });
 
@@ -340,9 +458,9 @@ export const createTestOrder = async (testId, studentId) => {
 };
 
 /**
- * Get test by ID with purchase status for student
+ * Get test by ID with full details (no payment check)
  */
-export const getTestById = async (testId, studentId) => {
+export const getTestById = async (testId) => {
   const test = await testRepository.findTestById(testId, {
     questionBank: "name categories",
   });
@@ -350,14 +468,9 @@ export const getTestById = async (testId, studentId) => {
   if (!test) throw new ApiError(404, "Test not found");
   if (!test.isPublished) throw new ApiError(404, "Test not found");
 
-  const purchase = await orderRepository.findTestPurchase({
-    student: studentId,
-    test: testId,
-    paymentStatus: "completed",
-  });
-
   const testData = test.toObject();
-  testData.isPurchased = !!purchase;
+  delete testData.questions;
+  delete testData.randomConfig;
   return testData;
 };
 
@@ -574,6 +687,7 @@ export default {
   createTestOrder,
   purchaseTest,
   getTestBundles,
+  getTestsAndBundles,
   createTestBundleOrder,
   purchaseTestBundle,
   getMyTests,

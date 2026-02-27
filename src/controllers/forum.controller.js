@@ -4,136 +4,115 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import forumService from "../services/forum.service.js";
 import forumValidator from "../validation/forum.validator.js";
 
-// ==================== STUDENT CONTROLLERS ====================
-
-// Create Forum
-export const createForum = asyncHandler(async (req, res) => {
-  const { error, value } = forumValidator.createForum.validate(req.body);
-
-  if (error) {
-    throw new ApiError(
-      400,
-      "Validation Error",
-      error.details.map((x) => x.message)
-    );
+function normalizeForumBody(body) {
+  const b = { ...body };
+  if (typeof b.tags === "string") {
+    try {
+      b.tags = JSON.parse(b.tags);
+    } catch {
+      b.tags = b.tags ? b.tags.split(",").map((s) => s.trim()) : [];
+    }
   }
+  return b;
+}
 
-  const forum = await forumService.createForum(value, req.user._id);
-  return res.status(201).json(
-    ApiResponse.success(forum, "Forum created successfully")
-  );
+export const createForum = asyncHandler(async (req, res) => {
+  const body = normalizeForumBody(req.body);
+  const { error, value } = forumValidator.createForum.validate(body);
+  if (error) {
+    throw new ApiError(400, "Validation Error", error.details.map((x) => x.message));
+  }
+  const forum = await forumService.createForum(value, req.user._id, req.file);
+  return res.status(201).json(ApiResponse.success(forum, "Forum created successfully"));
 });
 
-// Get All Forums
 export const getForums = asyncHandler(async (req, res) => {
-  const forums = await forumService.getForums();
+  const { search, page, limit } = req.query;
+  const result = await forumService.getForums(req.user?._id, { search, page, limit });
   return res.status(200).json(
-    ApiResponse.success(forums || [], "Forums fetched successfully")
+    ApiResponse.success(result.forums, "Forums fetched successfully", result.pagination)
   );
 });
 
-// Get Forum by ID
 export const getForumById = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const forum = await forumService.getForumById(id);
-  return res.status(200).json(
-    ApiResponse.success(forum, "Forum fetched successfully")
-  );
+  return res.status(200).json(ApiResponse.success(forum, "Forum fetched successfully"));
 });
 
-// Update Forum (only by creator)
 export const updateForum = asyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const { error, value } = forumValidator.updateForum.validate(req.body);
-
+  const body = normalizeForumBody(req.body);
+  const { error, value } = forumValidator.updateForum.validate(body);
   if (error) {
-    throw new ApiError(
-      400,
-      "Validation Error",
-      error.details.map((x) => x.message)
-    );
+    throw new ApiError(400, "Validation Error", error.details.map((x) => x.message));
   }
-
-  const forum = await forumService.updateForum(id, value, req.user._id);
-  return res.status(200).json(
-    ApiResponse.success(forum, "Forum updated successfully")
-  );
+  const { id } = req.params;
+  const hasFile = req.file?.buffer;
+  if (Object.keys(value).length === 0 && !hasFile) {
+    throw new ApiError(400, "At least one field or attachment is required");
+  }
+  const forum = await forumService.updateForum(id, value, req.user._id, req.file);
+  return res.status(200).json(ApiResponse.success(forum, "Forum updated successfully"));
 });
 
-// Delete Forum (only by creator)
 export const deleteForum = asyncHandler(async (req, res) => {
   const { id } = req.params;
   await forumService.deleteForum(id, req.user._id);
-  return res.status(200).json(
-    ApiResponse.success(null, "Forum deleted successfully")
-  );
+  return res.status(200).json(ApiResponse.success(null, "Forum deleted successfully"));
 });
 
-export const createForumThread = asyncHandler(async (req, res) => {
+export const addComment = asyncHandler(async (req, res) => {
   const { forumId } = req.params;
-  const { error, value } = forumValidator.createForumThread.validate(req.body);
-
+  const { error, value } = forumValidator.addComment.validate(req.body);
   if (error) {
-    throw new ApiError(
-      400,
-      "Validation Error",
-      error.details.map((x) => x.message)
-    );
+    throw new ApiError(400, "Validation Error", error.details.map((x) => x.message));
   }
-
-  const forum = await forumService.createForumThread(forumId, value, req.user._id);
-  return res.status(201).json(
-    ApiResponse.success(forum, "Thread created successfully")
-  );
+  const forum = await forumService.addComment(forumId, value.content, req.user._id);
+  return res.status(201).json(ApiResponse.success(forum, "Comment added successfully"));
 });
 
-export const addPostToThread = asyncHandler(async (req, res) => {
-  const { forumId, threadId } = req.params;
-  const { error, value } = forumValidator.addPostToThread.validate(req.body);
-
+export const replyToComment = asyncHandler(async (req, res) => {
+  const { forumId, commentId } = req.params;
+  const { error, value } = forumValidator.replyToComment.validate(req.body);
   if (error) {
-    throw new ApiError(
-      400,
-      "Validation Error",
-      error.details.map((x) => x.message)
-    );
+    throw new ApiError(400, "Validation Error", error.details.map((x) => x.message));
   }
-
-  const forum = await forumService.addPostToThread(forumId, threadId, value.content, req.user._id);
-  return res.status(201).json(
-    ApiResponse.success(forum, "Post added successfully")
-  );
+  const forum = await forumService.replyToComment(forumId, commentId, value.content, req.user._id);
+  return res.status(201).json(ApiResponse.success(forum, "Reply added successfully"));
 });
 
-export const replyToPost = asyncHandler(async (req, res) => {
-  const { forumId, threadId, postId } = req.params;
-  const { error, value } = forumValidator.replyToPost.validate(req.body);
-
-  if (error) {
-    throw new ApiError(
-      400,
-      "Validation Error",
-      error.details.map((x) => x.message)
-    );
-  }
-
-  const forum = await forumService.replyToPost(forumId, threadId, postId, value.content, req.user._id);
-  return res.status(201).json(
-    ApiResponse.success(forum, "Reply added successfully")
-  );
+export const likeForum = asyncHandler(async (req, res) => {
+  const { forumId } = req.params;
+  const forum = await forumService.likeForum(forumId, req.user._id);
+  return res.status(200).json(ApiResponse.success(forum, "Like toggled successfully"));
 });
 
-export const likePost = asyncHandler(async (req, res) => {
-  const { forumId, threadId, postId, replyId } = req.params;
-  const forum = await forumService.likePost(forumId, threadId, postId, replyId, req.user._id);
-  return res.status(200).json(
-    ApiResponse.success(forum, "Like toggled successfully")
-  );
+export const likeComment = asyncHandler(async (req, res) => {
+  const { forumId, commentId } = req.params;
+  const forum = await forumService.likeComment(forumId, commentId, req.user._id);
+  return res.status(200).json(ApiResponse.success(forum, "Like toggled successfully"));
 });
 
-// ==================== ADMIN CONTROLLERS ====================
+export const likeReply = asyncHandler(async (req, res) => {
+  const { forumId, commentId, replyId } = req.params;
+  const forum = await forumService.likeReply(forumId, commentId, replyId, req.user._id);
+  return res.status(200).json(ApiResponse.success(forum, "Like toggled successfully"));
+});
 
-// Get All Forums for Admin Monitoring
+export const deleteComment = asyncHandler(async (req, res) => {
+  const { forumId, commentId } = req.params;
+  const forum = await forumService.deleteComment(forumId, commentId, req.user._id);
+  return res.status(200).json(ApiResponse.success(forum, "Comment deleted successfully"));
+});
+
+export const deleteReply = asyncHandler(async (req, res) => {
+  const { forumId, commentId, replyId } = req.params;
+  const forum = await forumService.deleteReply(forumId, commentId, replyId, req.user._id);
+  return res.status(200).json(ApiResponse.success(forum, "Reply deleted successfully"));
+});
+
+// ==================== ADMIN ====================
+
 export const getForumsAdmin = asyncHandler(async (req, res) => {
   const { page, limit, search } = req.query;
   const result = await forumService.getForumsForAdmin({ page, limit, search });
@@ -142,40 +121,22 @@ export const getForumsAdmin = asyncHandler(async (req, res) => {
   );
 });
 
-// Delete Post (Admin only - for moderation)
-export const deletePostAdmin = asyncHandler(async (req, res) => {
-  const { forumId, threadId, postId } = req.params;
-  const forum = await forumService.deleteForumPost(forumId, threadId, postId);
-  return res.status(200).json(
-    ApiResponse.success(forum, "Post deleted successfully by admin")
-  );
-});
-
-// Delete Reply (Admin only - for moderation)
-export const deleteReplyAdmin = asyncHandler(async (req, res) => {
-  const { forumId, threadId, postId, replyId } = req.params;
-  const forum = await forumService.deleteForumReply(forumId, threadId, postId, replyId);
-  return res.status(200).json(
-    ApiResponse.success(forum, "Reply deleted successfully by admin")
-  );
-});
-
-// Delete Thread (Admin only - for moderation)
-export const deleteThreadAdmin = asyncHandler(async (req, res) => {
-  const { forumId, threadId } = req.params;
-  const forum = await forumService.deleteForumThread(forumId, threadId);
-  return res.status(200).json(
-    ApiResponse.success(forum, "Thread deleted successfully by admin")
-  );
-});
-
-// Delete Forum (Admin only - for moderation)
 export const deleteForumAdmin = asyncHandler(async (req, res) => {
   const { forumId } = req.params;
   await forumService.deleteForumByAdmin(forumId);
-  return res.status(200).json(
-    ApiResponse.success(null, "Forum deleted successfully by admin")
-  );
+  return res.status(200).json(ApiResponse.success(null, "Forum deleted successfully by admin"));
+});
+
+export const deleteCommentAdmin = asyncHandler(async (req, res) => {
+  const { forumId, commentId } = req.params;
+  const forum = await forumService.deleteCommentAdmin(forumId, commentId);
+  return res.status(200).json(ApiResponse.success(forum, "Comment deleted successfully by admin"));
+});
+
+export const deleteReplyAdmin = asyncHandler(async (req, res) => {
+  const { forumId, commentId, replyId } = req.params;
+  const forum = await forumService.deleteReplyAdmin(forumId, commentId, replyId);
+  return res.status(200).json(ApiResponse.success(forum, "Reply deleted successfully by admin"));
 });
 
 export default {
@@ -184,15 +145,15 @@ export default {
   getForumById,
   updateForum,
   deleteForum,
-  createForumThread,
-  addPostToThread,
-  replyToPost,
-  likePost,
-  // Admin functions
+  addComment,
+  replyToComment,
+  likeForum,
+  likeComment,
+  likeReply,
+  deleteComment,
+  deleteReply,
   getForumsAdmin,
-  deletePostAdmin,
-  deleteReplyAdmin,
-  deleteThreadAdmin,
   deleteForumAdmin,
+  deleteCommentAdmin,
+  deleteReplyAdmin,
 };
-

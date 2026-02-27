@@ -1,26 +1,57 @@
 import { ApiError } from "../utils/ApiError.js";
 import courseRepository from "../repository/course.repository.js";
-import { uploadPDFToCloudinary, deleteFileFromCloudinary } from "../utils/cloudinaryUpload.js";
+import {
+  uploadPDFToCloudinary,
+  uploadImageToCloudinary,
+  uploadVideoToCloudinary,
+  uploadAudioToCloudinary,
+  deleteFileFromCloudinary,
+} from "../utils/cloudinaryUpload.js";
 
-export const createCourse = async (data, adminId, file) => {
-  let contentUrl = data.contentUrl;
+const isVideo = (m) => m && m.startsWith("video/");
+const isAudio = (m) => m && m.startsWith("audio/");
 
-  // If file is provided, upload to Cloudinary
-  if (file) {
-    if (file.mimetype !== "application/pdf") {
-      throw new ApiError(400, "Only PDF files are allowed");
-    }
-    contentUrl = await uploadPDFToCloudinary(file.buffer, file.originalname, "courses");
+/** Study material only: PDF, video, or audio (no image) */
+async function uploadStudyMaterialFile(file) {
+  const { mimetype, buffer, originalname } = file;
+  const folder = "courses";
+  if (mimetype === "application/pdf") {
+    return { url: await uploadPDFToCloudinary(buffer, originalname, folder), contentType: "pdf" };
+  }
+  if (isVideo(mimetype)) {
+    return { url: await uploadVideoToCloudinary(buffer, originalname, folder), contentType: "video" };
+  }
+  if (isAudio(mimetype)) {
+    return { url: await uploadAudioToCloudinary(buffer, originalname, folder), contentType: "audio" };
+  }
+  throw new ApiError(400, "Study material must be PDF, video, or audio");
+}
+
+export const createCourse = async (data, adminId, files) => {
+  const studyFile = files?.pdf?.[0];
+  if (!studyFile) {
+    throw new ApiError(400, "Study material file is required (PDF, video, or audio)");
   }
 
-  if (!contentUrl) {
-    throw new ApiError(400, "PDF file is required");
+  const { url: contentUrl, contentType } = await uploadStudyMaterialFile(studyFile);
+
+  let imageUrl = null;
+  const imageFile = files?.image?.[0];
+  if (imageFile) {
+    imageUrl = await uploadImageToCloudinary(
+      imageFile.buffer,
+      imageFile.originalname,
+      "courses",
+      imageFile.mimetype
+    );
   }
 
   const course = await courseRepository.create({
     title: data.title,
     description: data.description,
+    imageUrl,
     contentUrl,
+    contentType: contentType || "pdf",
     price: data.price || 0,
     isPublished: data.isPublished,
     createdBy: adminId,
@@ -40,42 +71,50 @@ export const getCourseById = async (id) => {
   return course;
 };
 
-export const updateCourse = async (id, data, file) => {
+export const updateCourse = async (id, data, files) => {
   const existingCourse = await courseRepository.findById(id);
   if (!existingCourse) {
     throw new ApiError(404, "Course not found");
   }
 
   let contentUrl = data.contentUrl || existingCourse.contentUrl;
+  let contentType = existingCourse.contentType || "pdf";
+  let imageUrl = existingCourse.imageUrl || null;
 
-  // If new file is provided, upload to Cloudinary and delete old file
-  if (file) {
-    if (file.mimetype !== "application/pdf") {
-      throw new ApiError(400, "Only PDF files are allowed");
-    }
-
-    // Delete old file from Cloudinary if exists
+  const studyFile = files?.pdf?.[0];
+  if (studyFile) {
     if (existingCourse.contentUrl) {
       await deleteFileFromCloudinary(existingCourse.contentUrl);
     }
+    const result = await uploadStudyMaterialFile(studyFile);
+    contentUrl = result.url;
+    contentType = result.contentType;
+  }
 
-    // Upload new file
-    contentUrl = await uploadPDFToCloudinary(file.buffer, file.originalname, "courses");
+  const imageFile = files?.image?.[0];
+  if (imageFile) {
+    if (existingCourse.imageUrl) {
+      await deleteFileFromCloudinary(existingCourse.imageUrl);
+    }
+    imageUrl = await uploadImageToCloudinary(
+      imageFile.buffer,
+      imageFile.originalname,
+      "courses",
+      imageFile.mimetype
+    );
   }
 
   const updateData = {
     ...data,
     contentUrl,
+    contentType,
+    imageUrl,
   };
-  
-  // Ensure price is included if provided
   if (data.price !== undefined) {
     updateData.price = data.price;
   }
 
-  const updated = await courseRepository.updateById(id, updateData);
-  
-  return updated;
+  return await courseRepository.updateById(id, updateData);
 };
 
 export const deleteCourse = async (id) => {
@@ -84,7 +123,9 @@ export const deleteCourse = async (id) => {
     throw new ApiError(404, "Course not found");
   }
 
-  // Delete file from Cloudinary if exists
+  if (course.imageUrl) {
+    await deleteFileFromCloudinary(course.imageUrl);
+  }
   if (course.contentUrl) {
     await deleteFileFromCloudinary(course.contentUrl);
   }

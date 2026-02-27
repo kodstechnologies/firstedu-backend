@@ -19,10 +19,6 @@ const findBlogRequests = async (filters = {}) => {
         query.status = filters.status;
     }
 
-    if (filters.role) {
-        query.role = filters.role;
-    }
-
     return await BlogRequest.find(query)
         .sort({ createdAt: -1 })
         .lean();

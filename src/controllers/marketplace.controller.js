@@ -6,6 +6,7 @@ import marketplaceValidator from "../validation/marketplace.validator.js";
 import marketplaceService from "../services/marketplace.service.js";
 
 // Get All Published Courses (Marketplace)
+// Query: type (pdf | video | audio), access (free | paid | both)
 export const getCourses = asyncHandler(async (req, res) => {
   const {
     page = 1,
@@ -14,6 +15,8 @@ export const getCourses = asyncHandler(async (req, res) => {
     category,
     sortBy = "createdAt",
     sortOrder = "desc",
+    type,
+    access,
   } = req.query;
 
   const { courses, pagination } = await marketplaceService.getCourses({
@@ -23,6 +26,8 @@ export const getCourses = asyncHandler(async (req, res) => {
     category,
     sortBy,
     sortOrder,
+    type,
+    access,
   });
 
   return res.status(200).json(
@@ -118,6 +123,7 @@ export const getTests = asyncHandler(async (req, res) => {
     limit = 10,
     search,
     questionBank,
+    category,
     sortBy = "createdAt",
     sortOrder = "desc",
   } = req.query;
@@ -127,6 +133,7 @@ export const getTests = asyncHandler(async (req, res) => {
     limit,
     search,
     questionBank,
+    category,
     sortBy,
     sortOrder,
   });
@@ -136,12 +143,45 @@ export const getTests = asyncHandler(async (req, res) => {
   );
 });
 
-// Get Test Details (with purchase status)
+// Get Tests and Test Bundles (combined, with type filter: test | testBundle | both)
+// Always returns { items, pagination } — one list and one pagination for easy handling
+export const getTestsAndBundles = asyncHandler(async (req, res) => {
+  const {
+    type = "both",
+    page = 1,
+    limit = 10,
+    search,
+    category,
+    questionBank,
+    sortBy = "createdAt",
+    sortOrder = "desc",
+  } = req.query;
+
+  const result = await marketplaceService.getTestsAndBundles({
+    type: ["test", "testBundle", "both"].includes(type) ? type : "both",
+    page,
+    limit,
+    search,
+    category,
+    questionBank,
+    sortBy,
+    sortOrder,
+  });
+
+  return res.status(200).json(
+    ApiResponse.success(
+      { items: result.items },
+      "Tests and bundles fetched successfully",
+      result.pagination
+    )
+  );
+});
+
+// Get Test Details (full details, no payment check)
 export const getTestById = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const studentId = req.user._id;
 
-  const testData = await marketplaceService.getTestById(id, studentId);
+  const testData = await marketplaceService.getTestById(id);
 
   return res
     .status(200)
@@ -332,6 +372,7 @@ export default {
   getMyCourses,
   getCourseFollowUpTests,
   getTests,
+  getTestsAndBundles,
   getTestById,
   createTestOrder,
   purchaseTest,

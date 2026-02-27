@@ -5,6 +5,12 @@ import questionBankRepository from "../repository/questionBank.repository.js";
 import walletService from "./wallet.service.js";
 import eventRegistrationRepository from "../repository/eventRegistration.repository.js";
 import examSessionRepository from "../repository/examSession.repository.js";
+import {
+  uploadImageToCloudinary,
+  deleteFileFromCloudinary,
+} from "../utils/cloudinaryUpload.js";
+
+const OLYMPIADS_IMAGE_FOLDER = "olympiads";
 
 const testWithQuestionBankPopulate = {
   path: "test",
@@ -35,7 +41,7 @@ const enrichOlympiadTestsWithBankStats = async (olympiads) => {
   });
 };
 
-export const createOlympiad = async (data, adminId) => {
+export const createOlympiad = async (data, adminId, file) => {
   const {
     title,
     description,
@@ -76,9 +82,20 @@ export const createOlympiad = async (data, adminId) => {
     throw new ApiError(400, "Registration must end before event starts");
   }
 
+  let imageUrl = null;
+  if (file) {
+    imageUrl = await uploadImageToCloudinary(
+      file.buffer,
+      file.originalname,
+      OLYMPIADS_IMAGE_FOLDER,
+      file.mimetype
+    );
+  }
+
   return await olympiadRepository.create({
     title,
     description,
+    imageUrl,
     subject,
     startTime,
     endTime,
@@ -154,10 +171,22 @@ export const getOlympiadById = async (id, isAdmin = false) => {
   return olympiad;
 };
 
-export const updateOlympiad = async (id, updateData) => {
+export const updateOlympiad = async (id, updateData, file) => {
   const olympiad = await olympiadRepository.findById(id);
   if (!olympiad) {
     throw new ApiError(404, "Olympiad not found");
+  }
+
+  if (file) {
+    if (olympiad.imageUrl) {
+      await deleteFileFromCloudinary(olympiad.imageUrl);
+    }
+    updateData.imageUrl = await uploadImageToCloudinary(
+      file.buffer,
+      file.originalname,
+      OLYMPIADS_IMAGE_FOLDER,
+      file.mimetype
+    );
   }
 
   // Validate test if provided
@@ -184,6 +213,9 @@ export const deleteOlympiad = async (id) => {
   const olympiad = await olympiadRepository.findById(id);
   if (!olympiad) {
     throw new ApiError(404, "Olympiad not found");
+  }
+  if (olympiad.imageUrl) {
+    await deleteFileFromCloudinary(olympiad.imageUrl);
   }
   return await olympiadRepository.deleteById(id);
 };

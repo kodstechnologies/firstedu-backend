@@ -3,94 +3,10 @@ import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { generateOTP } from "../utils/otp.js";
 import { sendOTPEmail } from "../utils/sendEmail.js";
-import { uploadPDFToCloudinary, uploadImageToCloudinary } from "../utils/cloudinaryUpload.js";
 import teacherRepository from "../repository/teacher.repository.js";
 import teacherValidator from "../validation/teacher.validator.js";
 
-// Teacher Signup
-export const signup = asyncHandler(async (req, res) => {
-  const { error, value } = teacherValidator.teacherSignup.validate(req.body);
-
-  if (error) {
-    throw new ApiError(
-      400,
-      "Validation Error",
-      error.details.map((x) => x.message)
-    );
-  }
-
-  const { name, email, password, phone, gender, skills } = value;
-
-  // Check if resume PDF file is provided
-  const resumeFile = req.files?.resume?.[0] || req.file; // Support both single and multiple file uploads
-  if (!resumeFile) {
-    throw new ApiError(400, "Resume PDF file is required");
-  }
-
-  if (resumeFile.mimetype !== "application/pdf") {
-    throw new ApiError(400, "Only PDF files are allowed for resume");
-  }
-
-  // Upload resume to Cloudinary
-  let resumeUrl = null;
-  try {
-    resumeUrl = await uploadPDFToCloudinary(
-      resumeFile.buffer,
-      resumeFile.originalname,
-      "teacher-resumes"
-    );
-  } catch (uploadError) {
-    throw new ApiError(500, `Failed to upload resume: ${uploadError.message}`);
-  }
-
-  // Handle profile image upload if provided
-  let profileImageUrl = null;
-  const profileImageFile = req.files?.profileImage?.[0];
-  if (profileImageFile) {
-    // Validate image file type
-    if (!profileImageFile.mimetype.startsWith('image/')) {
-      throw new ApiError(400, "Only image files are allowed for profile image");
-    }
-
-    try {
-      profileImageUrl = await uploadImageToCloudinary(
-        profileImageFile.buffer,
-        profileImageFile.originalname,
-        "teacher-profile-images",
-        profileImageFile.mimetype
-      );
-    } catch (uploadError) {
-      throw new ApiError(500, `Failed to upload profile image: ${uploadError.message}`);
-    }
-  }
-
-  // Create teacher (status will be "pending" by default)
-  const createdTeacher = await teacherRepository.create({
-    name,
-    email,
-    password,
-    phone,
-    gender,
-    skills,
-    resumeUrl,
-    profileImage: profileImageUrl,
-  });
-
-  if (!createdTeacher) {
-    throw new ApiError(500, "Something went wrong while registering the teacher");
-  }
-
-  return res
-    .status(201)
-    .json(
-      ApiResponse.success(
-        createdTeacher,
-        "Teacher registered successfully. Waiting for admin approval."
-      )
-    );
-});
-
-// Teacher Login
+// Teacher Login (teachers are created by admin; no signup)
 export const login = asyncHandler(async (req, res) => {
   const { error, value } = teacherValidator.teacherLogin.validate(req.body);
 
@@ -341,7 +257,6 @@ export const changePassword = asyncHandler(async (req, res) => {
 });
 
 export default {
-  signup,
   login,
   logout,
   requestForgotPasswordOTP,

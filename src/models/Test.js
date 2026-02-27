@@ -11,6 +11,11 @@ const testSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    imageUrl: {
+      type: String,
+      trim: true,
+      default: null,
+    },
     questionBank: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "QuestionBank",

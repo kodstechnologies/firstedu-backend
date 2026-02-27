@@ -1,6 +1,7 @@
 import Test from "../models/Test.js";
 import TestBundle from "../models/TestBundle.js";
 import Question from "../models/Question.js";
+import QuestionBank from "../models/QuestionBank.js";
 import { ApiError } from "../utils/ApiError.js";
 
 // ========== Test Repository ==========
@@ -42,6 +43,7 @@ const findAllTests = async (filter = {}, options = {}) => {
       sortOrder = "desc",
       search,
       questionBank,
+      category,
       isPublished,
     } = options;
 
@@ -49,6 +51,11 @@ const findAllTests = async (filter = {}, options = {}) => {
 
     if (questionBank) {
       query.questionBank = questionBank;
+    }
+
+    if (category) {
+      const bankIds = await QuestionBank.find({ categories: category }).distinct("_id");
+      query.questionBank = { $in: bankIds };
     }
 
     if (typeof isPublished !== "undefined") {

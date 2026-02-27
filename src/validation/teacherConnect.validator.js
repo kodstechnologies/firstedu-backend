@@ -16,9 +16,12 @@ const endCall = Joi.object({
   recordingSid: Joi.string().trim().optional().allow(""),
 });
 
+// Teacher can update only: name, email, gender, about (profileImage via file)
 const updateTeacherProfile = Joi.object({
-  skills: Joi.array().items(Joi.string().trim()).min(1).optional(),
-  perMinuteRate: Joi.number().min(0).optional(),
+  name: Joi.string().trim().optional(),
+  email: Joi.string().email().trim().lowercase().optional(),
+  gender: Joi.string().valid("male", "female", "other").optional(),
+  about: Joi.string().trim().allow("", null).optional(),
 });
 
 const toggleAvailability = Joi.object({
@@ -29,6 +32,10 @@ const startCall = Joi.object({
   twilioCallSid: Joi.string().trim().required(),
 });
 
+const rateTeacher = Joi.object({
+  rating: Joi.number().min(1).max(5).integer().required(),
+});
+
 export default {
   initiateCallRequest,
   acceptCallRequest,
@@ -37,5 +44,6 @@ export default {
   updateTeacherProfile,
   toggleAvailability,
   startCall,
+  rateTeacher,
 };
 

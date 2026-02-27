@@ -37,6 +37,47 @@ const changePassword = Joi.object({
   confirmPassword: Joi.string().valid(Joi.ref("newPassword")).required(),
 });
 
+// Admin create teacher (name, about, experience, salaryPerMinute, language, skills, hiringFor, email, gender, password)
+const adminCreateTeacher = Joi.object({
+  name: Joi.string().trim().required(),
+  email: Joi.string().email().trim().lowercase().required(),
+  password: Joi.string().min(6).required(),
+  gender: Joi.string().valid("male", "female", "other").required(),
+  about: Joi.string().trim().allow("", null).optional(),
+  experience: Joi.string().trim().allow("", null).optional(),
+  language: Joi.string().trim().allow("", null).optional(),
+  hiringFor: Joi.string().trim().allow("", null).optional(),
+  salaryPerMinute: Joi.number().min(0).optional(),
+  skills: Joi.array().items(Joi.string().trim()).optional(),
+});
+
+// Admin update teacher (all optional)
+const adminUpdateTeacher = Joi.object({
+  name: Joi.string().trim().optional(),
+  email: Joi.string().email().trim().lowercase().optional(),
+  password: Joi.string().min(6).optional(),
+  gender: Joi.string().valid("male", "female", "other").optional(),
+  about: Joi.string().trim().allow("", null).optional(),
+  experience: Joi.string().trim().allow("", null).optional(),
+  language: Joi.string().trim().allow("", null).optional(),
+  hiringFor: Joi.string().trim().allow("", null).optional(),
+  salaryPerMinute: Joi.number().min(0).optional(),
+  skills: Joi.array().items(Joi.string().trim()).optional(),
+});
+
+// Teacher self-update profile (only name, email, gender, about; profileImage via file)
+const teacherUpdateProfile = Joi.object({
+  name: Joi.string().trim().optional(),
+  email: Joi.string().email().trim().lowercase().optional(),
+  gender: Joi.string().valid("male", "female", "other").optional(),
+  about: Joi.string().trim().allow("", null).optional(),
+});
+
+// Admin send credentials – password to set and email to teacher
+const sendCredentials = Joi.object({
+  password: Joi.string().min(6).required(),
+});
+
 export default {
   teacherSignup,
   teacherLogin,
@@ -44,5 +85,9 @@ export default {
   verifyPasswordChange,
   confirmNewPassword,
   changePassword,
+  adminCreateTeacher,
+  adminUpdateTeacher,
+  teacherUpdateProfile,
+  sendCredentials,
 };
 

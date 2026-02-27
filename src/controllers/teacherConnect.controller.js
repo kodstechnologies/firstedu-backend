@@ -4,9 +4,10 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import teacherConnectService from "../services/teacherConnect.service.js";
 import teacherConnectValidator from "../validation/teacherConnect.validator.js";
 import teacherRepository from "../repository/teacher.repository.js";
+import { uploadImageToCloudinary } from "../utils/cloudinaryUpload.js";
 
 /**
- * Update teacher profile (subjects/skills and rate)
+ * Update teacher profile (teacher can update only: name, email, gender, about, profileImage)
  */
 export const updateProfile = asyncHandler(async (req, res) => {
   const { error, value } = teacherConnectValidator.updateTeacherProfile.validate(req.body);
@@ -22,12 +23,28 @@ export const updateProfile = asyncHandler(async (req, res) => {
   const teacherId = req.user._id;
   const updateData = {};
 
-  if (value.skills !== undefined) {
-    updateData.skills = value.skills;
+  if (value.name !== undefined) updateData.name = value.name;
+  if (value.email !== undefined) {
+    const existing = await teacherRepository.findOne({ email: value.email });
+    if (existing && existing._id.toString() !== teacherId.toString()) {
+      throw new ApiError(409, "Email is already in use by another teacher");
+    }
+    updateData.email = value.email;
   }
+  if (value.gender !== undefined) updateData.gender = value.gender;
+  if (value.about !== undefined) updateData.about = value.about;
 
-  if (value.perMinuteRate !== undefined) {
-    updateData.perMinuteRate = value.perMinuteRate;
+  const profileImageFile = req.file;
+  if (profileImageFile && profileImageFile.buffer) {
+    if (!profileImageFile.mimetype.startsWith("image/")) {
+      throw new ApiError(400, "Profile image must be an image file");
+    }
+    updateData.profileImage = await uploadImageToCloudinary(
+      profileImageFile.buffer,
+      profileImageFile.originalname,
+      "teacher-profile-images",
+      profileImageFile.mimetype
+    );
   }
 
   if (Object.keys(updateData).length === 0) {

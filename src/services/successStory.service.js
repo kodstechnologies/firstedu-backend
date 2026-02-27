@@ -6,73 +6,68 @@ import {
   deleteFileFromCloudinary,
 } from '../utils/cloudinaryUpload.js';
 
+const VIDEO_MIMETYPES = [
+  'video/mp4',
+  'video/mpeg',
+  'video/quicktime',
+  'video/x-msvideo',
+  'video/webm',
+  'video/x-ms-wmv',
+  'video/3gpp',
+];
+const IMAGE_MIMETYPES = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp'];
+
 /**
- * Create a new success story (Admin)
+ * Create a new success story (Admin) - media = video only, thumbnail = image only
  */
 const createSuccessStory = async (data, files, adminId) => {
-  const { storyType } = data;
-
-  // Validate media files based on storyType
-  if (storyType === 'VIDEO') {
-    if (!files?.media?.[0]) {
-      throw new ApiError(400, 'Video file is required for VIDEO type story');
-    }
-    if (!files?.thumbnail?.[0]) {
-      throw new ApiError(400, 'Thumbnail is required for VIDEO type story');
-    }
-  } else if (storyType === 'PHOTO') {
-    if (!files?.media?.[0]) {
-      throw new ApiError(400, 'Photo file is required for PHOTO type story');
-    }
+  if (!files?.media?.[0]) {
+    throw new ApiError(400, 'Media (video) file is required');
+  }
+  if (!files?.thumbnail?.[0]) {
+    throw new ApiError(400, 'Thumbnail (image) file is required');
   }
 
-  // Upload media to Cloudinary
+  const mediaFile = files.media[0];
+  const thumbFile = files.thumbnail[0];
+
+  if (!VIDEO_MIMETYPES.includes(mediaFile.mimetype)) {
+    throw new ApiError(400, 'Media must be a video file (MP4, MOV, WEBM, etc.)');
+  }
+  if (!IMAGE_MIMETYPES.includes(thumbFile.mimetype)) {
+    throw new ApiError(400, 'Thumbnail must be an image file (JPEG, PNG, WEBP)');
+  }
+
   let mediaUrl;
-  let thumbnailUrl = null;
+  let thumbnailUrl;
 
   try {
-    if (storyType === 'VIDEO') {
-      // Upload video
-      mediaUrl = await uploadVideoToCloudinary(
-        files.media[0].buffer,
-        files.media[0].originalname,
-        'success-stories/videos',
-      );
+    mediaUrl = await uploadVideoToCloudinary(
+      mediaFile.buffer,
+      mediaFile.originalname,
+      'success-stories/videos',
+    );
+    thumbnailUrl = await uploadImageToCloudinary(
+      thumbFile.buffer,
+      thumbFile.originalname,
+      'success-stories/thumbnails',
+    );
 
-      // Upload thumbnail
-      thumbnailUrl = await uploadImageToCloudinary(
-        files.thumbnail[0].buffer,
-        files.thumbnail[0].originalname,
-        'success-stories/thumbnails',
-      );
-    } else {
-      // Upload photo
-      mediaUrl = await uploadImageToCloudinary(
-        files.media[0].buffer,
-        files.media[0].originalname,
-        'success-stories/photos',
-      );
-    }
-
-    // Create success story
     const storyData = {
-      ...data,
+      name: data.name,
+      description: data.description,
+      achievement: data.achievement,
+      achieveIn: data.achieveIn,
       mediaUrl,
       thumbnailUrl,
+      status: data.status ?? 'DRAFT',
       createdBy: adminId,
-      status: data.status ?? 'DRAFT', // allow override
-      isFeatured: data.isFeatured ?? false,
     };
 
     return await successStoryRepository.createSuccessStory(storyData);
   } catch (error) {
-    // Cleanup uploaded files if story creation fails
-    if (mediaUrl) {
-      await deleteFileFromCloudinary(mediaUrl);
-    }
-    if (thumbnailUrl) {
-      await deleteFileFromCloudinary(thumbnailUrl);
-    }
+    if (mediaUrl) await deleteFileFromCloudinary(mediaUrl);
+    if (thumbnailUrl) await deleteFileFromCloudinary(thumbnailUrl);
     throw error;
   }
 };
@@ -89,64 +84,56 @@ const getAllStories = async (filters) => {
  */
 const getStoryById = async (id) => {
   const story = await successStoryRepository.findById(id);
-
   if (!story) {
     throw new ApiError(404, 'Success story not found');
   }
-
   return story;
 };
 
 /**
- * Update success story (Admin)
+ * Update success story (Admin) - optional new video/image
  */
 const updateSuccessStory = async (id, data, files) => {
   const story = await successStoryRepository.findById(id);
-
   if (!story) {
     throw new ApiError(404, 'Success story not found');
   }
 
-  const updateData = { ...data };
+  const updateData = {};
+  if (data.name !== undefined) updateData.name = data.name;
+  if (data.description !== undefined) updateData.description = data.description;
+  if (data.achievement !== undefined) updateData.achievement = data.achievement;
+  if (data.achieveIn !== undefined) updateData.achieveIn = data.achieveIn;
+
   const oldMediaUrl = story.mediaUrl;
   const oldThumbnailUrl = story.thumbnailUrl;
 
   try {
-    // Handle media replacement if new files provided
     if (files?.media?.[0]) {
-      if (story.storyType === 'VIDEO') {
-        // Upload new video
-        updateData.mediaUrl = await uploadVideoToCloudinary(
-          files.media[0].buffer,
-          files.media[0].originalname,
-          'success-stories/videos',
-        );
-      } else {
-        // Upload new photo
-        updateData.mediaUrl = await uploadImageToCloudinary(
-          files.media[0].buffer,
-          files.media[0].originalname,
-          'success-stories/photos',
-        );
+      const mediaFile = files.media[0];
+      if (!VIDEO_MIMETYPES.includes(mediaFile.mimetype)) {
+        throw new ApiError(400, 'Media must be a video file (MP4, MOV, WEBM, etc.)');
       }
+      updateData.mediaUrl = await uploadVideoToCloudinary(
+        mediaFile.buffer,
+        mediaFile.originalname,
+        'success-stories/videos',
+      );
     }
-
-    // Handle thumbnail replacement for video stories
-    if (files?.thumbnail?.[0] && story.storyType === 'VIDEO') {
+    if (files?.thumbnail?.[0]) {
+      const thumbFile = files.thumbnail[0];
+      if (!IMAGE_MIMETYPES.includes(thumbFile.mimetype)) {
+        throw new ApiError(400, 'Thumbnail must be an image file (JPEG, PNG, WEBP)');
+      }
       updateData.thumbnailUrl = await uploadImageToCloudinary(
-        files.thumbnail[0].buffer,
-        files.thumbnail[0].originalname,
+        thumbFile.buffer,
+        thumbFile.originalname,
         'success-stories/thumbnails',
       );
     }
 
-    // Update the story
-    const updatedStory = await successStoryRepository.updateById(
-      id,
-      updateData,
-    );
+    const updatedStory = await successStoryRepository.updateById(id, updateData);
 
-    // Delete old media files if they were replaced
     if (updateData.mediaUrl && oldMediaUrl) {
       await deleteFileFromCloudinary(oldMediaUrl);
     }
@@ -156,14 +143,10 @@ const updateSuccessStory = async (id, data, files) => {
 
     return updatedStory;
   } catch (error) {
-    // Cleanup newly uploaded files if update fails
-    if (updateData.mediaUrl && updateData.mediaUrl !== oldMediaUrl) {
+    if (updateData.mediaUrl) {
       await deleteFileFromCloudinary(updateData.mediaUrl);
     }
-    if (
-      updateData.thumbnailUrl &&
-      updateData.thumbnailUrl !== oldThumbnailUrl
-    ) {
+    if (updateData.thumbnailUrl) {
       await deleteFileFromCloudinary(updateData.thumbnailUrl);
     }
     throw error;
@@ -175,11 +158,9 @@ const updateSuccessStory = async (id, data, files) => {
  */
 const updateStoryStatus = async (id, status) => {
   const story = await successStoryRepository.findById(id);
-
   if (!story) {
     throw new ApiError(404, 'Success story not found');
   }
-
   return await successStoryRepository.updateById(id, { status });
 };
 
@@ -188,25 +169,16 @@ const updateStoryStatus = async (id, status) => {
  */
 const deleteSuccessStory = async (id) => {
   const story = await successStoryRepository.findById(id);
-
   if (!story) {
     throw new ApiError(404, 'Success story not found');
   }
-
-  // Delete media files from Cloudinary
-  if (story.mediaUrl) {
-    await deleteFileFromCloudinary(story.mediaUrl);
-  }
-  if (story.thumbnailUrl) {
-    await deleteFileFromCloudinary(story.thumbnailUrl);
-  }
-
-  // Delete story from database
+  if (story.mediaUrl) await deleteFileFromCloudinary(story.mediaUrl);
+  if (story.thumbnailUrl) await deleteFileFromCloudinary(story.thumbnailUrl);
   return await successStoryRepository.deleteById(id);
 };
 
 /**
- * Get featured published stories (Student)
+ * Get featured published stories (Student) - returns latest N published
  */
 const getFeaturedStories = async (limit = 3) => {
   return await successStoryRepository.getFeaturedPublishedStories(limit);
@@ -216,12 +188,10 @@ const getFeaturedStories = async (limit = 3) => {
  * Get all published stories (Student)
  */
 const getAllPublishedStories = async (filters) => {
-  const queryFilters = {
+  return await successStoryRepository.findSuccessStories({
     ...filters,
-    status: 'PUBLISHED', // Only published stories for students
-  };
-
-  return await successStoryRepository.findSuccessStories(queryFilters);
+    status: 'PUBLISHED',
+  });
 };
 
 /**
@@ -229,15 +199,12 @@ const getAllPublishedStories = async (filters) => {
  */
 const getPublishedStoryById = async (id) => {
   const story = await successStoryRepository.findById(id);
-
   if (!story) {
     throw new ApiError(404, 'Success story not found');
   }
-
   if (story.status !== 'PUBLISHED') {
     throw new ApiError(404, 'Success story not found');
   }
-
   return story;
 };
 

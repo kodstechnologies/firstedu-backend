@@ -4,8 +4,8 @@ import olympiadService from "../services/olympiad.service.js";
 import tournamentService from "../services/tournament.service.js";
 import workshopService from "../services/workshop.service.js";
 
-/** Only 3 categories: olympiad, tournament, workshop */
-const VALID_CATEGORIES = ["olympiad", "tournament", "workshop"];
+/** olympiad | tournament | workshop | both (both = tournaments + workshops only) */
+const VALID_CATEGORIES = ["olympiad", "tournament", "workshop", "both"];
 
 /** status = "open" (within registration), "close" (before), "completed" (after end) */
 const addRegistrationStatus = (item) => {
@@ -23,7 +23,7 @@ const addRegistrationStatus = (item) => {
  * Get all published events. Response always has data: { olympiads, tournaments, workshops } and meta pagination.
  *
  * Query params:
- * - category: "olympiad" | "tournament" | "workshop" — filter to one type (only that array is filled)
+ * - category: "olympiad" | "tournament" | "workshop" | "both" — filter (both = tournaments + workshops only)
  * - search: string — search in title/description/subject (case-insensitive)
  * - page, limit: pagination (limit max 50)
  */
@@ -37,16 +37,19 @@ export const getAllEvents = asyncHandler(async (req, res) => {
   if (normalizedCategory && !VALID_CATEGORIES.includes(normalizedCategory)) {
     return res.status(400).json(
       ApiResponse.error(
-        "Invalid category. Use: olympiad, tournament, or workshop",
+        "Invalid category. Use: olympiad, tournament, workshop, or both",
         null,
         { validCategories: VALID_CATEGORIES }
       )
     );
   }
 
-  const fetchOlympiads = !normalizedCategory || normalizedCategory === "olympiad";
-  const fetchTournaments = !normalizedCategory || normalizedCategory === "tournament";
-  const fetchWorkshops = !normalizedCategory || normalizedCategory === "workshop";
+  const fetchOlympiads =
+    !normalizedCategory || normalizedCategory === "olympiad";
+  const fetchTournaments =
+    !normalizedCategory || normalizedCategory === "tournament" || normalizedCategory === "both";
+  const fetchWorkshops =
+    !normalizedCategory || normalizedCategory === "workshop" || normalizedCategory === "both";
 
   const baseOptions = { page: pageNum, limit: limitNum, isPublished: true, search: search || undefined };
 
@@ -56,16 +59,26 @@ export const getAllEvents = asyncHandler(async (req, res) => {
     fetchWorkshops ? workshopService.getWorkshops(baseOptions) : Promise.resolve({ workshops: [], pagination: { page: pageNum, limit: limitNum, total: 0, pages: 0 } }),
   ]);
 
-  const message = normalizedCategory
-    ? `${normalizedCategory.replace(/s$/, "")} fetched successfully`
-    : "Olympiads, tournaments and workshops fetched successfully";
+  const message = !normalizedCategory
+    ? "Olympiads, tournaments and workshops fetched successfully"
+    : normalizedCategory === "both"
+      ? "Tournaments and workshops fetched successfully"
+      : `${normalizedCategory.replace(/s$/, "")} fetched successfully`;
+
+  // Strip meeting link/password from workshops in list – only show on detail for purchased users
+  const workshopsSafe = (workshopResult.workshops || []).map((w) => {
+    const doc = addRegistrationStatus(w);
+    delete doc.meetingLink;
+    delete doc.meetingPassword;
+    return doc;
+  });
 
   return res.status(200).json(
     ApiResponse.success(
       {
         olympiads: (olympiadResult.olympiads || []).map(addRegistrationStatus),
         tournaments: (tournamentResult.tournaments || []).map(addRegistrationStatus),
-        workshops: (workshopResult.workshops || []).map(addRegistrationStatus),
+        workshops: workshopsSafe,
       },
       message,
       {

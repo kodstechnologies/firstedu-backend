@@ -17,7 +17,7 @@ export const createTest = asyncHandler(async (req, res) => {
     );
   }
 
-  const test = await testService.createTest(value, req.user._id);
+  const test = await testService.createTest(value, req.user._id, req.file);
 
   return res
     .status(201)
@@ -78,7 +78,7 @@ export const updateTest = asyncHandler(async (req, res) => {
     );
   }
 
-  const updated = await testService.updateTest(id, value);
+  const updated = await testService.updateTest(id, value, req.file);
 
   return res
     .status(200)
@@ -98,7 +98,11 @@ export const deleteTest = asyncHandler(async (req, res) => {
 // -------- Bundles --------
 
 export const createBundle = asyncHandler(async (req, res) => {
-  const { error, value } = testValidator.createBundle.validate(req.body);
+  const body = { ...req.body };
+  if (body.tests && typeof body.tests === 'string') {
+    body.tests = body.tests.split(',').map((s) => s.trim()).filter(Boolean);
+  }
+  const { error, value } = testValidator.createBundle.validate(body);
 
   if (error) {
     throw new ApiError(
@@ -108,7 +112,7 @@ export const createBundle = asyncHandler(async (req, res) => {
     );
   }
 
-  const bundle = await testService.createBundle(value, req.user._id);
+  const bundle = await testService.createBundle(value, req.user._id, req.file);
 
   return res
     .status(201)
@@ -157,7 +161,11 @@ export const getBundleById = asyncHandler(async (req, res) => {
 
 export const updateBundle = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { error, value } = testValidator.updateBundle.validate(req.body);
+  const body = { ...req.body };
+  if (body.tests !== undefined && typeof body.tests === 'string') {
+    body.tests = body.tests.split(',').map((s) => s.trim()).filter(Boolean);
+  }
+  const { error, value } = testValidator.updateBundle.validate(body);
 
   if (error) {
     throw new ApiError(
@@ -167,7 +175,7 @@ export const updateBundle = asyncHandler(async (req, res) => {
     );
   }
 
-  const updated = await testService.updateBundle(id, value);
+  const updated = await testService.updateBundle(id, value, req.file);
 
   return res
     .status(200)

@@ -292,6 +292,17 @@ export const logout = asyncHandler(async (req, res) => {
     .json(ApiResponse.success(null, "Student logged out successfully"));
 });
 
+// Get My Profile (current logged-in student)
+export const getProfile = asyncHandler(async (req, res) => {
+  const student = await studentRepository.findById(req.user._id);
+  if (!student) {
+    throw new ApiError(404, "Student not found");
+  }
+  return res
+    .status(200)
+    .json(ApiResponse.success(student, "Profile fetched successfully"));
+});
+
 // Update Profile
 export const updateProfile = asyncHandler(async (req, res) => {
   const { error, value } = userValidator.updateProfile.validate(req.body);
