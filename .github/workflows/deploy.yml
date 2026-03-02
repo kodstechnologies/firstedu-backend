@@ -13,7 +13,17 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Deploy to EC2 via SSH
+      - name: Copy Project to EC2
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_KEY }}
+          source: "."
+          target: "/home/ubuntu/firstedu-backend"
+          rm: true
+
+      - name: Deploy & Restart
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
@@ -22,21 +32,12 @@ jobs:
           script: |
             cd /home/ubuntu/firstedu-backend
 
-            echo "Pulling latest code..."
-            git pull origin main
-
-            echo "Creating .env file..."
             echo "${{ secrets.ENV_FILE }}" > .env
 
-            echo "Installing dependencies..."
-            npm install
+            npm install --production
 
-            echo "Restarting PM2..."
             pm2 restart firstedu-backend || pm2 start src/server.js --name firstedu-backend
 
             pm2 save
 
-            echo "Restarting Nginx..."
             sudo systemctl restart nginx
-
-            echo "Deployment completed!"
