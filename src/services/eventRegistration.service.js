@@ -6,7 +6,7 @@ import workshopRepository from "../repository/workshop.repository.js";
 import examSessionRepository from "../repository/examSession.repository.js";
 import walletService from "./wallet.service.js";
 import razorpayOrderIntentRepository from "../repository/razorpayOrderIntent.repository.js";
-import { createRazorpayOrder } from "../utils/razorpayUtils.js";
+import { createRazorpayOrder, verifyPaymentSignature } from "../utils/razorpayUtils.js";
 
 const EVENT_MODEL_MAP = {
   olympiad: "Olympiad",
@@ -21,7 +21,14 @@ export const registerForEvent = async (
   studentId,
   options = {}
 ) => {
-  const { paymentStatus = "completed", paymentId = null, paymentMethod = null } = options;
+  const {
+    paymentStatus = "completed",
+    paymentId = null,
+    paymentMethod = null,
+    razorpayOrderId = null,
+    razorpayPaymentId = null,
+    razorpaySignature = null,
+  } = options;
 
   // Check if already registered
   const existingRegistration = await eventRegistrationRepository.findOne({
@@ -81,9 +88,52 @@ export const registerForEvent = async (
         paymentId: paymentId || "wallet",
       });
     }
+    if (paymentMethod === "gateway") {
+      if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
+        throw new ApiError(
+          400,
+          "For gateway payment, razorpayOrderId, razorpayPaymentId and razorpaySignature are required."
+        );
+      }
+      const isValid = verifyPaymentSignature(
+        razorpayOrderId,
+        razorpayPaymentId,
+        razorpaySignature
+      );
+      if (!isValid) {
+        throw new ApiError(400, "Payment verification failed");
+      }
+      const intent = await razorpayOrderIntentRepository.findByOrderId(razorpayOrderId);
+      if (!intent) {
+        throw new ApiError(400, "Invalid order or payment already used");
+      }
+      const studentIdStr = studentId?.toString?.() ?? String(studentId);
+      const eventIdStr = eventId?.toString?.() ?? String(eventId);
+      if (intent.studentId?.toString?.() !== studentIdStr) {
+        throw new ApiError(403, "This payment was made by a different user");
+      }
+      if (intent.type !== eventType || intent.entityId?.toString?.() !== eventIdStr) {
+        throw new ApiError(400, "Payment does not match this event");
+      }
+      const amountPaise = Math.round(price * 100);
+      if (intent.amountPaise !== amountPaise) {
+        throw new ApiError(400, "Payment amount does not match event price");
+      }
+      const created = await eventRegistrationRepository.create({
+        student: studentId,
+        eventType,
+        eventId,
+        eventModel: EVENT_MODEL_MAP[eventType],
+        status: "registered",
+        paymentStatus: "completed",
+        paymentId: razorpayPaymentId,
+      });
+      await razorpayOrderIntentRepository.markReconciled(razorpayOrderId, razorpayPaymentId);
+      return created;
+    }
     throw new ApiError(
       400,
-      "Payment required. Use initiate-payment endpoint to pay via gateway, or send paymentMethod: 'wallet' to pay with wallet balance."
+      "Payment required. Use initiate-payment endpoint to pay via gateway (then send razorpayOrderId, razorpayPaymentId, razorpaySignature, paymentMethod: 'gateway'), or send paymentMethod: 'wallet' to pay with wallet balance."
     );
   }
 
@@ -242,10 +292,17 @@ const EVENT_TYPE_TO_MODEL = {
 };
 
 /**
- * Initiate gateway payment for event registration. Returns Razorpay order details.
- * Student pays via Razorpay; webhook will create EventRegistration on success.
+ * Initiate event registration. Handles free, wallet, and razorpay.
+ * - free: completes registration immediately (only if event price is 0)
+ * - wallet: deducts balance and completes registration immediately
+ * - razorpay: creates order, returns order details; registration completed via register API after payment
  */
-export const initiateEventPayment = async (eventType, eventId, studentId) => {
+export const initiateEventRegistration = async (
+  eventType,
+  eventId,
+  studentId,
+  paymentMethod
+) => {
   const existing = await eventRegistrationRepository.findOne({
     student: studentId,
     eventType,
@@ -270,11 +327,6 @@ export const initiateEventPayment = async (eventType, eventId, studentId) => {
     throw new ApiError(404, `${eventType} not found`);
   }
 
-  const price = Number(event.price) || 0;
-  if (price < 1) {
-    throw new ApiError(400, "This event is free. Use register endpoint without payment.");
-  }
-
   const now = new Date();
   if (now < new Date(event.registrationStartTime) || now > new Date(event.registrationEndTime)) {
     throw new ApiError(400, "Registration is not open for this event");
@@ -289,34 +341,76 @@ export const initiateEventPayment = async (eventType, eventId, studentId) => {
     throw new ApiError(400, "Maximum participants reached");
   }
 
-  const receipt = `${eventType}_${eventId}_${studentId}_${Date.now()}`.substring(0, 40);
-  const order = await createRazorpayOrder(price, receipt);
+  const price = Number(event.price) || 0;
 
-  await razorpayOrderIntentRepository.create({
-    orderId: order.orderId,
-    studentId,
-    type: eventType,
-    entityId: eventId,
-    entityModel: EVENT_TYPE_TO_MODEL[eventType],
-    amountPaise: order.amount,
-    currency: order.currency || "INR",
-    receipt,
-  });
-
-  const razorpayKeyId = process.env.RAZORPAY_KEY_ID;
-  if (!razorpayKeyId) {
-    throw new ApiError(500, "Payment gateway not configured");
+  if (paymentMethod === "free") {
+    if (price > 0) {
+      throw new ApiError(400, "This event is paid. Use paymentMethod: wallet or razorpay.");
+    }
+    const registration = await registerForEvent(eventType, eventId, studentId, {});
+    return { registration, completed: true };
   }
 
-  return {
-    orderId: order.orderId,
-    amount: order.amount,
-    currency: order.currency,
-    key: razorpayKeyId,
-    eventType,
-    eventId,
-    eventTitle: event.title,
-  };
+  if (paymentMethod === "wallet") {
+    const registration = await registerForEvent(eventType, eventId, studentId, {
+      paymentMethod: "wallet",
+    });
+    return { registration, completed: true };
+  }
+
+  if (paymentMethod === "razorpay") {
+    if (price < 1) {
+      throw new ApiError(400, "This event is free. Use paymentMethod: free.");
+    }
+    const razorpayKeyId = process.env.RAZORPAY_KEY_ID;
+    const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET;
+    if (!razorpayKeyId || !razorpayKeySecret) {
+      throw new ApiError(500, "Payment gateway not configured. Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in .env");
+    }
+    const receipt = `${eventType}_${eventId}_${studentId}_${Date.now()}`.substring(0, 40);
+    let order;
+    try {
+      order = await createRazorpayOrder(price, receipt);
+    } catch (err) {
+      const statusCode = err?.statusCode ?? err?.response?.status;
+      const code = err?.error?.code ?? err?.response?.data?.error?.code;
+      if (statusCode === 401 || code === "BAD_REQUEST_ERROR") {
+        console.error("[Razorpay] Authentication failed. Check RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET:", err?.error ?? err?.message ?? err);
+        throw new ApiError(500, "Payment gateway authentication failed. Please check Razorpay credentials in server .env (RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET).");
+      }
+      console.error("[Razorpay] Order create error:", err?.error ?? err?.message ?? err);
+      throw new ApiError(500, "Payment gateway error. Please try again later.");
+    }
+
+    await razorpayOrderIntentRepository.create({
+      orderId: order.orderId,
+      studentId,
+      type: eventType,
+      entityId: eventId,
+      entityModel: EVENT_TYPE_TO_MODEL[eventType],
+      amountPaise: order.amount,
+      currency: order.currency || "INR",
+      receipt,
+    });
+
+    return {
+      completed: false,
+      orderId: order.orderId,
+      amount: order.amount,
+      currency: order.currency,
+      key: razorpayKeyId,
+      eventType,
+      eventId,
+      eventTitle: event.title,
+    };
+  }
+
+  throw new ApiError(400, "Invalid paymentMethod. Use: free, wallet, or razorpay.");
+};
+
+/** @deprecated Use initiateEventRegistration with paymentMethod: 'razorpay' */
+export const initiateEventPayment = async (eventType, eventId, studentId) => {
+  return initiateEventRegistration(eventType, eventId, studentId, "razorpay");
 };
 
 export default {
@@ -328,5 +422,6 @@ export default {
   getTournamentProgress,
   updateRegistration,
   initiateEventPayment,
+  initiateEventRegistration,
 };
 

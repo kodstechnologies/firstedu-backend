@@ -13,11 +13,7 @@ const studentSchema = new mongoose.Schema({
   profileImage: { type: String, default: null, trim: true },
   passwordResetOTP: { type: String, default: null },
   passwordResetOTPExpires: { type: Date, default: null },
-  // 👇 New fields for tokens
-  refreshToken: { type: String, default: null },
-  // FCM token for push notifications
-  fcmToken: { type: String, default: null },
-  // 👇 Referral System Fields
+  // 👇 Referral System Fields (sessions/tokens live in StudentSession)
   referralCode: { type: String, unique: true, sparse: true }, // generated on signup
   referredBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   referralHistory: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], // Array of users invited by this user

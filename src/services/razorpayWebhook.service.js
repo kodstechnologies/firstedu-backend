@@ -141,7 +141,7 @@ async function reconcilePaymentCaptured(orderId, paymentId, amountPaise) {
     const existing = await eventRegistrationRepository.findOne({
       student: studentId,
       eventType: type,
-      eventId,
+      eventId: entityId,
     });
     if (existing) {
       await razorpayOrderIntentRepository.markReconciled(orderId, paymentId);
@@ -151,7 +151,7 @@ async function reconcilePaymentCaptured(orderId, paymentId, amountPaise) {
     await eventRegistrationRepository.create({
       student: studentId,
       eventType: type,
-      eventId,
+      eventId: entityId,
       eventModel: entityModel,
       status: "registered",
       paymentStatus: "completed",

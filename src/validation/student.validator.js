@@ -15,6 +15,9 @@ const studentSignup = Joi.object({
 const studentLogin = Joi.object({
   email: Joi.string().email().required(),
   password: Joi.string().required(),
+  fcmToken: Joi.string().trim().allow("").optional(),
+  forceLogin: Joi.boolean().optional(),
+  deviceId: Joi.string().trim().allow("").optional(),
 });
 
 const requestPasswordChange = Joi.object({}); // no body needed

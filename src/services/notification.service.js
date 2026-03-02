@@ -1,5 +1,6 @@
 import notificationRepository from "../repository/notification.repository.js";
 import studentRepository from "../repository/student.repository.js";
+import studentSessionRepository from "../repository/studentSession.repository.js";
 import {
   sendNotificationToDevice,
   sendNotificationToMultipleDevices,
@@ -9,13 +10,14 @@ import {
  * Send notification to a single student
  */
 export const sendNotificationToStudent = async (studentId, title, body, data = {}, sentBy) => {
-  // Get student's FCM token
   const student = await studentRepository.findById(studentId);
   if (!student) {
     throw new Error("Student not found");
   }
 
-  // Create notification record
+  const session = await studentSessionRepository.findByStudentId(studentId);
+  const fcmToken = session?.fcmToken || null;
+
   const notification = await notificationRepository.create({
     title,
     body,
@@ -25,12 +27,11 @@ export const sendNotificationToStudent = async (studentId, title, body, data = {
     type: data.type || "general",
   });
 
-  // Send FCM notification if token exists
   let fcmResult = null;
-  if (student.fcmToken) {
+  if (fcmToken) {
     try {
       fcmResult = await sendNotificationToDevice(
-        student.fcmToken,
+        fcmToken,
         title,
         body,
         {
@@ -39,7 +40,6 @@ export const sendNotificationToStudent = async (studentId, title, body, data = {
         }
       );
 
-      // Update notification with FCM status
       if (fcmResult.success) {
         await notificationRepository.update(notification._id, {
           fcmSent: true,
@@ -48,10 +48,9 @@ export const sendNotificationToStudent = async (studentId, title, body, data = {
       }
     } catch (error) {
       console.error("Error sending FCM notification:", error);
-      // If token is invalid, remove it
-      if (error.code === "messaging/invalid-registration-token" || 
+      if (error.code === "messaging/invalid-registration-token" ||
           error.code === "messaging/registration-token-not-registered") {
-        await studentRepository.updateById(studentId, { fcmToken: null });
+        await studentSessionRepository.updateFcmToken(studentId, null);
       }
     }
   }
@@ -72,7 +71,6 @@ export const sendNotificationToMultipleStudents = async (
   data = {},
   sentBy
 ) => {
-  // Get all students with their FCM tokens
   const students = await studentRepository.findAll(
     { _id: { $in: studentIds } },
     { limit: 1000 }
@@ -82,7 +80,6 @@ export const sendNotificationToMultipleStudents = async (
     throw new Error("No students found");
   }
 
-  // Create notification records for all students
   const notifications = students.students.map((student) => ({
     title,
     body,
@@ -94,14 +91,16 @@ export const sendNotificationToMultipleStudents = async (
 
   const createdNotifications = await notificationRepository.createMany(notifications);
 
-  // Group students by FCM token
+  const sessionMap = await studentSessionRepository.findByStudentIds(studentIds);
   const fcmTokens = [];
   const tokenToNotificationMap = new Map();
 
   students.students.forEach((student, index) => {
-    if (student.fcmToken) {
-      fcmTokens.push(student.fcmToken);
-      tokenToNotificationMap.set(student.fcmToken, createdNotifications[index]._id);
+    const session = sessionMap.get(student._id.toString());
+    const token = session?.fcmToken;
+    if (token) {
+      fcmTokens.push(token);
+      tokenToNotificationMap.set(token, createdNotifications[index]._id);
     }
   });
 

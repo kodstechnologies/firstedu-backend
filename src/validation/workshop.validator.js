@@ -39,14 +39,20 @@ const updateWorkshop = Joi.object({
   isPublished: Joi.boolean().optional(),
 });
 
+const initiateWorkshopPayment = Joi.object({
+  paymentMethod: Joi.string().valid("free", "wallet", "razorpay").required(),
+});
+
 const registerForWorkshop = Joi.object({
-  paymentId: Joi.string().trim().optional(),
-  paymentMethod: Joi.string().valid("wallet", "gateway").optional(),
+  razorpayOrderId: Joi.string().trim().required(),
+  razorpayPaymentId: Joi.string().trim().required(),
+  razorpaySignature: Joi.string().trim().required(),
 });
 
 export default {
   createWorkshop,
   updateWorkshop,
+  initiateWorkshopPayment,
   registerForWorkshop,
 };
 

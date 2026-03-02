@@ -217,14 +217,7 @@ import {
   rejectApplication,
 } from '../controllers/teacherConnectApply.controller.js';
 import { verifyJWT } from "../middleware/auth.middleware.js";
-
-
-
-
 import { uploadCourseMaterial, uploadImage, uploadSuccessStory } from '../utils/multerConfig.js';
-
-
-
 
 const router = Router();
 

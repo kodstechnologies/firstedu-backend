@@ -38,9 +38,14 @@ const updateTournament = Joi.object({
   isPublished: Joi.boolean().optional(),
 });
 
+const initiateTournamentPayment = Joi.object({
+  paymentMethod: Joi.string().valid("free", "wallet", "razorpay").required(),
+});
+
 const registerForTournament = Joi.object({
-  paymentId: Joi.string().trim().optional(),
-  paymentMethod: Joi.string().valid("wallet", "gateway").optional(),
+  razorpayOrderId: Joi.string().trim().required(),
+  razorpayPaymentId: Joi.string().trim().required(),
+  razorpaySignature: Joi.string().trim().required(),
 });
 
 const declareWinners = Joi.object({
@@ -53,6 +58,7 @@ const declareWinners = Joi.object({
 export default {
   createTournament,
   updateTournament,
+  initiateTournamentPayment,
   registerForTournament,
   declareWinners,
 };
