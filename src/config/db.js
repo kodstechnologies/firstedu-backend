@@ -1,6 +1,8 @@
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
-import { seedAdmin } from '../utils/seedAdmin.js'; // ✅ Add this
+import { seedAdmin } from '../utils/seedAdmin.js';
+// Ensure models are registered at startup (required for StudentSession collection)
+import '../models/StudentSession.js';
 
 dotenv.config();
 

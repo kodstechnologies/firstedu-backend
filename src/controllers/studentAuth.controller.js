@@ -154,10 +154,12 @@ export const login = asyncHandler(async (req, res) => {
   const refreshToken = student.generateRefreshToken();
   const userAgent = req.get("user-agent") || null;
 
+  const fcmTokenValue = (fcmToken && fcmToken.trim()) ? fcmToken.trim() : null;
+
   await studentSessionRepository.create({
     student: student._id,
     refreshToken,
-    fcmToken: (fcmToken && fcmToken.trim()) ? fcmToken.trim() : null,
+    fcmToken: fcmTokenValue,
     deviceId: (deviceId && deviceId.trim()) ? deviceId.trim() : null,
     userAgent,
   });
@@ -177,7 +179,12 @@ export const login = asyncHandler(async (req, res) => {
     .cookie("refreshToken", refreshToken, options)
     .json(
       ApiResponse.success(
-        { user: loggedInStudent, accessToken, refreshToken },
+        {
+          user: loggedInStudent,
+          accessToken,
+          refreshToken,
+          fcmTokenRegistered: !!fcmTokenValue,
+        },
         "Student logged in successfully"
       )
     );

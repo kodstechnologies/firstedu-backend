@@ -67,8 +67,12 @@ const updateFcmToken = async (studentId, fcmToken) => {
       { $set: { fcmToken: fcmToken || null, lastActiveAt: new Date() } },
       { new: true }
     );
+    if (!session) {
+      throw new ApiError(404, "No active session. Please login again.");
+    }
     return session;
   } catch (error) {
+    if (error instanceof ApiError) throw error;
     throw new ApiError(500, "Failed to update session FCM token", error.message);
   }
 };
