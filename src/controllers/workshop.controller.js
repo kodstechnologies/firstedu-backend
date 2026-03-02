@@ -151,6 +151,36 @@ export const getWorkshopDetails = asyncHandler(async (req, res) => {
   );
 });
 
+export const initiateWorkshopPayment = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { error, value } = workshopValidator.initiateWorkshopPayment.validate(req.body);
+
+  if (error) {
+    throw new ApiError(
+      400,
+      "Validation Error",
+      error.details.map((x) => x.message)
+    );
+  }
+
+  const result = await eventRegistrationService.initiateEventRegistration(
+    "workshop",
+    id,
+    req.user._id,
+    value.paymentMethod
+  );
+
+  if (result.completed) {
+    return res.status(201).json(
+      ApiResponse.success(result.registration, "Successfully registered for workshop")
+    );
+  }
+
+  return res.status(200).json(
+    ApiResponse.success(result, "Payment order created. Complete payment and call register API.")
+  );
+});
+
 export const registerForWorkshop = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { error, value } = workshopValidator.registerForWorkshop.validate(req.body);
@@ -162,32 +192,21 @@ export const registerForWorkshop = asyncHandler(async (req, res) => {
       error.details.map((x) => x.message)
     );
   }
-  
+
   const registration = await eventRegistrationService.registerForEvent(
     "workshop",
     id,
     req.user._id,
     {
-      paymentStatus: "completed",
-      paymentId: value.paymentId,
-      paymentMethod: value.paymentMethod,
+      paymentMethod: "gateway",
+      razorpayOrderId: value.razorpayOrderId,
+      razorpayPaymentId: value.razorpayPaymentId,
+      razorpaySignature: value.razorpaySignature,
     }
   );
 
   return res.status(201).json(
     ApiResponse.success(registration, "Successfully registered for workshop")
-  );
-});
-
-export const initiateWorkshopPayment = asyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const data = await eventRegistrationService.initiateEventPayment(
-    "workshop",
-    id,
-    req.user._id
-  );
-  return res.status(200).json(
-    ApiResponse.success(data, "Payment order created. Complete payment to register.")
   );
 });
 

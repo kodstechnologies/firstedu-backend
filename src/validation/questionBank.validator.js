@@ -7,7 +7,12 @@ const optionSchema = Joi.object({
 
 const sectionSchema = Joi.object({
   count: Joi.number().min(1).required(),
-  difficulty: Joi.string().valid("easy", "medium", "hard").required(),
+  difficulty: Joi.string()
+    .valid("easy", "medium", "hard")
+    .required()
+    .lowercase(),
+  id: Joi.number().optional(),
+  name: Joi.string().trim().optional(),
 });
 
 const questionItemSchema = Joi.object({
@@ -42,6 +47,10 @@ const questionItemSchema = Joi.object({
   categoryId: Joi.string().optional(),
   subject: Joi.string().trim().optional(),
   topic: Joi.string().trim().optional(),
+  difficulty: Joi.string()
+    .valid("easy", "medium", "hard")
+    .optional()
+    .lowercase(),
   marks: Joi.number().min(0).default(1),
   negativeMarks: Joi.number().min(0).default(0),
   tags: Joi.array().items(Joi.string().trim()).optional(),

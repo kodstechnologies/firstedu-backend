@@ -156,6 +156,36 @@ export const getOlympiadDetails = asyncHandler(async (req, res) => {
   );
 });
 
+export const initiateOlympiadPayment = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { error, value } = olympiadValidator.initiateOlympiadPayment.validate(req.body);
+
+  if (error) {
+    throw new ApiError(
+      400,
+      "Validation Error",
+      error.details.map((x) => x.message)
+    );
+  }
+
+  const result = await eventRegistrationService.initiateEventRegistration(
+    "olympiad",
+    id,
+    req.user._id,
+    value.paymentMethod
+  );
+
+  if (result.completed) {
+    return res.status(201).json(
+      ApiResponse.success(result.registration, "Successfully registered for olympiad")
+    );
+  }
+
+  return res.status(200).json(
+    ApiResponse.success(result, "Payment order created. Complete payment and call register API.")
+  );
+});
+
 export const registerForOlympiad = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { error, value } = olympiadValidator.registerForOlympiad.validate(req.body);
@@ -173,26 +203,15 @@ export const registerForOlympiad = asyncHandler(async (req, res) => {
     id,
     req.user._id,
     {
-      paymentStatus: "completed",
-      paymentId: value.paymentId,
-      paymentMethod: value.paymentMethod,
+      paymentMethod: "gateway",
+      razorpayOrderId: value.razorpayOrderId,
+      razorpayPaymentId: value.razorpayPaymentId,
+      razorpaySignature: value.razorpaySignature,
     }
   );
 
   return res.status(201).json(
     ApiResponse.success(registration, "Successfully registered for olympiad")
-  );
-});
-
-export const initiateOlympiadPayment = asyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const data = await eventRegistrationService.initiateEventPayment(
-    "olympiad",
-    id,
-    req.user._id
-  );
-  return res.status(200).json(
-    ApiResponse.success(data, "Payment order created. Complete payment to register.")
   );
 });
 
