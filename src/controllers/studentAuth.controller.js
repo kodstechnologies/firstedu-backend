@@ -412,32 +412,3 @@ export const convertPoints = asyncHandler(async (req, res) => {
   );
 });
 
-// Get Student Profile
-export const getProfile = asyncHandler(async (req, res) => {
-  const studentId = req.user._id;
-
-  // findById should not return password by default
-  const student = await studentRepository.findById(studentId);
-
-  if (!student) {
-    throw new ApiError(404, "Student not found");
-  }
-
-  // Explicitly create a safe object to return, excluding sensitive fields.
-  const safeStudentData = {
-    _id: student._id,
-    name: student.name,
-    email: student.email,
-    phone: student.phone,
-    profileImage: student.profileImage,
-    schoolOrCollege: student.schoolOrCollege,
-    classOrGrade: student.classOrGrade,
-    referralCode: student.referralCode,
-    status: student.status,
-    createdAt: student.createdAt,
-  };
-
-  return res
-    .status(200)
-    .json(ApiResponse.success(safeStudentData, "Student profile fetched successfully"));
-});
