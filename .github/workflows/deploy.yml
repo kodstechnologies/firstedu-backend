@@ -1,0 +1,39 @@
+name: Deploy FirstEdu Backend
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Deploy to EC2 via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd /home/ubuntu/firstedu-backend
+
+            echo "Pulling latest code..."
+            git pull origin main
+
+            echo "Installing dependencies..."
+            npm install
+
+            echo "Restarting PM2..."
+            pm2 restart firstedu-backend || pm2 start src/server.js --name firstedu-backend
+
+            pm2 save
+
+            echo "Ensuring Nginx is running..."
+            sudo systemctl restart nginx
+
+            echo "Deployment completed!"

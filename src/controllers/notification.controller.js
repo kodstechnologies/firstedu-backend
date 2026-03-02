@@ -2,7 +2,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import * as notificationService from "../services/notification.service.js";
-import studentRepository from "../repository/student.repository.js";
+import studentSessionRepository from "../repository/studentSession.repository.js";
 
 // ==================== ADMIN CONTROLLERS ====================
 
@@ -93,7 +93,7 @@ export const sendNotificationToAllStudents = asyncHandler(async (req, res) => {
 // ==================== STUDENT CONTROLLERS ====================
 
 /**
- * Register/Update FCM token (Student)
+ * Register/Update FCM token for current session (Student)
  */
 export const registerFCMToken = asyncHandler(async (req, res) => {
   const { fcmToken } = req.body;
@@ -103,7 +103,7 @@ export const registerFCMToken = asyncHandler(async (req, res) => {
     throw new ApiError(400, "FCM token is required");
   }
 
-  await studentRepository.updateById(studentId, { fcmToken });
+  await studentSessionRepository.updateFcmToken(studentId, fcmToken.trim());
 
   return res.status(200).json(
     ApiResponse.success(

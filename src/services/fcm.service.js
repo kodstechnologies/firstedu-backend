@@ -65,6 +65,46 @@ export const sendNotificationToDevice = async (fcmToken, title, body, data = {})
 };
 
 /**
+ * Send FCM data-only message to a single device (no notification popup).
+ * Use for silent events like FORCE_LOGOUT so the app can clear local session.
+ * @param {string} fcmToken - FCM token of the recipient
+ * @param {object} data - Data payload (all values must be strings for FCM)
+ * @returns {Promise<object>} - FCM response
+ */
+export const sendDataOnlyToDevice = async (fcmToken, data = {}) => {
+  if (!firebaseAdmin) {
+    throw new Error("Firebase Admin SDK not initialized");
+  }
+  if (!fcmToken) {
+    throw new Error("FCM token is required");
+  }
+  const stringData = Object.fromEntries(
+    Object.entries(data).map(([k, v]) => [k, String(v)])
+  );
+  const message = {
+    token: fcmToken,
+    data: stringData,
+    android: { priority: "high" },
+    apns: {
+      payload: {
+        aps: { contentAvailable: true },
+      },
+      headers: { "apns-priority": "10" },
+    },
+  };
+  try {
+    const response = await firebaseAdmin.messaging().send(message);
+    return { success: true, messageId: response };
+  } catch (error) {
+    if (error.code === "messaging/invalid-registration-token" ||
+        error.code === "messaging/registration-token-not-registered") {
+      return { success: false, error: "invalid_token", message: error.message };
+    }
+    throw error;
+  }
+};
+
+/**
  * Send FCM notification to multiple devices
  * @param {string[]} fcmTokens - Array of FCM tokens
  * @param {string} title - Notification title

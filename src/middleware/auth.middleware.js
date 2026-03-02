@@ -4,7 +4,7 @@ import { ApiError } from "../utils/ApiError.js";
 import Admin from "../models/Admin.js";
 import User from "../models/Student.js";
 import Teacher from "../models/Teacher.js";
-import studentRepository from "../repository/student.repository.js";
+import studentSessionRepository from "../repository/studentSession.repository.js";
 
 export const verifyJWT = asyncHandler(async (req, _, next) => {
   const token =
@@ -35,9 +35,7 @@ export const verifyJWT = asyncHandler(async (req, _, next) => {
     }
 
     if (user.status === "banned") {
-      await studentRepository.updateById(user._id, {
-        $unset: { refreshToken: 1 },
-      });
+      await studentSessionRepository.deleteByStudentId(user._id);
       throw new ApiError(403, "You are banned by the admin");
     }
 

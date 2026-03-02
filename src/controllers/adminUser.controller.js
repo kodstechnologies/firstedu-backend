@@ -2,6 +2,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import studentRepository from "../repository/student.repository.js";
+import studentSessionRepository from "../repository/studentSession.repository.js";
 import examSessionRepository from "../repository/examSession.repository.js";
 
 // List Students with pagination/search
@@ -102,10 +103,13 @@ export const updateStudentStatus = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Student not found");
   }
 
-  const updateData =
-    status === "banned"
-      ? { $set: { status: "banned" }, $unset: { refreshToken: 1 } }
-      : { $set: { status: "active" } };
+  const updateData = status === "banned"
+    ? { $set: { status: "banned" } }
+    : { $set: { status: "active" } };
+
+  if (status === "banned") {
+    await studentSessionRepository.deleteByStudentId(id);
+  }
 
   const updated = await studentRepository.updateById(id, updateData);
   return res.status(200).json(

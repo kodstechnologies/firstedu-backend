@@ -5,8 +5,10 @@ import { generateOTP } from "../utils/otp.js";
 import { sendOTPEmail } from "../utils/sendEmail.js";
 import { uploadImageToCloudinary } from "../utils/cloudinaryUpload.js";
 import studentRepository from "../repository/student.repository.js";
+import studentSessionRepository from "../repository/studentSession.repository.js";
 import userValidator from "../validation/student.validator.js";
 import studentService from "../services/student.service.js";
+import { sendDataOnlyToDevice } from "../services/fcm.service.js";
 
 
 // Student Signup
@@ -94,7 +96,7 @@ export const signup = asyncHandler(async (req, res) => {
     .json(ApiResponse.success(createdStudent, "Student registered successfully"));
 });
 
-// Student Login
+// Student Login (session-based, single device: alreadyLoggedInElsewhere + forceLogin flow)
 export const login = asyncHandler(async (req, res) => {
   const { error, value } = userValidator.studentLogin.validate(req.body);
 
@@ -102,7 +104,7 @@ export const login = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Validation Error", error.details.map(x => x.message));
   }
 
-  const { email, password } = value;
+  const { email, password, fcmToken, forceLogin, deviceId } = value;
 
   const student = await studentRepository.findOne({ email }, true);
 
@@ -120,12 +122,47 @@ export const login = asyncHandler(async (req, res) => {
     throw new ApiError(401, "Invalid user credentials");
   }
 
+  const existingSession = await studentSessionRepository.findByStudentId(student._id);
+  const alreadyLoggedInElsewhere = !!existingSession;
+
+  if (alreadyLoggedInElsewhere && !forceLogin) {
+    return res.status(200).json(
+      ApiResponse.success(
+        {
+          alreadyLoggedInElsewhere: true,
+          message: "You are logged in on another device. Please logout there to continue, or confirm to login here and logout from that device.",
+        },
+        "Already logged in on another device"
+      )
+    );
+  }
+
+  if (alreadyLoggedInElsewhere && forceLogin && existingSession.fcmToken) {
+    try {
+      await sendDataOnlyToDevice(existingSession.fcmToken, {
+        type: "FORCE_LOGOUT",
+        reason: "logged_in_elsewhere",
+      });
+    } catch (err) {
+      console.error("FCM force-logout notification failed:", err);
+    }
+  }
+
+  await studentSessionRepository.deleteByStudentId(student._id);
+
   const accessToken = student.generateAccessToken();
   const refreshToken = student.generateRefreshToken();
+  const userAgent = req.get("user-agent") || null;
 
-  student.refreshToken = refreshToken;
-  student.lastLogin = new Date();
-  await studentRepository.save(student);
+  await studentSessionRepository.create({
+    student: student._id,
+    refreshToken,
+    fcmToken: (fcmToken && fcmToken.trim()) ? fcmToken.trim() : null,
+    deviceId: (deviceId && deviceId.trim()) ? deviceId.trim() : null,
+    userAgent,
+  });
+
+  await studentRepository.updateById(student._id, { lastLogin: new Date() });
 
   const loggedInStudent = await studentRepository.findById(student._id);
 
@@ -271,13 +308,9 @@ export const resetPassword = asyncHandler(async (req, res) => {
   );
 });
 
-// Logout
+// Logout (deletes session for this user; clears cookies)
 export const logout = asyncHandler(async (req, res) => {
-  await studentRepository.updateById(req.user._id, {
-    $unset: {
-      refreshToken: 1,
-    },
-  });
+  await studentSessionRepository.deleteByStudentId(req.user._id);
 
   const options = {
     httpOnly: true,
