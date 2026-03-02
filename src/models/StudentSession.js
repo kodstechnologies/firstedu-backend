@@ -19,11 +19,8 @@ const studentSessionSchema = new mongoose.Schema(
     userAgent: { type: String, default: null, trim: true },
     lastActiveAt: { type: Date, default: Date.now },
   },
-  { timestamps: true }
+  { timestamps: true, collection: "studentsessions" }
 );
-
-// One active session per student
-studentSessionSchema.index({ student: 1 }, { unique: true });
 
 export default mongoose.models.StudentSession ||
   mongoose.model("StudentSession", studentSessionSchema);
