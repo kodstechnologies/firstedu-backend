@@ -1,32 +1,40 @@
 import admin from "firebase-admin";
-import dotenv from "dotenv";
+import { readFileSync, existsSync } from "fs";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
 
-dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// Path to service account JSON (in config folder)
+const SERVICE_ACCOUNT_PATH = join(__dirname, "firebase-service-account.json");
 
 // Initialize Firebase Admin SDK
 let firebaseApp;
 
 try {
-  // Check if Firebase is already initialized
   if (admin.apps.length === 0) {
-    if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
-      throw new Error("FIREBASE_SERVICE_ACCOUNT environment variable is required");
+    if (!existsSync(SERVICE_ACCOUNT_PATH)) {
+      throw new Error(
+        `Firebase service account file not found at: ${SERVICE_ACCOUNT_PATH}. ` +
+        "Create firebase-service-account.json in src/config (see firebase-service-account.json)."
+      );
     }
 
-    let serviceAccount;
-    try {
-      // Try parsing the JSON string
-      serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-    } catch (parseError) {
-      console.error("❌ Failed to parse FIREBASE_SERVICE_ACCOUNT JSON:", parseError.message);
-      console.error("📝 Make sure your .env file has valid JSON. Example format:");
-      console.error('FIREBASE_SERVICE_ACCOUNT={"type":"service_account","project_id":"...","private_key":"...","client_email":"..."}');
-      throw new Error("Invalid JSON in FIREBASE_SERVICE_ACCOUNT. Check your .env file.");
-    }
+    const serviceAccount = JSON.parse(
+      readFileSync(SERVICE_ACCOUNT_PATH, "utf8")
+    );
 
-    // Validate required fields
     if (!serviceAccount.project_id || !serviceAccount.private_key || !serviceAccount.client_email) {
-      throw new Error("FIREBASE_SERVICE_ACCOUNT is missing required fields: project_id, private_key, or client_email");
+      throw new Error(
+        "Service account JSON is missing required fields: project_id, private_key, or client_email"
+      );
+    }
+
+    // Fix private key newlines if stored as literal \n (e.g. from copy-paste)
+    if (typeof serviceAccount.private_key === "string") {
+      serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, "\n");
     }
 
     firebaseApp = admin.initializeApp({
@@ -40,13 +48,9 @@ try {
 } catch (error) {
   console.error("❌ Firebase Admin SDK initialization error:", error.message);
   console.warn(
-    "⚠️  Push notifications will not work. Please configure FIREBASE_SERVICE_ACCOUNT in your .env file."
-  );
-  console.warn(
-    "💡 Tip: If your JSON contains quotes, make sure to escape them properly or use single quotes around the entire JSON string."
+    "⚠️  Push notifications will not work. Add firebase-service-account.json in src/config (see firebase-service-account.json)."
   );
 }
 
 export default firebaseApp;
 export { admin };
-

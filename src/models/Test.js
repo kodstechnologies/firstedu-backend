@@ -36,11 +36,6 @@ const testSchema = new mongoose.Schema(
       required: true,
       min: 1,
     },
-    negativeMarksPerQuestion: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
     isPublished: {
       type: Boolean,
       default: false,
