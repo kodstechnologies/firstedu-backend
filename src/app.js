@@ -17,6 +17,7 @@ app.use(
       const allowedOrigins = process.env.CORS_ORIGIN?.split(",").map((o) =>
         o.trim()
       ) || [
+          "https://iscorre.com",
           "http://localhost:3000",
           "http://localhost:5173",
           "http://localhost:5174",
