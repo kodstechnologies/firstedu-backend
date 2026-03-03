@@ -120,6 +120,7 @@ import {
   getTicketById,
   getTicketMessages,
   sendMessage,
+  getTicketCategories,
 } from "../controllers/studentSupport.controller.js";
 import {
   submitSupport,
@@ -370,9 +371,24 @@ router.post("/teacher-connect/apply", uploadPDF.single("resume"), applyForJob);
 // Ticket Management
 router.post("/support/tickets", verifyJWT, createTicket);
 router.get("/support/tickets", verifyJWT, getMyTickets);
-router.get("/support/tickets/:ticketId", verifyJWT, getTicketById);
-router.get("/support/tickets/:ticketId/messages", verifyJWT, getTicketMessages);
-router.post("/support/tickets/:ticketId/messages", verifyJWT, sendMessage);
+
+// Specific routes like '/categories' must come before parameterized routes like '/:ticketId'
+router.get("/support/tickets/categories", verifyJWT, getTicketCategories);
+router.get(
+  "/support/tickets/:ticketId",
+  verifyJWT,
+  getTicketById
+);
+router.get(
+  "/support/tickets/:ticketId/messages",
+  verifyJWT,
+  getTicketMessages
+);
+router.post(
+  "/support/tickets/:ticketId/messages",
+  verifyJWT,
+  sendMessage
+);
 
 // ==================== NOTIFICATIONS ====================
 
@@ -405,5 +421,3 @@ router.get("/competitions/:idOrSlug", getCompetitionByIdOrSlug);
 
 
 export default router;
-
-

@@ -2,28 +2,78 @@ import { ApiError } from '../utils/ApiError.js';
 import supportTicketRepository from '../repository/supportTicket.repository.js';
 import supportMessageRepository from '../repository/supportMessage.repository.js';
 
+const SUPPORT_TICKET_CATEGORIES = [
+  'technical',
+  'billing',
+  'course',
+  'account',
+  'payment',
+  'exam_issue',
+  'proctoring_issue',
+  'certificate_issue',
+  'content_error',
+  'feature_request',
+  'teacher_connect',
+  'live_event',
+  'feedback',
+  'general_inquiry',
+  'other',
+];
+
+const getPriorityForCategory = (category) => {
+  switch (category) {
+    case 'payment':
+    case 'billing':
+    case 'exam_issue':
+    case 'proctoring_issue':
+    case 'technical':
+      return 'high';
+    case 'course':
+    case 'account':
+    case 'certificate_issue':
+    case 'teacher_connect':
+    case 'live_event':
+      return 'medium';
+    case 'content_error':
+    case 'feature_request':
+    case 'feedback':
+    case 'general_inquiry':
+      return 'low';
+    case 'other':
+    default:
+      return 'medium';
+  }
+};
+
 /**
  * Create a new support ticket
  */
 export const createTicket = async (studentId, ticketData) => {
+  const category = SUPPORT_TICKET_CATEGORIES.includes(ticketData.category)
+    ? ticketData.category
+    : 'other';
+
   const ticket = await supportTicketRepository.create({
-    ticketNumber: ticketData.ticketNumber, // ✅ REQUIRED
-
+    ticketNumber: ticketData.ticketNumber,
     student: studentId,
-
     subject: ticketData.subject,
-
     description: ticketData.description,
-
-    category: ticketData.category || 'other',
-
-    priority: ticketData.priority || 'medium',
-
+    category,
+    priority: ticketData.priority || getPriorityForCategory(category),
     status: 'open',
   });
 
   return ticket;
 };
+
+/**
+ * Get all available support ticket categories with default priority.
+ */
+export const getTicketCategories = async () =>
+  SUPPORT_TICKET_CATEGORIES.map((category) => ({
+    name: category,
+    priority: getPriorityForCategory(category),
+  }));
 
 /**
  * Get student's tickets
@@ -194,7 +244,7 @@ export const sendMessage = async (
   const messageData = {
     ticket: ticketId,
     sender: senderId,
-    senderType: senderType === 'admin' ? 'Admin' : 'User',
+    senderType: senderType.toLowerCase() === 'admin' ? 'Admin' : 'User',
     message,
     attachments,
   };
@@ -279,4 +329,5 @@ export default {
   sendMessage,
   getTicketMessages,
   getUnreadCount,
+  getTicketCategories,
 };
