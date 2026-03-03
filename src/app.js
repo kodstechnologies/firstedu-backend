@@ -11,26 +11,28 @@ dotenv.config();
 const app = express();
 
 // CORS
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      const allowedOrigins = process.env.CORS_ORIGIN?.split(",").map((o) =>
-        o.trim()
-      ) || [
-          "https://iscorre.com",
-          "http://localhost:3000",
-          "http://localhost:5173",
-          "http://localhost:5174",
-        ];
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS"));
-      }
-    },
-    credentials: true,
-  })
-);
+// app.use(
+//   cors({
+//     origin: (origin, callback) => {
+//       const allowedOrigins = process.env.CORS_ORIGIN?.split(",").map((o) =>
+//         o.trim()
+//       ) || [
+//           "https://iscorre.com",
+//           "http://localhost:3000",
+//           "http://localhost:5173",
+//           "http://localhost:5174",
+//         ];
+//       if (!origin || allowedOrigins.includes(origin)) {
+//         callback(null, true);
+//       } else {
+//         callback(new Error("Not allowed by CORS"));
+//       }
+//     },
+//     credentials: true,
+//   })
+// );
+
+app.use(cors());
 
 // Webhooks: raw body required for signature verification (must be before express.json)
 app.use(
