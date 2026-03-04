@@ -75,12 +75,45 @@ export const createWorkshop = async (data, adminId, file) => {
     registrationStartTime,
     registrationEndTime,
     eventType: eventType || "workshop",
+    isPublished: data.isPublished === true || data.isPublished === "true",
     createdBy: adminId,
   });
 };
 
+/** Valid status values for server-side filtering. */
+const VALID_STATUSES = ["close", "open", "upcoming", "live", "completed"];
+
+const buildStatusQuery = (status) => {
+  const now = new Date();
+  switch (status) {
+    case "close":
+      return { registrationStartTime: { $gt: now } };
+    case "open":
+      return {
+        $and: [
+          { registrationStartTime: { $lte: now } },
+          { registrationEndTime: { $gte: now } },
+        ],
+      };
+    case "upcoming":
+      return {
+        registrationEndTime: { $lt: now },
+        startTime: { $gt: now },
+      };
+    case "live":
+      return {
+        startTime: { $lte: now },
+        endTime: { $gte: now },
+      };
+    case "completed":
+      return { endTime: { $lt: now } };
+    default:
+      return null;
+  }
+};
+
 export const getWorkshops = async (options = {}) => {
-  const { page = 1, limit = 10, search, isPublished, eventType, teacherId } = options;
+  const { page = 1, limit = 10, search, isPublished, eventType, teacherId, status } = options;
 
   const query = {};
   if (search) {
@@ -97,6 +130,12 @@ export const getWorkshops = async (options = {}) => {
   }
   if (teacherId) {
     query.teacher = teacherId;
+  }
+  const normalizedStatus =
+    typeof status === "string" ? status.trim().toLowerCase() : null;
+  if (normalizedStatus && VALID_STATUSES.includes(normalizedStatus)) {
+    const statusQuery = buildStatusQuery(normalizedStatus);
+    if (statusQuery) Object.assign(query, statusQuery);
   }
 
   const pageNum = parseInt(page);

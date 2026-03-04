@@ -18,6 +18,16 @@ const findByStudentId = async (studentId) => {
   }
 };
 
+/** Find session by id (for validating token – single-device enforcement). */
+const findById = async (sessionId) => {
+  try {
+    if (!sessionId) return null;
+    return await StudentSession.findById(sessionId).lean();
+  } catch (error) {
+    return null;
+  }
+};
+
 const findByRefreshToken = async (refreshToken) => {
   try {
     return await StudentSession.findOne({ refreshToken });
@@ -60,6 +70,21 @@ const deleteById = async (sessionId) => {
   }
 };
 
+const updateRefreshToken = async (sessionId, refreshToken) => {
+  try {
+    const session = await StudentSession.findByIdAndUpdate(
+      sessionId,
+      { $set: { refreshToken, lastActiveAt: new Date() } },
+      { new: true }
+    );
+    if (!session) throw new ApiError(404, "Session not found");
+    return session;
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError(500, "Failed to update session", error.message);
+  }
+};
+
 const updateFcmToken = async (studentId, fcmToken) => {
   try {
     const session = await StudentSession.findOneAndUpdate(
@@ -90,11 +115,13 @@ const updateLastActive = async (studentId) => {
 
 export default {
   create,
+  findById,
   findByStudentId,
   findByRefreshToken,
   findByStudentIds,
   deleteByStudentId,
   deleteById,
+  updateRefreshToken,
   updateFcmToken,
   updateLastActive,
 };

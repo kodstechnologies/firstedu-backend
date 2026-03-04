@@ -150,19 +150,20 @@ export const login = asyncHandler(async (req, res) => {
 
   await studentSessionRepository.deleteByStudentId(student._id);
 
-  const accessToken = student.generateAccessToken();
-  const refreshToken = student.generateRefreshToken();
   const userAgent = req.get("user-agent") || null;
-
   const fcmTokenValue = (fcmToken && fcmToken.trim()) ? fcmToken.trim() : null;
 
-  await studentSessionRepository.create({
+  const session = await studentSessionRepository.create({
     student: student._id,
-    refreshToken,
+    refreshToken: student.generateRefreshToken(),
     fcmToken: fcmTokenValue,
     deviceId: (deviceId && deviceId.trim()) ? deviceId.trim() : null,
     userAgent,
   });
+
+  const accessToken = student.generateAccessToken(session._id);
+  const refreshToken = student.generateRefreshToken(session._id);
+  await studentSessionRepository.updateRefreshToken(session._id, refreshToken);
 
   await studentRepository.updateById(student._id, { lastLogin: new Date() });
 
@@ -315,9 +316,13 @@ export const resetPassword = asyncHandler(async (req, res) => {
   );
 });
 
-// Logout (deletes session for this user; clears cookies)
+// Logout (deletes this device's session; clears cookies)
 export const logout = asyncHandler(async (req, res) => {
-  await studentSessionRepository.deleteByStudentId(req.user._id);
+  if (req.user.sessionId) {
+    await studentSessionRepository.deleteById(req.user.sessionId);
+  } else {
+    await studentSessionRepository.deleteByStudentId(req.user._id);
+  }
 
   const options = {
     httpOnly: true,

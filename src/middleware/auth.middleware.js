@@ -39,7 +39,14 @@ export const verifyJWT = asyncHandler(async (req, _, next) => {
       throw new ApiError(403, "You are banned by the admin");
     }
 
+    if (decodedToken.sessionId) {
+      const session = await studentSessionRepository.findById(decodedToken.sessionId);
+      if (!session || session.student.toString() !== user._id.toString()) {
+        throw new ApiError(401, "Session invalidated. Please login again.");
+      }
+    }
     req.user = user;
+    if (decodedToken.sessionId) req.user.sessionId = decodedToken.sessionId;
     next();
   } catch (error) {
     // Handle specific JWT errors

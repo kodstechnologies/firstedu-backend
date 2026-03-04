@@ -1,7 +1,7 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
-import { getEventStatus, withEventStatus } from "../utils/eventStatus.js";
+import { getEventStatus, getGoesLiveAt, withEventStatus } from "../utils/eventStatus.js";
 import workshopService from "../services/workshop.service.js";
 import eventRegistrationService from "../services/eventRegistration.service.js";
 import workshopValidator from "../validation/workshop.validator.js";
@@ -26,7 +26,7 @@ export const createWorkshop = asyncHandler(async (req, res) => {
 });
 
 export const getWorkshops = asyncHandler(async (req, res) => {
-  const { page, limit, search, isPublished, eventType, teacherId } = req.query;
+  const { page, limit, search, isPublished, eventType, teacherId, status } = req.query;
   const result = await workshopService.getWorkshops({
     page,
     limit,
@@ -34,11 +34,13 @@ export const getWorkshops = asyncHandler(async (req, res) => {
     isPublished,
     eventType,
     teacherId,
+    status,
   });
 
   const workshopsWithStatus = (result.workshops || []).map((w) => ({
     ...(w?.toObject ? w.toObject() : w),
     status: getEventStatus(w),
+    goesLiveAt: getGoesLiveAt(w),
   }));
   return res.status(200).json(
     ApiResponse.success(workshopsWithStatus, "Workshops fetched successfully", result.pagination)
@@ -50,7 +52,11 @@ export const getWorkshopById = asyncHandler(async (req, res) => {
   const workshop = await workshopService.getWorkshopById(id);
   return res.status(200).json(
     ApiResponse.success(
-      { ...(workshop?.toObject ? workshop.toObject() : workshop), status: getEventStatus(workshop) },
+      {
+        ...(workshop?.toObject ? workshop.toObject() : workshop),
+        status: getEventStatus(workshop),
+        goesLiveAt: getGoesLiveAt(workshop),
+      },
       "Workshop fetched successfully"
     )
   );
@@ -85,7 +91,7 @@ export const deleteWorkshop = asyncHandler(async (req, res) => {
 // ==================== STUDENT CONTROLLERS ====================
 
 export const getPublishedWorkshops = asyncHandler(async (req, res) => {
-  const { page = 1, limit = 10, search, eventType } = req.query;
+  const { page = 1, limit = 10, search, eventType, status } = req.query;
 
   const result = await workshopService.getWorkshops({
     page,
@@ -93,6 +99,7 @@ export const getPublishedWorkshops = asyncHandler(async (req, res) => {
     search,
     isPublished: true,
     eventType,
+    status,
   });
 
   const workshopsWithStatus = await Promise.all(

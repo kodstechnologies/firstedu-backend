@@ -53,7 +53,7 @@ export const createCourse = async (data, adminId, files) => {
     contentUrl,
     contentType: contentType || "pdf",
     price: data.price || 0,
-    isPublished: data.isPublished,
+    isPublished: data.isPublished === true || data.isPublished === "true",
     createdBy: adminId,
   });
   return course;

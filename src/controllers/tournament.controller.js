@@ -1,7 +1,7 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
-import { getEventStatus, withEventStatus } from "../utils/eventStatus.js";
+import { getEventStatus, getGoesLiveAt, withEventStatus } from "../utils/eventStatus.js";
 import tournamentService from "../services/tournament.service.js";
 import eventRegistrationService from "../services/eventRegistration.service.js";
 import tournamentValidator from "../validation/tournament.validator.js";
@@ -37,6 +37,7 @@ export const getTournaments = asyncHandler(async (req, res) => {
   const tournamentsWithStatus = (result.tournaments || []).map((t) => ({
     ...(t?.toObject ? t.toObject() : t),
     status: getEventStatus(t),
+    goesLiveAt: getGoesLiveAt(t),
   }));
   return res.status(200).json(
     ApiResponse.success(tournamentsWithStatus, "Tournaments fetched successfully", result.pagination)
@@ -48,7 +49,11 @@ export const getTournamentById = asyncHandler(async (req, res) => {
   const tournament = await tournamentService.getTournamentById(id, true);
   return res.status(200).json(
     ApiResponse.success(
-      { ...(tournament?.toObject ? tournament.toObject() : tournament), status: getEventStatus(tournament) },
+      {
+        ...(tournament?.toObject ? tournament.toObject() : tournament),
+        status: getEventStatus(tournament),
+        goesLiveAt: getGoesLiveAt(tournament),
+      },
       "Tournament fetched successfully"
     )
   );
@@ -108,16 +113,17 @@ export const declareTournamentWinners = asyncHandler(async (req, res) => {
 // ==================== STUDENT CONTROLLERS ====================
 
 export const getPublishedTournaments = asyncHandler(async (req, res) => {
-  const { page = 1, limit = 10, search } = req.query;
+  const { page = 1, limit = 10, search, status, registeredOnly } = req.query;
 
   const result = await tournamentService.getTournaments({
     page,
     limit,
     search,
+    status: status || undefined,
     isPublished: true,
   });
 
-  const tournamentsWithStatus = await Promise.all(
+  let tournamentsWithStatus = await Promise.all(
     result.tournaments.map(async (tournament) => {
       const registration = await eventRegistrationService.getRegistrationByEvent(
         "tournament",
@@ -128,6 +134,10 @@ export const getPublishedTournaments = asyncHandler(async (req, res) => {
       return { ...obj, isRegistered: !!registration };
     })
   );
+
+  if (registeredOnly === "true" || registeredOnly === true) {
+    tournamentsWithStatus = tournamentsWithStatus.filter((t) => t.isRegistered);
+  }
 
   return res.status(200).json(
     ApiResponse.success(tournamentsWithStatus, "Tournaments fetched successfully", result.pagination)

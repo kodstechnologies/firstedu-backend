@@ -1,5 +1,6 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
+import { getGoesLiveAt } from "../utils/eventStatus.js";
 import olympiadService from "../services/olympiad.service.js";
 import tournamentService from "../services/tournament.service.js";
 import workshopService from "../services/workshop.service.js";
@@ -7,7 +8,7 @@ import workshopService from "../services/workshop.service.js";
 /** olympiad | tournament | workshop | both (both = tournaments + workshops only) */
 const VALID_CATEGORIES = ["olympiad", "tournament", "workshop", "both"];
 
-/** status = "open" (within registration), "close" (before), "completed" (after end) */
+/** status = "open" (within registration), "close" (before), "completed" (after end); goesLiveAt = countdown target */
 const addRegistrationStatus = (item) => {
   const doc = item?.toObject ? item.toObject() : { ...item };
   const now = new Date();
@@ -16,6 +17,7 @@ const addRegistrationStatus = (item) => {
   if (now >= start && now <= end) doc.status = "open";
   else if (now > end) doc.status = "completed";
   else doc.status = "close";
+  doc.goesLiveAt = getGoesLiveAt(item, { onlyWithin24Hours: true });
   return doc;
 };
 
@@ -24,11 +26,12 @@ const addRegistrationStatus = (item) => {
  *
  * Query params:
  * - category: "olympiad" | "tournament" | "workshop" | "both" — filter (both = tournaments + workshops only)
+ * - status: "close" | "open" | "upcoming" | "live" | "completed" — filter by event status
  * - search: string — search in title/description/subject (case-insensitive)
  * - page, limit: pagination (limit max 50)
  */
 export const getAllEvents = asyncHandler(async (req, res) => {
-  const { page = 1, limit = 20, category, search } = req.query;
+  const { page = 1, limit = 20, category, status, search } = req.query;
   const pageNum = parseInt(page);
   const limitNum = Math.min(parseInt(limit) || 20, 50);
 
@@ -51,7 +54,13 @@ export const getAllEvents = asyncHandler(async (req, res) => {
   const fetchWorkshops =
     !normalizedCategory || normalizedCategory === "workshop" || normalizedCategory === "both";
 
-  const baseOptions = { page: pageNum, limit: limitNum, isPublished: true, search: search || undefined };
+  const baseOptions = {
+    page: pageNum,
+    limit: limitNum,
+    isPublished: true,
+    search: search || undefined,
+    status: status || undefined,
+  };
 
   const [olympiadResult, tournamentResult, workshopResult] = await Promise.all([
     fetchOlympiads ? olympiadService.getOlympiads(baseOptions) : Promise.resolve({ olympiads: [], pagination: { page: pageNum, limit: limitNum, total: 0, pages: 0 } }),

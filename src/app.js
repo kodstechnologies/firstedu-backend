@@ -33,6 +33,8 @@ app.use(
   })
 );
 
+// app.use(cors());
+
 // Webhooks: raw body required for signature verification (must be before express.json)
 app.use(
   "/webhooks/razorpay",

@@ -1,7 +1,7 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
-import { getEventStatus, withEventStatus } from "../utils/eventStatus.js";
+import { getEventStatus, getGoesLiveAt, withEventStatus } from "../utils/eventStatus.js";
 import olympiadService from "../services/olympiad.service.js";
 import eventRegistrationService from "../services/eventRegistration.service.js";
 import olympiadValidator from "../validation/olympiad.validator.js";
@@ -37,6 +37,7 @@ export const getOlympiads = asyncHandler(async (req, res) => {
   const olympiadsWithStatus = (result.olympiads || []).map((o) => ({
     ...(o?.toObject ? o.toObject() : o),
     status: getEventStatus(o),
+    goesLiveAt: getGoesLiveAt(o),
   }));
   return res.status(200).json(
     ApiResponse.success(olympiadsWithStatus, "Olympiads fetched successfully", result.pagination)
@@ -48,7 +49,11 @@ export const getOlympiadById = asyncHandler(async (req, res) => {
   const olympiad = await olympiadService.getOlympiadById(id, true);
   return res.status(200).json(
     ApiResponse.success(
-      { ...(olympiad?.toObject ? olympiad.toObject() : olympiad), status: getEventStatus(olympiad) },
+      {
+        ...(olympiad?.toObject ? olympiad.toObject() : olympiad),
+        status: getEventStatus(olympiad),
+        goesLiveAt: getGoesLiveAt(olympiad),
+      },
       "Olympiad fetched successfully"
     )
   );
@@ -108,16 +113,17 @@ export const declareOlympiadWinners = asyncHandler(async (req, res) => {
 // ==================== STUDENT CONTROLLERS ====================
 
 export const getPublishedOlympiads = asyncHandler(async (req, res) => {
-  const { page = 1, limit = 10, search } = req.query;
+  const { page = 1, limit = 10, search, status, registeredOnly } = req.query;
 
   const result = await olympiadService.getOlympiads({
     page,
     limit,
     search,
+    status: status || undefined,
     isPublished: true,
   });
 
-  const olympiadsWithStatus = await Promise.all(
+  let olympiadsWithStatus = await Promise.all(
     result.olympiads.map(async (olympiad) => {
       const registration = await eventRegistrationService.getRegistrationByEvent(
         "olympiad",
@@ -128,6 +134,10 @@ export const getPublishedOlympiads = asyncHandler(async (req, res) => {
       return { ...obj, isRegistered: !!registration };
     })
   );
+
+  if (registeredOnly === "true" || registeredOnly === true) {
+    olympiadsWithStatus = olympiadsWithStatus.filter((o) => o.isRegistered);
+  }
 
   return res.status(200).json(
     ApiResponse.success(olympiadsWithStatus, "Olympiads fetched successfully", result.pagination)

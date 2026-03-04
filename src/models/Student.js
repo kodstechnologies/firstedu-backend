@@ -37,20 +37,23 @@ studentSchema.methods.isPasswordCorrect = async function (enteredPassword) {
   return await bcrypt.compare(enteredPassword, this.password);
 };
 
-// 👇 Method to generate Access Token
-studentSchema.methods.generateAccessToken = function () {
+// 👇 Method to generate Access Token (sessionId required for students – enforces single device)
+studentSchema.methods.generateAccessToken = function (sessionId = null) {
+  const payload = { _id: this._id, phone: this.phone };
+  if (sessionId) payload.sessionId = sessionId.toString();
   return jwt.sign(
-    { _id: this._id, phone: this.phone },
+    payload,
     process.env.ACCESS_TOKEN_SECRET,
-
     { expiresIn: "2d" }
   );
 };
 
-// 👇 Method to generate Refresh Token
-studentSchema.methods.generateRefreshToken = function () {
+// 👇 Method to generate Refresh Token (sessionId required for students)
+studentSchema.methods.generateRefreshToken = function (sessionId = null) {
+  const payload = { _id: this._id, phone: this.phone };
+  if (sessionId) payload.sessionId = sessionId.toString();
   return jwt.sign(
-    { _id: this._id, phone: this.phone },
+    payload,
     process.env.REFRESH_TOKEN_SECRET,
     { expiresIn: "7d" }
   );
