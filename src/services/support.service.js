@@ -176,10 +176,16 @@ export const updateTicketStatus = async (ticketId, status, adminId = null) => {
     updateData.resolvedAt = new Date();
   }
 
-  if (status === 'closed' && !ticket.closedAt) {
-    updateData.closedAt = new Date();
-    await supportMessageRepository.deleteTicketMessages(ticketId);
-  }
+if (status === 'closed') {
+
+  // Delete all messages
+  await supportMessageRepository.deleteTicketMessages(ticketId);
+
+  // Delete ticket (room)
+  await supportTicketRepository.deleteById(ticketId);
+
+  return { message: "Ticket and full chat deleted successfully" };
+}
 
   if (status === 'open' && ticket.resolvedAt) {
     updateData.resolvedAt = null;

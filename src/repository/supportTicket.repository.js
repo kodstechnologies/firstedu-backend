@@ -215,6 +215,16 @@ const updateLastMessageAt = async (ticketId) => {
   }
 };
 
+const deleteById = async (ticketId) => {
+  try {
+    throwIfInvalidTicketId(ticketId);
+
+    return await SupportTicket.findByIdAndDelete(ticketId);
+
+  } catch (error) {
+    throw new ApiError(500, "Failed to delete ticket", error.message);
+  }
+};
 export default {
   create,
   findById,
@@ -224,5 +234,6 @@ export default {
   findAllTickets,
   addInternalNote,
   updateLastMessageAt,
+  deleteById ,
 };
 
