@@ -4,9 +4,7 @@ const createTicket = Joi.object({
   ticketNumber: Joi.string()
     .trim()
     .pattern(/^TKT-\d{6}-\d{3}$/)
-    .required()
     .messages({
-      'string.empty': 'Ticket number is required',
       'string.pattern.base': 'Invalid ticket number format',
     }),
 
@@ -15,7 +13,23 @@ const createTicket = Joi.object({
   description: Joi.string().trim().required().min(10).max(2000),
 
   category: Joi.string()
-    .valid('technical', 'billing', 'course', 'account', 'other')
+    .valid(
+      'technical',
+      'billing',
+      'course',
+      'account',
+      'payment',
+      'exam_issue',
+      'proctoring_issue',
+      'certificate_issue',
+      'content_error',
+      'feature_request',
+      'teacher_connect',
+      'live_event',
+      'feedback',
+      'general_inquiry',
+      'other'
+    )
     .optional(),
 
   priority: Joi.string().valid('low', 'medium', 'high', 'urgent').optional(),

@@ -131,6 +131,7 @@ import {
   addInternalNote,
   getTicketMessages,
   sendMessage,
+  getTicketCategories,
 } from "../controllers/adminSupport.controller.js";
 import {
   sendNotificationToStudent,
@@ -403,6 +404,7 @@ router.delete('/blogs/:id', verifyJWT, deleteBlog);
 
 // Ticket Management
 router.get("/support/tickets", verifyJWT, getAllTickets);
+router.get("/support/tickets/categories", verifyJWT, getTicketCategories);
 router.get("/support/tickets/:ticketId", verifyJWT, getTicketById);
 router.post("/support/tickets/:ticketId/assign", verifyJWT, assignTicket);
 router.put("/support/tickets/:ticketId/status", verifyJWT, updateTicketStatus);

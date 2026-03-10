@@ -160,6 +160,20 @@ export const getQuestionPalette = asyncHandler(async (req, res) => {
   );
 });
 
+/**
+ * Get all in-progress exams for the student
+ */
+export const getInProgressExams = asyncHandler(async (req, res) => {
+  const studentId = req.user._id;
+  const { page = 1, limit = 10 } = req.query;
+
+  const result = await examSessionService.getInProgressSessions(studentId, page, limit);
+
+  return res.status(200).json(
+    ApiResponse.success(result.sessions, "In-progress exams fetched successfully", result.pagination)
+  );
+});
+
 export default {
   startExam,
   pauseExam,
@@ -171,5 +185,5 @@ export default {
   submitExam,
   getExamResults,
   getQuestionPalette,
+  getInProgressExams,
 };
-

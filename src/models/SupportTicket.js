@@ -1,11 +1,11 @@
 import mongoose from "mongoose";
+import crypto from "crypto";
 
 const supportTicketSchema = new mongoose.Schema(
   {
     ticketNumber: {
       type: String,
       unique: true,
-      required: true,
     },
     student: {
       type: mongoose.Schema.Types.ObjectId,
@@ -24,7 +24,23 @@ const supportTicketSchema = new mongoose.Schema(
     },
     category: {
       type: String,
-      enum: ["technical", "billing", "course", "account", "other"],
+      enum: [
+        "technical",
+        "billing",
+        "course",
+        "account",
+        "payment",
+        "exam_issue",
+        "proctoring_issue",
+        "certificate_issue",
+        "content_error",
+        "feature_request",
+        "teacher_connect",
+        "live_event",
+        "feedback",
+        "general_inquiry",
+        "other",
+      ],
       default: "other",
     },
     priority: {
@@ -82,14 +98,22 @@ const supportTicketSchema = new mongoose.Schema(
   }
 );
 
-// Generate unique ticket number before save
+
+
+function generateTicketNumber() {
+  const letters = crypto.randomBytes(2).toString("hex").toUpperCase(); // 4 letters
+  const numbers = Math.floor(100000 + Math.random() * 900000); // 6 digit number
+  return `TKT-${letters}-${numbers}`;
+}
+
 supportTicketSchema.pre("save", async function (next) {
   if (!this.ticketNumber) {
-    const count = await mongoose.model("SupportTicket").countDocuments();
-    this.ticketNumber = `TKT-${String(count + 1).padStart(6, "0")}`;
+    this.ticketNumber = generateTicketNumber();
   }
   next();
 });
+// Generate unique ticket number before save
+
 
 // Indexes for efficient queries
 supportTicketSchema.index({ student: 1, createdAt: -1 });

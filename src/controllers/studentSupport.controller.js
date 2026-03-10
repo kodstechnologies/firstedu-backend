@@ -119,11 +119,24 @@ export const sendMessage = asyncHandler(async (req, res) => {
     .json(ApiResponse.success(newMessage, "Message sent successfully"));
 });
 
+/**
+ * Get all ticket categories
+ */
+export const getTicketCategories = asyncHandler(async (req, res) => {
+  const categories = await supportService.getTicketCategories();
+  return res
+    .status(200)
+    .json(
+      ApiResponse.success(categories, "Ticket categories fetched successfully")
+    );
+});
+
 export default {
   createTicket,
   getMyTickets,
   getTicketById,
   getTicketMessages,
   sendMessage,
+  getTicketCategories,
 };
 

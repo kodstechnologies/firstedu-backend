@@ -89,6 +89,7 @@ import {
   submitExam,
   getExamResults,
   getQuestionPalette,
+  getInProgressExams,
 } from "../controllers/examSession.controller.js";
 import {
   getWallet,
@@ -120,6 +121,7 @@ import {
   getTicketById,
   getTicketMessages,
   sendMessage,
+  getTicketCategories,
 } from "../controllers/studentSupport.controller.js";
 import {
   submitSupport,
@@ -177,12 +179,18 @@ router.post("/login", login);
 // Contact Us (no JWT)
 router.post("/contact-us", contactUs);
 router.post("/logout", verifyJWT, logout);
-router.get("/profile", verifyJWT, getProfile);
+
+router.get('/profile', verifyJWT, getProfile);
+router.get('/get-profile', verifyJWT, getProfile);
+// router.get("/profile", verifyJWT, getProfile);
 router.post("/forgot-password/request", requestForgotPasswordOTP);
 router.post("/forgot-password/verify", verifyForgotPasswordOTP);
 router.post("/forgot-password/reset", resetPassword);
 router.put("/update-profile", verifyJWT, updateProfile);
 router.put("/change-password", verifyJWT, changePassword);
+
+// Marketplace - All Resources (Combined)
+router.get("/marketplace/all", verifyJWT, getAllResources);
 
 // Marketplace - Courses
 router.get("/courses", verifyJWT, getCourses);
@@ -279,6 +287,9 @@ router.get("/examhall", verifyJWT, getExamHall);
 // Start Exam Session
 router.post("/tests/:testId/start-exam", verifyJWT, startExam);
 
+// Get In-Progress Exams
+router.get("/exam-sessions/in-progress", verifyJWT, getInProgressExams);
+
 // Get Exam Session (with questions, timer, palette)
 router.get("/exam-sessions/:sessionId", verifyJWT, getExamSession);
 
@@ -367,9 +378,24 @@ router.post("/teacher-connect/apply", uploadPDF.single("resume"), applyForJob);
 // Ticket Management
 router.post("/support/tickets", verifyJWT, createTicket);
 router.get("/support/tickets", verifyJWT, getMyTickets);
-router.get("/support/tickets/:ticketId", verifyJWT, getTicketById);
-router.get("/support/tickets/:ticketId/messages", verifyJWT, getTicketMessages);
-router.post("/support/tickets/:ticketId/messages", verifyJWT, sendMessage);
+
+// Specific routes like '/categories' must come before parameterized routes like '/:ticketId'
+router.get("/support/tickets/categories", verifyJWT, getTicketCategories);
+router.get(
+  "/support/tickets/:ticketId",
+  verifyJWT,
+  getTicketById
+);
+router.get(
+  "/support/tickets/:ticketId/messages",
+  verifyJWT,
+  getTicketMessages
+);
+router.post(
+  "/support/tickets/:ticketId/messages",
+  verifyJWT,
+  sendMessage
+);
 
 // ==================== NOTIFICATIONS ====================
 

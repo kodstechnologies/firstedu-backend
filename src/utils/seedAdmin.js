@@ -8,7 +8,7 @@ export const seedAdmin = async () => {
       const newAdmin = new Admin({
         name: 'Super Admin',
         email: 'mohantysoumyan13@gmail.com',
-        password: 'admin@123',  // Will be auto-hashed due to pre-save hook
+        password: 'admin@12345',  // Will be auto-hashed due to pre-save hook
         userType: 'Admin',
       });
 
