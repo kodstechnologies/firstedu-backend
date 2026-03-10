@@ -27,6 +27,7 @@ import {
   purchaseTestBundle,
   getMyTests,
   getExamHall,
+  getAllResources,
 } from "../controllers/marketplace.controller.js";
 import {
   getDetailedAnalysis,
