@@ -211,6 +211,7 @@ import {
   updateApplyJob,
   deleteApplyJob,
   getAllApplicationsAdmin,
+  getInterviewTakenAdmin,
   getApplicationByIdAdmin,
   scheduleInterview,
   approveApplication,
@@ -486,6 +487,7 @@ router.get('/teacher-connect/jobs/:id', verifyJWT, getApplyJobByIdAdmin);
 router.put('/teacher-connect/jobs/:id', verifyJWT, updateApplyJob);
 router.delete('/teacher-connect/jobs/:id', verifyJWT, deleteApplyJob);
 router.get('/teacher-connect/applications', verifyJWT, getAllApplicationsAdmin);
+router.get('/teacher-connect/interview-taken', verifyJWT, getInterviewTakenAdmin);
 router.get('/teacher-connect/applications/:id', verifyJWT, getApplicationByIdAdmin);
 router.post('/teacher-connect/applications/:id/schedule-interview', verifyJWT, scheduleInterview);
 router.post('/teacher-connect/applications/:id/approve', verifyJWT, approveApplication);

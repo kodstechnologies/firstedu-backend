@@ -20,12 +20,13 @@ import {
   getTests,
   getTestsAndBundles,
   getTestById,
-  createTestOrder,
+  initiateTestPayment,
   purchaseTest,
   getTestBundles,
-  createTestBundleOrder,
+  initiateTestBundlePayment,
   purchaseTestBundle,
   getMyTests,
+  getExamHall,
 } from "../controllers/marketplace.controller.js";
 import {
   getDetailedAnalysis,
@@ -79,6 +80,7 @@ import { getAllEvents } from "../controllers/events.controller.js";
 import { contactUs } from "../controllers/contact.controller.js";
 import {
   startExam,
+  pauseExam,
   getExamSession,
   saveAnswer,
   markForReview,
@@ -194,12 +196,12 @@ router.get("/courses/:id/follow-up-tests", verifyJWT, getCourseFollowUpTests);
 router.get("/tests", verifyJWT, getTests);
 router.get("/tests-and-bundles", verifyJWT, getTestsAndBundles);
 router.get("/tests/:id", verifyJWT, getTestById);
-router.post("/tests/:id/create-order", verifyJWT, createTestOrder);
+router.post("/tests/:id/initiate-payment", verifyJWT, initiateTestPayment);
 router.post("/tests/:id/purchase", verifyJWT, purchaseTest);
 
 // Marketplace - Test Bundles
 router.get("/test-bundles", getTestBundles);
-router.post("/test-bundles/:id/create-order", verifyJWT, createTestBundleOrder);
+router.post("/test-bundles/:id/initiate-payment", verifyJWT, initiateTestBundlePayment);
 router.post("/test-bundles/:id/purchase", verifyJWT, purchaseTestBundle);
 
 // Categories (taxonomy for filtering tests/question banks)
@@ -271,11 +273,17 @@ router.get("/my-events", verifyJWT, getMyEventsDashboard);
 
 // ==================== EXAM HALL (Examination System) ====================
 
+// Exam Hall - all purchased tests and test series
+router.get("/examhall", verifyJWT, getExamHall);
+
 // Start Exam Session
 router.post("/tests/:testId/start-exam", verifyJWT, startExam);
 
 // Get Exam Session (with questions, timer, palette)
 router.get("/exam-sessions/:sessionId", verifyJWT, getExamSession);
+
+// Pause Exam (stops timer; call start-exam to resume)
+router.post("/exam-sessions/:sessionId/pause", verifyJWT, pauseExam);
 
 // Save Answer
 router.put("/exam-sessions/:sessionId/questions/:questionId/answer", verifyJWT, saveAnswer);

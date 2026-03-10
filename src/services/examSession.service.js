@@ -54,16 +54,36 @@ export const startExamSession = async (testId, studentId) => {
     }
   }
 
-  // Check if there's an existing active session
-  const existingSession = await examSessionRepository.findOne({
+  // Check if there's an existing in_progress session (resume without pause)
+  const inProgressSession = await examSessionRepository.findOne({
     student: studentId,
     test: testId,
     status: "in_progress",
   });
 
-  if (existingSession) {
-    // Return existing session
-    return await getExamSession(existingSession._id, studentId);
+  if (inProgressSession) {
+    return await getExamSession(inProgressSession._id, studentId);
+  }
+
+  // Check if there's a paused session (resume from pause - timer was stopped)
+  const pausedSession = await examSessionRepository.findOne({
+    student: studentId,
+    test: testId,
+    status: "paused",
+  });
+
+  if (pausedSession) {
+    const now = new Date();
+    const remainingMs = pausedSession.remainingTimeAtPause ?? 0;
+    const newEndTime = new Date(now.getTime() + remainingMs);
+
+    pausedSession.status = "in_progress";
+    pausedSession.endTime = newEndTime;
+    pausedSession.pausedAt = null;
+    pausedSession.remainingTimeAtPause = null;
+    await examSessionRepository.save(pausedSession);
+
+    return await getExamSession(pausedSession._id, studentId);
   }
 
   // Check if there's a completed session (prevent retaking)
@@ -162,8 +182,11 @@ export const getExamSession = async (sessionId, studentId) => {
     }
   }
 
-  // Calculate remaining time
-  const remainingTime = Math.max(0, new Date(session.endTime).getTime() - now.getTime());
+  // Calculate remaining time (use stored value when paused)
+  const remainingTime =
+    session.status === "paused" && session.remainingTimeAtPause != null
+      ? session.remainingTimeAtPause
+      : Math.max(0, new Date(session.endTime).getTime() - now.getTime());
 
   // Remove correct answers from questions (for security)
   const questions = session.answers.map((answer) => {
@@ -402,6 +425,35 @@ export const logProctoringEvent = async (sessionId, eventType, metadata, student
   }
 
   return { success: true, message: "Proctoring event logged", autoSubmitted: false };
+};
+
+/**
+ * Pause exam session (stops the timer; call start-exam to resume)
+ */
+export const pauseExamSession = async (sessionId, studentId) => {
+  const session = await examSessionRepository.findOne({
+    _id: sessionId,
+    student: studentId,
+    status: "in_progress",
+  });
+
+  if (!session) {
+    throw new ApiError(404, "Exam session not found or not in progress");
+  }
+
+  const now = new Date();
+  const remainingMs = Math.max(0, new Date(session.endTime).getTime() - now.getTime());
+
+  session.status = "paused";
+  session.pausedAt = now;
+  session.remainingTimeAtPause = remainingMs;
+  await examSessionRepository.save(session);
+
+  return {
+    success: true,
+    message: "Exam paused successfully. Call start-exam to resume.",
+    remainingTimeAtPause: remainingMs,
+  };
 };
 
 /**
@@ -766,6 +818,7 @@ const formatTime = (ms) => {
 
 export default {
   startExamSession,
+  pauseExamSession,
   getExamSession,
   saveAnswer,
   markForReview,

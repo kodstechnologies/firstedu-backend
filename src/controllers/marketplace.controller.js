@@ -188,16 +188,31 @@ export const getTestById = asyncHandler(async (req, res) => {
     .json(ApiResponse.success(testData, "Test fetched successfully"));
 });
 
-// Create Razorpay order for test checkout
-export const createTestOrder = asyncHandler(async (req, res) => {
+// Initiate test payment (free, wallet, or razorpay - like olympiad/tournament/workshop)
+export const initiateTestPayment = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const studentId = req.user._id;
 
-  const data = await marketplaceService.createTestOrder(id, studentId);
+  const { error, value } = marketplaceValidator.initiateTestPayment.validate(req.body);
+  if (error) {
+    throw new ApiError(
+      400,
+      "Validation Error",
+      error.details.map((x) => x.message)
+    );
+  }
 
-  return res
-    .status(200)
-    .json(ApiResponse.success(data, "Order created for checkout"));
+  const result = await marketplaceService.initiateTestPayment(id, studentId, value.paymentMethod);
+
+  if (result.completed) {
+    return res.status(201).json(
+      ApiResponse.success(result.purchase, "Test purchased successfully")
+    );
+  }
+
+  return res.status(200).json(
+    ApiResponse.success(result, "Payment order created. Complete payment and call purchase API.")
+  );
 });
 
 // Purchase Test
@@ -252,16 +267,31 @@ export const getTestBundles = asyncHandler(async (req, res) => {
   );
 });
 
-// Create Razorpay order for test bundle checkout
-export const createTestBundleOrder = asyncHandler(async (req, res) => {
+// Initiate test bundle payment (free, wallet, or razorpay - like olympiad/tournament/workshop)
+export const initiateTestBundlePayment = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const studentId = req.user._id;
 
-  const data = await marketplaceService.createTestBundleOrder(id, studentId);
+  const { error, value } = marketplaceValidator.initiateTestBundlePayment.validate(req.body);
+  if (error) {
+    throw new ApiError(
+      400,
+      "Validation Error",
+      error.details.map((x) => x.message)
+    );
+  }
 
-  return res
-    .status(200)
-    .json(ApiResponse.success(data, "Order created for checkout"));
+  const result = await marketplaceService.initiateTestBundlePayment(id, studentId, value.paymentMethod);
+
+  if (result.completed) {
+    return res.status(201).json(
+      ApiResponse.success(result.purchase, "Test bundle purchased successfully")
+    );
+  }
+
+  return res.status(200).json(
+    ApiResponse.success(result, "Payment order created. Complete payment and call purchase API.")
+  );
 });
 
 // Purchase Test Bundle
@@ -312,6 +342,24 @@ export const getMyTests = asyncHandler(async (req, res) => {
   );
 });
 
+// Get Exam Hall - all purchased tests and test series (bundles)
+export const getExamHall = asyncHandler(async (req, res) => {
+  const studentId = req.user._id;
+  const { page = 1, limit = 20, type = "both", category } = req.query;
+
+  const filterType = ["test", "testBundle", "both"].includes(type) ? type : "both";
+
+  const result = await marketplaceService.getExamHall(studentId, page, limit, filterType, category || null);
+
+  return res.status(200).json(
+    ApiResponse.success(
+      result.items,
+      "Exam hall fetched successfully",
+      result.pagination
+    )
+  );
+});
+
 export default {
   getCourses,
   getCourseById,
@@ -322,10 +370,11 @@ export default {
   getTests,
   getTestsAndBundles,
   getTestById,
-  createTestOrder,
+  initiateTestPayment,
   purchaseTest,
   getTestBundles,
-  createTestBundleOrder,
+  initiateTestBundlePayment,
   purchaseTestBundle,
   getMyTests,
+  getExamHall,
 };

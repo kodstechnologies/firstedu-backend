@@ -81,6 +81,20 @@ export const skipQuestion = asyncHandler(async (req, res) => {
 });
 
 /**
+ * Pause exam session (stops timer; call start-exam to resume)
+ */
+export const pauseExam = asyncHandler(async (req, res) => {
+  const { sessionId } = req.params;
+  const studentId = req.user._id;
+
+  const result = await examSessionService.pauseExamSession(sessionId, studentId);
+
+  return res.status(200).json(
+    ApiResponse.success(result, "Exam paused successfully")
+  );
+});
+
+/**
  * Log proctoring event
  */
 export const logProctoringEvent = asyncHandler(async (req, res) => {
@@ -148,6 +162,7 @@ export const getQuestionPalette = asyncHandler(async (req, res) => {
 
 export default {
   startExam,
+  pauseExam,
   getExamSession,
   saveAnswer,
   markForReview,

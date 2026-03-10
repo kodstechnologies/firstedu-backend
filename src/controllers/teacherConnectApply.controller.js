@@ -36,14 +36,14 @@ export const createApplyJob = asyncHandler(async (req, res) => {
 });
 
 /**
- * Get all jobs (admin) – pagination, optional filter by hiringFor
- * GET /admin/teacher-connect/jobs?page=1&limit=10&hiringFor=fulltime
+ * Get all jobs (admin) – pagination, optional filter by hiringFor, search
+ * GET /admin/teacher-connect/jobs?page=1&limit=10&hiringFor=fulltime&search=math
  */
 export const getAllApplyJobsAdmin = asyncHandler(async (req, res) => {
-  const { hiringFor, page, limit } = req.query;
+  const { hiringFor, search, page, limit } = req.query;
   const filters = {};
   if (hiringFor) filters.hiringFor = hiringFor;
-  const result = await applyJobService.getAllJobsPaginated(filters, { page, limit, hiringFor });
+  const result = await applyJobService.getAllJobsPaginated(filters, { page, limit, hiringFor, search });
   return res.status(200).json(
     ApiResponse.success(result.list, "Jobs fetched successfully", result.pagination)
   );
@@ -90,17 +90,39 @@ export const deleteApplyJob = asyncHandler(async (req, res) => {
 // ==================== ADMIN – Applications ====================
 
 /**
- * Get all job applications (admin) – pagination, optional filter by jobId, status
- * GET /admin/teacher-connect/applications?page=1&limit=10&jobId=...&status=applied
+ * Get all job applications (admin) – pagination, optional filter by jobId, status, search
+ * Meta includes: totalJobs, totalInterviewTaken
+ * GET /admin/teacher-connect/applications?page=1&limit=10&jobId=...&status=applied&search=john
  */
 export const getAllApplicationsAdmin = asyncHandler(async (req, res) => {
-  const { jobId, status, page, limit } = req.query;
+  const { jobId, status, search, page, limit } = req.query;
   const result = await jobApplicationService.getAllApplicationsPaginated(
     {},
-    { jobId, status, page, limit }
+    { jobId, status, search, page, limit }
   );
   return res.status(200).json(
     ApiResponse.success(result.list, "Applications fetched successfully", result.pagination)
+  );
+});
+
+/**
+ * Get interview-taken applications (admin) – candidates whose scheduled interview date has passed
+ * GET /admin/teacher-connect/interview-taken?page=1&limit=10&jobId=...&search=john
+ */
+export const getInterviewTakenAdmin = asyncHandler(async (req, res) => {
+  const { jobId, search, page, limit } = req.query;
+  const result = await jobApplicationService.getInterviewTakenPaginated({
+    jobId,
+    search,
+    page,
+    limit,
+  });
+  return res.status(200).json(
+    ApiResponse.success(
+      result.list,
+      "Interview-taken applications fetched successfully",
+      result.pagination
+    )
   );
 });
 
@@ -131,15 +153,18 @@ export const scheduleInterview = asyncHandler(async (req, res) => {
 });
 
 /**
- * Approve application – create teacher account and send credentials (admin)
+ * Approve application – auto-create teacher account and send credentials (admin)
  * POST /admin/teacher-connect/applications/:id/approve
  */
 export const approveApplication = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const application = await jobApplicationService.approveApplication(id);
-  return res
-    .status(200)
-    .json(ApiResponse.success(application, "Application approved; confirmation email sent to candidate"));
+  const { application, teacher } = await jobApplicationService.approveApplication(id);
+  return res.status(200).json(
+    ApiResponse.success(
+      { application, teacher },
+      "Application approved; teacher account created and credentials sent to candidate"
+    )
+  );
 });
 
 /**
@@ -220,6 +245,7 @@ export default {
   updateApplyJob,
   deleteApplyJob,
   getAllApplicationsAdmin,
+  getInterviewTakenAdmin,
   getApplicationByIdAdmin,
   scheduleInterview,
   approveApplication,

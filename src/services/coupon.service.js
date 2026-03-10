@@ -121,8 +121,22 @@ export const validateCoupon = async (code, purchaseAmount, itemType = "all") => 
     );
   }
 
-  // Check applicable to
-  if (coupon.applicableTo !== "all" && coupon.applicableTo !== itemType) {
+  // Check applicable to (itemType may be "test", "testBundle", "course" etc.; map to enum values)
+  const ITEM_TYPE_MAP = {
+    test: "Test",
+    testBundle: "TestSeries",
+    bundle: "TestSeries",
+    course: "Course",
+    courses: "Course",
+    olympiad: "Olympiad",
+    tournament: "Tournament",
+    workshop: "Workshop",
+    workshops: "Workshop",
+    ecommerce: "Ecommerce",
+    merchandise: "Ecommerce",
+  };
+  const normalizedItemType = ITEM_TYPE_MAP[itemType] || itemType;
+  if (coupon.applicableTo !== "all" && coupon.applicableTo !== normalizedItemType) {
     throw new ApiError(400, `Coupon is not applicable to ${itemType}`);
   }
 

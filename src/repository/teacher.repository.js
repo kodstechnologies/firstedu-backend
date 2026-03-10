@@ -65,7 +65,7 @@ const findAll = async (filter = {}, options = {}) => {
         { email: regex },
         { phone: regex },
         { about: regex },
-        { skills: { $in: [regex] } },
+        { skills: regex },
       ];
     }
 

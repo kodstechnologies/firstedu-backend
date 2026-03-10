@@ -12,7 +12,7 @@ const createCoupon = Joi.object({
   usageLimit: Joi.number().integer().positive().allow(null).optional(),
   isActive: Joi.boolean().default(true),
   applicableTo: Joi.string()
-    .valid("all", "courses", "tests", "bundles")
+    .valid("all", "Test", "TestSeries", "Course", "Olympiad", "Tournament", "Workshop", "Ecommerce")
     .default("all"),
 });
 
@@ -28,7 +28,7 @@ const updateCoupon = Joi.object({
   usageLimit: Joi.number().integer().positive().allow(null).optional(),
   isActive: Joi.boolean().optional(),
   applicableTo: Joi.string()
-    .valid("all", "courses", "tests", "bundles")
+    .valid("all", "Test", "TestSeries", "Course", "Olympiad", "Tournament", "Workshop", "Ecommerce")
     .optional(),
 });
 

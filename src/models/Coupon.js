@@ -55,7 +55,7 @@ const couponSchema = new mongoose.Schema(
     },
     applicableTo: {
       type: String,
-      enum: ["all", "courses", "tests", "bundles"],
+      enum: ["all", "Test", "TestSeries", "Course", "Olympiad", "Tournament", "Workshop", "Ecommerce"],
       default: "all",
     },
   },

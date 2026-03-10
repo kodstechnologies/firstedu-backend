@@ -8,10 +8,18 @@ const purchaseCourse = Joi.object({
   razorpaySignature: Joi.string().trim().required(),
 });
 
+const initiateTestPayment = Joi.object({
+  paymentMethod: Joi.string().valid("free", "wallet", "razorpay").required(),
+});
+
 const purchaseTest = Joi.object({
   razorpayOrderId: Joi.string().trim().required(),
   razorpayPaymentId: Joi.string().trim().required(),
   razorpaySignature: Joi.string().trim().required(),
+});
+
+const initiateTestBundlePayment = Joi.object({
+  paymentMethod: Joi.string().valid("free", "wallet", "razorpay").required(),
 });
 
 const purchaseTestBundle = Joi.object({
@@ -23,7 +31,9 @@ const purchaseTestBundle = Joi.object({
 export default {
   createCourseOrder,
   purchaseCourse,
+  initiateTestPayment,
   purchaseTest,
+  initiateTestBundlePayment,
   purchaseTestBundle,
 };
 

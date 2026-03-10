@@ -113,7 +113,7 @@ export const declareTournamentWinners = asyncHandler(async (req, res) => {
 // ==================== STUDENT CONTROLLERS ====================
 
 export const getPublishedTournaments = asyncHandler(async (req, res) => {
-  const { page = 1, limit = 10, search, status, registeredOnly } = req.query;
+  const { page = 1, limit = 10, search, status, registeredOnly, category } = req.query;
 
   const result = await tournamentService.getTournaments({
     page,
@@ -121,6 +121,7 @@ export const getPublishedTournaments = asyncHandler(async (req, res) => {
     search,
     status: status || undefined,
     isPublished: true,
+    category: category || undefined,
   });
 
   let tournamentsWithStatus = await Promise.all(

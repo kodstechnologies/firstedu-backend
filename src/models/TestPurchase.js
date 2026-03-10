@@ -50,10 +50,16 @@ testPurchaseSchema.pre("validate", function (next) {
   next();
 });
 
-// Prevent duplicate purchases for individual tests
-testPurchaseSchema.index({ student: 1, test: 1 }, { unique: true, sparse: true });
-// Prevent duplicate purchases for bundles
-testPurchaseSchema.index({ student: 1, testBundle: 1 }, { unique: true, sparse: true });
+// Prevent duplicate purchases for individual tests (only when test is set)
+testPurchaseSchema.index(
+  { student: 1, test: 1 },
+  { unique: true, partialFilterExpression: { test: { $exists: true } } }
+);
+// Prevent duplicate purchases for bundles (only when testBundle is set)
+testPurchaseSchema.index(
+  { student: 1, testBundle: 1 },
+  { unique: true, partialFilterExpression: { testBundle: { $exists: true } } }
+);
 
 export default mongoose.models.TestPurchase ||
   mongoose.model("TestPurchase", testPurchaseSchema);

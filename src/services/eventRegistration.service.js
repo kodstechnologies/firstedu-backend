@@ -7,6 +7,7 @@ import examSessionRepository from "../repository/examSession.repository.js";
 import walletService from "./wallet.service.js";
 import razorpayOrderIntentRepository from "../repository/razorpayOrderIntent.repository.js";
 import { createRazorpayOrder, verifyPaymentSignature } from "../utils/razorpayUtils.js";
+import { getApplicableOfferDetails } from "../utils/offerUtils.js";
 
 const EVENT_MODEL_MAP = {
   olympiad: "Olympiad",
@@ -76,8 +77,13 @@ export const registerForEvent = async (
 
   // When event has a price, payment is required before registration
   if (price > 0) {
+    const { discountedPrice: regDiscountedPrice } = EVENT_TYPE_TO_OFFER_MODULE[eventType]
+      ? await getApplicableOfferDetails(EVENT_TYPE_TO_OFFER_MODULE[eventType], price)
+      : { discountedPrice: price };
+    const regAmountToCharge = regDiscountedPrice;
+
     if (paymentMethod === "wallet") {
-      await walletService.deductMonetaryBalance(studentId, price, "User");
+      await walletService.deductMonetaryBalance(studentId, regAmountToCharge, "User");
       return await eventRegistrationRepository.create({
         student: studentId,
         eventType,
@@ -115,10 +121,7 @@ export const registerForEvent = async (
       if (intent.type !== eventType || intent.entityId?.toString?.() !== eventIdStr) {
         throw new ApiError(400, "Payment does not match this event");
       }
-      const amountPaise = Math.round(price * 100);
-      if (intent.amountPaise !== amountPaise) {
-        throw new ApiError(400, "Payment amount does not match event price");
-      }
+      // Intent amount may be discounted (offer applied); signature verification confirms payment
       const created = await eventRegistrationRepository.create({
         student: studentId,
         eventType,
@@ -342,6 +345,11 @@ export const initiateEventRegistration = async (
   }
 
   const price = Number(event.price) || 0;
+  const offerModule = EVENT_TYPE_TO_OFFER_MODULE[eventType];
+  const { discountedPrice, appliedOffer } = offerModule
+    ? await getApplicableOfferDetails(offerModule, price)
+    : { discountedPrice: price, appliedOffer: null };
+  const amountToCharge = discountedPrice;
 
   if (paymentMethod === "free") {
     if (price > 0) {
@@ -402,6 +410,9 @@ export const initiateEventRegistration = async (
       eventType,
       eventId,
       eventTitle: event.title,
+      appliedOffer: appliedOffer || undefined,
+      originalPrice: price,
+      discountedPrice: amountToCharge,
     };
   }
 

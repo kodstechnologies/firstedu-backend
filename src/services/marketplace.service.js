@@ -3,12 +3,15 @@ import courseRepository from "../repository/course.repository.js";
 import testRepository from "../repository/test.repository.js";
 import courseTestLinkRepository from "../repository/courseTestLink.repository.js";
 import orderRepository from "../repository/order.repository.js";
+import examSessionRepository from "../repository/examSession.repository.js";
 import razorpayOrderIntentRepository from "../repository/razorpayOrderIntent.repository.js";
 import pointsService from "./points.service.js";
+import walletService from "./wallet.service.js";
 import {
   createRazorpayOrder,
   verifyPaymentSignature,
 } from "../utils/razorpayUtils.js";
+import { attachOfferToList, attachOfferToItem, getApplicableOfferDetails } from "../utils/offerUtils.js";
 
 /**
  * Get all published courses (marketplace listing)
@@ -48,11 +51,12 @@ export const getCourses = async (options = {}) => {
     access,
   });
 
-  const courses = result.courses.map((course) => {
+  const coursesRaw = result.courses.map((course) => {
     const courseObj = course.toObject();
     delete courseObj.contentUrl;
     return courseObj;
   });
+  const courses = await attachOfferToList(coursesRaw, "Course", "price");
   const total = result.pagination.total;
 
   return {
@@ -81,7 +85,7 @@ export const getCourseById = async (courseId, studentId) => {
     paymentStatus: "completed",
   });
 
-  const courseData = course.toObject();
+  const courseData = await attachOfferToItem(course, "Course", "price");
   courseData.isPurchased = !!purchase;
   if (!courseData.isPurchased) delete courseData.contentUrl;
 
@@ -138,6 +142,9 @@ export const createCourseOrder = async (courseId, studentId) => {
     key: razorpayKeyId,
     courseId,
     courseTitle: course.title,
+    appliedOffer: appliedOffer || undefined,
+    originalPrice: price,
+    discountedPrice: amountToCharge,
   };
 };
 
@@ -173,13 +180,28 @@ export const purchaseCourse = async (
     throw new ApiError(400, "Payment verification failed");
   }
 
+  const intent = await razorpayOrderIntentRepository.findByOrderId(razorpayOrderId);
+  if (!intent) {
+    throw new ApiError(400, "Invalid order or payment already used");
+  }
+  const studentIdStr = studentId?.toString?.() ?? String(studentId);
+  const courseIdStr = courseId?.toString?.() ?? String(courseId);
+  if (intent.studentId?.toString?.() !== studentIdStr) {
+    throw new ApiError(403, "This payment was made by a different user");
+  }
+  if (intent.type !== "course" || intent.entityId?.toString?.() !== courseIdStr) {
+    throw new ApiError(400, "Payment does not match this course");
+  }
+  const purchasePrice = intent.amountPaise / 100;
+
   const purchaseData = await orderRepository.createCoursePurchase({
     student: studentId,
     course: courseId,
-    purchasePrice: course.price,
+    purchasePrice,
     paymentId: razorpayPaymentId,
     paymentStatus: "completed",
   });
+  await razorpayOrderIntentRepository.markReconciled(razorpayOrderId, razorpayPaymentId);
 
   try {
     await pointsService.awardCoursePurchasePoints(
@@ -385,12 +407,13 @@ export const getTests = async (options = {}) => {
     isPublished: true,
   });
 
-  const tests = result.tests.map((test) => {
+  const testsRaw = result.tests.map((test) => {
     const testObj = test.toObject();
     delete testObj.questions;
     delete testObj.randomConfig;
     return testObj;
   });
+  const tests = await attachOfferToList(testsRaw, "Test", "price");
   const total = result.pagination.total;
 
   return {
@@ -405,9 +428,12 @@ export const getTests = async (options = {}) => {
 };
 
 /**
- * Create Razorpay order for test checkout
+ * Initiate test purchase. Handles free, wallet, and razorpay (like olympiad/tournament/workshop).
+ * - free: completes purchase immediately if price is 0
+ * - wallet: deducts balance and completes purchase immediately
+ * - razorpay: creates order, returns order details; purchase completed via purchase API after payment
  */
-export const createTestOrder = async (testId, studentId) => {
+export const initiateTestPayment = async (testId, studentId, paymentMethod) => {
   const test = await testRepository.findTestById(testId);
 
   if (!test || !test.isPublished) {
@@ -423,38 +449,96 @@ export const createTestOrder = async (testId, studentId) => {
     throw new ApiError(400, "Test already purchased");
   }
 
-  const price = Number(test.price);
-  if (!price || price < 1) {
-    throw new ApiError(400, "Test price is invalid or free");
+  const price = Number(test.price) || 0;
+  const { discountedPrice, appliedOffer } = await getApplicableOfferDetails("Test", price);
+  const amountToCharge = discountedPrice;
+
+  if (paymentMethod === "free") {
+    if (price > 0) {
+      throw new ApiError(400, "This test is paid. Use paymentMethod: wallet or razorpay.");
+    }
+    const purchase = await orderRepository.createTestPurchase({
+      student: studentId,
+      test: testId,
+      purchasePrice: 0,
+      paymentId: "free",
+      paymentStatus: "completed",
+    });
+    return { purchase, completed: true };
   }
 
-  const receipt = `test_${testId}_${studentId}_${Date.now()}`.substring(0, 40);
-  const order = await createRazorpayOrder(price, receipt);
-
-  await razorpayOrderIntentRepository.create({
-    orderId: order.orderId,
-    studentId,
-    type: "test",
-    entityId: testId,
-    entityModel: "Test",
-    amountPaise: order.amount,
-    currency: order.currency || "INR",
-    receipt,
-  });
-
-  const razorpayKeyId = process.env.RAZORPAY_KEY_ID;
-  if (!razorpayKeyId) {
-    throw new ApiError(500, "Payment gateway not configured");
+  if (paymentMethod === "wallet") {
+    if (price < 1) {
+      throw new ApiError(400, "This test is free. Use paymentMethod: free.");
+    }
+    await walletService.deductMonetaryBalance(studentId, amountToCharge, "User");
+    const purchase = await orderRepository.createTestPurchase({
+      student: studentId,
+      test: testId,
+      purchasePrice: amountToCharge,
+      paymentId: "wallet",
+      paymentStatus: "completed",
+    });
+    return { purchase, completed: true };
   }
 
-  return {
-    orderId: order.orderId,
-    amount: order.amount,
-    currency: order.currency,
-    key: razorpayKeyId,
-    testId,
-    testTitle: test.title,
-  };
+  if (paymentMethod === "razorpay") {
+    if (price < 1) {
+      throw new ApiError(400, "This test is free. Use paymentMethod: free.");
+    }
+    const razorpayKeyId = process.env.RAZORPAY_KEY_ID;
+    const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET;
+    if (!razorpayKeyId || !razorpayKeySecret) {
+      throw new ApiError(500, "Payment gateway not configured. Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in .env");
+    }
+    const receipt = `test_${testId}_${studentId}_${Date.now()}`.substring(0, 40);
+    let order;
+    try {
+      order = await createRazorpayOrder(amountToCharge, receipt);
+    } catch (err) {
+      const statusCode = err?.statusCode ?? err?.response?.status;
+      const code = err?.error?.code ?? err?.response?.data?.error?.code;
+      if (statusCode === 401 || code === "BAD_REQUEST_ERROR") {
+        console.error("[Razorpay] Authentication failed:", err?.error ?? err?.message ?? err);
+        throw new ApiError(500, "Payment gateway authentication failed. Please check Razorpay credentials.");
+      }
+      console.error("[Razorpay] Order create error:", err?.error ?? err?.message ?? err);
+      throw new ApiError(500, "Payment gateway error. Please try again later.");
+    }
+
+    await razorpayOrderIntentRepository.create({
+      orderId: order.orderId,
+      studentId,
+      type: "test",
+      entityId: testId,
+      entityModel: "Test",
+      amountPaise: order.amount,
+      currency: order.currency || "INR",
+      receipt,
+    });
+
+    return {
+      completed: false,
+      orderId: order.orderId,
+      amount: order.amount,
+      currency: order.currency,
+      key: razorpayKeyId,
+      testId,
+      testTitle: test.title,
+      appliedOffer: appliedOffer || undefined,
+      originalPrice: price,
+      discountedPrice: amountToCharge,
+    };
+  }
+
+  throw new ApiError(400, "Invalid paymentMethod. Use: free, wallet, or razorpay.");
+};
+
+/** @deprecated Use initiateTestPayment with paymentMethod: 'razorpay' */
+export const createTestOrder = async (testId, studentId) => {
+  const result = await initiateTestPayment(testId, studentId, "razorpay");
+  if (result.completed) return result.purchase;
+  return result;
 };
 
 /**
@@ -468,7 +552,7 @@ export const getTestById = async (testId) => {
   if (!test) throw new ApiError(404, "Test not found");
   if (!test.isPublished) throw new ApiError(404, "Test not found");
 
-  const testData = test.toObject();
+  const testData = await attachOfferToItem(test, "Test", "price");
   delete testData.questions;
   delete testData.randomConfig;
   return testData;
@@ -476,6 +560,7 @@ export const getTestById = async (testId) => {
 
 /**
  * Purchase test (verify Razorpay payment and complete purchase)
+ * Called only after initiateTestPayment with paymentMethod: razorpay and user completed Razorpay checkout
  */
 export const purchaseTest = async (
   testId,
@@ -506,13 +591,30 @@ export const purchaseTest = async (
     throw new ApiError(400, "Payment verification failed");
   }
 
-  return await orderRepository.createTestPurchase({
+  const intent = await razorpayOrderIntentRepository.findByOrderId(razorpayOrderId);
+  if (!intent) {
+    throw new ApiError(400, "Invalid order or payment already used");
+  }
+  const studentIdStr = studentId?.toString?.() ?? String(studentId);
+  const testIdStr = testId?.toString?.() ?? String(testId);
+  if (intent.studentId?.toString?.() !== studentIdStr) {
+    throw new ApiError(403, "This payment was made by a different user");
+  }
+  if (intent.type !== "test" || intent.entityId?.toString?.() !== testIdStr) {
+    throw new ApiError(400, "Payment does not match this test");
+  }
+  // Intent amount may be discounted (offer applied)
+  const purchasePrice = intent.amountPaise / 100;
+
+  const purchase = await orderRepository.createTestPurchase({
     student: studentId,
     test: testId,
-    purchasePrice: test.price,
+    purchasePrice,
     paymentId: razorpayPaymentId,
     paymentStatus: "completed",
   });
+  await razorpayOrderIntentRepository.markReconciled(razorpayOrderId, razorpayPaymentId);
+  return purchase;
 };
 
 /**
@@ -548,16 +650,18 @@ export const getTestBundles = async (options = {}) => {
     isActive: true,
   });
 
+  const bundles = await attachOfferToList(result.bundles, "TestSeries", "price");
+
   return {
-    bundles: result.bundles,
+    bundles,
     pagination: result.pagination,
   };
 };
 
 /**
- * Create Razorpay order for test bundle checkout
+ * Initiate test bundle purchase. Handles free, wallet, and razorpay (like olympiad/tournament/workshop).
  */
-export const createTestBundleOrder = async (bundleId, studentId) => {
+export const initiateTestBundlePayment = async (bundleId, studentId, paymentMethod) => {
   const bundle = await testRepository.findBundleById(bundleId, {
     tests: "title durationMinutes questionBank",
   });
@@ -575,42 +679,99 @@ export const createTestBundleOrder = async (bundleId, studentId) => {
     throw new ApiError(400, "Test bundle already purchased");
   }
 
-  const price = Number(bundle.price);
-  if (!price || price < 1) {
-    throw new ApiError(400, "Test bundle price is invalid or free");
+  const price = Number(bundle.price) || 0;
+
+  if (paymentMethod === "free") {
+    if (price > 0) {
+      throw new ApiError(400, "This test bundle is paid. Use paymentMethod: wallet or razorpay.");
+    }
+    const purchase = await orderRepository.createTestPurchase({
+      student: studentId,
+      testBundle: bundleId,
+      purchasePrice: 0,
+      paymentId: "free",
+      paymentStatus: "completed",
+    });
+    return { purchase, completed: true };
   }
 
-  const receipt = `bundle_${bundleId}_${studentId}_${Date.now()}`.substring(0, 40);
-  const order = await createRazorpayOrder(price, receipt);
-
-  await razorpayOrderIntentRepository.create({
-    orderId: order.orderId,
-    studentId,
-    type: "bundle",
-    entityId: bundleId,
-    entityModel: "TestBundle",
-    amountPaise: order.amount,
-    currency: order.currency || "INR",
-    receipt,
-  });
-
-  const razorpayKeyId = process.env.RAZORPAY_KEY_ID;
-  if (!razorpayKeyId) {
-    throw new ApiError(500, "Payment gateway not configured");
+  if (paymentMethod === "wallet") {
+    if (price < 1) {
+      throw new ApiError(400, "This test bundle is free. Use paymentMethod: free.");
+    }
+    await walletService.deductMonetaryBalance(studentId, amountToCharge, "User");
+    const purchase = await orderRepository.createTestPurchase({
+      student: studentId,
+      testBundle: bundleId,
+      purchasePrice: amountToCharge,
+      paymentId: "wallet",
+      paymentStatus: "completed",
+    });
+    return { purchase, completed: true };
   }
 
-  return {
-    orderId: order.orderId,
-    amount: order.amount,
-    currency: order.currency,
-    key: razorpayKeyId,
-    bundleId,
-    bundleName: bundle.name,
-  };
+  if (paymentMethod === "razorpay") {
+    if (price < 1) {
+      throw new ApiError(400, "This test bundle is free. Use paymentMethod: free.");
+    }
+    const razorpayKeyId = process.env.RAZORPAY_KEY_ID;
+    const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET;
+    if (!razorpayKeyId || !razorpayKeySecret) {
+      throw new ApiError(500, "Payment gateway not configured. Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in .env");
+    }
+    const receipt = `bundle_${bundleId}_${studentId}_${Date.now()}`.substring(0, 40);
+    let order;
+    try {
+      order = await createRazorpayOrder(price, receipt);
+    } catch (err) {
+      const statusCode = err?.statusCode ?? err?.response?.status;
+      const code = err?.error?.code ?? err?.response?.data?.error?.code;
+      if (statusCode === 401 || code === "BAD_REQUEST_ERROR") {
+        console.error("[Razorpay] Authentication failed:", err?.error ?? err?.message ?? err);
+        throw new ApiError(500, "Payment gateway authentication failed. Please check Razorpay credentials.");
+      }
+      console.error("[Razorpay] Order create error:", err?.error ?? err?.message ?? err);
+      throw new ApiError(500, "Payment gateway error. Please try again later.");
+    }
+
+    await razorpayOrderIntentRepository.create({
+      orderId: order.orderId,
+      studentId,
+      type: "bundle",
+      entityId: bundleId,
+      entityModel: "TestBundle",
+      amountPaise: order.amount,
+      currency: order.currency || "INR",
+      receipt,
+    });
+
+    return {
+      completed: false,
+      orderId: order.orderId,
+      amount: order.amount,
+      currency: order.currency,
+      key: razorpayKeyId,
+      bundleId,
+      bundleName: bundle.name,
+      appliedOffer: appliedOffer || undefined,
+      originalPrice: price,
+      discountedPrice: amountToCharge,
+    };
+  }
+
+  throw new ApiError(400, "Invalid paymentMethod. Use: free, wallet, or razorpay.");
+};
+
+/** @deprecated Use initiateTestBundlePayment with paymentMethod: 'razorpay' */
+export const createTestBundleOrder = async (bundleId, studentId) => {
+  const result = await initiateTestBundlePayment(bundleId, studentId, "razorpay");
+  if (result.completed) return result.purchase;
+  return result;
 };
 
 /**
  * Purchase test bundle (verify Razorpay payment and complete purchase)
+ * Called only after initiateTestBundlePayment with paymentMethod: razorpay
  */
 export const purchaseTestBundle = async (
   bundleId,
@@ -643,13 +804,30 @@ export const purchaseTestBundle = async (
     throw new ApiError(400, "Payment verification failed");
   }
 
-  return await orderRepository.createTestPurchase({
+  const intent = await razorpayOrderIntentRepository.findByOrderId(razorpayOrderId);
+  if (!intent) {
+    throw new ApiError(400, "Invalid order or payment already used");
+  }
+  const studentIdStr = studentId?.toString?.() ?? String(studentId);
+  const bundleIdStr = bundleId?.toString?.() ?? String(bundleId);
+  if (intent.studentId?.toString?.() !== studentIdStr) {
+    throw new ApiError(403, "This payment was made by a different user");
+  }
+  if (intent.type !== "bundle" || intent.entityId?.toString?.() !== bundleIdStr) {
+    throw new ApiError(400, "Payment does not match this test bundle");
+  }
+  // Intent amount may be discounted (offer applied)
+  const purchasePrice = intent.amountPaise / 100;
+
+  const purchase = await orderRepository.createTestPurchase({
     student: studentId,
     testBundle: bundleId,
-    purchasePrice: bundle.price,
+    purchasePrice,
     paymentId: razorpayPaymentId,
     paymentStatus: "completed",
   });
+  await razorpayOrderIntentRepository.markReconciled(razorpayOrderId, razorpayPaymentId);
+  return purchase;
 };
 
 /**
@@ -675,6 +853,106 @@ export const getMyTests = async (studentId, page = 1, limit = 10) => {
   };
 };
 
+/**
+ * Check if categories array contains the given categoryId
+ */
+const hasCategory = (categories, categoryId) => {
+  if (!categories || !Array.isArray(categories) || !categoryId) return false;
+  const idStr = categoryId.toString();
+  return categories.some((c) => (c?._id ?? c)?.toString?.() === idStr);
+};
+
+/**
+ * Get exam hall - all purchased tests and test series (bundles) for the student
+ * Returns items with type "test" or "testBundle", with full details including tests within bundles
+ * @param {string} type - Filter: "test" | "testBundle" | "both" (default)
+ * @param {string} category - Filter by category ID (optional)
+ */
+export const getExamHall = async (studentId, page = 1, limit = 20, type = "both", category = null) => {
+  const pageNum = parseInt(page);
+  const limitNum = parseInt(limit);
+  const skip = (pageNum - 1) * limitNum;
+
+  const purchases = await orderRepository.findTestPurchasesForExamHall(studentId);
+
+  const filtered = purchases.filter((p) => {
+    if (!p.test && !p.testBundle) return false;
+    if (type === "test") return !!p.test;
+    if (type === "testBundle") return !!p.testBundle;
+
+    if (category) {
+      if (p.test) {
+        const cats = p.test?.questionBank?.categories;
+        if (!hasCategory(cats, category)) return false;
+      } else if (p.testBundle) {
+        const tests = p.testBundle?.tests || [];
+        const matches = tests.some((t) => hasCategory(t?.questionBank?.categories, category));
+        if (!matches) return false;
+      }
+    }
+    return true;
+  });
+
+  const total = filtered.length;
+  const paginatedPurchases = filtered.slice(skip, skip + limitNum);
+
+  // Collect all test IDs (standalone + from bundles) for status lookup
+  const allTestIds = [];
+  paginatedPurchases.forEach((p) => {
+    if (p.test) allTestIds.push(p.test._id);
+    else if (p.testBundle?.tests?.length)
+      p.testBundle.tests.forEach((t) => t?._id && allTestIds.push(t._id));
+  });
+
+  const statusMap = await examSessionRepository.getSessionStatusMapByStudent(
+    studentId,
+    allTestIds
+  );
+
+  const getTestStatus = (testId) =>
+    statusMap[testId?.toString?.() ?? ""] ?? "not_started";
+
+  const items = paginatedPurchases
+    .map((p) => {
+      const base = {
+        _id: p._id,
+        purchaseDate: p.purchaseDate,
+        purchasePrice: p.purchasePrice,
+      };
+      if (p.test) {
+        return {
+          ...base,
+          type: "test",
+          test: p.test,
+          testId: p.test._id,
+          testStatus: getTestStatus(p.test._id),
+        };
+      }
+      const bundleTests = p.testBundle.tests || [];
+      const testsWithStatus = bundleTests.map((t) => {
+        const plain = t?.toObject ? t.toObject() : { ...t };
+        return { ...plain, testStatus: getTestStatus(t._id) };
+      });
+      return {
+        ...base,
+        type: "testBundle",
+        testBundle: p.testBundle,
+        bundleId: p.testBundle._id,
+        tests: testsWithStatus,
+      };
+    });
+
+  return {
+    items,
+    pagination: {
+      page: pageNum,
+      limit: limitNum,
+      total,
+      pages: Math.ceil(total / limitNum) || 1,
+    },
+  };
+};
+
 export default {
   getCourses,
   getCourseById,
@@ -684,11 +962,14 @@ export default {
   getCourseFollowUpTests,
   getTests,
   getTestById,
+  initiateTestPayment,
   createTestOrder,
   purchaseTest,
   getTestBundles,
   getTestsAndBundles,
+  initiateTestBundlePayment,
   createTestBundleOrder,
   purchaseTestBundle,
   getMyTests,
+  getExamHall,
 };

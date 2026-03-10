@@ -74,6 +74,29 @@ const findTestPurchases = async (studentId) => {
   }
 };
 
+const findTestPurchasesForExamHall = async (studentId) => {
+  try {
+    return await TestPurchase.find({ student: studentId, paymentStatus: "completed" })
+      .populate({
+        path: "test",
+        select: "title description durationMinutes questionBank price",
+        populate: { path: "questionBank", select: "categories" },
+      })
+      .populate({
+        path: "testBundle",
+        select: "name description price tests",
+        populate: {
+          path: "tests",
+          select: "title description durationMinutes questionBank",
+          populate: { path: "questionBank", select: "categories" },
+        },
+      })
+      .sort({ purchaseDate: -1 });
+  } catch (error) {
+    throw new ApiError(500, "Failed to fetch exam hall purchases", error.message);
+  }
+};
+
 const findMerchandiseClaims = async (studentId) => {
   try {
     return await MerchandiseClaim.find({ student: studentId })
@@ -129,6 +152,7 @@ export default {
   createOrder,
   findCoursePurchases,
   findTestPurchases,
+  findTestPurchasesForExamHall,
   findMerchandiseClaims,
   findCoursePurchase,
   createCoursePurchase,

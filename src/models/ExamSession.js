@@ -22,7 +22,7 @@ const examSessionSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["in_progress", "completed", "expired", "abandoned"],
+      enum: ["in_progress", "paused", "completed", "expired", "abandoned"],
       default: "in_progress",
     },
     answers: [
@@ -179,6 +179,8 @@ const examSessionSchema = new mongoose.Schema(
       enum: ["time_expired", "proctoring_violation", null],
       default: null,
     },
+    pausedAt: { type: Date, default: null },
+    remainingTimeAtPause: { type: Number, default: null }, // ms remaining when paused
   },
   {
     timestamps: true,

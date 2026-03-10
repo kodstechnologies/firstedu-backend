@@ -12,8 +12,9 @@ export const createOffer = asyncHandler(async (req, res) => {
     }
 
     // Basic Validation
-    if (!["TestBundle", "TestCourse"].includes(applicableOn)) {
-        throw new ApiError(400, "applicableOn must be either 'TestBundle' or 'TestCourse'");
+    const VALID_APPLICABLE_ON = ["Test", "TestSeries", "Course", "Olympiad", "Tournament", "Workshop", "Ecommerce"];
+    if (!VALID_APPLICABLE_ON.includes(applicableOn)) {
+        throw new ApiError(400, `applicableOn must be one of: ${VALID_APPLICABLE_ON.join(", ")}`);
     }
     if (!["percentage", "fixed"].includes(discountType)) {
         throw new ApiError(400, "discountType must be either 'percentage' or 'fixed'");

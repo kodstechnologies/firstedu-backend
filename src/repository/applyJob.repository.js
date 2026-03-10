@@ -5,10 +5,21 @@ const create = async (data) => {
 };
 
 const findAllPaginated = async (filters = {}, options = {}) => {
-  const { page = 1, limit = 10, hiringFor } = options;
+  const { page = 1, limit = 10, hiringFor, search } = options;
   const matchQuery = {};
   if (filters.hiringFor) matchQuery.hiringFor = filters.hiringFor;
   if (hiringFor) matchQuery.hiringFor = hiringFor;
+
+  if (search) {
+    const regex = { $regex: search, $options: "i" };
+    matchQuery.$or = [
+      { title: regex },
+      { skills: regex },
+      { experience: regex },
+      { location: regex },
+      { language: regex },
+    ];
+  }
 
   const pageNum = Math.max(1, parseInt(page) || 1);
   const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 10));
@@ -61,10 +72,15 @@ const deleteById = async (id) => {
   return await ApplyJob.findByIdAndDelete(id);
 };
 
+const countAll = async () => {
+  return await ApplyJob.countDocuments({});
+};
+
 export default {
   create,
   findAllPaginated,
   findById,
   updateById,
   deleteById,
+  countAll,
 };

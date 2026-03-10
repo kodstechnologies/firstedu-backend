@@ -3,6 +3,8 @@ import categoryRepository from "../repository/category.repository.js";
 import QuestionBank from "../models/QuestionBank.js";
 import Test from "../models/Test.js";
 import TestBundle from "../models/TestBundle.js";
+import Olympiad from "../models/Olympiad.js";
+import Tournament from "../models/Tournament.js";
 
 /**
  * Recursively create children under a parent category.
@@ -84,12 +86,15 @@ export const getChildren = async (parentId) => {
 };
 
 /**
- * Get category IDs connected to question banks, tests, and/or test bundles.
- * linkedTo: "questionBank" | "test" | "testBundle" | "both" | null (null = all)
+ * Get category IDs connected to question banks, tests, test bundles, olympiads, and/or tournaments.
+ * linkedTo: "all" | "questionBank" | "test" | "testBundle" | "both" | "olympiad" | "tournament" | null
+ * - all: union of test + testBundle + olympiad + tournament (categories used in marketplace/events)
  * - questionBank: categories on any question bank
  * - test: categories on question banks of published tests
  * - testBundle: categories on question banks of tests that are in at least one active bundle
  * - both: union of test + testBundle
+ * - olympiad: categories on question banks of tests used by published olympiads
+ * - tournament: categories on question banks of tests used in stages of published tournaments
  */
 const getConnectedCategoryIds = async (linkedTo) => {
   if (!linkedTo) return null;
@@ -109,7 +114,7 @@ const getConnectedCategoryIds = async (linkedTo) => {
     }
   }
 
-  if (linkedTo === "testBundle" || linkedTo === "both") {
+  if (linkedTo === "all" || linkedTo === "testBundle" || linkedTo === "both") {
     const activeBundles = await TestBundle.find({ isActive: true }).select("tests").lean();
     const allTestIds = activeBundles.flatMap((b) => b.tests || []);
     if (allTestIds.length > 0) {
@@ -117,6 +122,31 @@ const getConnectedCategoryIds = async (linkedTo) => {
       if (bankIdsFromBundles.length > 0) {
         const fromBundles = await QuestionBank.find({ _id: { $in: bankIdsFromBundles } }).distinct("categories");
         fromBundles.forEach((id) => categoryIds.add(id?.toString?.() || id));
+      }
+    }
+  }
+
+  if (linkedTo === "olympiad") {
+    const publishedOlympiads = await Olympiad.find({ isPublished: true }).select("test").lean();
+    const testIds = publishedOlympiads.map((o) => o.test).filter(Boolean);
+    if (testIds.length > 0) {
+      const bankIds = await Test.find({ _id: { $in: testIds } }).distinct("questionBank");
+      if (bankIds.length > 0) {
+        const fromOlympiads = await QuestionBank.find({ _id: { $in: bankIds } }).distinct("categories");
+        fromOlympiads.forEach((id) => categoryIds.add(id?.toString?.() || id));
+      }
+    }
+  }
+
+  if (linkedTo === "all" || linkedTo === "tournament") {
+    const publishedTournaments = await Tournament.find({ isPublished: true }).select("stages").lean();
+    const testIds = publishedTournaments.flatMap((t) => (t.stages || []).map((s) => s.test).filter(Boolean));
+    const uniqueTestIds = [...new Set(testIds)];
+    if (uniqueTestIds.length > 0) {
+      const bankIds = await Test.find({ _id: { $in: uniqueTestIds } }).distinct("questionBank");
+      if (bankIds.length > 0) {
+        const fromTournaments = await QuestionBank.find({ _id: { $in: bankIds } }).distinct("categories");
+        fromTournaments.forEach((id) => categoryIds.add(id?.toString?.() || id));
       }
     }
   }

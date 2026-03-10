@@ -25,7 +25,6 @@ const findById = async (id) => {
       .populate("parentQuestionId", "questionText passage")
       .populate("childQuestions", "questionText options correctAnswer")
       .populate("createdBy", "name email")
-      .populate("categoryRef", "name")
       .populate("questionBank", "name");
   } catch (error) {
     throw new ApiError(500, "Failed to fetch question", error.message);
@@ -95,7 +94,6 @@ const findAll = async (filter = {}, options = {}) => {
       .populate("parentQuestionId", "questionText passage")
       .populate("childQuestions", "questionText options correctAnswer")
       .populate("createdBy", "name email")
-      .populate("categoryRef", "name")
       .populate("questionBank", "name")
       .sort(sort)
       .skip(skip)
@@ -128,7 +126,6 @@ const updateById = async (id, updateData) => {
       .populate("parentQuestionId", "questionText passage")
       .populate("childQuestions", "questionText options correctAnswer")
       .populate("createdBy", "name email")
-      .populate("categoryRef", "name")
       .populate("questionBank", "name");
   } catch (error) {
     throw new ApiError(500, "Failed to update question", error.message);
