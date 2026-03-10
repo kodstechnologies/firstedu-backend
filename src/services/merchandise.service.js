@@ -4,6 +4,41 @@ import walletService from "./wallet.service.js";
 import { attachOfferToList, attachOfferToItem } from "../utils/offerUtils.js";
 
 /**
+ * Get all merchandise items (admin - includes inactive)
+ */
+export const getAllMerchandiseForAdmin = async (page = 1, limit = 10, category = null, isActive = null, search = null) => {
+  const query = {};
+  if (category) query.category = category;
+  if (isActive !== null) query.isActive = isActive === "true";
+  if (search && search.trim()) {
+    const regex = { $regex: search.trim(), $options: "i" };
+    query.$or = [{ name: regex }, { description: regex }, { category: regex }];
+  }
+
+  const result = await merchandiseRepository.findMerchandise(query, {
+    page,
+    limit,
+    sort: { createdAt: -1 },
+  });
+
+  return {
+    items: result.items,
+    pagination: result.pagination,
+  };
+};
+
+/**
+ * Get merchandise by ID (admin - no isActive check)
+ */
+export const getMerchandiseByIdForAdmin = async (itemId) => {
+  const item = await merchandiseRepository.findMerchandiseById(itemId);
+  if (!item) {
+    throw new ApiError(404, "Merchandise not found");
+  }
+  return item;
+};
+
+/**
  * Get all active merchandise items
  */
 export const getMerchandiseItems = async (page = 1, limit = 10, category = null) => {
@@ -124,6 +159,8 @@ export const getAllClaims = async (page = 1, limit = 10, status = null) => {
 export default {
   getMerchandiseItems,
   getMerchandiseById,
+  getAllMerchandiseForAdmin,
+  getMerchandiseByIdForAdmin,
   claimMerchandise,
   getStudentClaims,
   getAllClaims,

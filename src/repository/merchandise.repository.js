@@ -38,9 +38,21 @@ const findMerchandise = async (query, options = {}) => {
 
 const createMerchandise = async (merchandiseData) => {
   try {
-    return await Merchandise.create(merchandiseData);
+    const payload = {
+      name: merchandiseData.name,
+      pointsRequired: merchandiseData.pointsRequired,
+      description: merchandiseData.description || undefined,
+      imageUrl: merchandiseData.imageUrl || undefined,
+      category: merchandiseData.category ?? "general",
+      isPhysical: merchandiseData.isPhysical ?? false,
+      isActive: merchandiseData.isActive ?? true,
+      stockQuantity: merchandiseData.stockQuantity ?? null,
+    };
+    return await Merchandise.create(payload);
   } catch (error) {
-    throw new ApiError(500, "Failed to create merchandise", error.message);
+    const message = error.name === "ValidationError" ? error.message : "Failed to create merchandise";
+    const statusCode = error.name === "ValidationError" ? 400 : 500;
+    throw new ApiError(statusCode, message);
   }
 };
 

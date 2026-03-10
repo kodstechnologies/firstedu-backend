@@ -4,12 +4,64 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import merchandiseService from "../services/merchandise.service.js";
 import merchandiseRepository from "../repository/merchandise.repository.js";
 import merchandiseValidator from "../validation/merchandise.validator.js";
+import { uploadImageToCloudinary } from "../utils/cloudinaryUpload.js";
+
+/**
+ * Get all merchandise items (admin)
+ */
+export const getMerchandise = asyncHandler(async (req, res) => {
+  const { page = 1, limit = 10, category, isActive, search } = req.query;
+
+  const result = await merchandiseService.getAllMerchandiseForAdmin(
+    page,
+    limit,
+    category,
+    isActive,
+    search
+  );
+
+  return res.status(200).json(
+    ApiResponse.success(
+      result.items,
+      "Merchandise fetched successfully",
+      result.pagination
+    )
+  );
+});
+
+/**
+ * Get merchandise by ID (admin)
+ */
+export const getMerchandiseById = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+
+  const merchandise = await merchandiseService.getMerchandiseByIdForAdmin(id);
+
+  return res
+    .status(200)
+    .json(ApiResponse.success(merchandise, "Merchandise fetched successfully"));
+});
 
 /**
  * Create merchandise item (admin)
  */
 export const createMerchandise = asyncHandler(async (req, res) => {
-  const { error, value } = merchandiseValidator.createMerchandise.validate(req.body);
+  const body = { ...req.body };
+
+  // If image file uploaded, upload to Cloudinary and set imageUrl
+  if (req.file && req.file.buffer) {
+    try {
+      body.imageUrl = await uploadImageToCloudinary(
+        req.file.buffer,
+        req.file.originalname || "merchandise",
+        "merchandise"
+      );
+    } catch (uploadError) {
+      throw new ApiError(400, `Image upload failed: ${uploadError.message}`);
+    }
+  }
+
+  const { error, value } = merchandiseValidator.createMerchandise.validate(body);
 
   if (error) {
     throw new ApiError(
@@ -31,7 +83,22 @@ export const createMerchandise = asyncHandler(async (req, res) => {
  */
 export const updateMerchandise = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { error, value } = merchandiseValidator.updateMerchandise.validate(req.body);
+  const body = { ...req.body };
+
+  // If image file uploaded, upload to Cloudinary and set imageUrl
+  if (req.file && req.file.buffer) {
+    try {
+      body.imageUrl = await uploadImageToCloudinary(
+        req.file.buffer,
+        req.file.originalname || "merchandise",
+        "merchandise"
+      );
+    } catch (uploadError) {
+      throw new ApiError(400, `Image upload failed: ${uploadError.message}`);
+    }
+  }
+
+  const { error, value } = merchandiseValidator.updateMerchandise.validate(body);
 
   if (error) {
     throw new ApiError(
@@ -141,6 +208,8 @@ export const updateClaimStatus = asyncHandler(async (req, res) => {
 });
 
 export default {
+  getMerchandise,
+  getMerchandiseById,
   createMerchandise,
   updateMerchandise,
   deleteMerchandise,

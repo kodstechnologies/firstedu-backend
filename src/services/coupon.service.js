@@ -30,10 +30,14 @@ export const createCoupon = async (couponData) => {
 /**
  * Get all coupons
  */
-export const getCoupons = async (page = 1, limit = 10, isActive = null) => {
+export const getCoupons = async (page = 1, limit = 10, isActive = null, search = null) => {
   const query = {};
   if (isActive !== null) {
     query.isActive = isActive === "true";
+  }
+  if (search && search.trim()) {
+    const regex = { $regex: search.trim(), $options: "i" };
+    query.$or = [{ code: regex }, { description: regex }];
   }
 
   return await couponRepository.findCoupons(query, {
@@ -113,14 +117,6 @@ export const validateCoupon = async (code, purchaseAmount, itemType = "all") => 
     throw new ApiError(400, "Coupon usage limit exceeded");
   }
 
-  // Check minimum purchase amount
-  if (purchaseAmount < coupon.minPurchaseAmount) {
-    throw new ApiError(
-      400,
-      `Minimum purchase amount of ${coupon.minPurchaseAmount} required`
-    );
-  }
-
   // Check applicable to (itemType may be "test", "testBundle", "course" etc.; map to enum values)
   const ITEM_TYPE_MAP = {
     test: "Test",
@@ -140,13 +136,10 @@ export const validateCoupon = async (code, purchaseAmount, itemType = "all") => 
     throw new ApiError(400, `Coupon is not applicable to ${itemType}`);
   }
 
-  // Calculate discount
+  // Calculate discount (full discount applied, no min purchase or max cap)
   let discount = 0;
   if (coupon.discountType === "percentage") {
     discount = (purchaseAmount * coupon.discountValue) / 100;
-    if (coupon.maxDiscountAmount !== null) {
-      discount = Math.min(discount, coupon.maxDiscountAmount);
-    }
   } else {
     discount = Math.min(coupon.discountValue, purchaseAmount);
   }

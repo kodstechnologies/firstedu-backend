@@ -22,22 +22,22 @@ const claimMerchandise = Joi.object({
 const createMerchandise = Joi.object({
   name: Joi.string().required().trim(),
   description: Joi.string().trim().optional().allow(""),
-  imageUrl: Joi.string().uri().trim().optional().allow(""),
+  imageUrl: Joi.string().trim().optional().allow("").empty(""),
   pointsRequired: Joi.number().integer().min(0).required(),
   category: Joi.string().trim().default("general"),
-  isPhysical: Joi.boolean().default(false),
-  isActive: Joi.boolean().default(true),
+  isPhysical: Joi.boolean().truthy("true", "1").falsy("false", "0").default(false),
+  isActive: Joi.boolean().truthy("true", "1").falsy("false", "0").default(true),
   stockQuantity: Joi.number().integer().min(0).allow(null).optional(),
 });
 
 const updateMerchandise = Joi.object({
   name: Joi.string().trim().optional(),
   description: Joi.string().trim().optional().allow(""),
-  imageUrl: Joi.string().uri().trim().optional().allow(""),
+  imageUrl: Joi.string().trim().optional().allow("").empty(""),
   pointsRequired: Joi.number().integer().min(0).optional(),
   category: Joi.string().trim().optional(),
-  isPhysical: Joi.boolean().optional(),
-  isActive: Joi.boolean().optional(),
+  isPhysical: Joi.boolean().truthy("true", "1").falsy("false", "0").optional(),
+  isActive: Joi.boolean().truthy("true", "1").falsy("false", "0").optional(),
   stockQuantity: Joi.number().integer().min(0).allow(null).optional(),
 });
 

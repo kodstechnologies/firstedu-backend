@@ -114,6 +114,8 @@ import {
   deleteOffer,
 } from "../controllers/offer.controller.js";
 import {
+  getMerchandise,
+  getMerchandiseById,
   createMerchandise,
   updateMerchandise,
   deleteMerchandise,
@@ -133,6 +135,7 @@ import {
   sendNotificationToStudent,
   sendNotificationToMultipleStudents,
   sendNotificationToAllStudents,
+  sendNotificationToPurchasers,
 } from "../controllers/notification.controller.js";
 import {
   createCategory as createTaxonomyCategory,
@@ -368,8 +371,10 @@ router.get("/orders", verifyJWT, getAllOrders);
 router.get("/orders/:id", verifyJWT, getOrderById);
 
 // Merchandise Management
-router.post("/merchandise", verifyJWT, createMerchandise);
-router.put("/merchandise/:id", verifyJWT, updateMerchandise);
+router.get("/merchandise", verifyJWT, getMerchandise);
+router.get("/merchandise/:id", verifyJWT, getMerchandiseById);
+router.post("/merchandise", verifyJWT, uploadImage.single("image"), createMerchandise);
+router.put("/merchandise/:id", verifyJWT, uploadImage.single("image"), updateMerchandise);
 router.delete("/merchandise/:id", verifyJWT, deleteMerchandise);
 
 // Merchandise Requests (Claims)
@@ -415,6 +420,9 @@ router.post("/notifications/send-multiple", verifyJWT, sendNotificationToMultipl
 
 // Send notification to all students
 router.post("/notifications/send-all", verifyJWT, sendNotificationToAllStudents);
+
+// Send notification to students who purchased a specific product (course, test, bundle, olympiad, tournament, workshop)
+router.post("/notifications/send-to-purchasers", verifyJWT, sendNotificationToPurchasers);
 
 
 
