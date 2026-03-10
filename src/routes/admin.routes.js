@@ -7,6 +7,7 @@ import {
   verifyForgotPasswordOTP,
   resetPassword,
   changePassword,
+  getAdminProfile,
 } from "../controllers/adminAuth.controller.js";
 import {
   createQuestion,
@@ -228,6 +229,7 @@ const router = Router();
 // Admin Authentication Routes
 router.post("/login", adminLogin);
 router.post("/logout", verifyJWT, adminLogout);
+router.get("/profile", verifyJWT, getAdminProfile);
 router.post("/forgot-password/request", requestForgotPasswordOTP);
 router.post("/forgot-password/verify", verifyForgotPasswordOTP);
 router.post("/forgot-password/reset", resetPassword);
