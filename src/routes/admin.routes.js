@@ -134,6 +134,11 @@ import {
   getTicketCategories,
 } from "../controllers/adminSupport.controller.js";
 import {
+  uploadCertificate,
+  getCertificates,
+  getCertificateById,
+} from "../controllers/certificate.controller.js";
+import {
   sendNotificationToStudent,
   sendNotificationToMultipleStudents,
   sendNotificationToAllStudents,
@@ -223,7 +228,7 @@ import {
   rejectApplication,
 } from '../controllers/teacherConnectApply.controller.js';
 import { verifyJWT } from "../middleware/auth.middleware.js";
-import { uploadCourseMaterial, uploadImage, uploadSuccessStory } from '../utils/multerConfig.js';
+import { uploadCourseMaterial, uploadImage, uploadPDF, uploadSuccessStory } from '../utils/multerConfig.js';
 
 const router = Router();
 
@@ -413,6 +418,15 @@ router.post("/support/tickets/:ticketId/internal-notes", verifyJWT, addInternalN
 // Chat Management
 router.get("/support/tickets/:ticketId/messages", verifyJWT, getTicketMessages);
 router.post("/support/tickets/:ticketId/messages", verifyJWT, sendMessage);
+
+// ==================== CERTIFICATES ====================
+
+// Upload certificate PDF for student (admin sends PDF from frontend)
+router.post("/certificates/upload", verifyJWT, uploadPDF.single("pdf"), uploadCertificate);
+
+// List and view issued certificates
+router.get("/certificates", verifyJWT, getCertificates);
+router.get("/certificates/:certificateId", verifyJWT, getCertificateById);
 
 // ==================== NOTIFICATIONS ====================
 

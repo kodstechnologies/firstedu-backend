@@ -31,8 +31,6 @@ const createTicket = Joi.object({
       'other'
     )
     .optional(),
-
-  priority: Joi.string().valid('low', 'medium', 'high', 'urgent').optional(),
 });
 
 const sendMessage = Joi.object({

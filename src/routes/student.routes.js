@@ -162,6 +162,10 @@ import {
   getStoryDetailStudent,
 } from "../controllers/successStory.controller.js";
 import { getCategoriesForStudent } from "../controllers/category.controller.js";
+import {
+  getMyCertificates,
+  getMyCertificateById,
+} from "../controllers/certificate.controller.js";
 import { verifyJWT } from "../middleware/auth.middleware.js";
 import { uploadImage, uploadPDF } from "../utils/multerConfig.js";
 import {
@@ -397,6 +401,12 @@ router.post(
   verifyJWT,
   sendMessage
 );
+
+// ==================== CERTIFICATES ====================
+
+// Student's own certificates
+router.get("/certificates", verifyJWT, getMyCertificates);
+router.get("/certificates/:certificateId", verifyJWT, getMyCertificateById);
 
 // ==================== NOTIFICATIONS ====================
 

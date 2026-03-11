@@ -22,26 +22,26 @@ const SUPPORT_TICKET_CATEGORIES = [
 
 const getPriorityForCategory = (category) => {
   switch (category) {
-    case 'payment':
     case 'billing':
-    case 'exam_issue':
-    case 'proctoring_issue':
+    case 'payment':
+    case 'live_event':
+      return 'urgent';
     case 'technical':
+    case 'exam_issue':
       return 'high';
     case 'course':
+    case 'proctoring_issue':
+    case 'content_error':
+    case 'teacher_connect':
+      return 'medium';
     case 'account':
     case 'certificate_issue':
-    case 'teacher_connect':
-    case 'live_event':
-      return 'medium';
-    case 'content_error':
     case 'feature_request':
     case 'feedback':
     case 'general_inquiry':
-      return 'low';
     case 'other':
     default:
-      return 'medium';
+      return 'low';
   }
 };
 
@@ -59,7 +59,7 @@ export const createTicket = async (studentId, ticketData) => {
     subject: ticketData.subject,
     description: ticketData.description,
     category,
-    priority: ticketData.priority || getPriorityForCategory(category),
+    priority: getPriorityForCategory(category),
     status: 'open',
   });
 

@@ -146,17 +146,84 @@ const findAllTickets = async (options = {}) => {
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);
     const skip = (pageNum - 1) * limitNum;
-    const sort = { [sortBy]: sortOrder === "desc" ? -1 : 1 };
 
-    const [tickets, total] = await Promise.all([
-      SupportTicket.find(query)
-        .populate("student", "name email")
-        .populate("assignedTo", "name email")
-        .sort(sort)
-        .skip(skip)
-        .limit(limitNum),
-      SupportTicket.countDocuments(query),
-    ]);
+    const pipeline = [
+      { $match: query },
+      {
+        $addFields: {
+          priorityRank: {
+            $switch: {
+              branches: [
+                { case: { $eq: ["$priority", "urgent"] }, then: 1 },
+                { case: { $eq: ["$priority", "high"] }, then: 2 },
+                { case: { $eq: ["$priority", "medium"] }, then: 3 },
+                { case: { $eq: ["$priority", "low"] }, then: 4 },
+              ],
+              default: 4,
+            },
+          },
+        },
+      },
+      { $sort: { priorityRank: 1, createdAt: -1 } },
+      {
+        $facet: {
+          tickets: [
+            { $skip: skip },
+            { $limit: limitNum },
+            {
+              $lookup: {
+                from: "users",
+                localField: "student",
+                foreignField: "_id",
+                as: "studentData",
+              },
+            },
+            { $unwind: { path: "$studentData", preserveNullAndEmptyArrays: true } },
+            {
+              $lookup: {
+                from: "admins",
+                localField: "assignedTo",
+                foreignField: "_id",
+                as: "assignedToData",
+              },
+            },
+            { $unwind: { path: "$assignedToData", preserveNullAndEmptyArrays: true } },
+            {
+              $project: {
+                student: {
+                  _id: "$studentData._id",
+                  name: "$studentData.name",
+                  email: "$studentData.email",
+                },
+                assignedTo: {
+                  _id: "$assignedToData._id",
+                  name: "$assignedToData.name",
+                  email: "$assignedToData.email",
+                },
+                ticketNumber: 1,
+                subject: 1,
+                description: 1,
+                category: 1,
+                priority: 1,
+                status: 1,
+                internalNotes: 1,
+                openedAt: 1,
+                resolvedAt: 1,
+                closedAt: 1,
+                lastMessageAt: 1,
+                createdAt: 1,
+                updatedAt: 1,
+              },
+            },
+          ],
+          total: [{ $count: "count" }],
+        },
+      },
+    ];
+
+    const result = await SupportTicket.aggregate(pipeline);
+    const tickets = result[0]?.tickets || [];
+    const total = result[0]?.total?.[0]?.count ?? 0;
 
     return {
       tickets,
