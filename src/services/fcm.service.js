@@ -18,17 +18,26 @@ export const sendNotificationToDevice = async (fcmToken, title, body, data = {})
     throw new Error("FCM token is required");
   }
 
+  const stringData = Object.fromEntries(
+    Object.entries({
+      ...data,
+      title,
+      body,
+      timestamp: new Date().toISOString(),
+    }).map(([k, v]) => [k, v != null ? String(v) : ''])
+  );
+
   const message = {
     token: fcmToken,
     notification: {
       title,
       body,
     },
-    data: {
-      ...data,
-      title,
-      body,
-      timestamp: new Date().toISOString(),
+    data: stringData,
+    webpush: {
+      fcmOptions: {
+        link: process.env.FRONTEND_URL || 'http://localhost:5173/student/notifications',
+      },
     },
     android: {
       priority: "high",
@@ -128,16 +137,25 @@ export const sendNotificationToMultipleDevices = async (fcmTokens, title, body, 
     throw new Error("No valid FCM tokens provided");
   }
 
+  const stringData = Object.fromEntries(
+    Object.entries({
+      ...data,
+      title,
+      body,
+      timestamp: new Date().toISOString(),
+    }).map(([k, v]) => [k, v != null ? String(v) : ''])
+  );
+
   const message = {
     notification: {
       title,
       body,
     },
-    data: {
-      ...data,
-      title,
-      body,
-      timestamp: new Date().toISOString(),
+    data: stringData,
+    webpush: {
+      fcmOptions: {
+        link: process.env.FRONTEND_URL || 'http://localhost:5173/student/notifications',
+      },
     },
     android: {
       priority: "high",

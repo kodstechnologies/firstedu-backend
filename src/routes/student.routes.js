@@ -94,7 +94,8 @@ import {
 } from "../controllers/examSession.controller.js";
 import {
   getWallet,
-  rechargeWallet,
+  initiateRecharge,
+  completeRecharge,
   getPointsHistory,
 } from "../controllers/wallet.controller.js";
 import {
@@ -326,15 +327,16 @@ router.get("/exam-sessions/:sessionId/palette", verifyJWT, getQuestionPalette);
 
 // Wallet Routes
 router.get("/wallet", verifyJWT, getWallet);
-router.post("/wallet/recharge", verifyJWT, rechargeWallet);
+router.post("/wallet/recharge/initiate", verifyJWT, initiateRecharge);
+router.post("/wallet/recharge", verifyJWT, completeRecharge);
 router.get("/wallet/points-history", verifyJWT, getPointsHistory);
 router.post("/wallet/convert-points", verifyJWT, convertPoints);
 
-// Merchandise Store Routes
+// Merchandise Store Routes (specific routes must come before parameterized :id)
 router.get("/merchandise", verifyJWT, getMerchandiseItems);
+router.get("/merchandise/my-claims", verifyJWT, getMyClaims);
 router.get("/merchandise/:id", verifyJWT, getMerchandiseById);
 router.post("/merchandise/:id/claim", verifyJWT, claimMerchandise);
-router.get("/merchandise/my-claims", verifyJWT, getMyClaims);
 
 // Order History
 router.get("/orders", verifyJWT, getMyOrders);

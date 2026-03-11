@@ -38,13 +38,14 @@ const findMerchandise = async (query, options = {}) => {
 
 const createMerchandise = async (merchandiseData) => {
   try {
+    const category = merchandiseData.category ?? "general";
     const payload = {
       name: merchandiseData.name,
       pointsRequired: merchandiseData.pointsRequired,
       description: merchandiseData.description || undefined,
       imageUrl: merchandiseData.imageUrl || undefined,
-      category: merchandiseData.category ?? "general",
-      isPhysical: merchandiseData.isPhysical ?? false,
+      category,
+      isPhysical: category === "digital" ? false : (merchandiseData.isPhysical ?? false),
       isActive: merchandiseData.isActive ?? true,
       stockQuantity: merchandiseData.stockQuantity ?? null,
     };
@@ -58,7 +59,12 @@ const createMerchandise = async (merchandiseData) => {
 
 const updateMerchandise = async (id, updateData) => {
   try {
-    return await Merchandise.findByIdAndUpdate(id, updateData, {
+    // When category is digital, isPhysical must be false
+    const payload = { ...updateData };
+    if (payload.category === "digital") {
+      payload.isPhysical = false;
+    }
+    return await Merchandise.findByIdAndUpdate(id, payload, {
       new: true,
       runValidators: true,
     });

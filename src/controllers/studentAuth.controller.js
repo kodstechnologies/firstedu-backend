@@ -449,10 +449,11 @@ export const convertPoints = asyncHandler(async (req, res) => {
 
   const result = await studentService.convertPointsToMoney(studentId, parseInt(pointsToConvert));
 
+  const balanceAdded = (parseInt(pointsToConvert) / 100) * 10;
   return res.status(200).json(
     ApiResponse.success(
       result,
-      `Successfully converted ${pointsToConvert} points to ${pointsToConvert / 10} balance`
+      `Successfully converted ${pointsToConvert} points to ${balanceAdded} balance`
     )
   );
 });

@@ -2,8 +2,25 @@
 import nodemailer from 'nodemailer';
 import dotenv from "dotenv";
 import { ApiError } from './ApiError.js';
+import emailTemplateService from '../services/emailTemplate.service.js';
 
 dotenv.config();
+
+/**
+ * Resolve email subject and html from admin template if exists, else return null.
+ * Caller uses default when null.
+ */
+const resolveTemplate = async (category, slug, variables) => {
+  try {
+    const template = await emailTemplateService.getTemplateByCategorySlug(category, slug);
+    if (!template) return null;
+    const subject = emailTemplateService.replaceTemplateVariables(template.subject, variables);
+    const html = emailTemplateService.replaceTemplateVariables(template.content, variables);
+    return { subject, html };
+  } catch {
+    return null;
+  }
+};
 
 // Validate required environment variables
 const requiredEnvVars = ['SMTP_HOST', 'SMTP_PORT', 'SMTP_EMAIL', 'SMTP_PASSWORD'];
@@ -41,31 +58,35 @@ transporter.verify((error, success) => {
 
 export const sendOTPEmail = async (email, otp, name) => {
   try {
-    // Validate email parameter
     if (!email) {
       throw new ApiError(400, 'Email address is required');
     }
-
-    // Validate environment variables are set
     if (missingVars.length > 0) {
       throw new ApiError(500, `SMTP configuration incomplete. Missing: ${missingVars.join(', ')}`);
     }
 
+    const defaultSubject = 'Your Password Change OTP';
+    const defaultHtml = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #333;">Hello ${name || 'Student'},</h2>
+        <p style="color: #666;">Use this OTP to change your password:</p>
+        <div style="background-color: #f4f4f4; padding: 20px; text-align: center; margin: 20px 0; border-radius: 5px;">
+          <h1 style="letter-spacing: 8px; color: #333; margin: 0;">${otp}</h1>
+        </div>
+        <p style="color: #666;">This OTP is valid for <strong>10 minutes</strong>.</p>
+        <p style="color: #999; font-size: 12px;">If you didn't request this, please ignore this email.</p>
+      </div>
+    `;
+
+    const resolved = await resolveTemplate('login_otp', 'password_reset', { name: name || 'Student', otp });
+    const subject = resolved?.subject ?? defaultSubject;
+    const html = resolved?.html ?? defaultHtml;
+
     const mailOptions = {
       from: `"Your App" <${process.env.SMTP_EMAIL}>`,
       to: email,
-      subject: 'Your Password Change OTP',
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #333;">Hello ${name || 'Student'},</h2>
-          <p style="color: #666;">Use this OTP to change your password:</p>
-          <div style="background-color: #f4f4f4; padding: 20px; text-align: center; margin: 20px 0; border-radius: 5px;">
-            <h1 style="letter-spacing: 8px; color: #333; margin: 0;">${otp}</h1>
-          </div>
-          <p style="color: #666;">This OTP is valid for <strong>10 minutes</strong>.</p>
-          <p style="color: #999; font-size: 12px;">If you didn't request this, please ignore this email.</p>
-        </div>
-      `,
+      subject,
+      html,
     };
 
     const info = await transporter.sendMail(mailOptions);
@@ -79,6 +100,31 @@ export const sendOTPEmail = async (email, otp, name) => {
     }
     throw new ApiError(500, `Failed to send email: ${error.message}`);
   }
+};
+
+/**
+ * Send email using template resolution. If admin has created a template for (category, slug), use it; else use defaultSubject and defaultHtml.
+ * Use this when adding new email types (welcome, course enrollment, support ticket, etc.)
+ */
+export const sendEmailWithTemplate = async ({
+  to: email,
+  category,
+  slug,
+  variables = {},
+  defaultSubject,
+  defaultHtml,
+  from = `"FirstEdu" <${process.env.SMTP_EMAIL}>`,
+}) => {
+  if (!email) throw new ApiError(400, 'Email address is required');
+  if (missingVars.length > 0) {
+    throw new ApiError(500, `SMTP configuration incomplete. Missing: ${missingVars.join(', ')}`);
+  }
+  const resolved = await resolveTemplate(category, slug, variables);
+  const subject = resolved?.subject ?? defaultSubject;
+  const html = resolved?.html ?? defaultHtml;
+  const info = await transporter.sendMail({ from, to: email, subject, html });
+  console.log(`✅ Email sent to ${email}. Message ID: ${info.messageId}`);
+  return info;
 };
 
 /**
@@ -150,23 +196,36 @@ export const sendInterviewScheduledEmail = async ({
     }
 
     const dateStr = interviewDate ? new Date(interviewDate).toLocaleDateString("en-IN", { dateStyle: "long" }) : "—";
+    const defaultSubject = `Interview Scheduled – ${jobTitle}`;
+    const defaultHtml = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #333;">Hello ${teacherName || "Candidate"},</h2>
+        <p style="color: #666;">Your interview has been scheduled for the position: <strong>${jobTitle}</strong>.</p>
+        <table style="width: 100%; border-collapse: collapse; color: #666;">
+          <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Date</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${dateStr}</td></tr>
+          <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Time</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${interviewTime || "—"}</td></tr>
+          <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Platform</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${interviewProvider || "—"}</td></tr>
+          <tr><td style="padding: 8px 0;"><strong>Join Link</strong></td><td style="padding: 8px 0;">${providerLink ? `<a href="${providerLink}">${providerLink}</a>` : "—"}</td></tr>
+        </table>
+        <p style="color: #999; font-size: 12px; margin-top: 20px;">FirstEdu Teacher Connect</p>
+      </div>
+    `;
+
+    const resolved = await resolveTemplate('teacher_application', 'interview_scheduled', {
+      name: teacherName || "Candidate",
+      jobTitle,
+      interviewDate: dateStr,
+      interviewTime: interviewTime || "—",
+      providerLink: providerLink || "",
+    });
+    const subject = resolved?.subject ?? defaultSubject;
+    const html = resolved?.html ?? defaultHtml;
+
     const mailOptions = {
       from: `"FirstEdu Teacher Connect" <${process.env.SMTP_EMAIL}>`,
       to: toEmail,
-      subject: `Interview Scheduled – ${jobTitle}`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #333;">Hello ${teacherName || "Candidate"},</h2>
-          <p style="color: #666;">Your interview has been scheduled for the position: <strong>${jobTitle}</strong>.</p>
-          <table style="width: 100%; border-collapse: collapse; color: #666;">
-            <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Date</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${dateStr}</td></tr>
-            <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Time</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${interviewTime || "—"}</td></tr>
-            <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Platform</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${interviewProvider || "—"}</td></tr>
-            <tr><td style="padding: 8px 0;"><strong>Join Link</strong></td><td style="padding: 8px 0;">${providerLink ? `<a href="${providerLink}">${providerLink}</a>` : "—"}</td></tr>
-          </table>
-          <p style="color: #999; font-size: 12px; margin-top: 20px;">FirstEdu Teacher Connect</p>
-        </div>
-      `,
+      subject,
+      html,
     };
 
     const info = await transporter.sendMail(mailOptions);
@@ -238,22 +297,33 @@ export const sendTeacherApprovalWithCredentialsEmail = async ({
       throw new ApiError(500, `SMTP configuration incomplete. Missing: ${missingVars.join(", ")}`);
     }
 
+    const defaultSubject = "Congratulations – You have been selected as a Teacher";
+    const defaultHtml = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #333;">Hello ${teacherName || "Teacher"},</h2>
+        <p style="color: #666;">Congratulations! You have been selected. Please use the following credentials to log in to the teacher portal.</p>
+        <table style="width: 100%; border-collapse: collapse; color: #666;">
+          <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Email</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${email}</td></tr>
+          <tr><td style="padding: 8px 0;"><strong>Password</strong></td><td style="padding: 8px 0;"><code style="background: #f4f4f4; padding: 4px 8px;">${password}</code></td></tr>
+        </table>
+        <p style="color: #666;">Please change your password after first login.</p>
+        <p style="color: #999; font-size: 12px; margin-top: 20px;">FirstEdu Teacher Connect</p>
+      </div>
+    `;
+
+    const resolved = await resolveTemplate('teacher_application', 'approval', {
+      name: teacherName || "Teacher",
+      email,
+      password,
+    });
+    const subject = resolved?.subject ?? defaultSubject;
+    const html = resolved?.html ?? defaultHtml;
+
     const mailOptions = {
       from: `"FirstEdu Teacher Connect" <${process.env.SMTP_EMAIL}>`,
       to: toEmail,
-      subject: "Congratulations – You have been selected as a Teacher",
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #333;">Hello ${teacherName || "Teacher"},</h2>
-          <p style="color: #666;">Congratulations! You have been selected. Please use the following credentials to log in to the teacher portal.</p>
-          <table style="width: 100%; border-collapse: collapse; color: #666;">
-            <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Email</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${email}</td></tr>
-            <tr><td style="padding: 8px 0;"><strong>Password</strong></td><td style="padding: 8px 0;"><code style="background: #f4f4f4; padding: 4px 8px;">${password}</code></td></tr>
-          </table>
-          <p style="color: #666;">Please change your password after first login.</p>
-          <p style="color: #999; font-size: 12px; margin-top: 20px;">FirstEdu Teacher Connect</p>
-        </div>
-      `,
+      subject,
+      html,
     };
 
     const info = await transporter.sendMail(mailOptions);
@@ -279,18 +349,28 @@ export const sendTeacherRejectionEmail = async ({ toEmail, teacherName, jobTitle
       throw new ApiError(500, `SMTP configuration incomplete. Missing: ${missingVars.join(", ")}`);
     }
 
+    const defaultSubject = `Update on your application – ${jobTitle || "Teacher Position"}`;
+    const defaultHtml = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #333;">Hello ${teacherName || "Candidate"},</h2>
+        <p style="color: #666;">Thank you for your interest. After careful consideration, we have decided not to move forward with your application for ${jobTitle ? `<strong>${jobTitle}</strong>` : "this position"}.</p>
+        <p style="color: #666;">We encourage you to apply for other openings in the future.</p>
+        <p style="color: #999; font-size: 12px; margin-top: 20px;">FirstEdu Teacher Connect</p>
+      </div>
+    `;
+
+    const resolved = await resolveTemplate('teacher_application', 'rejection', {
+      name: teacherName || "Candidate",
+      jobTitle: jobTitle || "Teacher Position",
+    });
+    const subject = resolved?.subject ?? defaultSubject;
+    const html = resolved?.html ?? defaultHtml;
+
     const mailOptions = {
       from: `"FirstEdu Teacher Connect" <${process.env.SMTP_EMAIL}>`,
       to: toEmail,
-      subject: `Update on your application – ${jobTitle || "Teacher Position"}`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #333;">Hello ${teacherName || "Candidate"},</h2>
-          <p style="color: #666;">Thank you for your interest. After careful consideration, we have decided not to move forward with your application for ${jobTitle ? `<strong>${jobTitle}</strong>` : "this position"}.</p>
-          <p style="color: #666;">We encourage you to apply for other openings in the future.</p>
-          <p style="color: #999; font-size: 12px; margin-top: 20px;">FirstEdu Teacher Connect</p>
-        </div>
-      `,
+      subject,
+      html,
     };
 
     const info = await transporter.sendMail(mailOptions);

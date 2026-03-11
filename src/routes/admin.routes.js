@@ -9,6 +9,7 @@ import {
   changePassword,
   getAdminProfile,
 } from "../controllers/adminAuth.controller.js";
+import { getDashboardData } from "../controllers/adminDashboard.controller.js";
 import {
   createQuestion,
   getAllQuestions,
@@ -227,6 +228,14 @@ import {
   approveApplication,
   rejectApplication,
 } from '../controllers/teacherConnectApply.controller.js';
+import {
+  getCategories,
+  getTemplates,
+  getTemplateById,
+  createTemplate,
+  updateTemplate,
+  deleteTemplate,
+} from "../controllers/emailTemplate.controller.js";
 import { verifyJWT } from "../middleware/auth.middleware.js";
 import { uploadCourseMaterial, uploadImage, uploadPDF, uploadSuccessStory } from '../utils/multerConfig.js';
 
@@ -236,6 +245,7 @@ const router = Router();
 router.post("/login", adminLogin);
 router.post("/logout", verifyJWT, adminLogout);
 router.get("/profile", verifyJWT, getAdminProfile);
+router.get("/dashboard", verifyJWT, getDashboardData);
 router.post("/forgot-password/request", requestForgotPasswordOTP);
 router.post("/forgot-password/verify", verifyForgotPasswordOTP);
 router.post("/forgot-password/reset", resetPassword);
@@ -518,5 +528,13 @@ router.get('/teacher-connect/applications/:id', verifyJWT, getApplicationByIdAdm
 router.post('/teacher-connect/applications/:id/schedule-interview', verifyJWT, scheduleInterview);
 router.post('/teacher-connect/applications/:id/approve', verifyJWT, approveApplication);
 router.post('/teacher-connect/applications/:id/reject', verifyJWT, rejectApplication);
+
+// ==================== EMAIL TEMPLATES ====================
+router.get("/email-templates/categories", verifyJWT, getCategories);
+router.get("/email-templates", verifyJWT, getTemplates);
+router.get("/email-templates/:id", verifyJWT, getTemplateById);
+router.post("/email-templates", verifyJWT, createTemplate);
+router.put("/email-templates/:id", verifyJWT, updateTemplate);
+router.delete("/email-templates/:id", verifyJWT, deleteTemplate);
 
 export default router;

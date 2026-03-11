@@ -19,10 +19,10 @@ export const getWallet = asyncHandler(async (req, res) => {
 });
 
 /**
- * Recharge wallet (structure for payment gateway integration)
+ * Initiate wallet recharge – create Razorpay order for checkout
  */
-export const rechargeWallet = asyncHandler(async (req, res) => {
-  const { error, value } = walletValidator.rechargeWallet.validate(req.body);
+export const initiateRecharge = asyncHandler(async (req, res) => {
+  const { error, value } = walletValidator.initiateRecharge.validate(req.body);
 
   if (error) {
     throw new ApiError(
@@ -33,31 +33,45 @@ export const rechargeWallet = asyncHandler(async (req, res) => {
   }
 
   const userId = req.user._id;
-  const userType = req.user.userType || "User";
-  const { amount, paymentId } = value;
+  const { amount } = value;
 
-  // TODO: Integrate payment gateway here
-  // For now, we'll just add the balance directly
-  // In production, this should:
-  // 1. Create a payment intent with payment gateway
-  // 2. Verify payment status
-  // 3. Then add balance
+  const result = await walletService.initiateWalletRecharge(userId, amount);
 
-  const wallet = await walletService.addMonetaryBalance(
+  return res.status(200).json(
+    ApiResponse.success(result, "Razorpay order created. Complete payment to recharge.")
+  );
+});
+
+/**
+ * Complete wallet recharge – verify Razorpay payment and add balance
+ */
+export const completeRecharge = asyncHandler(async (req, res) => {
+  const { error, value } = walletValidator.completeRecharge.validate(req.body);
+
+  if (error) {
+    throw new ApiError(
+      400,
+      "Validation Error",
+      error.details.map((x) => x.message)
+    );
+  }
+
+  const userId = req.user._id;
+  const { razorpayOrderId, razorpayPaymentId, razorpaySignature } = value;
+
+  const wallet = await walletService.completeWalletRecharge(
     userId,
-    amount,
-    paymentId || `RECHARGE_${Date.now()}`,
-    userType
+    razorpayOrderId,
+    razorpayPaymentId,
+    razorpaySignature
   );
 
-  return res
-    .status(200)
-    .json(
-      ApiResponse.success(
-        { balance: wallet.monetaryBalance },
-        "Wallet recharged successfully"
-      )
-    );
+  return res.status(200).json(
+    ApiResponse.success(
+      { balance: wallet.monetaryBalance },
+      "Wallet recharged successfully"
+    )
+  );
 });
 
 /**
@@ -80,7 +94,8 @@ export const getPointsHistory = asyncHandler(async (req, res) => {
 
 export default {
   getWallet,
-  rechargeWallet,
+  initiateRecharge,
+  completeRecharge,
   getPointsHistory,
 };
 
