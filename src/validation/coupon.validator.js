@@ -14,6 +14,19 @@ const createCoupon = Joi.object({
     .default("all"),
 });
 
+/**
+ * Student: Apply/validate coupon for discount preview.
+ * itemType: test | testBundle | course | olympiad | tournament | workshop | ecommerce | all
+ * - "all" = universal coupon, works wherever there's an amount (test, bundle, course, event, merchandise)
+ */
+const applyCoupon = Joi.object({
+  code: Joi.string().required().trim(),
+  amount: Joi.number().min(0).required(),
+  itemType: Joi.string()
+    .valid("test", "testBundle", "course", "olympiad", "tournament", "workshop", "ecommerce", "all")
+    .default("all"),
+});
+
 const updateCoupon = Joi.object({
   code: Joi.string().trim().uppercase().optional(),
   description: Joi.string().trim().optional().allow(""),
@@ -31,5 +44,6 @@ const updateCoupon = Joi.object({
 export default {
   createCoupon,
   updateCoupon,
+  applyCoupon,
 };
 

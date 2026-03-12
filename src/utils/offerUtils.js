@@ -1,4 +1,65 @@
 import offerRepository from "../repository/offer.repository.js";
+import couponService from "../services/coupon.service.js";
+
+const MODULE_TO_ITEM_TYPE = {
+  Test: "test",
+  TestSeries: "testBundle",
+  Course: "course",
+  Olympiad: "olympiad",
+  Tournament: "tournament",
+  Workshop: "workshop",
+  Ecommerce: "ecommerce",
+};
+
+/**
+ * Resolve amount to charge: Offer is applied first, then coupon stacks on top.
+ * - Step 1: Apply offer to original price → priceAfterOffer
+ * - Step 2: If coupon provided, apply coupon to priceAfterOffer → final amountToCharge
+ * UsedCount is NOT incremented here - only when payment completes.
+ * @returns {{ amountToCharge: number, couponId: ObjectId|null, appliedOffer: object|null, appliedCoupon: object|null, originalPrice: number, discountAmount: number }}
+ */
+export const getAmountToCharge = async (moduleType, originalPrice, couponCode = null) => {
+  const price = Number(originalPrice) || 0;
+  if (price <= 0) {
+    return { amountToCharge: 0, couponId: null, appliedOffer: null, appliedCoupon: null, originalPrice: price, discountAmount: 0 };
+  }
+
+  // Step 1: Apply offer first (if any)
+  const offerDetails = await getApplicableOfferDetails(moduleType, price);
+  const priceAfterOffer = offerDetails.discountedPrice;
+  const offerDiscountAmount = offerDetails.discountAmount;
+
+  // Step 2: If coupon provided, apply coupon on top of offer-discounted price
+  const itemType = MODULE_TO_ITEM_TYPE[moduleType] || "all";
+  if (couponCode && String(couponCode).trim()) {
+    const result = await couponService.validateCoupon(couponCode.trim(), priceAfterOffer, itemType);
+    const couponDiscount = result.discount;
+    const amountToCharge = Math.max(0, priceAfterOffer - couponDiscount);
+    const appliedCoupon = {
+      _id: result.coupon._id,
+      code: result.coupon.code,
+      discountType: result.coupon.discountType,
+      discountValue: result.coupon.discountValue,
+    };
+    return {
+      amountToCharge,
+      couponId: result.coupon._id,
+      appliedOffer: offerDetails.appliedOffer,
+      appliedCoupon,
+      originalPrice: price,
+      discountAmount: offerDiscountAmount + couponDiscount,
+    };
+  }
+
+  return {
+    amountToCharge: priceAfterOffer,
+    couponId: null,
+    appliedOffer: offerDetails.appliedOffer,
+    appliedCoupon: null,
+    originalPrice: offerDetails.originalPrice,
+    discountAmount: offerDiscountAmount,
+  };
+};
 
 /**
  * Get applied offer details for a product type and price.

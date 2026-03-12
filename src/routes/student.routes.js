@@ -13,9 +13,10 @@ import {
 import {
   getCourses,
   getCourseById,
-  createCourseOrder,
+  initiateCoursePayment,
   purchaseCourse,
   getMyCourses,
+  getCourseContent,
   getCourseFollowUpTests,
   getTests,
   getTestsAndBundles,
@@ -163,6 +164,7 @@ import {
   getStoryDetailStudent,
 } from "../controllers/successStory.controller.js";
 import { getCategoriesForStudent } from "../controllers/category.controller.js";
+import { applyCoupon } from "../controllers/studentCoupon.controller.js";
 import {
   getMyCertificates,
   getMyCertificateById,
@@ -187,8 +189,6 @@ router.post("/contact-us", contactUs);
 router.post("/logout", verifyJWT, logout);
 
 router.get('/profile', verifyJWT, getProfile);
-router.get('/get-profile', verifyJWT, getProfile);
-// router.get("/profile", verifyJWT, getProfile);
 router.post("/forgot-password/request", requestForgotPasswordOTP);
 router.post("/forgot-password/verify", verifyForgotPasswordOTP);
 router.post("/forgot-password/reset", resetPassword);
@@ -201,9 +201,10 @@ router.get("/marketplace/all", verifyJWT, getAllResources);
 // Marketplace - Courses
 router.get("/courses", verifyJWT, getCourses);
 router.get("/courses/:id", verifyJWT, getCourseById);
-router.post("/courses/:id/create-order", verifyJWT, createCourseOrder);
+router.post("/courses/:id/initiate-payment", verifyJWT, initiateCoursePayment);
 router.post("/courses/:id/purchase", verifyJWT, purchaseCourse);
 router.get("/my-courses", verifyJWT, getMyCourses);
+router.get("/courses/:id/content", verifyJWT, getCourseContent);
 router.get("/courses/:id/follow-up-tests", verifyJWT, getCourseFollowUpTests);
 
 // Marketplace - Tests
@@ -220,6 +221,9 @@ router.post("/test-bundles/:id/purchase", verifyJWT, purchaseTestBundle);
 
 // Categories (taxonomy for filtering tests/question banks)
 router.get("/categories", verifyJWT, getCategoriesForStudent);
+
+// Coupons - Apply discount code (test, testBundle, course, olympiad, tournament, workshop, ecommerce, all)
+router.post("/coupons/apply", verifyJWT, applyCoupon);
 
 // My Purchases
 router.get("/my-tests", verifyJWT, getMyTests);

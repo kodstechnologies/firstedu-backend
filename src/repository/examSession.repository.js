@@ -181,8 +181,8 @@ const findExpiredInProgressSessions = async () => {
  * studentIds: optional array; if provided, only these students are considered.
  */
 /**
- * Get latest exam session status per test for a student.
- * Returns Map<testIdString, "not_started" | "resume" | "completed">
+ * Get latest exam session status and sessionId per test for a student.
+ * Returns Map<testIdString, { status: "not_started"|"resume"|"completed", sessionId: ObjectId|null }>
  */
 const getSessionStatusMapByStudent = async (studentId, testIds) => {
   try {
@@ -198,6 +198,7 @@ const getSessionStatusMapByStudent = async (studentId, testIds) => {
         $group: {
           _id: "$test",
           status: { $first: "$status" },
+          sessionId: { $first: "$_id" },
         },
       },
     ]);
@@ -206,9 +207,13 @@ const getSessionStatusMapByStudent = async (studentId, testIds) => {
     for (const row of latest) {
       const testIdStr = row._id?.toString?.();
       if (!testIdStr) continue;
-      if (row.status === "in_progress" || row.status === "paused") map[testIdStr] = "resume";
-      else if (["completed", "expired", "abandoned"].includes(row.status)) map[testIdStr] = "completed";
-      else map[testIdStr] = "not_started";
+      let status = "not_started";
+      if (row.status === "in_progress" || row.status === "paused") status = "resume";
+      else if (["completed", "expired", "abandoned"].includes(row.status)) status = "completed";
+      map[testIdStr] = {
+        status,
+        sessionId: row.sessionId ?? null,
+      };
     }
     return map;
   } catch (error) {

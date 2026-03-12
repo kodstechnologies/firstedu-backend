@@ -1,7 +1,8 @@
 import { ApiError } from "../utils/ApiError.js";
 import merchandiseRepository from "../repository/merchandise.repository.js";
 import walletService from "./wallet.service.js";
-import { attachOfferToList, attachOfferToItem } from "../utils/offerUtils.js";
+import { attachOfferToList, attachOfferToItem, getAmountToCharge } from "../utils/offerUtils.js";
+import couponService from "./coupon.service.js";
 
 /**
  * Get all merchandise items (admin - includes inactive)
@@ -79,11 +80,20 @@ export const getMerchandiseById = async (itemId) => {
 
 /**
  * Claim merchandise item
+ * @param {string} studentId
+ * @param {string} itemId
+ * @param {object} deliveryAddress - Required for physical items
+ * @param {string} [couponCode] - Optional coupon for points discount
  */
-export const claimMerchandise = async (studentId, itemId, deliveryAddress) => {
+export const claimMerchandise = async (studentId, itemId, deliveryAddress, couponCode = null) => {
   const item = await getMerchandiseById(itemId);
 
-  const pointsRequired = item.discountedPrice != null ? item.discountedPrice : item.pointsRequired;
+  const basePoints = item.discountedPrice != null ? item.discountedPrice : item.pointsRequired;
+  const { amountToCharge: pointsRequired, couponId } = await getAmountToCharge(
+    "Ecommerce",
+    basePoints,
+    couponCode
+  );
 
   // Check if student has enough points
   const wallet = await walletService.getOrCreateWallet(studentId, "User");
@@ -96,7 +106,7 @@ export const claimMerchandise = async (studentId, itemId, deliveryAddress) => {
     throw new ApiError(400, "Item is out of stock");
   }
 
-  // Deduct points (use discounted price if offer applied)
+  // Deduct points (use coupon/offer discounted amount)
   await walletService.deductRewardPoints(
     studentId,
     pointsRequired,
@@ -125,6 +135,11 @@ export const claimMerchandise = async (studentId, itemId, deliveryAddress) => {
     await merchandiseRepository.updateMerchandise(itemId, {
       stockQuantity: item.stockQuantity - 1,
     });
+  }
+
+  // Increment coupon usedCount only after successful claim
+  if (couponId) {
+    await couponService.incrementCouponUsedCount(couponId);
   }
 
   return await merchandiseRepository.findMerchandiseClaimById(claim._id);

@@ -106,6 +106,10 @@ export const validateCoupon = async (code, purchaseAmount, itemType = "all") => 
     throw new ApiError(404, "Invalid or inactive coupon code");
   }
 
+  if (!coupon.isActive) {
+    throw new ApiError(404, "Invalid or inactive coupon code");
+  }
+
   // Check validity dates
   const now = new Date();
   if (now < coupon.validFrom || now > coupon.validUntil) {
@@ -150,6 +154,15 @@ export const validateCoupon = async (code, purchaseAmount, itemType = "all") => 
   };
 };
 
+/**
+ * Increment coupon usedCount. Call ONLY when payment/claim has completed successfully.
+ * UsedCount is NOT incremented on initiate - only when user actually pays.
+ */
+export const incrementCouponUsedCount = async (couponId) => {
+  if (!couponId) return;
+  await couponRepository.incrementUsedCount(couponId);
+};
+
 export default {
   createCoupon,
   getCoupons,
@@ -157,5 +170,6 @@ export default {
   updateCoupon,
   deleteCoupon,
   validateCoupon,
+  incrementCouponUsedCount,
 };
 

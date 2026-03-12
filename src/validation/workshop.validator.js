@@ -41,6 +41,7 @@ const updateWorkshop = Joi.object({
 
 const initiateWorkshopPayment = Joi.object({
   paymentMethod: Joi.string().valid("free", "wallet", "razorpay").required(),
+  couponCode: Joi.string().trim().optional().allow("", null),
 });
 
 const registerForWorkshop = Joi.object({

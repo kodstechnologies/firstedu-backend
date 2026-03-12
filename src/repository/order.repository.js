@@ -56,7 +56,7 @@ const createOrder = async (orderData) => {
 const findCoursePurchases = async (studentId) => {
   try {
     return await CoursePurchase.find({ student: studentId, paymentStatus: "completed" })
-      .populate("course", "title description price")
+      .populate("course", "title description price contentUrl contentType")
       .sort({ purchaseDate: -1 });
   } catch (error) {
     throw new ApiError(500, "Failed to fetch course purchases", error.message);

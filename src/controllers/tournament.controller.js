@@ -187,7 +187,8 @@ export const initiateTournamentPayment = asyncHandler(async (req, res) => {
     "tournament",
     id,
     req.user._id,
-    value.paymentMethod
+    value.paymentMethod,
+    { couponCode: value?.couponCode }
   );
 
   if (result.completed) {

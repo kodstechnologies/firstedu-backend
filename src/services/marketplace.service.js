@@ -11,7 +11,8 @@ import {
   createRazorpayOrder,
   verifyPaymentSignature,
 } from "../utils/razorpayUtils.js";
-import { attachOfferToList, attachOfferToItem, getApplicableOfferDetails } from "../utils/offerUtils.js";
+import { attachOfferToList, attachOfferToItem, getApplicableOfferDetails, getAmountToCharge } from "../utils/offerUtils.js";
+import couponService from "./coupon.service.js";
 
 /**
  * Get all published courses (marketplace listing)
@@ -93,9 +94,14 @@ export const getCourseById = async (courseId, studentId) => {
 };
 
 /**
- * Create Razorpay order for course checkout
+ * Initiate course purchase. Handles free, wallet, and razorpay (like test/test-bundle).
+ * - free: completes purchase immediately if price is 0
+ * - wallet: deducts balance and completes purchase immediately
+ * - razorpay: creates order, returns order details; purchase completed via purchase API after payment
+ * @param {Object} options - { couponCode?: string }
  */
-export const createCourseOrder = async (courseId, studentId) => {
+export const initiateCoursePayment = async (courseId, studentId, paymentMethod, options = {}) => {
+  const { couponCode } = options;
   const course = await courseRepository.findById(courseId);
 
   if (!course || !course.isPublished) {
@@ -111,41 +117,111 @@ export const createCourseOrder = async (courseId, studentId) => {
     throw new ApiError(400, "Course already purchased");
   }
 
-  const price = Number(course.price);
-  if (!price || price < 1) {
-    throw new ApiError(400, "Course price is invalid or free");
+  const price = Number(course.price) || 0;
+
+  if (paymentMethod === "free") {
+    if (price > 0) {
+      throw new ApiError(400, "This course is paid. Use paymentMethod: wallet or razorpay.");
+    }
+    const purchase = await orderRepository.createCoursePurchase({
+      student: studentId,
+      course: courseId,
+      purchasePrice: 0,
+      paymentId: "free",
+      paymentStatus: "completed",
+    });
+    try {
+      await pointsService.awardCoursePurchasePoints(studentId, courseId, course.title || "Course");
+    } catch (error) {
+      console.error("Error awarding points for course purchase:", error);
+    }
+    return { purchase, completed: true };
   }
 
-  const receipt = `course_${courseId}_${studentId}_${Date.now()}`.substring(0, 40);
-  const order = await createRazorpayOrder(price, receipt);
+  const { amountToCharge, couponId, appliedOffer, appliedCoupon } = await getAmountToCharge("Course", price, couponCode);
 
-  await razorpayOrderIntentRepository.create({
-    orderId: order.orderId,
-    studentId,
-    type: "course",
-    entityId: courseId,
-    entityModel: "Course",
-    amountPaise: order.amount,
-    currency: order.currency || "INR",
-    receipt,
-  });
-
-  const razorpayKeyId = process.env.RAZORPAY_KEY_ID;
-  if (!razorpayKeyId) {
-    throw new ApiError(500, "Payment gateway not configured");
+  if (paymentMethod === "wallet") {
+    if (price < 1) {
+      throw new ApiError(400, "This course is free. Use paymentMethod: free.");
+    }
+    await walletService.deductMonetaryBalance(studentId, amountToCharge, "User");
+    const purchase = await orderRepository.createCoursePurchase({
+      student: studentId,
+      course: courseId,
+      purchasePrice: amountToCharge,
+      paymentId: "wallet",
+      paymentStatus: "completed",
+    });
+    if (couponId) {
+      await couponService.incrementCouponUsedCount(couponId);
+    }
+    try {
+      await pointsService.awardCoursePurchasePoints(studentId, courseId, course.title || "Course");
+    } catch (error) {
+      console.error("Error awarding points for course purchase:", error);
+    }
+    return { purchase, completed: true };
   }
 
-  return {
-    orderId: order.orderId,
-    amount: order.amount,
-    currency: order.currency,
-    key: razorpayKeyId,
-    courseId,
-    courseTitle: course.title,
-    appliedOffer: appliedOffer || undefined,
-    originalPrice: price,
-    discountedPrice: amountToCharge,
-  };
+  if (paymentMethod === "razorpay") {
+    if (price < 1) {
+      throw new ApiError(400, "This course is free. Use paymentMethod: free.");
+    }
+    const razorpayKeyId = process.env.RAZORPAY_KEY_ID;
+    const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET;
+    if (!razorpayKeyId || !razorpayKeySecret) {
+      throw new ApiError(500, "Payment gateway not configured");
+    }
+    const receipt = `course_${courseId}_${studentId}_${Date.now()}`.substring(0, 40);
+    let order;
+    try {
+      order = await createRazorpayOrder(amountToCharge, receipt);
+    } catch (err) {
+      const statusCode = err?.statusCode ?? err?.response?.status;
+      const code = err?.error?.code ?? err?.response?.data?.error?.code;
+      if (statusCode === 401 || code === "BAD_REQUEST_ERROR") {
+        console.error("[Razorpay] Authentication failed:", err?.error ?? err?.message ?? err);
+        throw new ApiError(500, "Payment gateway authentication failed.");
+      }
+      console.error("[Razorpay] Order create error:", err?.error ?? err?.message ?? err);
+      throw new ApiError(500, "Payment gateway error. Please try again later.");
+    }
+
+    await razorpayOrderIntentRepository.create({
+      orderId: order.orderId,
+      studentId,
+      type: "course",
+      entityId: courseId,
+      entityModel: "Course",
+      amountPaise: order.amount,
+      currency: order.currency || "INR",
+      receipt,
+      couponId: couponId || undefined,
+    });
+
+    return {
+      completed: false,
+      orderId: order.orderId,
+      amount: order.amount,
+      currency: order.currency,
+      key: razorpayKeyId,
+      courseId,
+      courseTitle: course.title,
+      appliedOffer: appliedOffer || undefined,
+      appliedCoupon: appliedCoupon || undefined,
+      originalPrice: price,
+      discountedPrice: amountToCharge,
+    };
+  }
+
+  throw new ApiError(400, "Invalid paymentMethod. Use: free, wallet, or razorpay.");
+};
+
+/** @deprecated Use initiateCoursePayment with paymentMethod: 'razorpay' */
+export const createCourseOrder = async (courseId, studentId, options = {}) => {
+  const result = await initiateCoursePayment(courseId, studentId, "razorpay", options);
+  if (result.completed) return result.purchase;
+  return result;
 };
 
 /**
@@ -203,6 +279,10 @@ export const purchaseCourse = async (
   });
   await razorpayOrderIntentRepository.markReconciled(razorpayOrderId, razorpayPaymentId);
 
+  if (intent.couponId) {
+    await couponService.incrementCouponUsedCount(intent.couponId);
+  }
+
   try {
     await pointsService.awardCoursePurchasePoints(
       studentId,
@@ -217,14 +297,38 @@ export const purchaseCourse = async (
 };
 
 /**
- * Get student's purchased courses (paginated)
+ * Get student's purchased courses (paginated).
+ * Filters: search (title/description), contentType (pdf | video | audio)
  */
-export const getMyCourses = async (studentId, page = 1, limit = 10) => {
+export const getMyCourses = async (studentId, page = 1, limit = 10, options = {}) => {
+  const { search, contentType } = options;
   const pageNum = parseInt(page);
   const limitNum = parseInt(limit);
   const skip = (pageNum - 1) * limitNum;
 
-  const purchases = await orderRepository.findCoursePurchases(studentId);
+  let purchases = await orderRepository.findCoursePurchases(studentId);
+
+  // Filter by contentType (pdf, video, audio)
+  if (contentType) {
+    const type = String(contentType).toLowerCase();
+    if (["pdf", "video", "audio"].includes(type)) {
+      purchases = purchases.filter(
+        (p) => p.course && String(p.course.contentType || "").toLowerCase() === type
+      );
+    }
+  }
+
+  // Filter by search (title, description)
+  if (search && search.trim()) {
+    const term = search.trim().toLowerCase();
+    purchases = purchases.filter((p) => {
+      if (!p.course) return false;
+      const title = (p.course.title || "").toLowerCase();
+      const desc = (p.course.description || "").toLowerCase();
+      return title.includes(term) || desc.includes(term);
+    });
+  }
+
   const total = purchases.length;
   const paginatedPurchases = purchases.slice(skip, skip + limitNum);
 
@@ -236,6 +340,35 @@ export const getMyCourses = async (studentId, page = 1, limit = 10) => {
       total,
       pages: Math.ceil(total / limitNum) || 1,
     },
+  };
+};
+
+/**
+ * Get course content for viewing/download (requires purchase).
+ * Returns contentUrl and contentType for video, audio, or PDF.
+ */
+export const getCourseContentForDownload = async (courseId, studentId) => {
+  const purchase = await orderRepository.findCoursePurchase({
+    student: studentId,
+    course: courseId,
+    paymentStatus: "completed",
+  });
+  if (!purchase) {
+    throw new ApiError(403, "You must purchase this course to access content");
+  }
+
+  const course = await courseRepository.findById(courseId);
+  if (!course || !course.isPublished) {
+    throw new ApiError(404, "Course not found");
+  }
+  if (!course.contentUrl) {
+    throw new ApiError(404, "Course content is not available");
+  }
+
+  return {
+    contentUrl: course.contentUrl,
+    contentType: course.contentType || "pdf",
+    title: course.title,
   };
 };
 
@@ -432,8 +565,10 @@ export const getTests = async (options = {}) => {
  * - free: completes purchase immediately if price is 0
  * - wallet: deducts balance and completes purchase immediately
  * - razorpay: creates order, returns order details; purchase completed via purchase API after payment
+ * @param {Object} options - { couponCode?: string }
  */
-export const initiateTestPayment = async (testId, studentId, paymentMethod) => {
+export const initiateTestPayment = async (testId, studentId, paymentMethod, options = {}) => {
+  const { couponCode } = options;
   const test = await testRepository.findTestById(testId);
 
   if (!test || !test.isPublished) {
@@ -450,8 +585,6 @@ export const initiateTestPayment = async (testId, studentId, paymentMethod) => {
   }
 
   const price = Number(test.price) || 0;
-  const { discountedPrice, appliedOffer } = await getApplicableOfferDetails("Test", price);
-  const amountToCharge = discountedPrice;
 
   if (paymentMethod === "free") {
     if (price > 0) {
@@ -467,6 +600,8 @@ export const initiateTestPayment = async (testId, studentId, paymentMethod) => {
     return { purchase, completed: true };
   }
 
+  const { amountToCharge, couponId, appliedOffer, appliedCoupon } = await getAmountToCharge("Test", price, couponCode);
+
   if (paymentMethod === "wallet") {
     if (price < 1) {
       throw new ApiError(400, "This test is free. Use paymentMethod: free.");
@@ -479,6 +614,9 @@ export const initiateTestPayment = async (testId, studentId, paymentMethod) => {
       paymentId: "wallet",
       paymentStatus: "completed",
     });
+    if (couponId) {
+      await couponService.incrementCouponUsedCount(couponId);
+    }
     return { purchase, completed: true };
   }
 
@@ -515,6 +653,7 @@ export const initiateTestPayment = async (testId, studentId, paymentMethod) => {
       amountPaise: order.amount,
       currency: order.currency || "INR",
       receipt,
+      couponId: couponId || undefined,
     });
 
     return {
@@ -526,6 +665,7 @@ export const initiateTestPayment = async (testId, studentId, paymentMethod) => {
       testId,
       testTitle: test.title,
       appliedOffer: appliedOffer || undefined,
+      appliedCoupon: appliedCoupon || undefined,
       originalPrice: price,
       discountedPrice: amountToCharge,
     };
@@ -614,6 +754,9 @@ export const purchaseTest = async (
     paymentStatus: "completed",
   });
   await razorpayOrderIntentRepository.markReconciled(razorpayOrderId, razorpayPaymentId);
+  if (intent.couponId) {
+    await couponService.incrementCouponUsedCount(intent.couponId);
+  }
   return purchase;
 };
 
@@ -660,8 +803,10 @@ export const getTestBundles = async (options = {}) => {
 
 /**
  * Initiate test bundle purchase. Handles free, wallet, and razorpay (like olympiad/tournament/workshop).
+ * @param {Object} options - { couponCode?: string }
  */
-export const initiateTestBundlePayment = async (bundleId, studentId, paymentMethod) => {
+export const initiateTestBundlePayment = async (bundleId, studentId, paymentMethod, options = {}) => {
+  const { couponCode } = options;
   const bundle = await testRepository.findBundleById(bundleId, {
     tests: "title durationMinutes questionBank",
   });
@@ -695,6 +840,8 @@ export const initiateTestBundlePayment = async (bundleId, studentId, paymentMeth
     return { purchase, completed: true };
   }
 
+  const { amountToCharge, couponId, appliedOffer, appliedCoupon } = await getAmountToCharge("TestSeries", price, couponCode);
+
   if (paymentMethod === "wallet") {
     if (price < 1) {
       throw new ApiError(400, "This test bundle is free. Use paymentMethod: free.");
@@ -707,6 +854,9 @@ export const initiateTestBundlePayment = async (bundleId, studentId, paymentMeth
       paymentId: "wallet",
       paymentStatus: "completed",
     });
+    if (couponId) {
+      await couponService.incrementCouponUsedCount(couponId);
+    }
     return { purchase, completed: true };
   }
 
@@ -722,7 +872,7 @@ export const initiateTestBundlePayment = async (bundleId, studentId, paymentMeth
     const receipt = `bundle_${bundleId}_${studentId}_${Date.now()}`.substring(0, 40);
     let order;
     try {
-      order = await createRazorpayOrder(price, receipt);
+      order = await createRazorpayOrder(amountToCharge, receipt);
     } catch (err) {
       const statusCode = err?.statusCode ?? err?.response?.status;
       const code = err?.error?.code ?? err?.response?.data?.error?.code;
@@ -743,6 +893,7 @@ export const initiateTestBundlePayment = async (bundleId, studentId, paymentMeth
       amountPaise: order.amount,
       currency: order.currency || "INR",
       receipt,
+      couponId: couponId || undefined,
     });
 
     return {
@@ -754,6 +905,7 @@ export const initiateTestBundlePayment = async (bundleId, studentId, paymentMeth
       bundleId,
       bundleName: bundle.name,
       appliedOffer: appliedOffer || undefined,
+      appliedCoupon: appliedCoupon || undefined,
       originalPrice: price,
       discountedPrice: amountToCharge,
     };
@@ -827,6 +979,9 @@ export const purchaseTestBundle = async (
     paymentStatus: "completed",
   });
   await razorpayOrderIntentRepository.markReconciled(razorpayOrderId, razorpayPaymentId);
+  if (intent.couponId) {
+    await couponService.incrementCouponUsedCount(intent.couponId);
+  }
   return purchase;
 };
 
@@ -910,7 +1065,10 @@ export const getExamHall = async (studentId, page = 1, limit = 20, type = "both"
   );
 
   const getTestStatus = (testId) =>
-    statusMap[testId?.toString?.() ?? ""] ?? "not_started";
+    statusMap[testId?.toString?.() ?? ""]?.status ?? "not_started";
+
+  const getSessionId = (testId) =>
+    statusMap[testId?.toString?.() ?? ""]?.sessionId ?? null;
 
   const items = paginatedPurchases
     .map((p) => {
@@ -926,12 +1084,17 @@ export const getExamHall = async (studentId, page = 1, limit = 20, type = "both"
           test: p.test,
           testId: p.test._id,
           testStatus: getTestStatus(p.test._id),
+          sessionId: getSessionId(p.test._id),
         };
       }
       const bundleTests = p.testBundle.tests || [];
       const testsWithStatus = bundleTests.map((t) => {
         const plain = t?.toObject ? t.toObject() : { ...t };
-        return { ...plain, testStatus: getTestStatus(t._id) };
+        return {
+          ...plain,
+          testStatus: getTestStatus(t._id),
+          sessionId: getSessionId(t._id),
+        };
       });
       return {
         ...base,
@@ -956,9 +1119,11 @@ export const getExamHall = async (studentId, page = 1, limit = 20, type = "both"
 export default {
   getCourses,
   getCourseById,
+  initiateCoursePayment,
   createCourseOrder,
   purchaseCourse,
   getMyCourses,
+  getCourseContentForDownload,
   getCourseFollowUpTests,
   getTests,
   getTestById,

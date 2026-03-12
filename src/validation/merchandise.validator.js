@@ -17,6 +17,7 @@ const claimMerchandise = Joi.object({
     then: deliveryAddressSchema.required(),
     otherwise: Joi.optional(),
   }),
+  couponCode: Joi.string().trim().optional().allow("", null),
 });
 
 const createMerchandise = Joi.object({

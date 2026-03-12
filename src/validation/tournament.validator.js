@@ -40,6 +40,7 @@ const updateTournament = Joi.object({
 
 const initiateTournamentPayment = Joi.object({
   paymentMethod: Joi.string().valid("free", "wallet", "razorpay").required(),
+  couponCode: Joi.string().trim().optional().allow("", null),
 });
 
 const registerForTournament = Joi.object({

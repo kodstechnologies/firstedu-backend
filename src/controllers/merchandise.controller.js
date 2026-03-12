@@ -74,7 +74,8 @@ export const claimMerchandise = asyncHandler(async (req, res) => {
   const claim = await merchandiseService.claimMerchandise(
     studentId,
     id,
-    value.deliveryAddress
+    value.deliveryAddress,
+    value?.couponCode
   );
 
   return res

@@ -183,7 +183,8 @@ export const initiateOlympiadPayment = asyncHandler(async (req, res) => {
     "olympiad",
     id,
     req.user._id,
-    value.paymentMethod
+    value.paymentMethod,
+    { couponCode: value?.couponCode }
   );
 
   if (result.completed) {

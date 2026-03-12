@@ -35,6 +35,7 @@ const razorpayOrderIntentSchema = new mongoose.Schema(
     amountPaise: { type: Number, required: true },
     currency: { type: String, default: "INR" },
     receipt: { type: String, trim: true },
+    couponId: { type: mongoose.Schema.Types.ObjectId, ref: "Coupon", default: null },
     reconciled: { type: Boolean, default: false, index: true },
     reconciledAt: { type: Date },
     paymentId: { type: String, trim: true },

@@ -40,6 +40,7 @@ const updateOlympiad = Joi.object({
 
 const initiateOlympiadPayment = Joi.object({
   paymentMethod: Joi.string().valid("free", "wallet", "razorpay").required(),
+  couponCode: Joi.string().trim().optional().allow("", null),
 });
 
 const registerForOlympiad = Joi.object({

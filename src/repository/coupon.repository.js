@@ -70,6 +70,19 @@ const deleteCoupon = async (id) => {
   }
 };
 
+const incrementUsedCount = async (couponId) => {
+  try {
+    const updated = await Coupon.findByIdAndUpdate(
+      couponId,
+      { $inc: { usedCount: 1 } },
+      { new: true }
+    );
+    return updated;
+  } catch (error) {
+    throw new ApiError(500, "Failed to increment coupon usage", error.message);
+  }
+};
+
 export default {
   findCouponByCode,
   findCouponById,
@@ -77,5 +90,6 @@ export default {
   createCoupon,
   updateCoupon,
   deleteCoupon,
+  incrementUsedCount,
 };
 

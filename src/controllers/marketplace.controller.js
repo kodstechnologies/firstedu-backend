@@ -2,7 +2,9 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import marketplaceValidator from "../validation/marketplace.validator.js";
-import marketplaceService from "../services/marketplace.service.js";
+import marketplaceService, {
+  initiateCoursePayment as initiateCoursePaymentService,
+} from "../services/marketplace.service.js";
 
 // Get All Published Courses (Marketplace)
 // Query: type (pdf | video | audio), access (free | paid | both)
@@ -48,16 +50,37 @@ export const getCourseById = asyncHandler(async (req, res) => {
     .json(ApiResponse.success(courseData, "Course fetched successfully"));
 });
 
-// Create Razorpay order for course checkout
-export const createCourseOrder = asyncHandler(async (req, res) => {
+// Initiate course payment (free, wallet, or razorpay - like test/test-bundle)
+export const initiateCoursePayment = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const studentId = req.user._id;
 
-  const data = await marketplaceService.createCourseOrder(id, studentId);
+  const { error, value } = marketplaceValidator.initiateCoursePayment.validate(req.body);
+  if (error) {
+    throw new ApiError(400, "Validation Error", error.details.map((x) => x.message));
+  }
+
+  const result = await initiateCoursePaymentService(
+    id,
+    studentId,
+    value.paymentMethod,
+    { couponCode: value?.couponCode }
+  );
+
+  if (result.completed) {
+    return res
+      .status(201)
+      .json(ApiResponse.success(result.purchase, "Course purchased successfully"));
+  }
 
   return res
     .status(200)
-    .json(ApiResponse.success(data, "Order created for checkout"));
+    .json(
+      ApiResponse.success(
+        result,
+        "Payment order created. Complete payment and call purchase API."
+      )
+    );
 });
 
 // Purchase Course (verify Razorpay payment and complete purchase)
@@ -88,14 +111,16 @@ export const purchaseCourse = asyncHandler(async (req, res) => {
 });
 
 // Get Student's Purchased Courses
+// Query: page, limit, search (title/description), contentType (pdf | video | audio)
 export const getMyCourses = asyncHandler(async (req, res) => {
   const studentId = req.user._id;
-  const { page = 1, limit = 10 } = req.query;
+  const { page = 1, limit = 10, search, contentType } = req.query;
 
   const { purchases, pagination } = await marketplaceService.getMyCourses(
     studentId,
     page,
     limit,
+    { search, contentType },
   );
 
   return res
@@ -107,6 +132,24 @@ export const getMyCourses = asyncHandler(async (req, res) => {
         pagination,
       ),
     );
+});
+
+// Get course content for viewing/download (requires purchase; returns contentUrl for audio, video, pdf)
+// Query: redirect=true — redirects to contentUrl for direct download
+export const getCourseContent = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const studentId = req.user._id;
+  const { redirect } = req.query;
+
+  const content = await marketplaceService.getCourseContentForDownload(id, studentId);
+
+  if (redirect === "true" || redirect === "1") {
+    return res.redirect(302, content.contentUrl);
+  }
+
+  return res
+    .status(200)
+    .json(ApiResponse.success(content, "Course content fetched successfully"));
 });
 
 // Get Follow-up Tests for a Course
@@ -215,6 +258,7 @@ export const initiateTestPayment = asyncHandler(async (req, res) => {
     id,
     studentId,
     value.paymentMethod,
+    { couponCode: value?.couponCode },
   );
 
   if (result.completed) {
@@ -310,6 +354,7 @@ export const initiateTestBundlePayment = asyncHandler(async (req, res) => {
     id,
     studentId,
     value.paymentMethod,
+    { couponCode: value?.couponCode },
   );
 
   if (result.completed) {
@@ -479,7 +524,7 @@ export const getAllResources = asyncHandler(async (req, res) => {
 export default {
   getCourses,
   getCourseById,
-  createCourseOrder,
+  initiateCoursePayment,
   purchaseCourse,
   getMyCourses,
   getCourseFollowUpTests,
