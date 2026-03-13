@@ -22,6 +22,7 @@ const updateTeacherProfile = Joi.object({
   email: Joi.string().email().trim().lowercase().optional(),
   gender: Joi.string().valid("male", "female", "other").optional(),
   about: Joi.string().trim().allow("", null).optional(),
+  profileImage: Joi.any().optional(),
 });
 
 const toggleAvailability = Joi.object({

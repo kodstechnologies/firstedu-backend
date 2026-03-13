@@ -139,7 +139,6 @@ const getQuestionsByBankId = async (bankId, options = {}) => {
     const { sortBy = "orderInBank", sortOrder = "asc" } = options;
     const sort = { [sortBy]: sortOrder === "desc" ? -1 : 1 };
     return await Question.find({ questionBank: bankId })
-      .populate("categoryRef", "name")
       .populate("createdBy", "name email")
       .sort(sort)
       .lean();

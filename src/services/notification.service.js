@@ -1,10 +1,15 @@
 import notificationRepository from "../repository/notification.repository.js";
 import studentRepository from "../repository/student.repository.js";
 import studentSessionRepository from "../repository/studentSession.repository.js";
+import CoursePurchase from "../models/CoursePurchase.js";
+import TestPurchase from "../models/TestPurchase.js";
+import EventRegistration from "../models/EventRegistration.js";
 import {
   sendNotificationToDevice,
   sendNotificationToMultipleDevices,
 } from "./fcm.service.js";
+
+const PURCHASER_PRODUCT_TYPES = ["Course", "Test", "TestBundle", "Olympiad", "Tournament", "Workshop"];
 
 /**
  * Send notification to a single student
@@ -143,6 +148,86 @@ export const sendNotificationToMultipleStudents = async (
     totalSent: createdNotifications.length,
     fcmSent: fcmResult?.successCount || 0,
     fcmFailed: fcmResult?.failureCount || 0,
+  };
+};
+
+/**
+ * Send notification to students who purchased any item of the given product type
+ * (e.g. all test purchasers, all course purchasers, etc.)
+ */
+export const sendNotificationToPurchasers = async (
+  productType,
+  title,
+  body,
+  data = {},
+  sentBy
+) => {
+  let studentIds = [];
+
+  switch (productType) {
+    case "Course":
+      studentIds = await CoursePurchase.find({ paymentStatus: "completed" }).distinct("student");
+      break;
+    case "Test":
+      studentIds = await TestPurchase.find({
+        test: { $exists: true, $ne: null },
+        paymentStatus: "completed",
+      }).distinct("student");
+      break;
+    case "TestBundle":
+      studentIds = await TestPurchase.find({
+        testBundle: { $exists: true, $ne: null },
+        paymentStatus: "completed",
+      }).distinct("student");
+      break;
+    case "Olympiad":
+      studentIds = await EventRegistration.find({
+        eventType: "olympiad",
+        paymentStatus: "completed",
+      }).distinct("student");
+      break;
+    case "Tournament":
+      studentIds = await EventRegistration.find({
+        eventType: "tournament",
+        paymentStatus: "completed",
+      }).distinct("student");
+      break;
+    case "Workshop":
+      studentIds = await EventRegistration.find({
+        eventType: "workshop",
+        paymentStatus: "completed",
+      }).distinct("student");
+      break;
+    default:
+      throw new Error(
+        `Invalid productType. Must be one of: ${PURCHASER_PRODUCT_TYPES.join(", ")}`
+      );
+  }
+
+  // Remove duplicates (a student may have purchased multiple items of same type)
+  studentIds = [...new Set(studentIds.map((id) => id.toString()))];
+
+  if (!studentIds || studentIds.length === 0) {
+    return {
+      notifications: [],
+      totalSent: 0,
+      fcmSent: 0,
+      fcmFailed: 0,
+      message: `No purchasers found for ${productType}`,
+    };
+  }
+
+  const result = await sendNotificationToMultipleStudents(
+    studentIds,
+    title,
+    body,
+    { ...data, productType },
+    sentBy
+  );
+
+  return {
+    ...result,
+    productType,
   };
 };
 

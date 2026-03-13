@@ -220,6 +220,26 @@ export const resetPassword = asyncHandler(async (req, res) => {
   );
 });
 
+// Get admin profile (when logged in)
+export const getAdminProfile = asyncHandler(async (req, res) => {
+  const adminId = req.user._id;
+
+  const admin = await adminRepository.findById(adminId);
+  if (!admin) {
+    throw new ApiError(404, "Admin not found");
+  }
+
+  const profile = {
+    _id: admin._id,
+    name: admin.name,
+    email: admin.email,
+    userType: admin.userType,
+    createdAt: admin.createdAt,
+  };
+
+  return res.status(200).json(ApiResponse.success(profile, "Profile fetched successfully"));
+});
+
 // Change password (when logged in)
 export const changePassword = asyncHandler(async (req, res) => {
   const { error, value } = adminAuthValidator.changePassword.validate(req.body);

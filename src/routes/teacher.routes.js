@@ -8,6 +8,7 @@ import {
   changePassword,
 } from "../controllers/teacherAuth.controller.js";
 import {
+  getProfile,
   updateProfile,
   toggleAvailability,
   getPendingRequests,
@@ -40,6 +41,7 @@ router.post("/contact-support",verifyJWT, submitSupport);
 // ==================== TEACHER CONNECT MODULE ====================
 
 // Profile Management (teacher can update only: name, email, gender, about, profileImage)
+router.get("/profile", verifyJWT, getProfile);
 router.put("/profile", verifyJWT, uploadImage.single("profileImage"), updateProfile);
 router.put("/availability", verifyJWT, toggleAvailability);
 

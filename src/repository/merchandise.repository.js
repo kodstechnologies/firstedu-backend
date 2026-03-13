@@ -38,15 +38,33 @@ const findMerchandise = async (query, options = {}) => {
 
 const createMerchandise = async (merchandiseData) => {
   try {
-    return await Merchandise.create(merchandiseData);
+    const category = merchandiseData.category ?? "general";
+    const payload = {
+      name: merchandiseData.name,
+      pointsRequired: merchandiseData.pointsRequired,
+      description: merchandiseData.description || undefined,
+      imageUrl: merchandiseData.imageUrl || undefined,
+      category,
+      isPhysical: category === "digital" ? false : (merchandiseData.isPhysical ?? false),
+      isActive: merchandiseData.isActive ?? true,
+      stockQuantity: merchandiseData.stockQuantity ?? null,
+    };
+    return await Merchandise.create(payload);
   } catch (error) {
-    throw new ApiError(500, "Failed to create merchandise", error.message);
+    const message = error.name === "ValidationError" ? error.message : "Failed to create merchandise";
+    const statusCode = error.name === "ValidationError" ? 400 : 500;
+    throw new ApiError(statusCode, message);
   }
 };
 
 const updateMerchandise = async (id, updateData) => {
   try {
-    return await Merchandise.findByIdAndUpdate(id, updateData, {
+    // When category is digital, isPhysical must be false
+    const payload = { ...updateData };
+    if (payload.category === "digital") {
+      payload.isPhysical = false;
+    }
+    return await Merchandise.findByIdAndUpdate(id, payload, {
       new: true,
       runValidators: true,
     });

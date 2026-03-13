@@ -113,7 +113,7 @@ export const declareOlympiadWinners = asyncHandler(async (req, res) => {
 // ==================== STUDENT CONTROLLERS ====================
 
 export const getPublishedOlympiads = asyncHandler(async (req, res) => {
-  const { page = 1, limit = 10, search, status, registeredOnly } = req.query;
+  const { page = 1, limit = 10, search, status, registeredOnly, category } = req.query;
 
   const result = await olympiadService.getOlympiads({
     page,
@@ -121,6 +121,7 @@ export const getPublishedOlympiads = asyncHandler(async (req, res) => {
     search,
     status: status || undefined,
     isPublished: true,
+    category: category || undefined,
   });
 
   let olympiadsWithStatus = await Promise.all(
@@ -182,7 +183,8 @@ export const initiateOlympiadPayment = asyncHandler(async (req, res) => {
     "olympiad",
     id,
     req.user._id,
-    value.paymentMethod
+    value.paymentMethod,
+    { couponCode: value?.couponCode }
   );
 
   if (result.completed) {

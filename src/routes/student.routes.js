@@ -13,19 +13,22 @@ import {
 import {
   getCourses,
   getCourseById,
-  createCourseOrder,
+  initiateCoursePayment,
   purchaseCourse,
   getMyCourses,
+  getCourseContent,
   getCourseFollowUpTests,
   getTests,
   getTestsAndBundles,
   getTestById,
-  createTestOrder,
+  initiateTestPayment,
   purchaseTest,
   getTestBundles,
-  createTestBundleOrder,
+  initiateTestBundlePayment,
   purchaseTestBundle,
   getMyTests,
+  getExamHall,
+  getAllResources,
 } from "../controllers/marketplace.controller.js";
 import {
   getDetailedAnalysis,
@@ -79,6 +82,7 @@ import { getAllEvents } from "../controllers/events.controller.js";
 import { contactUs } from "../controllers/contact.controller.js";
 import {
   startExam,
+  pauseExam,
   getExamSession,
   saveAnswer,
   markForReview,
@@ -87,10 +91,12 @@ import {
   submitExam,
   getExamResults,
   getQuestionPalette,
+  getInProgressExams,
 } from "../controllers/examSession.controller.js";
 import {
   getWallet,
-  rechargeWallet,
+  initiateRecharge,
+  completeRecharge,
   getPointsHistory,
 } from "../controllers/wallet.controller.js";
 import {
@@ -118,6 +124,7 @@ import {
   getTicketById,
   getTicketMessages,
   sendMessage,
+  getTicketCategories,
 } from "../controllers/studentSupport.controller.js";
 import {
   submitSupport,
@@ -157,6 +164,11 @@ import {
   getStoryDetailStudent,
 } from "../controllers/successStory.controller.js";
 import { getCategoriesForStudent } from "../controllers/category.controller.js";
+import { applyCoupon } from "../controllers/studentCoupon.controller.js";
+import {
+  getMyCertificates,
+  getMyCertificateById,
+} from "../controllers/certificate.controller.js";
 import { verifyJWT } from "../middleware/auth.middleware.js";
 import { uploadImage, uploadPDF } from "../utils/multerConfig.js";
 import {
@@ -175,35 +187,43 @@ router.post("/login", login);
 // Contact Us (no JWT)
 router.post("/contact-us", contactUs);
 router.post("/logout", verifyJWT, logout);
-router.get("/profile", verifyJWT, getProfile);
+
+router.get('/profile', verifyJWT, getProfile);
 router.post("/forgot-password/request", requestForgotPasswordOTP);
 router.post("/forgot-password/verify", verifyForgotPasswordOTP);
 router.post("/forgot-password/reset", resetPassword);
 router.put("/update-profile", verifyJWT, updateProfile);
 router.put("/change-password", verifyJWT, changePassword);
 
+// Marketplace - All Resources (Combined)
+router.get("/marketplace/all", verifyJWT, getAllResources);
+
 // Marketplace - Courses
 router.get("/courses", verifyJWT, getCourses);
 router.get("/courses/:id", verifyJWT, getCourseById);
-router.post("/courses/:id/create-order", verifyJWT, createCourseOrder);
+router.post("/courses/:id/initiate-payment", verifyJWT, initiateCoursePayment);
 router.post("/courses/:id/purchase", verifyJWT, purchaseCourse);
 router.get("/my-courses", verifyJWT, getMyCourses);
+router.get("/courses/:id/content", verifyJWT, getCourseContent);
 router.get("/courses/:id/follow-up-tests", verifyJWT, getCourseFollowUpTests);
 
 // Marketplace - Tests
 router.get("/tests", verifyJWT, getTests);
 router.get("/tests-and-bundles", verifyJWT, getTestsAndBundles);
 router.get("/tests/:id", verifyJWT, getTestById);
-router.post("/tests/:id/create-order", verifyJWT, createTestOrder);
+router.post("/tests/:id/initiate-payment", verifyJWT, initiateTestPayment);
 router.post("/tests/:id/purchase", verifyJWT, purchaseTest);
 
 // Marketplace - Test Bundles
 router.get("/test-bundles", getTestBundles);
-router.post("/test-bundles/:id/create-order", verifyJWT, createTestBundleOrder);
+router.post("/test-bundles/:id/initiate-payment", verifyJWT, initiateTestBundlePayment);
 router.post("/test-bundles/:id/purchase", verifyJWT, purchaseTestBundle);
 
 // Categories (taxonomy for filtering tests/question banks)
 router.get("/categories", verifyJWT, getCategoriesForStudent);
+
+// Coupons - Apply discount code (test, testBundle, course, olympiad, tournament, workshop, ecommerce, all)
+router.post("/coupons/apply", verifyJWT, applyCoupon);
 
 // My Purchases
 router.get("/my-tests", verifyJWT, getMyTests);
@@ -271,11 +291,20 @@ router.get("/my-events", verifyJWT, getMyEventsDashboard);
 
 // ==================== EXAM HALL (Examination System) ====================
 
+// Exam Hall - all purchased tests and test series
+router.get("/examhall", verifyJWT, getExamHall);
+
 // Start Exam Session
 router.post("/tests/:testId/start-exam", verifyJWT, startExam);
 
+// Get In-Progress Exams
+router.get("/exam-sessions/in-progress", verifyJWT, getInProgressExams);
+
 // Get Exam Session (with questions, timer, palette)
 router.get("/exam-sessions/:sessionId", verifyJWT, getExamSession);
+
+// Pause Exam (stops timer; call start-exam to resume)
+router.post("/exam-sessions/:sessionId/pause", verifyJWT, pauseExam);
 
 // Save Answer
 router.put("/exam-sessions/:sessionId/questions/:questionId/answer", verifyJWT, saveAnswer);
@@ -302,15 +331,16 @@ router.get("/exam-sessions/:sessionId/palette", verifyJWT, getQuestionPalette);
 
 // Wallet Routes
 router.get("/wallet", verifyJWT, getWallet);
-router.post("/wallet/recharge", verifyJWT, rechargeWallet);
+router.post("/wallet/recharge/initiate", verifyJWT, initiateRecharge);
+router.post("/wallet/recharge", verifyJWT, completeRecharge);
 router.get("/wallet/points-history", verifyJWT, getPointsHistory);
 router.post("/wallet/convert-points", verifyJWT, convertPoints);
 
-// Merchandise Store Routes
+// Merchandise Store Routes (specific routes must come before parameterized :id)
 router.get("/merchandise", verifyJWT, getMerchandiseItems);
+router.get("/merchandise/my-claims", verifyJWT, getMyClaims);
 router.get("/merchandise/:id", verifyJWT, getMerchandiseById);
 router.post("/merchandise/:id/claim", verifyJWT, claimMerchandise);
-router.get("/merchandise/my-claims", verifyJWT, getMyClaims);
 
 // Order History
 router.get("/orders", verifyJWT, getMyOrders);
@@ -359,9 +389,30 @@ router.post("/teacher-connect/apply", uploadPDF.single("resume"), applyForJob);
 // Ticket Management
 router.post("/support/tickets", verifyJWT, createTicket);
 router.get("/support/tickets", verifyJWT, getMyTickets);
-router.get("/support/tickets/:ticketId", verifyJWT, getTicketById);
-router.get("/support/tickets/:ticketId/messages", verifyJWT, getTicketMessages);
-router.post("/support/tickets/:ticketId/messages", verifyJWT, sendMessage);
+
+// Specific routes like '/categories' must come before parameterized routes like '/:ticketId'
+router.get("/support/tickets/categories", verifyJWT, getTicketCategories);
+router.get(
+  "/support/tickets/:ticketId",
+  verifyJWT,
+  getTicketById
+);
+router.get(
+  "/support/tickets/:ticketId/messages",
+  verifyJWT,
+  getTicketMessages
+);
+router.post(
+  "/support/tickets/:ticketId/messages",
+  verifyJWT,
+  sendMessage
+);
+
+// ==================== CERTIFICATES ====================
+
+// Student's own certificates
+router.get("/certificates", verifyJWT, getMyCertificates);
+router.get("/certificates/:certificateId", verifyJWT, getMyCertificateById);
 
 // ==================== NOTIFICATIONS ====================
 

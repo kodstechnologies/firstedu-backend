@@ -187,9 +187,9 @@ export const handlePostSignupWalletRewards = async (
 
 /**
  * Convert reward points to monetary balance.
- * Conversion Rule: 10 Points = 1 Monetary Unit.
+ * Conversion Rule: 100 Points = 10 Balance. Minimum 100 points required to convert.
  * @param {string} userId - The user's ID
- * @param {number} pointsToConvert - Points to convert (must be multiple of 10)
+ * @param {number} pointsToConvert - Points to convert (min 100, any amount above)
  * @returns {Promise<Object>} - The updated wallet
  */
 export const convertPointsToMoney = async (userId, pointsToConvert) => {
@@ -198,8 +198,8 @@ export const convertPointsToMoney = async (userId, pointsToConvert) => {
     throw new Error('Points to convert must be greater than 0');
   }
 
-  if (pointsToConvert % 10 !== 0) {
-    throw new Error('Points must be in multiples of 10');
+  if (pointsToConvert < 100) {
+    throw new Error('Minimum 100 points required to convert to balance');
   }
 
   // 2. Fetch wallet
@@ -213,8 +213,8 @@ export const convertPointsToMoney = async (userId, pointsToConvert) => {
     throw new Error('Insufficient reward points');
   }
 
-  // 3. Calculate conversion
-  const monetaryToAdd = pointsToConvert / 10;
+  // 3. Calculate conversion: 100 points = 10 balance
+  const monetaryToAdd = (pointsToConvert / 100) * 10;
 
   // 4. Atomic update
   const updatedWallet = await walletRepository.convertRewardPoints(

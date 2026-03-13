@@ -23,10 +23,6 @@ const questionSchema = new mongoose.Schema(
     },
     explanation: { type: String, trim: true },
     subject: { type: String, trim: true },
-    categoryRef: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Category",
-    },
     questionBank: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "QuestionBank",

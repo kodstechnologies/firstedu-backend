@@ -41,6 +41,8 @@ const jobApplicationSchema = new mongoose.Schema(
     // Interview details (set by admin when scheduling)
     interviewDate: { type: Date, default: null },
     interviewTime: { type: String, trim: true, default: null },
+    /** Combined date+time for accurate "interview taken" check (date-only compared against time) */
+    interviewDateTime: { type: Date, default: null },
     interviewProvider: { type: String, trim: true, default: null },
     providerLink: { type: String, trim: true, default: null },
   },

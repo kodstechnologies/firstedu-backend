@@ -23,15 +23,6 @@ const couponSchema = new mongoose.Schema(
       required: true,
       min: 0,
     },
-    minPurchaseAmount: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
-    maxDiscountAmount: {
-      type: Number,
-      default: null, // null means no limit
-    },
     validFrom: {
       type: Date,
       required: true,
@@ -55,7 +46,7 @@ const couponSchema = new mongoose.Schema(
     },
     applicableTo: {
       type: String,
-      enum: ["all", "courses", "tests", "bundles"],
+      enum: ["all", "Test", "TestSeries", "Course", "Olympiad", "Tournament", "Workshop", "Ecommerce"],
       default: "all",
     },
   },

@@ -5,6 +5,7 @@ import {
   uploadImageToCloudinary,
   deleteFileFromCloudinary,
 } from "../utils/cloudinaryUpload.js";
+import { attachOfferToList, attachOfferToItem } from "../utils/offerUtils.js";
 
 const WORKSHOPS_IMAGE_FOLDER = "workshops";
 
@@ -155,8 +156,10 @@ export const getWorkshops = async (options = {}) => {
     workshopRepository.count(query),
   ]);
 
+  const workshopsWithOffer = await attachOfferToList(workshops, "Workshop", "price");
+
   return {
-    workshops,
+    workshops: workshopsWithOffer,
     pagination: {
       page: pageNum,
       limit: limitNum,
@@ -175,7 +178,7 @@ export const getWorkshopById = async (id) => {
   if (!workshop) {
     throw new ApiError(404, "Workshop not found");
   }
-  return workshop;
+  return await attachOfferToItem(workshop, "Workshop", "price");
 };
 
 export const updateWorkshop = async (id, updateData, file) => {

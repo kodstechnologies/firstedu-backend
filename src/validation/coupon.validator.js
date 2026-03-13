@@ -5,14 +5,25 @@ const createCoupon = Joi.object({
   description: Joi.string().trim().optional().allow(""),
   discountType: Joi.string().valid("percentage", "fixed").required(),
   discountValue: Joi.number().positive().required(),
-  minPurchaseAmount: Joi.number().min(0).default(0),
-  maxDiscountAmount: Joi.number().positive().allow(null).optional(),
   validFrom: Joi.date().required(),
   validUntil: Joi.date().greater(Joi.ref("validFrom")).required(),
   usageLimit: Joi.number().integer().positive().allow(null).optional(),
   isActive: Joi.boolean().default(true),
   applicableTo: Joi.string()
-    .valid("all", "courses", "tests", "bundles")
+    .valid("all", "Test", "TestSeries", "Course", "Olympiad", "Tournament", "Workshop", "Ecommerce")
+    .default("all"),
+});
+
+/**
+ * Student: Apply/validate coupon for discount preview.
+ * itemType: test | testBundle | course | olympiad | tournament | workshop | ecommerce | all
+ * - "all" = universal coupon, works wherever there's an amount (test, bundle, course, event, merchandise)
+ */
+const applyCoupon = Joi.object({
+  code: Joi.string().required().trim(),
+  amount: Joi.number().min(0).required(),
+  itemType: Joi.string()
+    .valid("test", "testBundle", "course", "olympiad", "tournament", "workshop", "ecommerce", "all")
     .default("all"),
 });
 
@@ -21,19 +32,18 @@ const updateCoupon = Joi.object({
   description: Joi.string().trim().optional().allow(""),
   discountType: Joi.string().valid("percentage", "fixed").optional(),
   discountValue: Joi.number().positive().optional(),
-  minPurchaseAmount: Joi.number().min(0).optional(),
-  maxDiscountAmount: Joi.number().positive().allow(null).optional(),
   validFrom: Joi.date().optional(),
   validUntil: Joi.date().optional(),
   usageLimit: Joi.number().integer().positive().allow(null).optional(),
   isActive: Joi.boolean().optional(),
   applicableTo: Joi.string()
-    .valid("all", "courses", "tests", "bundles")
+    .valid("all", "Test", "TestSeries", "Course", "Olympiad", "Tournament", "Workshop", "Ecommerce")
     .optional(),
 });
 
 export default {
   createCoupon,
   updateCoupon,
+  applyCoupon,
 };
 

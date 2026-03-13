@@ -114,7 +114,6 @@ export const createQuestionBankWithQuestions = async (data, createdBy) => {
       marks: q.marks ?? 1,
       negativeMarks: q.negativeMarks ?? 0,
       tags: q.tags,
-      categoryRef: q.categoryId || undefined,
       subject: q.subject || undefined,
       questionBank: bank._id,
       sectionIndex,

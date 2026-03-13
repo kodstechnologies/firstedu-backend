@@ -23,6 +23,17 @@ const findByOrderId = async (orderId) => {
   }
 };
 
+/** Find intent by orderId regardless of reconciled status (for complete/verify flows) */
+const findByOrderIdAny = async (orderId) => {
+  try {
+    return await RazorpayOrderIntent.findOne({
+      orderId: String(orderId).trim(),
+    });
+  } catch (error) {
+    throw new ApiError(500, "Failed to find order intent", error.message);
+  }
+};
+
 const markReconciled = async (orderId, paymentId) => {
   try {
     return await RazorpayOrderIntent.findOneAndUpdate(
@@ -38,5 +49,6 @@ const markReconciled = async (orderId, paymentId) => {
 export default {
   create,
   findByOrderId,
+  findByOrderIdAny,
   markReconciled,
 };

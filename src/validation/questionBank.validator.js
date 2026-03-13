@@ -44,7 +44,6 @@ const questionItemSchema = Joi.object({
     }),
   }),
   explanation: Joi.string().trim().optional(),
-  categoryId: Joi.string().optional(),
   subject: Joi.string().trim().optional(),
   topic: Joi.string().trim().optional(),
   difficulty: Joi.string()

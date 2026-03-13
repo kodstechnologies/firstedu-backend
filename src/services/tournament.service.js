@@ -2,6 +2,8 @@ import { ApiError } from "../utils/ApiError.js";
 import tournamentRepository from "../repository/tournament.repository.js";
 import testRepository from "../repository/test.repository.js";
 import questionBankRepository from "../repository/questionBank.repository.js";
+import QuestionBank from "../models/QuestionBank.js";
+import Test from "../models/Test.js";
 import walletService from "./wallet.service.js";
 import eventRegistrationRepository from "../repository/eventRegistration.repository.js";
 import examSessionRepository from "../repository/examSession.repository.js";
@@ -9,6 +11,7 @@ import {
   uploadImageToCloudinary,
   deleteFileFromCloudinary,
 } from "../utils/cloudinaryUpload.js";
+import { attachOfferToList, attachOfferToItem } from "../utils/offerUtils.js";
 
 const TOURNAMENTS_IMAGE_FOLDER = "tournaments";
 
@@ -160,7 +163,7 @@ const buildStatusQuery = (status) => {
 };
 
 export const getTournaments = async (options = {}) => {
-  const { page = 1, limit = 10, search, isPublished, status } = options;
+  const { page = 1, limit = 10, search, isPublished, status, category } = options;
 
   const query = {};
   if (search) {
@@ -177,6 +180,20 @@ export const getTournaments = async (options = {}) => {
   if (normalizedStatus && VALID_STATUSES.includes(normalizedStatus)) {
     const statusQuery = buildStatusQuery(normalizedStatus);
     if (statusQuery) Object.assign(query, statusQuery);
+  }
+
+  if (category) {
+    const bankIds = await QuestionBank.find({ categories: category }).distinct("_id");
+    if (bankIds.length > 0) {
+      const testIds = await Test.find({ questionBank: { $in: bankIds } }).distinct("_id");
+      if (testIds.length > 0) {
+        query["stages.test"] = { $in: testIds };
+      } else {
+        query["stages.test"] = { $in: [] };
+      }
+    } else {
+      query["stages.test"] = { $in: [] };
+    }
   }
 
   const pageNum = parseInt(page);
@@ -198,8 +215,10 @@ export const getTournaments = async (options = {}) => {
 
   await enrichTournamentStagesWithBankStats(tournaments);
 
+  const tournamentsWithOffer = await attachOfferToList(tournaments, "Tournament", "price");
+
   return {
-    tournaments,
+    tournaments: tournamentsWithOffer,
     pagination: {
       page: pageNum,
       limit: limitNum,
@@ -220,7 +239,7 @@ export const getTournamentById = async (id, isAdmin = false) => {
     throw new ApiError(404, "Tournament not found");
   }
   await enrichTournamentStagesWithBankStats(tournament);
-  return tournament;
+  return await attachOfferToItem(tournament, "Tournament", "price");
 };
 
 export const updateTournament = async (id, updateData, file) => {

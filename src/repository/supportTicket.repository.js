@@ -1,6 +1,12 @@
 import SupportTicket from "../models/SupportTicket.js";
 import { ApiError } from "../utils/ApiError.js";
 
+const throwIfInvalidTicketId = (ticketId) => {
+  if (!ticketId || !/^[0-9a-fA-F]{24}$/.test(String(ticketId))) {
+    throw new ApiError(400, "Invalid ticket ID");
+  }
+};
+
 const create = async (ticketData) => {
   try {
     const ticket = await SupportTicket.create(ticketData);
@@ -14,11 +20,15 @@ const create = async (ticketData) => {
 
 const findById = async (ticketId) => {
   try {
+    throwIfInvalidTicketId(ticketId);
     return await SupportTicket.findById(ticketId)
       .populate("student", "name email")
       .populate("assignedTo", "name email")
       .populate("internalNotes.addedBy", "name email");
   } catch (error) {
+    if (error?.name === "CastError") {
+      throw new ApiError(400, "Invalid ticket ID");
+    }
     throw new ApiError(500, "Failed to fetch ticket", error.message);
   }
 };
@@ -36,6 +46,7 @@ const findByTicketNumber = async (ticketNumber) => {
 
 const updateById = async (ticketId, updateData) => {
   try {
+    throwIfInvalidTicketId(ticketId);
     return await SupportTicket.findByIdAndUpdate(
       ticketId,
       { $set: updateData },
@@ -45,6 +56,9 @@ const updateById = async (ticketId, updateData) => {
       .populate("assignedTo", "name email")
       .populate("internalNotes.addedBy", "name email");
   } catch (error) {
+    if (error?.name === "CastError") {
+      throw new ApiError(400, "Invalid ticket ID");
+    }
     throw new ApiError(500, "Failed to update ticket", error.message);
   }
 };
@@ -132,17 +146,84 @@ const findAllTickets = async (options = {}) => {
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);
     const skip = (pageNum - 1) * limitNum;
-    const sort = { [sortBy]: sortOrder === "desc" ? -1 : 1 };
 
-    const [tickets, total] = await Promise.all([
-      SupportTicket.find(query)
-        .populate("student", "name email")
-        .populate("assignedTo", "name email")
-        .sort(sort)
-        .skip(skip)
-        .limit(limitNum),
-      SupportTicket.countDocuments(query),
-    ]);
+    const pipeline = [
+      { $match: query },
+      {
+        $addFields: {
+          priorityRank: {
+            $switch: {
+              branches: [
+                { case: { $eq: ["$priority", "urgent"] }, then: 1 },
+                { case: { $eq: ["$priority", "high"] }, then: 2 },
+                { case: { $eq: ["$priority", "medium"] }, then: 3 },
+                { case: { $eq: ["$priority", "low"] }, then: 4 },
+              ],
+              default: 4,
+            },
+          },
+        },
+      },
+      { $sort: { priorityRank: 1, createdAt: -1 } },
+      {
+        $facet: {
+          tickets: [
+            { $skip: skip },
+            { $limit: limitNum },
+            {
+              $lookup: {
+                from: "users",
+                localField: "student",
+                foreignField: "_id",
+                as: "studentData",
+              },
+            },
+            { $unwind: { path: "$studentData", preserveNullAndEmptyArrays: true } },
+            {
+              $lookup: {
+                from: "admins",
+                localField: "assignedTo",
+                foreignField: "_id",
+                as: "assignedToData",
+              },
+            },
+            { $unwind: { path: "$assignedToData", preserveNullAndEmptyArrays: true } },
+            {
+              $project: {
+                student: {
+                  _id: "$studentData._id",
+                  name: "$studentData.name",
+                  email: "$studentData.email",
+                },
+                assignedTo: {
+                  _id: "$assignedToData._id",
+                  name: "$assignedToData.name",
+                  email: "$assignedToData.email",
+                },
+                ticketNumber: 1,
+                subject: 1,
+                description: 1,
+                category: 1,
+                priority: 1,
+                status: 1,
+                internalNotes: 1,
+                openedAt: 1,
+                resolvedAt: 1,
+                closedAt: 1,
+                lastMessageAt: 1,
+                createdAt: 1,
+                updatedAt: 1,
+              },
+            },
+          ],
+          total: [{ $count: "count" }],
+        },
+      },
+    ];
+
+    const result = await SupportTicket.aggregate(pipeline);
+    const tickets = result[0]?.tickets || [];
+    const total = result[0]?.total?.[0]?.count ?? 0;
 
     return {
       tickets,
@@ -160,6 +241,7 @@ const findAllTickets = async (options = {}) => {
 
 const addInternalNote = async (ticketId, note, adminId) => {
   try {
+    throwIfInvalidTicketId(ticketId);
     return await SupportTicket.findByIdAndUpdate(
       ticketId,
       {
@@ -177,22 +259,39 @@ const addInternalNote = async (ticketId, note, adminId) => {
       .populate("assignedTo", "name email")
       .populate("internalNotes.addedBy", "name email");
   } catch (error) {
+    if (error?.name === "CastError") {
+      throw new ApiError(400, "Invalid ticket ID");
+    }
     throw new ApiError(500, "Failed to add internal note", error.message);
   }
 };
 
 const updateLastMessageAt = async (ticketId) => {
   try {
+    throwIfInvalidTicketId(ticketId);
     return await SupportTicket.findByIdAndUpdate(
       ticketId,
       { lastMessageAt: new Date() },
       { new: true }
     );
   } catch (error) {
+    if (error?.name === "CastError") {
+      throw new ApiError(400, "Invalid ticket ID");
+    }
     throw new ApiError(500, "Failed to update last message time", error.message);
   }
 };
 
+const deleteById = async (ticketId) => {
+  try {
+    throwIfInvalidTicketId(ticketId);
+
+    return await SupportTicket.findByIdAndDelete(ticketId);
+
+  } catch (error) {
+    throw new ApiError(500, "Failed to delete ticket", error.message);
+  }
+};
 export default {
   create,
   findById,
@@ -202,5 +301,6 @@ export default {
   findAllTickets,
   addInternalNote,
   updateLastMessageAt,
+  deleteById ,
 };
 

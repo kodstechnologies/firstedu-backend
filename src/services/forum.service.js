@@ -199,6 +199,7 @@ export const deleteComment = async (forumId, commentId, userId) => {
     throw new ApiError(403, "You can only delete your own comment");
   }
   forum.comments.pull(commentId);
+  forum.markModified("comments");
   await forum.save();
   return await forumRepository.findById(forumId, defaultPopulate);
 };
@@ -214,6 +215,7 @@ export const deleteReply = async (forumId, commentId, replyId, userId) => {
     throw new ApiError(403, "You can only delete your own reply");
   }
   comment.replies.pull(replyId);
+  forum.markModified("comments");
   await forum.save();
   return await forumRepository.findById(forumId, defaultPopulate);
 };
@@ -270,6 +272,7 @@ export const deleteCommentAdmin = async (forumId, commentId) => {
   const comment = forum.comments.id(commentId);
   if (!comment) throw new ApiError(404, "Comment not found");
   forum.comments.pull(commentId);
+  forum.markModified("comments");
   await forum.save();
   return await forumRepository.findById(forumId, defaultPopulate);
 };
@@ -282,6 +285,7 @@ export const deleteReplyAdmin = async (forumId, commentId, replyId) => {
   const reply = comment.replies.id(replyId);
   if (!reply) throw new ApiError(404, "Reply not found");
   comment.replies.pull(replyId);
+  forum.markModified("comments");
   await forum.save();
   return await forumRepository.findById(forumId, defaultPopulate);
 };

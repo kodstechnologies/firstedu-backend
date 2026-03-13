@@ -7,6 +7,19 @@ import teacherRepository from "../repository/teacher.repository.js";
 import { uploadImageToCloudinary } from "../utils/cloudinaryUpload.js";
 
 /**
+ * Get teacher profile (current logged-in teacher)
+ */
+export const getProfile = asyncHandler(async (req, res) => {
+  const teacher = await teacherRepository.findById(req.user._id);
+  if (!teacher) {
+    throw new ApiError(404, "Teacher not found");
+  }
+  return res
+    .status(200)
+    .json(ApiResponse.success(teacher, "Profile fetched successfully"));
+});
+
+/**
  * Update teacher profile (teacher can update only: name, email, gender, about, profileImage)
  */
 export const updateProfile = asyncHandler(async (req, res) => {
@@ -255,6 +268,7 @@ export const getEarnings = asyncHandler(async (req, res) => {
 });
 
 export default {
+  getProfile,
   updateProfile,
   toggleAvailability,
   getPendingRequests,

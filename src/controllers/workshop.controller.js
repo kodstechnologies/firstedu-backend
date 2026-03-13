@@ -174,7 +174,8 @@ export const initiateWorkshopPayment = asyncHandler(async (req, res) => {
     "workshop",
     id,
     req.user._id,
-    value.paymentMethod
+    value.paymentMethod,
+    { couponCode: value?.couponCode }
   );
 
   if (result.completed) {

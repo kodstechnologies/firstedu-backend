@@ -7,6 +7,8 @@ import examSessionRepository from "../repository/examSession.repository.js";
 import walletService from "./wallet.service.js";
 import razorpayOrderIntentRepository from "../repository/razorpayOrderIntent.repository.js";
 import { createRazorpayOrder, verifyPaymentSignature } from "../utils/razorpayUtils.js";
+import { getAmountToCharge } from "../utils/offerUtils.js";
+import couponService from "./coupon.service.js";
 
 const EVENT_MODEL_MAP = {
   olympiad: "Olympiad",
@@ -28,6 +30,7 @@ export const registerForEvent = async (
     razorpayOrderId = null,
     razorpayPaymentId = null,
     razorpaySignature = null,
+    couponCode = null,
   } = options;
 
   // Check if already registered
@@ -76,8 +79,14 @@ export const registerForEvent = async (
 
   // When event has a price, payment is required before registration
   if (price > 0) {
+    const offerModule = EVENT_TYPE_TO_OFFER_MODULE[eventType];
+    const { amountToCharge: regAmountToCharge, couponId } = offerModule
+      ? await getAmountToCharge(offerModule, price, couponCode)
+      : { amountToCharge: price, couponId: null };
+
     if (paymentMethod === "wallet") {
-      await walletService.deductMonetaryBalance(studentId, price, "User");
+      await walletService.deductMonetaryBalance(studentId, regAmountToCharge, "User");
+      if (couponId) await couponService.incrementCouponUsedCount(couponId);
       return await eventRegistrationRepository.create({
         student: studentId,
         eventType,
@@ -115,10 +124,7 @@ export const registerForEvent = async (
       if (intent.type !== eventType || intent.entityId?.toString?.() !== eventIdStr) {
         throw new ApiError(400, "Payment does not match this event");
       }
-      const amountPaise = Math.round(price * 100);
-      if (intent.amountPaise !== amountPaise) {
-        throw new ApiError(400, "Payment amount does not match event price");
-      }
+      // Intent amount may be discounted (offer applied); signature verification confirms payment
       const created = await eventRegistrationRepository.create({
         student: studentId,
         eventType,
@@ -129,6 +135,7 @@ export const registerForEvent = async (
         paymentId: razorpayPaymentId,
       });
       await razorpayOrderIntentRepository.markReconciled(razorpayOrderId, razorpayPaymentId);
+      if (intent.couponId) await couponService.incrementCouponUsedCount(intent.couponId);
       return created;
     }
     throw new ApiError(
@@ -301,8 +308,10 @@ export const initiateEventRegistration = async (
   eventType,
   eventId,
   studentId,
-  paymentMethod
+  paymentMethod,
+  options = {}
 ) => {
+  const { couponCode } = options;
   const existing = await eventRegistrationRepository.findOne({
     student: studentId,
     eventType,
@@ -342,6 +351,10 @@ export const initiateEventRegistration = async (
   }
 
   const price = Number(event.price) || 0;
+  const offerModule = EVENT_TYPE_TO_OFFER_MODULE[eventType];
+  const { amountToCharge, couponId, appliedOffer, appliedCoupon } = offerModule
+    ? await getAmountToCharge(offerModule, price, couponCode)
+    : { amountToCharge: price, couponId: null, appliedOffer: null, appliedCoupon: null };
 
   if (paymentMethod === "free") {
     if (price > 0) {
@@ -354,6 +367,7 @@ export const initiateEventRegistration = async (
   if (paymentMethod === "wallet") {
     const registration = await registerForEvent(eventType, eventId, studentId, {
       paymentMethod: "wallet",
+      couponCode,
     });
     return { registration, completed: true };
   }
@@ -370,7 +384,7 @@ export const initiateEventRegistration = async (
     const receipt = `${eventType}_${eventId}_${studentId}_${Date.now()}`.substring(0, 40);
     let order;
     try {
-      order = await createRazorpayOrder(price, receipt);
+      order = await createRazorpayOrder(amountToCharge, receipt);
     } catch (err) {
       const statusCode = err?.statusCode ?? err?.response?.status;
       const code = err?.error?.code ?? err?.response?.data?.error?.code;
@@ -391,6 +405,7 @@ export const initiateEventRegistration = async (
       amountPaise: order.amount,
       currency: order.currency || "INR",
       receipt,
+      couponId: couponId || undefined,
     });
 
     return {
@@ -402,6 +417,10 @@ export const initiateEventRegistration = async (
       eventType,
       eventId,
       eventTitle: event.title,
+      appliedOffer: appliedOffer || undefined,
+      appliedCoupon: appliedCoupon || undefined,
+      originalPrice: price,
+      discountedPrice: amountToCharge,
     };
   }
 

@@ -65,6 +65,46 @@ export const sendNotificationToMultipleStudents = asyncHandler(async (req, res) 
 });
 
 /**
+ * Send notification to students who purchased any item of the given type (Admin)
+ * e.g. select Test → all users who purchased any test get the notification
+ */
+export const sendNotificationToPurchasers = asyncHandler(async (req, res) => {
+  const { productType, title, body, type, data } = req.body;
+  const sentBy = req.user._id;
+
+  if (!productType) {
+    throw new ApiError(400, "productType is required");
+  }
+
+  const validTypes = ["Course", "Test", "TestBundle", "Olympiad", "Tournament", "Workshop"];
+  if (!validTypes.includes(productType)) {
+    throw new ApiError(
+      400,
+      `productType must be one of: ${validTypes.join(", ")}`
+    );
+  }
+
+  if (!title || !body) {
+    throw new ApiError(400, "Title and body are required");
+  }
+
+  const result = await notificationService.sendNotificationToPurchasers(
+    productType,
+    title,
+    body,
+    { ...data, type: type || "general" },
+    sentBy
+  );
+
+  const message =
+    result.totalSent === 0
+      ? result.message || "No purchasers found for this product"
+      : `Notification sent to ${result.totalSent} purchasers`;
+
+  return res.status(200).json(ApiResponse.success(result, message));
+});
+
+/**
  * Send notification to all students (Admin)
  */
 export const sendNotificationToAllStudents = asyncHandler(async (req, res) => {

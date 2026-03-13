@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import ExamSession from "../models/ExamSession.js";
 import Test from "../models/Test.js";
 import Question from "../models/Question.js";
@@ -22,11 +23,14 @@ const findById = async (id, populateOptions = {}) => {
       query = query.populate("student", populateOptions.student);
     }
     if (populateOptions.answers) {
-      query = query.populate({
+      const answersPopulate = {
         path: "answers.questionId",
         select: populateOptions.answers.select || "",
-        populate: populateOptions.answers.populate || {},
-      });
+      };
+      if (populateOptions.answers.populate && (typeof populateOptions.answers.populate === "string" || (typeof populateOptions.answers.populate === "object" && Object.keys(populateOptions.answers.populate).length > 0))) {
+        answersPopulate.populate = populateOptions.answers.populate;
+      }
+      query = query.populate(answersPopulate);
     }
     return await query;
   } catch (error) {
@@ -44,11 +48,14 @@ const findOne = async (filter, populateOptions = {}) => {
       query = query.populate("student", populateOptions.student);
     }
     if (populateOptions.answers) {
-      query = query.populate({
+      const answersPopulate = {
         path: "answers.questionId",
         select: populateOptions.answers.select || "",
-        populate: populateOptions.answers.populate || {},
-      });
+      };
+      if (populateOptions.answers.populate && (typeof populateOptions.answers.populate === "string" || (typeof populateOptions.answers.populate === "object" && Object.keys(populateOptions.answers.populate).length > 0))) {
+        answersPopulate.populate = populateOptions.answers.populate;
+      }
+      query = query.populate(answersPopulate);
     }
     return await query;
   } catch (error) {
@@ -173,6 +180,47 @@ const findExpiredInProgressSessions = async () => {
  * Get top N students by best score for a test (one entry per student, best score wins; tie-break: earlier completedAt).
  * studentIds: optional array; if provided, only these students are considered.
  */
+/**
+ * Get latest exam session status and sessionId per test for a student.
+ * Returns Map<testIdString, { status: "not_started"|"resume"|"completed", sessionId: ObjectId|null }>
+ */
+const getSessionStatusMapByStudent = async (studentId, testIds) => {
+  try {
+    if (!testIds?.length) return {};
+    const ids = testIds.map((id) => id?.toString?.() ?? id).filter(Boolean);
+    const objectIds = ids.map((id) => new mongoose.Types.ObjectId(id));
+
+    const latest = await ExamSession.aggregate([
+      { $match: { student: new mongoose.Types.ObjectId(studentId), test: { $in: objectIds } } },
+      // Use updatedAt so pause/resume changes reflect immediately
+      { $sort: { updatedAt: -1, createdAt: -1 } },
+      {
+        $group: {
+          _id: "$test",
+          status: { $first: "$status" },
+          sessionId: { $first: "$_id" },
+        },
+      },
+    ]);
+
+    const map = {};
+    for (const row of latest) {
+      const testIdStr = row._id?.toString?.();
+      if (!testIdStr) continue;
+      let status = "not_started";
+      if (row.status === "in_progress" || row.status === "paused") status = "resume";
+      else if (["completed", "expired", "abandoned"].includes(row.status)) status = "completed";
+      map[testIdStr] = {
+        status,
+        sessionId: row.sessionId ?? null,
+      };
+    }
+    return map;
+  } catch (error) {
+    throw new ApiError(500, "Failed to fetch session statuses", error.message);
+  }
+};
+
 const getRankedByTest = async (testId, studentIds = null, limit = 10) => {
   try {
     const match = {
@@ -235,6 +283,7 @@ export default {
   findTestPurchase,
   findAllCompletedSessions,
   findExpiredInProgressSessions,
+  getSessionStatusMapByStudent,
   getRankedByTest,
 };
 

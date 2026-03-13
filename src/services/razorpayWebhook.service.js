@@ -6,6 +6,7 @@ import courseRepository from "../repository/course.repository.js";
 import testRepository from "../repository/test.repository.js";
 import pointsService from "./points.service.js";
 import eventRegistrationRepository from "../repository/eventRegistration.repository.js";
+import walletService from "./wallet.service.js";
 
 const LOG_PREFIX = "[Razorpay Webhook]";
 
@@ -157,6 +158,9 @@ async function reconcilePaymentCaptured(orderId, paymentId, amountPaise) {
       paymentStatus: "completed",
       paymentId,
     });
+  } else if (type === "wallet") {
+    const amountRupees = Math.round(amountPaise / 100);
+    await walletService.addMonetaryBalance(studentId, amountRupees, paymentId, "User");
   } else {
     return { reconciled: false, reason: "unknown_type" };
   }

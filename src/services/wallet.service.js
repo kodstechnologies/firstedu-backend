@@ -1,5 +1,8 @@
 import { ApiError } from "../utils/ApiError.js";
 import walletRepository from "../repository/wallet.repository.js";
+import { createRazorpayOrder } from "../utils/razorpayUtils.js";
+import razorpayOrderIntentRepository from "../repository/razorpayOrderIntent.repository.js";
+import { verifyPaymentSignature } from "../utils/razorpayUtils.js";
 
 /**
  * Get or create wallet for a user
@@ -43,6 +46,74 @@ export const addMonetaryBalance = async (userId, amount, paymentId, userType = "
   return await walletRepository.updateWallet(wallet._id, {
     monetaryBalance: newBalance,
   });
+};
+
+/**
+ * Initiate wallet recharge – create Razorpay order for wallet topup
+ */
+export const initiateWalletRecharge = async (userId, amount) => {
+  if (amount < 1) {
+    throw new ApiError(400, "Amount must be at least ₹1");
+  }
+
+  const receipt = `WALLET_${userId}_${Date.now()}`;
+  const { orderId, amount: amountPaise } = await createRazorpayOrder(amount, receipt);
+
+  await razorpayOrderIntentRepository.create({
+    orderId,
+    studentId: userId,
+    type: "wallet",
+    entityId: userId,
+    entityModel: "User",
+    amountPaise,
+    currency: "INR",
+    receipt,
+  });
+
+  const razorpayKeyId = process.env.RAZORPAY_KEY_ID;
+  if (!razorpayKeyId) {
+    throw new ApiError(500, "Payment gateway not configured");
+  }
+
+  return {
+    orderId,
+    amount: amountPaise,
+    currency: "INR",
+    key: razorpayKeyId,
+  };
+};
+
+/**
+ * Complete wallet recharge – verify Razorpay payment and add balance
+ */
+export const completeWalletRecharge = async (userId, razorpayOrderId, razorpayPaymentId, razorpaySignature) => {
+  const isValid = verifyPaymentSignature(razorpayOrderId, razorpayPaymentId, razorpaySignature);
+  if (!isValid) {
+    throw new ApiError(400, "Invalid payment signature");
+  }
+
+  const intent = await razorpayOrderIntentRepository.findByOrderIdAny(razorpayOrderId);
+  if (!intent) {
+    throw new ApiError(404, "Recharge session not found or expired");
+  }
+
+  if (intent.studentId.toString() !== userId.toString()) {
+    throw new ApiError(403, "Unauthorized");
+  }
+
+  if (intent.type !== "wallet") {
+    throw new ApiError(400, "Invalid recharge session");
+  }
+
+  const amountRupees = Math.round(intent.amountPaise / 100);
+
+  if (!intent.reconciled) {
+    await addMonetaryBalance(userId, amountRupees, razorpayPaymentId, "User");
+    await razorpayOrderIntentRepository.markReconciled(razorpayOrderId, razorpayPaymentId);
+  }
+
+  const wallet = await getOrCreateWallet(userId, "User");
+  return wallet;
 };
 
 /**
@@ -149,5 +220,7 @@ export default {
   addRewardPoints,
   deductRewardPoints,
   getPointsHistory,
+  initiateWalletRecharge,
+  completeWalletRecharge,
 };
 

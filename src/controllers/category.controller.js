@@ -49,15 +49,19 @@ export const getCategoryTree = asyncHandler(async (req, res) => {
 
 /**
  * Student-facing: Get all categories (tree or flat) with optional filter.
- * Query: linkedTo=questionBank|test|testBundle|both, format=tree|flat
+ * Query: linkedTo=all|questionBank|test|testBundle|both|olympiad|tournament, format=tree|flat
+ * - all: union of test + testBundle + olympiad + tournament
+ * - questionBank: categories on any question bank
  * - test: only categories used by published tests
  * - testBundle: only categories used by tests inside active test bundles
- * - both: categories used by either tests or test bundles
+ * - both: union of test + testBundle
+ * - olympiad: categories used by published olympiads (via their test's question bank)
+ * - tournament: categories used by published tournaments (via stage tests' question banks)
  */
 export const getCategoriesForStudent = asyncHandler(async (req, res) => {
   const { linkedTo, format = "tree" } = req.query;
 
-  const validLinkedTo = ["questionBank", "test", "testBundle", "both"].includes(linkedTo) ? linkedTo : null;
+  const validLinkedTo = ["all", "questionBank", "test", "testBundle", "both", "olympiad", "tournament"].includes(linkedTo) ? linkedTo : null;
   const validFormat = ["tree", "flat"].includes(format) ? format : "tree";
 
   const result = await categoryService.getCategoriesForStudent({
@@ -68,7 +72,7 @@ export const getCategoriesForStudent = asyncHandler(async (req, res) => {
   return res.status(200).json(
     ApiResponse.success(
       result,
-      validLinkedTo
+      validLinkedTo && validLinkedTo !== "all"
         ? `Categories filtered by ${validLinkedTo} fetched successfully`
         : "Categories fetched successfully"
     )

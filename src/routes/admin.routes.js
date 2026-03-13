@@ -7,7 +7,9 @@ import {
   verifyForgotPasswordOTP,
   resetPassword,
   changePassword,
+  getAdminProfile,
 } from "../controllers/adminAuth.controller.js";
+import { getDashboardData } from "../controllers/adminDashboard.controller.js";
 import {
   createQuestion,
   getAllQuestions,
@@ -114,6 +116,8 @@ import {
   deleteOffer,
 } from "../controllers/offer.controller.js";
 import {
+  getMerchandise,
+  getMerchandiseById,
   createMerchandise,
   updateMerchandise,
   deleteMerchandise,
@@ -128,11 +132,18 @@ import {
   addInternalNote,
   getTicketMessages,
   sendMessage,
+  getTicketCategories,
 } from "../controllers/adminSupport.controller.js";
+import {
+  uploadCertificate,
+  getCertificates,
+  getCertificateById,
+} from "../controllers/certificate.controller.js";
 import {
   sendNotificationToStudent,
   sendNotificationToMultipleStudents,
   sendNotificationToAllStudents,
+  sendNotificationToPurchasers,
 } from "../controllers/notification.controller.js";
 import {
   createCategory as createTaxonomyCategory,
@@ -211,19 +222,30 @@ import {
   updateApplyJob,
   deleteApplyJob,
   getAllApplicationsAdmin,
+  getInterviewTakenAdmin,
   getApplicationByIdAdmin,
   scheduleInterview,
   approveApplication,
   rejectApplication,
 } from '../controllers/teacherConnectApply.controller.js';
+import {
+  getCategories,
+  getTemplates,
+  getTemplateById,
+  createTemplate,
+  updateTemplate,
+  deleteTemplate,
+} from "../controllers/emailTemplate.controller.js";
 import { verifyJWT } from "../middleware/auth.middleware.js";
-import { uploadCourseMaterial, uploadImage, uploadSuccessStory } from '../utils/multerConfig.js';
+import { uploadCourseMaterial, uploadImage, uploadPDF, uploadSuccessStory } from '../utils/multerConfig.js';
 
 const router = Router();
 
 // Admin Authentication Routes
 router.post("/login", adminLogin);
 router.post("/logout", verifyJWT, adminLogout);
+router.get("/profile", verifyJWT, getAdminProfile);
+router.get("/dashboard", verifyJWT, getDashboardData);
 router.post("/forgot-password/request", requestForgotPasswordOTP);
 router.post("/forgot-password/verify", verifyForgotPasswordOTP);
 router.post("/forgot-password/reset", resetPassword);
@@ -367,8 +389,10 @@ router.get("/orders", verifyJWT, getAllOrders);
 router.get("/orders/:id", verifyJWT, getOrderById);
 
 // Merchandise Management
-router.post("/merchandise", verifyJWT, createMerchandise);
-router.put("/merchandise/:id", verifyJWT, updateMerchandise);
+router.get("/merchandise", verifyJWT, getMerchandise);
+router.get("/merchandise/:id", verifyJWT, getMerchandiseById);
+router.post("/merchandise", verifyJWT, uploadImage.single("image"), createMerchandise);
+router.put("/merchandise/:id", verifyJWT, uploadImage.single("image"), updateMerchandise);
 router.delete("/merchandise/:id", verifyJWT, deleteMerchandise);
 
 // Merchandise Requests (Claims)
@@ -395,6 +419,7 @@ router.delete('/blogs/:id', verifyJWT, deleteBlog);
 
 // Ticket Management
 router.get("/support/tickets", verifyJWT, getAllTickets);
+router.get("/support/tickets/categories", verifyJWT, getTicketCategories);
 router.get("/support/tickets/:ticketId", verifyJWT, getTicketById);
 router.post("/support/tickets/:ticketId/assign", verifyJWT, assignTicket);
 router.put("/support/tickets/:ticketId/status", verifyJWT, updateTicketStatus);
@@ -403,6 +428,15 @@ router.post("/support/tickets/:ticketId/internal-notes", verifyJWT, addInternalN
 // Chat Management
 router.get("/support/tickets/:ticketId/messages", verifyJWT, getTicketMessages);
 router.post("/support/tickets/:ticketId/messages", verifyJWT, sendMessage);
+
+// ==================== CERTIFICATES ====================
+
+// Upload certificate PDF for student (admin sends PDF from frontend)
+router.post("/certificates/upload", verifyJWT, uploadPDF.single("pdf"), uploadCertificate);
+
+// List and view issued certificates
+router.get("/certificates", verifyJWT, getCertificates);
+router.get("/certificates/:certificateId", verifyJWT, getCertificateById);
 
 // ==================== NOTIFICATIONS ====================
 
@@ -414,6 +448,9 @@ router.post("/notifications/send-multiple", verifyJWT, sendNotificationToMultipl
 
 // Send notification to all students
 router.post("/notifications/send-all", verifyJWT, sendNotificationToAllStudents);
+
+// Send notification to students who purchased a specific product (course, test, bundle, olympiad, tournament, workshop)
+router.post("/notifications/send-to-purchasers", verifyJWT, sendNotificationToPurchasers);
 
 
 
@@ -486,9 +523,18 @@ router.get('/teacher-connect/jobs/:id', verifyJWT, getApplyJobByIdAdmin);
 router.put('/teacher-connect/jobs/:id', verifyJWT, updateApplyJob);
 router.delete('/teacher-connect/jobs/:id', verifyJWT, deleteApplyJob);
 router.get('/teacher-connect/applications', verifyJWT, getAllApplicationsAdmin);
+router.get('/teacher-connect/interview-taken', verifyJWT, getInterviewTakenAdmin);
 router.get('/teacher-connect/applications/:id', verifyJWT, getApplicationByIdAdmin);
 router.post('/teacher-connect/applications/:id/schedule-interview', verifyJWT, scheduleInterview);
 router.post('/teacher-connect/applications/:id/approve', verifyJWT, approveApplication);
 router.post('/teacher-connect/applications/:id/reject', verifyJWT, rejectApplication);
+
+// ==================== EMAIL TEMPLATES ====================
+router.get("/email-templates/categories", verifyJWT, getCategories);
+router.get("/email-templates", verifyJWT, getTemplates);
+router.get("/email-templates/:id", verifyJWT, getTemplateById);
+router.post("/email-templates", verifyJWT, createTemplate);
+router.put("/email-templates/:id", verifyJWT, updateTemplate);
+router.delete("/email-templates/:id", verifyJWT, deleteTemplate);
 
 export default router;

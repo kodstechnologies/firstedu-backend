@@ -2,6 +2,8 @@ import { ApiError } from "../utils/ApiError.js";
 import olympiadRepository from "../repository/olympiad.repository.js";
 import testRepository from "../repository/test.repository.js";
 import questionBankRepository from "../repository/questionBank.repository.js";
+import QuestionBank from "../models/QuestionBank.js";
+import Test from "../models/Test.js";
 import walletService from "./wallet.service.js";
 import eventRegistrationRepository from "../repository/eventRegistration.repository.js";
 import examSessionRepository from "../repository/examSession.repository.js";
@@ -9,6 +11,7 @@ import {
   uploadImageToCloudinary,
   deleteFileFromCloudinary,
 } from "../utils/cloudinaryUpload.js";
+import { attachOfferToList, attachOfferToItem } from "../utils/offerUtils.js";
 
 const OLYMPIADS_IMAGE_FOLDER = "olympiads";
 
@@ -146,7 +149,7 @@ const buildStatusQuery = (status) => {
 };
 
 export const getOlympiads = async (options = {}) => {
-  const { page = 1, limit = 10, search, isPublished, status } = options;
+  const { page = 1, limit = 10, search, isPublished, status, category } = options;
 
   const query = {};
   if (search) {
@@ -164,6 +167,20 @@ export const getOlympiads = async (options = {}) => {
   if (normalizedStatus && VALID_STATUSES.includes(normalizedStatus)) {
     const statusQuery = buildStatusQuery(normalizedStatus);
     if (statusQuery) Object.assign(query, statusQuery);
+  }
+
+  if (category) {
+    const bankIds = await QuestionBank.find({ categories: category }).distinct("_id");
+    if (bankIds.length > 0) {
+      const testIds = await Test.find({ questionBank: { $in: bankIds } }).distinct("_id");
+      if (testIds.length > 0) {
+        query.test = { $in: testIds };
+      } else {
+        query.test = { $in: [] };
+      }
+    } else {
+      query.test = { $in: [] };
+    }
   }
 
   const pageNum = parseInt(page);
@@ -207,7 +224,7 @@ export const getOlympiadById = async (id, isAdmin = false) => {
     throw new ApiError(404, "Olympiad not found");
   }
   await enrichOlympiadTestsWithBankStats(olympiad);
-  return olympiad;
+  return await attachOfferToItem(olympiad, "Olympiad", "price");
 };
 
 export const updateOlympiad = async (id, updateData, file) => {

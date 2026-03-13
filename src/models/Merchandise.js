@@ -40,6 +40,15 @@ const merchandiseSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
+    toJSON: {
+      transform(doc, ret) {
+        // Digital category always means non-physical
+        if (ret.category === "digital") {
+          ret.isPhysical = false;
+        }
+        return ret;
+      },
+    },
   }
 );
 

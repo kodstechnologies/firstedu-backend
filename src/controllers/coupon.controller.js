@@ -29,9 +29,9 @@ export const createCoupon = asyncHandler(async (req, res) => {
  * Get all coupons
  */
 export const getCoupons = asyncHandler(async (req, res) => {
-  const { page = 1, limit = 10, isActive } = req.query;
+  const { page = 1, limit = 10, isActive, search } = req.query;
 
-  const result = await couponService.getCoupons(page, limit, isActive);
+  const result = await couponService.getCoupons(page, limit, isActive, search);
 
   return res.status(200).json(
     ApiResponse.success(
