@@ -1,4 +1,4 @@
-import Competition from "../models/Competition.js";
+import {Competition,Test} from "../models/Competition.js";
 import CompetitionSector from "../models/CompetitionSector.js";
 import { ApiError } from "../utils/ApiError.js";
 
@@ -6,9 +6,8 @@ import { ApiError } from "../utils/ApiError.js";
 
 const createCompetition = async (data) => {
   try {
-    const res=await Competition.create(data);
-    await CompetitionSector.updateOne({_id:data.competitionSectorId},{$set:{competitions:res._id}})
-    return res
+    const res = await Competition.create(data);
+    return res;
   } catch (error) {
     throw new ApiError(500, "Failed to create competition", error.message);
   }
@@ -17,7 +16,7 @@ const createCompetition = async (data) => {
 const findCompetitionById = async (id) => {
   try {
    
-    return await Competition.findById(id);
+    return await Competition.findById(id).sort({createdAt:-1});;
   } catch (error) {
     throw new ApiError(500, "Failed to fetch competition", error.message);
   }
@@ -26,7 +25,8 @@ const findCompetitionById = async (id) => {
 const findSectorById = async (id, populateOptions = {}) => {
   try {
   
-    return await Competition.find({competitionSectorId:id})
+    return await Competition.find({competitionSectorId:id}).populate("tests")
+
   } catch (error) {
     throw new ApiError(500, "Failed to fetch competition sector", error.message);
   }
@@ -34,7 +34,7 @@ const findSectorById = async (id, populateOptions = {}) => {
 
 const findAllCompetitions = async (filter = {}) => {
   try {
-    return await Competition.find(filter);
+    return await Competition.find(filter).sort({createdAt:-1});
   } catch (error) {
     throw new ApiError(500, "Failed to fetch competitions", error.message);
   }
@@ -50,7 +50,36 @@ const updateCompetitionById = async (id, data) => {
 
 const deleteCompetitionById = async (id) => {
   try {
-    return await Competition.findByIdAndDelete(id);
+     const res= await Competition.findByIdAndDelete(id);
+  await CompetitionSector.updateOne({_id:res.competitionSectorId},{$Pull:{competitions:id}})
+    return res
+  } catch (error) {
+    throw new ApiError(500, "Failed to update competition", error.message);
+  }
+};
+
+ const createTest = async (id, data) => {
+  try {
+    const testData=await Test.create(data)
+   await Competition.updateOne({_id:id},{$addToSet:{tests:testData._id}})
+   return testData
+  } catch (error) {
+    throw new ApiError(500, "Failed to update competition", error.message);
+  }
+};
+
+const updateTest = async (id, data) => {
+  try {
+    return await Test.findByIdAndUpdate(id, { $set: data }, { new: true });
+  } catch (error) {
+    throw new ApiError(500, "Failed to update competition", error.message);
+  }
+};
+
+const deleteTest = async (id,compitition_id) => {
+  try {
+    await Competition.updateOne({_id:compitition_id},{$pull:{tests:id}})
+    return await Test.deleteOne({_id:id});
   } catch (error) {
     throw new ApiError(500, "Failed to delete competition", error.message);
   }
@@ -118,6 +147,9 @@ export default {
   findAllCompetitions,
   updateCompetitionById,
   deleteCompetitionById,
+  createTest,
+  updateTest,
+  deleteTest,
   createSector,
   findSectorById,
   findAllSectors,

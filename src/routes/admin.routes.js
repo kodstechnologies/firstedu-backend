@@ -239,6 +239,9 @@ import {
   listCompetitionSectors,
   updateCompetitionSector,
   deleteCompetitionSector,
+  createTests,
+  updateTests,
+  deleteTests,
 } from "../controllers/competition.controller.js";
 import { verifyJWT } from "../middleware/auth.middleware.js";
 import { uploadCourseMaterial, uploadImage, uploadPDF, uploadSuccessStory } from '../utils/multerConfig.js';
@@ -535,10 +538,14 @@ router.put("/email-templates/:id", verifyJWT, updateTemplate);
 router.delete("/email-templates/:id", verifyJWT, deleteTemplate);
 
 // ==================== COMPETITIONS ====================
-router.post("/competitions", verifyJWT, createCompetition);
+router.post("/competitions", verifyJWT,createCompetition);
 router.get("/competitions/:id", verifyJWT, getCompetitions);
 router.put("/competitions/:id", verifyJWT, updateCompetition);
 router.delete("/competitions/:id", verifyJWT, deleteCompetition);
+
+router.post("/competitions/test", verifyJWT, createTests);
+router.put("/competitions/test/:id", verifyJWT, updateTests);
+router.delete("/competitions/test/:id", verifyJWT, deleteTests);
 
 router.post("/competition-sectors", verifyJWT, createCompetitionSector);
 router.get("/competition-sectors", verifyJWT, listCompetitionSectors);

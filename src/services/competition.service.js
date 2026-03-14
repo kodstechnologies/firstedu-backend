@@ -5,7 +5,10 @@ import { ApiError } from "../utils/ApiError.js";
 
 const createCompetition = async (data) => {
   if (!data.title || !data.description || !data.competitionSectorId) {
-    throw new ApiError(400, "Title, description, and competitionSectorId are required");
+    throw new ApiError(
+      400,
+      "Title, description, and competitionSectorId are required",
+    );
   }
 
   const competition = await competitionRepository.createCompetition(data);
@@ -13,7 +16,7 @@ const createCompetition = async (data) => {
   // Link to Sector
   await competitionRepository.updateSectorPushCompetition(
     data.competitionSectorId,
-    competition._id
+    competition._id,
   );
 
   return competition;
@@ -46,9 +49,39 @@ const deleteCompetition = async (id) => {
   if (competition.competitionSectorId) {
     await competitionRepository.updateSectorPullCompetition(
       competition.competitionSectorId,
-      id
+      id,
     );
   }
+
+  return true;
+};
+
+const createTest = async (competition_id,data) => {
+
+  if (!data.title || !data.description) {
+    throw new ApiError(
+      400,
+      "Title, description, and competitionSectorId are required",
+    );
+  }
+
+  const testData = await competitionRepository.createTest(competition_id,data);
+
+  return testData;
+};
+
+const updateTest = async (id, data) => {
+  const existing = await competitionRepository.updateTest(id);
+  if (!existing) throw new ApiError(404, "Test not found");
+
+  return await competitionRepository.updateTest(id, data);
+};
+
+const deleteTest = async (id) => {
+  const competition = await competitionRepository.deleteTest(id);
+  if (!competition) throw new ApiError(404, "Test not found");
+
+  await competitionRepository.deleteTest(id);
 
   return true;
 };
@@ -84,6 +117,9 @@ export default {
   updateCompetition,
   deleteCompetition,
   createSector,
+  createTest,
+  updateTest,
+  deleteTest,
   listSectors,
   updateSector,
   deleteSector,

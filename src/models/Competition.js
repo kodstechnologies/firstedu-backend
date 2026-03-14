@@ -25,8 +25,12 @@ const competitionSchema = new mongoose.Schema({
     enum: ["Draft", "Public"],
     default: "Public",
   },
-  tests: [testSchema],
+  tests: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "CompetitionTest",
+  }],
 }, { timestamps: true });
 
-export default mongoose.model("Competition", competitionSchema);
+export const Test= mongoose.models.CompetitionTest|| mongoose.model("CompetitionTest", testSchema);
+export const Competition= mongoose.models.Competition|| mongoose.model("Competition", competitionSchema);
 
