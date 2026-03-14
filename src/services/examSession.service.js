@@ -2,10 +2,51 @@ import { ApiError } from "../utils/ApiError.js";
 import examSessionRepository from "../repository/examSession.repository.js";
 import orderRepository from "../repository/order.repository.js";
 import testRepository from "../repository/test.repository.js";
+import olympiadRepository from "../repository/olympiad.repository.js";
+import tournamentRepository from "../repository/tournament.repository.js";
+import eventRegistrationRepository from "../repository/eventRegistration.repository.js";
 import questionBankRepository from "../repository/questionBank.repository.js";
 import questionRepository from "../repository/question.repository.js";
 import examAnalysisService from "./examAnalysis.service.js";
 import pointsService from "./points.service.js";
+
+const hasCompletedRegistrationForLinkedEventTest = async (testId, studentId) => {
+  const [linkedOlympiads, linkedTournaments] = await Promise.all([
+    olympiadRepository.find(
+      { test: testId, isPublished: true },
+      { limit: 1000 }
+    ),
+    tournamentRepository.find(
+      { "stages.test": testId, isPublished: true },
+      { limit: 1000 }
+    ),
+  ]);
+
+  const olympiadIds = linkedOlympiads.map((o) => o?._id).filter(Boolean);
+  const tournamentIds = linkedTournaments.map((t) => t?._id).filter(Boolean);
+
+  if (olympiadIds.length > 0) {
+    const olympiadRegistration = await eventRegistrationRepository.findOne({
+      student: studentId,
+      eventType: "olympiad",
+      eventId: { $in: olympiadIds },
+      paymentStatus: "completed",
+    });
+    if (olympiadRegistration) return true;
+  }
+
+  if (tournamentIds.length > 0) {
+    const tournamentRegistration = await eventRegistrationRepository.findOne({
+      student: studentId,
+      eventType: "tournament",
+      eventId: { $in: tournamentIds },
+      paymentStatus: "completed",
+    });
+    if (tournamentRegistration) return true;
+  }
+
+  return false;
+};
 
 /**
  * Start a new exam session
@@ -31,7 +72,8 @@ export const startExamSession = async (testId, studentId) => {
     throw new ApiError(400, "Question bank has no questions");
   }
 
-  // Check if student has purchased the test (if test is paid): direct purchase OR bundle purchase
+  // Check if student can access paid test:
+  // direct purchase OR bundle purchase OR paid registration to linked olympiad/tournament.
   if (test.price > 0) {
     let purchase = await orderRepository.findTestPurchase({
       student: studentId,
@@ -50,7 +92,11 @@ export const startExamSession = async (testId, studentId) => {
       }
     }
     if (!purchase) {
-      throw new ApiError(403, "You need to purchase this test first");
+      const hasLinkedEventAccess =
+        await hasCompletedRegistrationForLinkedEventTest(testId, studentId);
+      if (!hasLinkedEventAccess) {
+        throw new ApiError(403, "You need to purchase this test first");
+      }
     }
   }
 
@@ -130,7 +176,7 @@ export const startExamSession = async (testId, studentId) => {
  * Get exam session with questions (without correct answers)
  */
 export const getExamSession = async (sessionId, studentId) => {
-  const session = await examSessionRepository.findOne(
+  let session = await examSessionRepository.findOne(
     {
       _id: sessionId,
       student: studentId,
@@ -176,9 +222,19 @@ export const getExamSession = async (sessionId, studentId) => {
       );
     } catch (error) {
       console.error("Error auto-submitting expired session:", error);
-      // Fallback: just mark as expired
-      session.status = "expired";
-      await examSessionRepository.save(session);
+      // Try to recover by re-reading latest persisted state first.
+      // This avoids accidentally overwriting a successfully completed session.
+      const latestSession = await examSessionRepository.findOne({
+        _id: sessionId,
+        student: studentId,
+      });
+      if (latestSession) {
+        session = latestSession;
+      } else {
+        // Fallback only when session cannot be reloaded
+        session.status = "expired";
+        await examSessionRepository.save(session);
+      }
     }
   }
 
@@ -651,25 +707,48 @@ const checkAnswerCorrectness = (question, studentAnswer) => {
  * Get exam results (with correct answers and explanations)
  */
 export const getExamResults = async (sessionId, studentId) => {
-  const session = await examSessionRepository.findOne(
+  const populateOptions = {
+    test: "title description durationMinutes",
+    answers: {
+      select: "questionText questionType options correctAnswer explanation subject topic marks negativeMarks isParent passage parentQuestionId childQuestions",
+      populate: {
+        path: "childQuestions",
+        select: "questionText questionType options correctAnswer explanation marks negativeMarks",
+      },
+    },
+  };
+
+  let session = await examSessionRepository.findOne(
     {
       _id: sessionId,
       student: studentId,
-      status: "completed",
     },
-    {
-      test: "title description durationMinutes",
-      answers: {
-        select: "questionText questionType options correctAnswer explanation subject topic marks negativeMarks isParent passage parentQuestionId childQuestions",
-        populate: {
-          path: "childQuestions",
-          select: "questionText questionType options correctAnswer explanation marks negativeMarks",
-        },
-      },
-    }
+    populateOptions
   );
 
   if (!session) {
+    throw new ApiError(404, "Exam session not found");
+  }
+
+  // If time has expired but session is not completed yet, auto-submit on-demand
+  const now = new Date();
+  const isOverTime = new Date(session.endTime) < now;
+  if ((session.status === "in_progress" || session.status === "paused") && isOverTime) {
+    try {
+      await autoSubmitExam(sessionId, studentId, "time_expired");
+      session = await examSessionRepository.findOne(
+        {
+          _id: sessionId,
+          student: studentId,
+        },
+        populateOptions
+      );
+    } catch (error) {
+      console.error("Error auto-submitting while fetching results:", error);
+    }
+  }
+
+  if (!session || session.status !== "completed") {
     throw new ApiError(404, "Exam session not found or not completed");
   }
 
@@ -817,13 +896,13 @@ const formatTime = (ms) => {
 };
 
 /**
- * Get in-progress sessions for a student
+ * Get paused sessions for a student
  */
 export const getInProgressSessions = async (studentId, page = 1, limit = 10) => {
   return await examSessionRepository.findAll(
     {
       student: studentId,
-      status: "in_progress",
+      status: "paused",
     },
     {
       page,

@@ -4,6 +4,7 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import { getEventStatus, getGoesLiveAt, withEventStatus } from "../utils/eventStatus.js";
 import olympiadService from "../services/olympiad.service.js";
 import eventRegistrationService from "../services/eventRegistration.service.js";
+import examSessionRepository from "../repository/examSession.repository.js";
 import olympiadValidator from "../validation/olympiad.validator.js";
 
 // ==================== ADMIN CONTROLLERS ====================
@@ -124,6 +125,14 @@ export const getPublishedOlympiads = asyncHandler(async (req, res) => {
     category: category || undefined,
   });
 
+  const testIds = result.olympiads
+    .map((o) => o?.test?._id || o?.test)
+    .filter(Boolean);
+  const sessionMap = await examSessionRepository.getSessionStatusMapByStudent(
+    req.user._id,
+    testIds
+  );
+
   let olympiadsWithStatus = await Promise.all(
     result.olympiads.map(async (olympiad) => {
       const registration = await eventRegistrationService.getRegistrationByEvent(
@@ -132,7 +141,23 @@ export const getPublishedOlympiads = asyncHandler(async (req, res) => {
         req.user._id
       );
       const obj = withEventStatus(olympiad, !!registration);
-      return { ...obj, isRegistered: !!registration };
+      const testId = (obj.test?._id || obj.test)?.toString?.();
+      const sessionInfo = testId ? sessionMap[testId] : null;
+
+      if (obj.test && typeof obj.test === "object") {
+        obj.test = {
+          ...obj.test,
+          sessionId: sessionInfo?.sessionId || null,
+          testStatus: sessionInfo?.status || "not_started",
+        };
+      }
+
+      return {
+        ...obj,
+        isRegistered: !!registration,
+        testSessionId: sessionInfo?.sessionId || null,
+        testStatus: sessionInfo?.status || "not_started",
+      };
     })
   );
 
@@ -159,9 +184,29 @@ export const getOlympiadDetails = asyncHandler(async (req, res) => {
     req.user._id
   );
   const obj = withEventStatus(olympiad, !!registration);
+  const olympiadTestId = (obj.test?._id || obj.test)?.toString?.();
+  const sessionMap = await examSessionRepository.getSessionStatusMapByStudent(
+    req.user._id,
+    olympiadTestId ? [olympiadTestId] : []
+  );
+  const sessionInfo = olympiadTestId ? sessionMap[olympiadTestId] : null;
+
+  if (obj.test && typeof obj.test === "object") {
+    obj.test = {
+      ...obj.test,
+      sessionId: sessionInfo?.sessionId || null,
+      testStatus: sessionInfo?.status || "not_started",
+    };
+  }
+
   return res.status(200).json(
     ApiResponse.success(
-      { ...obj, isRegistered: !!registration },
+      {
+        ...obj,
+        isRegistered: !!registration,
+        testSessionId: sessionInfo?.sessionId || null,
+        testStatus: sessionInfo?.status || "not_started",
+      },
       "Olympiad details fetched successfully"
     )
   );

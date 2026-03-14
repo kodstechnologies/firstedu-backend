@@ -429,14 +429,15 @@ export const getMyTests = asyncHandler(async (req, res) => {
     );
 });
 
-// Get Exam Hall - all purchased tests and test series (bundles)
+// Get Exam Hall - purchased tests, test bundles, and (when live) olympiads & tournaments
+// type: "test" | "testBundle" | "olympiad" | "tournament" | "both" (test+bundle) | "all"
 export const getExamHall = asyncHandler(async (req, res) => {
   const studentId = req.user._id;
-  const { page = 1, limit = 20, type = "both", category } = req.query;
+  const { page = 1, limit = 20, type = "all", category } = req.query;
 
-  const filterType = ["test", "testBundle", "both"].includes(type)
+  const filterType = ["test", "testBundle", "olympiad", "tournament", "both", "all"].includes(type)
     ? type
-    : "both";
+    : "all";
 
   const result = await marketplaceService.getExamHall(
     studentId,

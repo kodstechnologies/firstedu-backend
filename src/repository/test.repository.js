@@ -44,6 +44,7 @@ const findAllTests = async (filter = {}, options = {}) => {
       search,
       questionBank,
       category,
+      applicableFor,
       isPublished,
     } = options;
 
@@ -60,6 +61,10 @@ const findAllTests = async (filter = {}, options = {}) => {
 
     if (typeof isPublished !== "undefined") {
       query.isPublished = isPublished === "true" || isPublished === true;
+    }
+
+    if (applicableFor) {
+      query.applicableFor = applicableFor;
     }
 
     if (search) {

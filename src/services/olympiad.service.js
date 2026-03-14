@@ -71,6 +71,9 @@ export const createOlympiad = async (data, adminId, file) => {
   if (!test) {
     throw new ApiError(404, "Test not found");
   }
+  if ((test.applicableFor ?? "test") !== "olympiad") {
+    throw new ApiError(400, "Selected test is not configured for olympiads");
+  }
 
   // Validate time ranges
   if (new Date(startTime) >= new Date(endTime)) {
@@ -201,9 +204,10 @@ export const getOlympiads = async (options = {}) => {
   ]);
 
   await enrichOlympiadTestsWithBankStats(olympiads);
+  const olympiadsWithOffer = await attachOfferToList(olympiads, "Olympiad", "price");
 
   return {
-    olympiads,
+    olympiads: olympiadsWithOffer,
     pagination: {
       page: pageNum,
       limit: limitNum,
@@ -250,6 +254,9 @@ export const updateOlympiad = async (id, updateData, file) => {
     const test = await testRepository.findTestById(updateData.testId);
     if (!test) {
       throw new ApiError(404, "Test not found");
+    }
+    if ((test.applicableFor ?? "test") !== "olympiad") {
+      throw new ApiError(400, "Selected test is not configured for olympiads");
     }
     updateData.test = updateData.testId;
     delete updateData.testId;

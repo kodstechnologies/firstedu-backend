@@ -161,7 +161,7 @@ export const getQuestionPalette = asyncHandler(async (req, res) => {
 });
 
 /**
- * Get all in-progress exams for the student
+ * Get all paused exams for the student
  */
 export const getInProgressExams = asyncHandler(async (req, res) => {
   const studentId = req.user._id;
@@ -170,7 +170,7 @@ export const getInProgressExams = asyncHandler(async (req, res) => {
   const result = await examSessionService.getInProgressSessions(studentId, page, limit);
 
   return res.status(200).json(
-    ApiResponse.success(result.sessions, "In-progress exams fetched successfully", result.pagination)
+    ApiResponse.success(result.sessions, "Paused exams fetched successfully", result.pagination)
   );
 });
 

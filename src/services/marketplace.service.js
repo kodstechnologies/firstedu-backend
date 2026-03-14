@@ -4,6 +4,9 @@ import testRepository from "../repository/test.repository.js";
 import courseTestLinkRepository from "../repository/courseTestLink.repository.js";
 import orderRepository from "../repository/order.repository.js";
 import examSessionRepository from "../repository/examSession.repository.js";
+import eventRegistrationRepository from "../repository/eventRegistration.repository.js";
+import olympiadRepository from "../repository/olympiad.repository.js";
+import tournamentRepository from "../repository/tournament.repository.js";
 import razorpayOrderIntentRepository from "../repository/razorpayOrderIntent.repository.js";
 import pointsService from "./points.service.js";
 import walletService from "./wallet.service.js";
@@ -13,6 +16,9 @@ import {
 } from "../utils/razorpayUtils.js";
 import { attachOfferToList, attachOfferToItem, getApplicableOfferDetails, getAmountToCharge } from "../utils/offerUtils.js";
 import couponService from "./coupon.service.js";
+
+const isStandaloneMarketplaceTest = (test) =>
+  (test?.applicableFor ?? "test") === "test";
 
 /**
  * Get all published courses (marketplace listing)
@@ -519,7 +525,7 @@ export const getTests = async (options = {}) => {
     sortOrder = "desc",
   } = options;
 
-  const query = { isPublished: true };
+  const query = { isPublished: true, applicableFor: "test" };
   if (questionBank) query.questionBank = questionBank;
   if (search) {
     const regex = { $regex: search, $options: "i" };
@@ -573,6 +579,9 @@ export const initiateTestPayment = async (testId, studentId, paymentMethod, opti
 
   if (!test || !test.isPublished) {
     throw new ApiError(404, "Test not found");
+  }
+  if (!isStandaloneMarketplaceTest(test)) {
+    throw new ApiError(400, "This test is not available for direct purchase");
   }
 
   const existingPurchase = await orderRepository.findTestPurchase({
@@ -691,6 +700,9 @@ export const getTestById = async (testId) => {
 
   if (!test) throw new ApiError(404, "Test not found");
   if (!test.isPublished) throw new ApiError(404, "Test not found");
+  if (!isStandaloneMarketplaceTest(test)) {
+    throw new ApiError(404, "Test not found");
+  }
 
   const testData = await attachOfferToItem(test, "Test", "price");
   delete testData.questions;
@@ -711,6 +723,9 @@ export const purchaseTest = async (
 
   if (!test || !test.isPublished) {
     throw new ApiError(404, "Test not found");
+  }
+  if (!isStandaloneMarketplaceTest(test)) {
+    throw new ApiError(400, "This test is not available for direct purchase");
   }
 
   const existingPurchase = await orderRepository.findTestPurchase({
@@ -1017,66 +1032,52 @@ const hasCategory = (categories, categoryId) => {
   return categories.some((c) => (c?._id ?? c)?.toString?.() === idStr);
 };
 
+const olympiadPopulate = [
+  { path: "test", select: "title description durationMinutes questionBank price", populate: { path: "questionBank", select: "name categories" } },
+];
+const tournamentStagesPopulate = [
+  {
+    path: "stages.test",
+    select: "title description durationMinutes questionBank",
+    populate: { path: "questionBank", select: "name categories" },
+  },
+];
+
 /**
- * Get exam hall - all purchased tests and test series (bundles) for the student
- * Returns items with type "test" or "testBundle", with full details including tests within bundles
- * @param {string} type - Filter: "test" | "testBundle" | "both" (default)
- * @param {string} category - Filter by category ID (optional)
+ * Get exam hall - purchased tests, test bundles, and (when live) olympiads & tournaments the student joined.
+ * Olympiad/tournament tests appear only when event startTime <= now <= endTime (or stage window for tournaments).
+ * @param {string} type - "test" | "testBundle" | "olympiad" | "tournament" | "both" (test+bundle) | "all" (default: all)
+ * @param {string} category - Filter by category ID (questionBank categories for tests / olympiad / tournament)
  */
-export const getExamHall = async (studentId, page = 1, limit = 20, type = "both", category = null) => {
+export const getExamHall = async (studentId, page = 1, limit = 20, type = "all", category = null) => {
   const pageNum = parseInt(page);
   const limitNum = parseInt(limit);
   const skip = (pageNum - 1) * limitNum;
+  const now = new Date();
+  const nowMs = now.getTime();
+  const ONE_MINUTE_MS = 60 * 1000;
+  /** Include in exam hall only when current date and exact start time match (same minute as start). */
+  const isAtExactStartTime = (startTime, endTime) => {
+    const startMs = new Date(startTime).getTime();
+    const endMs = new Date(endTime).getTime();
+    return nowMs >= startMs && nowMs < startMs + ONE_MINUTE_MS && nowMs <= endMs;
+  };
 
   const purchases = await orderRepository.findTestPurchasesForExamHall(studentId);
-
-  const filtered = purchases.filter((p) => {
-    if (!p.test && !p.testBundle) return false;
-    if (type === "test") return !!p.test;
-    if (type === "testBundle") return !!p.testBundle;
-
-    if (category) {
-      if (p.test) {
-        const cats = p.test?.questionBank?.categories;
-        if (!hasCategory(cats, category)) return false;
-      } else if (p.testBundle) {
-        const tests = p.testBundle?.tests || [];
-        const matches = tests.some((t) => hasCategory(t?.questionBank?.categories, category));
-        if (!matches) return false;
-      }
-    }
-    return true;
-  });
-
-  const total = filtered.length;
-  const paginatedPurchases = filtered.slice(skip, skip + limitNum);
-
-  // Collect all test IDs (standalone + from bundles) for status lookup
-  const allTestIds = [];
-  paginatedPurchases.forEach((p) => {
-    if (p.test) allTestIds.push(p.test._id);
+  const purchaseTestIds = [];
+  purchases.forEach((p) => {
+    if (p.test) purchaseTestIds.push(p.test._id);
     else if (p.testBundle?.tests?.length)
-      p.testBundle.tests.forEach((t) => t?._id && allTestIds.push(t._id));
+      p.testBundle.tests.forEach((t) => t?._id && purchaseTestIds.push(t._id));
   });
+  const statusMap = await examSessionRepository.getSessionStatusMapByStudent(studentId, purchaseTestIds);
+  const getTestStatus = (testId) => statusMap[testId?.toString?.() ?? ""]?.status ?? "not_started";
+  const getSessionId = (testId) => statusMap[testId?.toString?.() ?? ""]?.sessionId ?? null;
 
-  const statusMap = await examSessionRepository.getSessionStatusMapByStudent(
-    studentId,
-    allTestIds
-  );
-
-  const getTestStatus = (testId) =>
-    statusMap[testId?.toString?.() ?? ""]?.status ?? "not_started";
-
-  const getSessionId = (testId) =>
-    statusMap[testId?.toString?.() ?? ""]?.sessionId ?? null;
-
-  const items = paginatedPurchases
+  const purchaseItems = purchases
+    .filter((p) => p.test || p.testBundle)
     .map((p) => {
-      const base = {
-        _id: p._id,
-        purchaseDate: p.purchaseDate,
-        purchasePrice: p.purchasePrice,
-      };
+      const base = { _id: p._id, purchaseDate: p.purchaseDate, purchasePrice: p.purchasePrice };
       if (p.test) {
         return {
           ...base,
@@ -1087,32 +1088,131 @@ export const getExamHall = async (studentId, page = 1, limit = 20, type = "both"
           sessionId: getSessionId(p.test._id),
         };
       }
-      const bundleTests = p.testBundle.tests || [];
-      const testsWithStatus = bundleTests.map((t) => {
+      const bundleTests = (p.testBundle?.tests || []).map((t) => {
         const plain = t?.toObject ? t.toObject() : { ...t };
-        return {
-          ...plain,
-          testStatus: getTestStatus(t._id),
-          sessionId: getSessionId(t._id),
-        };
+        return { ...plain, testStatus: getTestStatus(t._id), sessionId: getSessionId(t._id) };
       });
       return {
         ...base,
         type: "testBundle",
         testBundle: p.testBundle,
         bundleId: p.testBundle._id,
-        tests: testsWithStatus,
+        tests: bundleTests,
       };
     });
 
+  const eventRegs = await eventRegistrationRepository.find(
+    { student: studentId, eventType: { $in: ["olympiad", "tournament"] }, paymentStatus: "completed" },
+    { limit: 500 }
+  );
+  const olympiadIds = [...new Set(eventRegs.filter((r) => r.eventType === "olympiad").map((r) => r.eventId).filter(Boolean))];
+  const tournamentIds = [...new Set(eventRegs.filter((r) => r.eventType === "tournament").map((r) => r.eventId).filter(Boolean))];
+
+  const olympiadItems = [];
+  const eventTestIds = [];
+  if (olympiadIds.length > 0) {
+    const olympiads = await olympiadRepository.find(
+      { _id: { $in: olympiadIds }, isPublished: true },
+      { populate: olympiadPopulate, limit: 500 }
+    );
+    for (const o of olympiads) {
+      if (isAtExactStartTime(o.startTime, o.endTime) && o.test) {
+        eventTestIds.push(o.test._id);
+        olympiadItems.push({
+          _id: o._id,
+          type: "olympiad",
+          olympiadId: o._id,
+          olympiadTitle: o.title,
+          test: o.test,
+          testId: o.test._id,
+          startTime: o.startTime,
+          endTime: o.endTime,
+        });
+      }
+    }
+  }
+  const tournamentItems = [];
+  if (tournamentIds.length > 0) {
+    const tournaments = await tournamentRepository.find(
+      { _id: { $in: tournamentIds }, isPublished: true },
+      { populate: tournamentStagesPopulate, limit: 500 }
+    );
+    for (const t of tournaments) {
+      const stages = t.stages || [];
+      const liveStages = stages
+        .filter((s) => s.test && s.startTime && s.endTime)
+        .filter((s) => isAtExactStartTime(s.startTime, s.endTime))
+        .map((s) => {
+          eventTestIds.push(s.test._id);
+          const plain = s.test?.toObject ? s.test.toObject() : { ...s.test };
+          return {
+            ...(s.toObject ? s.toObject() : { ...s }),
+            test: { ...plain },
+            testId: s.test._id,
+          };
+        });
+      if (liveStages.length > 0) {
+        tournamentItems.push({
+          _id: t._id,
+          type: "tournament",
+          tournamentId: t._id,
+          tournamentTitle: t.title,
+          stages: liveStages,
+        });
+      }
+    }
+  }
+
+  const eventStatusMap =
+    eventTestIds.length > 0
+      ? await examSessionRepository.getSessionStatusMapByStudent(studentId, [...new Set(eventTestIds)])
+      : {};
+  const getEventTestStatus = (id) => eventStatusMap[id?.toString?.() ?? ""]?.status ?? "not_started";
+  const getEventSessionId = (id) => eventStatusMap[id?.toString?.() ?? ""]?.sessionId ?? null;
+  olympiadItems.forEach((item) => {
+    item.testStatus = getEventTestStatus(item.testId);
+    item.sessionId = getEventSessionId(item.testId);
+  });
+  tournamentItems.forEach((item) => {
+    (item.stages || []).forEach((st) => {
+      st.testStatus = getEventTestStatus(st.testId);
+      st.sessionId = getEventSessionId(st.testId);
+      if (st.test) {
+        st.test = { ...st.test, testStatus: st.testStatus, sessionId: st.sessionId };
+      }
+    });
+  });
+
+  let combined = [...purchaseItems, ...olympiadItems, ...tournamentItems];
+
+  const typeFilter = (item) => {
+    if (type === "test") return item.type === "test";
+    if (type === "testBundle") return item.type === "testBundle";
+    if (type === "olympiad") return item.type === "olympiad";
+    if (type === "tournament") return item.type === "tournament";
+    if (type === "both") return item.type === "test" || item.type === "testBundle";
+    return true;
+  };
+  const categoryFilter = (item) => {
+    if (!category) return true;
+    if (item.type === "test" && item.test) return hasCategory(item.test?.questionBank?.categories, category);
+    if (item.type === "testBundle" && item.testBundle?.tests) {
+      return item.testBundle.tests.some((t) => hasCategory(t?.questionBank?.categories, category));
+    }
+    if (item.type === "olympiad" && item.test) return hasCategory(item.test?.questionBank?.categories, category);
+    if (item.type === "tournament" && item.stages) {
+      return item.stages.some((s) => hasCategory(s.test?.questionBank?.categories, category));
+    }
+    return false;
+  };
+
+  combined = combined.filter((i) => typeFilter(i) && categoryFilter(i));
+  const total = combined.length;
+  const paginated = combined.slice(skip, skip + limitNum);
+
   return {
-    items,
-    pagination: {
-      page: pageNum,
-      limit: limitNum,
-      total,
-      pages: Math.ceil(total / limitNum) || 1,
-    },
+    items: paginated,
+    pagination: { page: pageNum, limit: limitNum, total, pages: Math.ceil(total / limitNum) || 1 },
   };
 };
 

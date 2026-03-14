@@ -93,6 +93,9 @@ export const createTournament = async (data, adminId, file) => {
     if (!test) {
       throw new ApiError(404, `Test not found for stage ${i + 1}`);
     }
+    if ((test.applicableFor ?? "test") !== "tournament") {
+      throw new ApiError(400, `Stage ${i + 1}: selected test is not configured for tournaments`);
+    }
 
     // Validate time ranges
     if (new Date(stage.startTime) >= new Date(stage.endTime)) {
@@ -268,6 +271,9 @@ export const updateTournament = async (id, updateData, file) => {
         const test = await testRepository.findTestById(stage.test);
         if (!test) {
           throw new ApiError(404, `Test not found for stage ${i + 1}`);
+        }
+        if ((test.applicableFor ?? "test") !== "tournament") {
+          throw new ApiError(400, `Stage ${i + 1}: selected test is not configured for tournaments`);
         }
       }
       stage.order = i + 1;

@@ -196,6 +196,44 @@ const updateExistingHallOfFame = async (eventType, eventId, topN = 3) => {
   return entry;
 };
 
+const ensureHallOfFameGeneratedForCompletedEvents = async (eventType) => {
+  const now = new Date();
+
+  if (!eventType || eventType === "olympiad") {
+    const completedOlympiads = await olympiadRepository.find(
+      { isPublished: true, endTime: { $lte: now } },
+      { sort: { endTime: -1 }, limit: 200 }
+    );
+
+    for (const olympiad of completedOlympiads) {
+      try {
+        await autoGenerateHallOfFame("olympiad", olympiad._id, 3);
+      } catch (_) {
+        // Ignore generation errors here to keep listing endpoint resilient
+      }
+    }
+  }
+
+  if (!eventType || eventType === "tournament") {
+    const tournaments = await tournamentRepository.find(
+      { isPublished: true, "stages.endTime": { $lte: now } },
+      { sort: { updatedAt: -1 }, limit: 200 }
+    );
+
+    for (const tournament of tournaments) {
+      const finalStage = tournament?.stages?.[tournament.stages.length - 1];
+      if (!finalStage) continue;
+      if (new Date(finalStage.endTime) > now) continue;
+
+      try {
+        await autoGenerateHallOfFame("tournament", tournament._id, 3);
+      } catch (_) {
+        // Ignore generation errors here to keep listing endpoint resilient
+      }
+    }
+  }
+};
+
 export const getHallOfFameEntries = async (options = {}) => {
   const { page = 1, limit = 10, eventType } = options;
 
@@ -206,6 +244,8 @@ export const getHallOfFameEntries = async (options = {}) => {
     }
     query.eventType = eventType;
   }
+
+  await ensureHallOfFameGeneratedForCompletedEvents(eventType);
 
   const pageNum = parseInt(page);
   const limitNum = parseInt(limit);

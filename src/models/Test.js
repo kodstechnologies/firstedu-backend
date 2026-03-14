@@ -31,6 +31,12 @@ const testSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    applicableFor: {
+      type: String,
+      enum: ["test", "testBundle", "olympiad", "tournament"],
+      default: "test",
+      index: true,
+    },
     durationMinutes: {
       type: Number,
       required: true,
