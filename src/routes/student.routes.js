@@ -171,12 +171,7 @@ import {
 } from "../controllers/certificate.controller.js";
 import { verifyJWT } from "../middleware/auth.middleware.js";
 import { uploadImage, uploadPDF } from "../utils/multerConfig.js";
-import {
 
-  getCompetitions,
-  getCompetitionByIdOrSlug,
-
-} from '../controllers/competition.controller.js';
 
 const router = Router();
 
@@ -440,8 +435,8 @@ router.get("/success-stories/:id", getStoryDetailStudent);
 
 // ==================== COMPETITION MANAGEMENT ====================
 
-router.get("/competitions", getCompetitions);
-router.get("/competitions/:idOrSlug", getCompetitionByIdOrSlug);
+// router.get("/competitions", getCompetitions);
+// router.get("/competitions/:idOrSlug", getCompetitionByIdOrSlug);
 
 
 export default router;

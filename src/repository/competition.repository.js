@@ -1,215 +1,128 @@
 import Competition from "../models/Competition.js";
-import Question from "../models/Question.js";
+import CompetitionSector from "../models/CompetitionSector.js";
 import { ApiError } from "../utils/ApiError.js";
 
+// ========== Competition Repository ==========
 
-/**
- * Helper: attach questions into questionBank
- */
-const attachQuestionsToCompetition = async (competition) => {
+const createCompetition = async (data) => {
+  try {
+    const res=await Competition.create(data);
+    await CompetitionSector.updateOne({_id:data.competitionSectorId},{$set:{competitions:res._id}})
+    return res
+  } catch (error) {
+    throw new ApiError(500, "Failed to create competition", error.message);
+  }
+};
 
-    if (!competition) return competition;
+const findCompetitionById = async (id) => {
+  try {
+   
+    return await Competition.findById(id);
+  } catch (error) {
+    throw new ApiError(500, "Failed to fetch competition", error.message);
+  }
+};
 
-    if (competition.test?.questionBank?._id) {
+const findSectorById = async (id, populateOptions = {}) => {
+  try {
+  
+    return await Competition.find({competitionSectorId:id})
+  } catch (error) {
+    throw new ApiError(500, "Failed to fetch competition sector", error.message);
+  }
+};
 
-        const questions = await Question.find({
-            questionBank: competition.test.questionBank._id,
-            isActive: true
-        })
-        .sort({ orderInBank: 1 })
-        .lean();
+const findAllCompetitions = async (filter = {}) => {
+  try {
+    return await Competition.find(filter);
+  } catch (error) {
+    throw new ApiError(500, "Failed to fetch competitions", error.message);
+  }
+};
 
-        // attach questions inside questionBank
-        competition.test.questionBank.questions = questions;
-    }
+const updateCompetitionById = async (id, data) => {
+  try {
+    return await Competition.findByIdAndUpdate(id, { $set: data }, { new: true });
+  } catch (error) {
+    throw new ApiError(500, "Failed to update competition", error.message);
+  }
+};
 
-    return competition;
+const deleteCompetitionById = async (id) => {
+  try {
+    return await Competition.findByIdAndDelete(id);
+  } catch (error) {
+    throw new ApiError(500, "Failed to delete competition", error.message);
+  }
+};
+
+// ========== CompetitionSector Repository ==========
+
+const createSector = async (data) => {
+  try {
+    return await CompetitionSector.create(data);
+  } catch (error) {
+    throw new ApiError(500, "Failed to create competition sector", error.message);
+  }
 };
 
 
 
-/**
- * Create Competition
- */
-const create = async (data) => {
-
-    try {
-
-        return await Competition.create(data);
-
-    } catch (error) {
-
-        if (error.code === 11000) {
-            throw new ApiError(409, "A competition with this slug already exists");
-        }
-
-        throw new ApiError(500, "Failed to create competition", error.message);
-
-    }
-
+const findAllSectors = async () => {
+  try {
+    return await CompetitionSector.find().sort({ createdAt: -1 });
+  } catch (error) {
+    throw new ApiError(500, "Failed to fetch competition sectors", error.message);
+  }
 };
 
-
-
-/**
- * Find Competitions (FULL DATA)
- */
-const find = async (filter = {}, options = {}) => {
-
-    const { sort = { createdAt: -1 }, skip = 0, limit = 10 } = options;
-
-    const competitions = await Competition.find(filter)
-        .sort(sort)
-        .skip(skip)
-        .limit(limit)
-        .populate({
-            path: "test",
-            populate: {
-                path: "questionBank"
-            }
-        })
-        .lean();
-
-    // attach questions to each competition
-    for (let comp of competitions) {
-        await attachQuestionsToCompetition(comp);
-    }
-
-    return competitions;
-
+const updateSectorById = async (id, data) => {
+  try {
+    return await CompetitionSector.findByIdAndUpdate(id, { $set: data }, { new: true });
+  } catch (error) {
+    throw new ApiError(500, "Failed to update competition sector", error.message);
+  }
 };
 
-
-
-/**
- * Find one Competition (FULL DATA)
- */
-const findOne = async (filter) => {
-
-    const competition = await Competition.findOne(filter)
-        .populate({
-            path: "test",
-            populate: {
-                path: "questionBank"
-            }
-        })
-        .lean();
-
-    return await attachQuestionsToCompetition(competition);
-
+const deleteSectorById = async (id) => {
+  try {
+    return await CompetitionSector.findByIdAndDelete(id);
+  } catch (error) {
+    throw new ApiError(500, "Failed to delete competition sector", error.message);
+  }
 };
 
-
-
-/**
- * Find Competition by ID (FULL DATA)
- */
-const findById = async (id) => {
-
-    const competition = await Competition.findById(id)
-        .populate({
-            path: "test",
-            populate: {
-                path: "questionBank"
-            }
-        })
-        .lean();
-
-    return await attachQuestionsToCompetition(competition);
-
+const updateSectorPushCompetition = async (sectorId, competitionId) => {
+  try {
+    return await CompetitionSector.findByIdAndUpdate(sectorId, {
+      $push: { competitions: competitionId },
+    });
+  } catch (error) {
+    throw new ApiError(500, "Failed to link competition to sector", error.message);
+  }
 };
 
-
-
-/**
- * Find Competition by Slug (FULL DATA)
- */
-const findBySlug = async (slug) => {
-
-    const competition = await Competition.findOne({
-        slug: slug.toLowerCase()
-    })
-        .populate({
-            path: "test",
-            populate: {
-                path: "questionBank"
-            }
-        })
-        .lean();
-
-    return await attachQuestionsToCompetition(competition);
-
+const updateSectorPullCompetition = async (sectorId, competitionId) => {
+  try {
+    return await CompetitionSector.findByIdAndUpdate(sectorId, {
+      $pull: { competitions: competitionId },
+    });
+  } catch (error) {
+    throw new ApiError(500, "Failed to unlink competition from sector", error.message);
+  }
 };
-
-
-
-/**
- * Update Competition
- */
-const updateById = async (id, updateData) => {
-
-    try {
-
-        const competition = await Competition.findByIdAndUpdate(
-            id,
-            { $set: updateData },
-            { new: true }
-        )
-        .populate({
-            path: "test",
-            populate: {
-                path: "questionBank"
-            }
-        })
-        .lean();
-
-        return await attachQuestionsToCompetition(competition);
-
-    } catch (error) {
-
-        if (error.code === 11000) {
-            throw new ApiError(409, "A competition with this slug already exists");
-        }
-
-        throw new ApiError(500, "Failed to update competition", error.message);
-
-    }
-
-};
-
-
-
-/**
- * Delete Competition
- */
-const deleteById = async (id) => {
-
-    return Competition.findByIdAndDelete(id);
-
-};
-
-
-
-/**
- * Count Competitions
- */
-const count = async (filter = {}) => {
-
-    return Competition.countDocuments(filter);
-
-};
-
-
 
 export default {
-
-    create,
-    find,
-    findOne,
-    findById,
-    findBySlug,
-    updateById,
-    deleteById,
-    count,
-
+  createCompetition,
+  findCompetitionById,
+  findAllCompetitions,
+  updateCompetitionById,
+  deleteCompetitionById,
+  createSector,
+  findSectorById,
+  findAllSectors,
+  updateSectorById,
+  deleteSectorById,
+  updateSectorPushCompetition,
+  updateSectorPullCompetition,
 };

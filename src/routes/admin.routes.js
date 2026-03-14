@@ -192,13 +192,7 @@ import {
   generateQuestions,
   saveGeneratedQuestions,
 } from '../controllers/aiQuestion.controller.js';
-import {
-  createCompetition,
-  getCompetitions,
-  getCompetitionByIdOrSlug,
-  updateCompetition,
-  deleteCompetition,
-} from '../controllers/competition.controller.js';
+
 import {
   createQnA,
   getAllQnAAdmin,
@@ -236,6 +230,16 @@ import {
   updateTemplate,
   deleteTemplate,
 } from "../controllers/emailTemplate.controller.js";
+import {
+  createCompetition,
+  getCompetitions,
+  updateCompetition,
+  deleteCompetition,
+  createCompetitionSector,
+  listCompetitionSectors,
+  updateCompetitionSector,
+  deleteCompetitionSector,
+} from "../controllers/competition.controller.js";
 import { verifyJWT } from "../middleware/auth.middleware.js";
 import { uploadCourseMaterial, uploadImage, uploadPDF, uploadSuccessStory } from '../utils/multerConfig.js';
 
@@ -354,13 +358,6 @@ router.get("/workshops", verifyJWT, getWorkshops);
 router.get("/workshops/:id", verifyJWT, getWorkshopById);
 router.put("/workshops/:id", verifyJWT, uploadImage.single("image"), updateWorkshop);
 router.delete("/workshops/:id", verifyJWT, deleteWorkshop);
-
-// ==================== COMPETITION MANAGEMENT ====================
-router.post("/competitions", createCompetition);
-router.get("/competitions", getCompetitions);
-router.get("/competitions/:idOrSlug", getCompetitionByIdOrSlug);
-router.put("/competitions/:id",  updateCompetition);
-router.delete("/competitions/:id",  deleteCompetition);
 
 // Forum Moderation (Admin)
 router.get("/forums", verifyJWT, getForumsAdmin);
@@ -536,5 +533,16 @@ router.get("/email-templates/:id", verifyJWT, getTemplateById);
 router.post("/email-templates", verifyJWT, createTemplate);
 router.put("/email-templates/:id", verifyJWT, updateTemplate);
 router.delete("/email-templates/:id", verifyJWT, deleteTemplate);
+
+// ==================== COMPETITIONS ====================
+router.post("/competitions", verifyJWT, createCompetition);
+router.get("/competitions/:id", verifyJWT, getCompetitions);
+router.put("/competitions/:id", verifyJWT, updateCompetition);
+router.delete("/competitions/:id", verifyJWT, deleteCompetition);
+
+router.post("/competition-sectors", verifyJWT, createCompetitionSector);
+router.get("/competition-sectors", verifyJWT, listCompetitionSectors);
+router.put("/competition-sectors/:id", verifyJWT, updateCompetitionSector);
+router.delete("/competition-sectors/:id", verifyJWT, deleteCompetitionSector);
 
 export default router;
