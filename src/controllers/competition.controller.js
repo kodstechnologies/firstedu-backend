@@ -19,6 +19,14 @@ export const getCompetitions = asyncHandler(async (req, res) => {
     .json(ApiResponse.success(sector, "Competitions fetched successfully"));
 });
 
+export const getSingleCompetition = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const competition = await competitionService.getSingleCompetitionWithTests(id);
+  return res
+    .status(200)
+    .json(ApiResponse.success(competition, "Competition fetched successfully"));
+});
+
 export const updateCompetition = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const updated = await competitionService.updateCompetition(id, req.body);
@@ -98,6 +106,7 @@ export const deleteCompetitionSector = asyncHandler(async (req, res) => {
 export default {
   createCompetition,
   getCompetitions,
+  getSingleCompetition,
   updateCompetition,
   deleteCompetition,
   createTests,

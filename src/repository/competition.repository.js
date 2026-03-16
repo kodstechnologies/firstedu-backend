@@ -22,11 +22,21 @@ const findCompetitionById = async (id) => {
   }
 };
 
+const findCompetitionWithTestsById = async (id) => {
+  try {
+    return await Competition.findById(id).populate("tests").lean();
+  } catch (error) {
+    throw new ApiError(500, "Failed to fetch competition with tests", error.message);
+  }
+};
+
 const findSectorById = async (id, populateOptions = {}) => {
   try {
   
-    return await Competition.find({competitionSectorId:id}).populate("tests")
-
+    // return await Competition.find({competitionSectorId:id})
+    // .populate("tests")
+    // .populate("competitionSectorId")
+    return await CompetitionSector.findById(id).populate("competitions").select('title description  competitions')
   } catch (error) {
     throw new ApiError(500, "Failed to fetch competition sector", error.message);
   }
@@ -35,6 +45,7 @@ const findSectorById = async (id, populateOptions = {}) => {
 const findAllCompetitions = async (filter = {}) => {
   try {
     return await Competition.find(filter).sort({createdAt:-1});
+   
   } catch (error) {
     throw new ApiError(500, "Failed to fetch competitions", error.message);
   }
@@ -144,6 +155,7 @@ const updateSectorPullCompetition = async (sectorId, competitionId) => {
 export default {
   createCompetition,
   findCompetitionById,
+  findCompetitionWithTestsById,
   findAllCompetitions,
   updateCompetitionById,
   deleteCompetitionById,

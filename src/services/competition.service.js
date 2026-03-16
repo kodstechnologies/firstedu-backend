@@ -22,6 +22,12 @@ const createCompetition = async (data) => {
   return competition;
 };
 
+const getSingleCompetitionWithTests = async (id) => {
+  const comp = await competitionRepository.findCompetitionWithTestsById(id);
+  if (!comp) throw new ApiError(404, "Competition not found");
+  return comp;
+};
+
 const getCompetitionsBySector = async (sectorId) => {
   const sector = await competitionRepository.findSectorById(sectorId, {
     competitions: true,
@@ -113,6 +119,7 @@ const deleteSector = async (id) => {
 
 export default {
   createCompetition,
+  getSingleCompetitionWithTests,
   getCompetitionsBySector,
   updateCompetition,
   deleteCompetition,
