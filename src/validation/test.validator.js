@@ -11,9 +11,10 @@ const createTest = Joi.object({
   proctoringInstructions: Joi.string().trim().optional(),
   price: Joi.number().min(0).default(0),
   applicableFor: Joi.string()
-    .valid("test", "testBundle", "olympiad", "tournament")
+    .valid("test", "testBundle", "olympiad", "tournament", "challenge_yourself")
     .default("test"),
   isPublished: Joi.boolean().optional(),
+  isEverydayChallenge: Joi.boolean().optional(),
 });
 
 const updateTest = Joi.object({
@@ -24,9 +25,10 @@ const updateTest = Joi.object({
   proctoringInstructions: Joi.string().trim().optional(),
   price: Joi.number().min(0).optional(),
   applicableFor: Joi.string()
-    .valid("test", "testBundle", "olympiad", "tournament")
+    .valid("test", "testBundle", "olympiad", "tournament", "challenge_yourself")
     .optional(),
   isPublished: Joi.boolean().optional(),
+  isEverydayChallenge: Joi.boolean().optional(),
 });
 
 // Test Bundle
