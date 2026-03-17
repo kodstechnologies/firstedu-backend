@@ -152,14 +152,29 @@ export const getPublishedOlympiads = asyncHandler(async (req, res) => {
         };
       }
 
-      return {
+      const base = {
         ...obj,
         isRegistered: !!registration,
         testSessionId: sessionInfo?.sessionId || null,
         testStatus: sessionInfo?.status || "not_started",
       };
+
+      // If client requested status=upcoming, reflect that in the returned status field
+      if ((status || "").toString().trim().toLowerCase() === "upcoming") {
+        return {
+          ...base,
+          status: "upcoming",
+        };
+      }
+
+      return base;
     })
   );
+
+  // For status=close, keep only events where the student is NOT participating
+  if ((status || "").toString().trim().toLowerCase() === "close") {
+    olympiadsWithStatus = olympiadsWithStatus.filter((o) => !o.isRegistered);
+  }
 
   if (registeredOnly === "true" || registeredOnly === true) {
     olympiadsWithStatus = olympiadsWithStatus.filter((o) => o.isRegistered);

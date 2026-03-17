@@ -75,6 +75,17 @@ export const createOlympiad = async (data, adminId, file) => {
     throw new ApiError(400, "Selected test is not configured for olympiads");
   }
 
+  // Prevent reusing the same test in multiple olympiads
+  const existingOlympiadWithSameTest = await olympiadRepository.findOne({
+    test: testId,
+  });
+  if (existingOlympiadWithSameTest) {
+    throw new ApiError(
+      400,
+      "This test is already linked to another olympiad. Please create or clone a new test for this olympiad."
+    );
+  }
+
   // Validate time ranges
   if (new Date(startTime) >= new Date(endTime)) {
     throw new ApiError(400, "End time must be after start time");
@@ -126,8 +137,12 @@ const buildStatusQuery = (status) => {
   const now = new Date();
   switch (status) {
     case "close":
-      return { registrationStartTime: { $gt: now } };
+      // Registration ended (regEnd < now), regardless of event start/end
+      return {
+        registrationEndTime: { $lt: now },
+      };
     case "open":
+      // Registration window currently active
       return {
         $and: [
           { registrationStartTime: { $lte: now } },
@@ -135,9 +150,10 @@ const buildStatusQuery = (status) => {
         ],
       };
     case "upcoming":
+      // Event not started yet and registration has NOT ended
       return {
-        registrationEndTime: { $lt: now },
         startTime: { $gt: now },
+        registrationEndTime: { $gte: now },
       };
     case "live":
       return {
@@ -258,6 +274,19 @@ export const updateOlympiad = async (id, updateData, file) => {
     if ((test.applicableFor ?? "test") !== "olympiad") {
       throw new ApiError(400, "Selected test is not configured for olympiads");
     }
+
+    // Prevent reusing the same test in multiple olympiads
+    const existingOlympiadWithSameTest = await olympiadRepository.findOne({
+      test: updateData.testId,
+      _id: { $ne: id },
+    });
+    if (existingOlympiadWithSameTest) {
+      throw new ApiError(
+        400,
+        "This test is already linked to another olympiad. Please create or clone a new test for this olympiad."
+      );
+    }
+
     updateData.test = updateData.testId;
     delete updateData.testId;
   }

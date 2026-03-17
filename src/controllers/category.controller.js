@@ -60,13 +60,17 @@ export const getCategoryTree = asyncHandler(async (req, res) => {
  */
 export const getCategoriesForStudent = asyncHandler(async (req, res) => {
   const { linkedTo, format = "tree" } = req.query;
+  const studentId = req.user._id;
 
-  const validLinkedTo = ["all", "questionBank", "test", "testBundle", "both", "olympiad", "tournament"].includes(linkedTo) ? linkedTo : null;
+  const validLinkedTo = ["all", "questionBank", "test", "testBundle", "both", "olympiad", "tournament", "examhall"].includes(linkedTo)
+    ? linkedTo
+    : null;
   const validFormat = ["tree", "flat"].includes(format) ? format : "tree";
 
   const result = await categoryService.getCategoriesForStudent({
     linkedTo: validLinkedTo,
     format: validFormat,
+    studentId,
   });
 
   return res.status(200).json(

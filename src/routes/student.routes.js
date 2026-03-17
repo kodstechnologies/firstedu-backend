@@ -80,6 +80,7 @@ import {
 import { getMyEventsDashboard } from "../controllers/eventRegistration.controller.js";
 import { getAllEvents } from "../controllers/events.controller.js";
 import { contactUs } from "../controllers/contact.controller.js";
+import { getLeaderboardsForStudent } from "../controllers/leaderboard.controller.js";
 import {
   startExam,
   pauseExam,
@@ -285,6 +286,9 @@ router.get("/hall-of-fame", verifyJWT, getHallOfFame);
 
 // All Events (Olympiads, Tournaments) - catalog, no registration filter
 router.get("/events", verifyJWT, getAllEvents);
+
+// Leaderboards (Olympiads & Tournaments - completed events)
+router.get("/leaderboard", verifyJWT, getLeaderboardsForStudent);
 
 // My Events Dashboard
 router.get("/my-events", verifyJWT, getMyEventsDashboard);

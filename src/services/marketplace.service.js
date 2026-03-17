@@ -1055,12 +1055,12 @@ export const getExamHall = async (studentId, page = 1, limit = 20, type = "all",
   const skip = (pageNum - 1) * limitNum;
   const now = new Date();
   const nowMs = now.getTime();
-  const ONE_MINUTE_MS = 60 * 1000;
-  /** Include in exam hall only when current date and exact start time match (same minute as start). */
-  const isAtExactStartTime = (startTime, endTime) => {
+  /** Include in exam hall whenever event is live: startTime <= now <= endTime. */
+  const isWithinEventWindow = (startTime, endTime) => {
     const startMs = new Date(startTime).getTime();
     const endMs = new Date(endTime).getTime();
-    return nowMs >= startMs && nowMs < startMs + ONE_MINUTE_MS && nowMs <= endMs;
+    if (Number.isNaN(startMs) || Number.isNaN(endMs)) return false;
+    return nowMs >= startMs && nowMs <= endMs;
   };
 
   const purchases = await orderRepository.findTestPurchasesForExamHall(studentId);
@@ -1116,7 +1116,7 @@ export const getExamHall = async (studentId, page = 1, limit = 20, type = "all",
       { populate: olympiadPopulate, limit: 500 }
     );
     for (const o of olympiads) {
-      if (isAtExactStartTime(o.startTime, o.endTime) && o.test) {
+      if (isWithinEventWindow(o.startTime, o.endTime) && o.test) {
         eventTestIds.push(o.test._id);
         olympiadItems.push({
           _id: o._id,
@@ -1141,7 +1141,7 @@ export const getExamHall = async (studentId, page = 1, limit = 20, type = "all",
       const stages = t.stages || [];
       const liveStages = stages
         .filter((s) => s.test && s.startTime && s.endTime)
-        .filter((s) => isAtExactStartTime(s.startTime, s.endTime))
+        .filter((s) => isWithinEventWindow(s.startTime, s.endTime))
         .map((s) => {
           eventTestIds.push(s.test._id);
           const plain = s.test?.toObject ? s.test.toObject() : { ...s.test };
