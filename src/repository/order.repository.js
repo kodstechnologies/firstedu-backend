@@ -2,6 +2,7 @@ import Order from "../models/Order.js";
 import CoursePurchase from "../models/CoursePurchase.js";
 import TestPurchase from "../models/TestPurchase.js";
 import MerchandiseClaim from "../models/MerchandiseClaim.js";
+import EventRegistration from "../models/EventRegistration.js";
 import { ApiError } from "../utils/ApiError.js";
 
 const findOrderById = async (id) => {
@@ -107,6 +108,20 @@ const findMerchandiseClaims = async (studentId) => {
   }
 };
 
+const findEventRegistrations = async (studentId) => {
+  try {
+    return await EventRegistration.find({
+      student: studentId,
+      eventType: { $in: ["olympiad", "tournament", "workshop"] },
+      paymentStatus: "completed",
+    })
+      .populate("eventId", "title price")
+      .sort({ registeredAt: -1 });
+  } catch (error) {
+    throw new ApiError(500, "Failed to fetch event registrations", error.message);
+  }
+};
+
 const findCoursePurchase = async (filter) => {
   try {
     return await CoursePurchase.findOne(filter);
@@ -154,6 +169,7 @@ export default {
   findTestPurchases,
   findTestPurchasesForExamHall,
   findMerchandiseClaims,
+  findEventRegistrations,
   findCoursePurchase,
   createCoursePurchase,
   findTestPurchase,

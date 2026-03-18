@@ -4,6 +4,7 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import { getEventStatus, getGoesLiveAt, withEventStatus } from "../utils/eventStatus.js";
 import tournamentService from "../services/tournament.service.js";
 import eventRegistrationService from "../services/eventRegistration.service.js";
+import examSessionRepository from "../repository/examSession.repository.js";
 import tournamentValidator from "../validation/tournament.validator.js";
 
 // ==================== ADMIN CONTROLLERS ====================
@@ -124,6 +125,14 @@ export const getPublishedTournaments = asyncHandler(async (req, res) => {
     category: category || undefined,
   });
 
+  const testIds = (result.tournaments || [])
+    .flatMap((tournament) => (tournament?.stages || []).map((stage) => stage?.test?._id || stage?.test))
+    .filter(Boolean);
+  const sessionMap = await examSessionRepository.getSessionStatusMapByStudent(
+    req.user._id,
+    testIds
+  );
+
   let tournamentsWithStatus = await Promise.all(
     result.tournaments.map(async (tournament) => {
       const registration = await eventRegistrationService.getRegistrationByEvent(
@@ -132,7 +141,27 @@ export const getPublishedTournaments = asyncHandler(async (req, res) => {
         req.user._id
       );
       const obj = withEventStatus(tournament, !!registration);
-      return { ...obj, isRegistered: !!registration };
+      const stagesWithSession = (obj.stages || []).map((stage) => {
+        const testId = (stage?.test?._id || stage?.test)?.toString?.();
+        const sessionInfo = testId ? sessionMap[testId] : null;
+        if (stage?.test && typeof stage.test === "object") {
+          return {
+            ...stage,
+            test: {
+              ...stage.test,
+              sessionId: sessionInfo?.sessionId || null,
+              testStatus: sessionInfo?.status || "not_started",
+            },
+          };
+        }
+        return stage;
+      });
+
+      return {
+        ...obj,
+        stages: stagesWithSession,
+        isRegistered: !!registration,
+      };
     })
   );
 
@@ -163,9 +192,38 @@ export const getTournamentDetails = asyncHandler(async (req, res) => {
     req.user._id
   );
   const obj = withEventStatus(tournament, !!registration);
+  const testIds = (obj.stages || [])
+    .map((stage) => stage?.test?._id || stage?.test)
+    .filter(Boolean);
+  const sessionMap = await examSessionRepository.getSessionStatusMapByStudent(
+    req.user._id,
+    testIds
+  );
+  const stagesWithSession = (obj.stages || []).map((stage) => {
+    const testId = (stage?.test?._id || stage?.test)?.toString?.();
+    const sessionInfo = testId ? sessionMap[testId] : null;
+    if (stage?.test && typeof stage.test === "object") {
+      return {
+        ...stage,
+        test: {
+          ...stage.test,
+          sessionId: sessionInfo?.sessionId || null,
+          testStatus: sessionInfo?.status || "not_started",
+        },
+      };
+    }
+    return stage;
+  });
+
   return res.status(200).json(
     ApiResponse.success(
-      { ...obj, isRegistered: !!registration, currentStage, qualifiedStages },
+      {
+        ...obj,
+        stages: stagesWithSession,
+        isRegistered: !!registration,
+        currentStage,
+        qualifiedStages,
+      },
       "Tournament details fetched successfully"
     )
   );

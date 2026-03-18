@@ -1,5 +1,6 @@
 import { ApiError } from "../utils/ApiError.js";
 import tournamentRepository from "../repository/tournament.repository.js";
+import olympiadRepository from "../repository/olympiad.repository.js";
 import testRepository from "../repository/test.repository.js";
 import questionBankRepository from "../repository/questionBank.repository.js";
 import QuestionBank from "../models/QuestionBank.js";
@@ -93,6 +94,9 @@ export const createTournament = async (data, adminId, file) => {
     if (!test) {
       throw new ApiError(404, `Test not found for stage ${i + 1}`);
     }
+    if ((test.applicableFor ?? "test") !== "tournament") {
+      throw new ApiError(400, `Stage ${i + 1}: selected test is not configured for tournaments`);
+    }
 
     // Validate time ranges
     if (new Date(stage.startTime) >= new Date(stage.endTime)) {
@@ -101,6 +105,32 @@ export const createTournament = async (data, adminId, file) => {
 
     // Set order
     stage.order = i + 1;
+  }
+
+  // Prevent reusing the same test across olympiads or tournaments
+  const stageTestIds = stages.map((s) => s.test).filter(Boolean);
+  if (stageTestIds.length > 0) {
+    // Any olympiad already using one of these tests?
+    const olympiadUsingTest = await olympiadRepository.findOne({
+      test: { $in: stageTestIds },
+    });
+    if (olympiadUsingTest) {
+      throw new ApiError(
+        400,
+        "One or more selected tests are already linked to an olympiad. Please create or clone new tests for this tournament."
+      );
+    }
+
+    // Any other tournament using one of these tests?
+    const tournamentUsingTest = await tournamentRepository.findOne({
+      "stages.test": { $in: stageTestIds },
+    });
+    if (tournamentUsingTest) {
+      throw new ApiError(
+        400,
+        "One or more selected tests are already linked to another tournament. Please create or clone new tests for this tournament."
+      );
+    }
   }
 
   // Validate stage sequence
@@ -269,8 +299,36 @@ export const updateTournament = async (id, updateData, file) => {
         if (!test) {
           throw new ApiError(404, `Test not found for stage ${i + 1}`);
         }
+        if ((test.applicableFor ?? "test") !== "tournament") {
+          throw new ApiError(400, `Stage ${i + 1}: selected test is not configured for tournaments`);
+        }
       }
       stage.order = i + 1;
+    }
+
+    // Prevent reusing the same test across olympiads or tournaments (excluding this tournament)
+    const stageTestIds = updateData.stages.map((s) => s.test).filter(Boolean);
+    if (stageTestIds.length > 0) {
+      const olympiadUsingTest = await olympiadRepository.findOne({
+        test: { $in: stageTestIds },
+      });
+      if (olympiadUsingTest) {
+        throw new ApiError(
+          400,
+          "One or more selected tests are already linked to an olympiad. Please create or clone new tests for this tournament."
+        );
+      }
+
+      const tournamentUsingTest = await tournamentRepository.findOne({
+        _id: { $ne: id },
+        "stages.test": { $in: stageTestIds },
+      });
+      if (tournamentUsingTest) {
+        throw new ApiError(
+          400,
+          "One or more selected tests are already linked to another tournament. Please create or clone new tests for this tournament."
+        );
+      }
     }
   }
 

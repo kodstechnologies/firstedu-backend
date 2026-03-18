@@ -55,7 +55,11 @@ const enrichTestsWithBankStats = async (tests) => {
 };
 
 export const getTests = async (options = {}) => {
-  const result = await testRepository.findAllTests({}, options);
+  const query = {};
+  if (options.applicableFor) {
+    query.applicableFor = options.applicableFor;
+  }
+  const result = await testRepository.findAllTests(query, options);
   await enrichTestsWithBankStats(result.tests);
   return result;
 };

@@ -17,7 +17,7 @@ const createTest = async (testData) => {
 const populateQuestionBankWithCategories = (query) => {
   return query.populate({
     path: "questionBank",
-    select: "name categories",
+    select: "name categories overallDifficulty",
     populate: { path: "categories", select: "name _id" },
   });
 };
@@ -44,6 +44,7 @@ const findAllTests = async (filter = {}, options = {}) => {
       search,
       questionBank,
       category,
+      applicableFor,
       isPublished,
     } = options;
 
@@ -60,6 +61,10 @@ const findAllTests = async (filter = {}, options = {}) => {
 
     if (typeof isPublished !== "undefined") {
       query.isPublished = isPublished === "true" || isPublished === true;
+    }
+
+    if (applicableFor) {
+      query.applicableFor = applicableFor;
     }
 
     if (search) {
@@ -285,11 +290,79 @@ const sampleRandomQuestionsFromBank = async (questionBankId, count) => {
   }
 };
 
+/** Get IDs of all published everyday challenge tests */
+const findEverydayChallengeTestIds = async () => {
+  try {
+    const docs = await Test.find({
+      isEverydayChallenge: true,
+      isPublished: true,
+    })
+      .select("_id")
+      .lean();
+    return docs.map((d) => d._id);
+  } catch (error) {
+    throw new ApiError(500, "Failed to fetch everyday challenge tests", error.message);
+  }
+};
+
+/** Get everyday challenge test IDs grouped by questionBank.overallDifficulty (for Bronze stage) */
+const findEverydayChallengeTestsByDifficulty = async () => {
+  try {
+    const docs = await Test.find({
+      isEverydayChallenge: true,
+      isPublished: true,
+    })
+      .select("_id questionBank")
+      .populate("questionBank", "overallDifficulty")
+      .lean();
+    const easy = [];
+    const medium = [];
+    const hard = [];
+    docs.forEach((d) => {
+      const diff = d.questionBank?.overallDifficulty || "medium";
+      if (diff === "easy") easy.push(d._id);
+      else if (diff === "medium") medium.push(d._id);
+      else if (diff === "hard") hard.push(d._id);
+    });
+    return { easy, medium, hard };
+  } catch (error) {
+    throw new ApiError(500, "Failed to fetch everyday challenge tests by difficulty", error.message);
+  }
+};
+
+/** Get challenge-yourself test IDs grouped by questionBank.overallDifficulty */
+const findChallengeYourselfTestsByDifficulty = async () => {
+  try {
+    const docs = await Test.find({
+      applicableFor: "challenge_yourself",
+      isPublished: true,
+    })
+      .select("_id questionBank")
+      .populate("questionBank", "overallDifficulty")
+      .lean();
+    const easy = [];
+    const medium = [];
+    const hard = [];
+    docs.forEach((d) => {
+      const diff = d.questionBank?.overallDifficulty || "medium";
+      if (diff === "easy") easy.push(d._id);
+      else if (diff === "medium") medium.push(d._id);
+      else if (diff === "hard") hard.push(d._id);
+    });
+    return { easy, medium, hard };
+  } catch (error) {
+    throw new ApiError(500, "Failed to fetch challenge-yourself tests", error.message);
+  }
+};
+
 export default {
   // Test methods
   createTest,
   findTestById,
   findAllTests,
+  findEverydayChallengeTestIds,
+  findEverydayChallengeTestsByDifficulty,
+  findChallengeYourselfTestsByDifficulty,
   updateTestById,
   deleteTestById,
   // Bundle methods

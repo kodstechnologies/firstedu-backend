@@ -7,9 +7,13 @@ import orderService from "../services/order.service.js";
  */
 export const getMyOrders = asyncHandler(async (req, res) => {
   const studentId = req.user._id;
-  const { page = 1, limit = 10 } = req.query;
+  const { page = 1, limit = 10, type, from, to } = req.query;
 
-  const result = await orderService.getAggregatedOrderHistory(studentId, page, limit);
+  const result = await orderService.getAggregatedOrderHistory(studentId, page, limit, {
+    type,
+    from,
+    to,
+  });
 
   return res.status(200).json(
     ApiResponse.success(

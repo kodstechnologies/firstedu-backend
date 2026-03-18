@@ -229,7 +229,12 @@ const getRankedByTest = async (testId, studentIds = null, limit = 10) => {
       score: { $ne: null, $gte: 0 },
     };
     if (Array.isArray(studentIds) && studentIds.length) {
-      match.student = { $in: studentIds };
+      // Ensure we compare ObjectIds to ObjectIds in aggregation
+      const ids = studentIds
+        .map((id) => (id?.toString?.() ?? id))
+        .filter(Boolean)
+        .map((id) => new mongoose.Types.ObjectId(id));
+      match.student = { $in: ids };
     }
     const ranked = await ExamSession.aggregate([
       { $match: match },

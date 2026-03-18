@@ -5,6 +5,10 @@ import Test from "../models/Test.js";
 import TestBundle from "../models/TestBundle.js";
 import Olympiad from "../models/Olympiad.js";
 import Tournament from "../models/Tournament.js";
+import orderRepository from "../repository/order.repository.js";
+import eventRegistrationRepository from "../repository/eventRegistration.repository.js";
+import olympiadRepository from "../repository/olympiad.repository.js";
+import tournamentRepository from "../repository/tournament.repository.js";
 
 /**
  * Recursively create children under a parent category.
@@ -87,7 +91,7 @@ export const getChildren = async (parentId) => {
 
 /**
  * Get category IDs connected to question banks, tests, test bundles, olympiads, and/or tournaments.
- * linkedTo: "all" | "questionBank" | "test" | "testBundle" | "both" | "olympiad" | "tournament" | null
+ * linkedTo: "all" | "questionBank" | "test" | "testBundle" | "both" | "olympiad" | "tournament" | "examhall" | null
  * - all: union of test + testBundle + olympiad + tournament (categories used in marketplace/events)
  * - questionBank: categories on any question bank
  * - test: categories on question banks of published tests
@@ -95,8 +99,9 @@ export const getChildren = async (parentId) => {
  * - both: union of test + testBundle
  * - olympiad: categories on question banks of tests used by published olympiads
  * - tournament: categories on question banks of tests used in stages of published tournaments
+ * - examhall: categories linked to items visible in the student's exam hall
  */
-const getConnectedCategoryIds = async (linkedTo) => {
+const getConnectedCategoryIds = async (linkedTo, studentId) => {
   if (!linkedTo) return null;
 
   let categoryIds = new Set();
@@ -148,6 +153,99 @@ const getConnectedCategoryIds = async (linkedTo) => {
         const fromTournaments = await QuestionBank.find({ _id: { $in: bankIds } }).distinct("categories");
         fromTournaments.forEach((id) => categoryIds.add(id?.toString?.() || id));
       }
+    }
+  }
+
+  if (linkedTo === "examhall") {
+    if (!studentId) {
+      return new Set();
+    }
+
+    // 1) Purchased tests / bundles (from exam hall purchases helper)
+    const purchases = await orderRepository.findTestPurchasesForExamHall(studentId);
+    const bankIdsFromPurchases = new Set();
+    purchases.forEach((p) => {
+      if (p.test?.questionBank?._id || p.test?.questionBank) {
+        const qb = p.test.questionBank;
+        const qbId = qb._id?.toString?.() || qb.toString?.();
+        if (qbId) bankIdsFromPurchases.add(qbId);
+      }
+      if (p.testBundle?.tests?.length) {
+        p.testBundle.tests.forEach((t) => {
+          const qb = t?.questionBank;
+          const qbId = qb?._id?.toString?.() || qb?.toString?.();
+          if (qbId) bankIdsFromPurchases.add(qbId);
+        });
+      }
+    });
+
+    // 2) Registered olympiads / tournaments (from event registrations)
+    const regs = await eventRegistrationRepository.find(
+      {
+        student: studentId,
+        eventType: { $in: ["olympiad", "tournament"] },
+        paymentStatus: "completed",
+      },
+      { limit: 500 }
+    );
+
+    const olympiadIds = [
+      ...new Set(regs.filter((r) => r.eventType === "olympiad").map((r) => r.eventId).filter(Boolean)),
+    ];
+    const tournamentIds = [
+      ...new Set(regs.filter((r) => r.eventType === "tournament").map((r) => r.eventId).filter(Boolean)),
+    ];
+
+    const eventBankIds = new Set();
+
+    if (olympiadIds.length > 0) {
+      const olympiads = await olympiadRepository.find(
+        { _id: { $in: olympiadIds } },
+        {
+          populate: [
+            {
+              path: "test",
+              select: "questionBank",
+              populate: { path: "questionBank", select: "categories" },
+            },
+          ],
+          limit: 500,
+        }
+      );
+      olympiads.forEach((o) => {
+        const qb = o.test?.questionBank;
+        const qbId = qb?._id?.toString?.() || qb?.toString?.();
+        if (qbId) eventBankIds.add(qbId);
+      });
+    }
+
+    if (tournamentIds.length > 0) {
+      const tournaments = await tournamentRepository.find(
+        { _id: { $in: tournamentIds } },
+        {
+          populate: [
+            {
+              path: "stages.test",
+              select: "questionBank",
+              populate: { path: "questionBank", select: "categories" },
+            },
+          ],
+          limit: 500,
+        }
+      );
+      tournaments.forEach((t) => {
+        (t.stages || []).forEach((s) => {
+          const qb = s?.test?.questionBank;
+          const qbId = qb?._id?.toString?.() || qb?.toString?.();
+          if (qbId) eventBankIds.add(qbId);
+        });
+      });
+    }
+
+    const allBankIds = new Set([...bankIdsFromPurchases, ...eventBankIds]);
+    if (allBankIds.size > 0) {
+      const fromExamHall = await QuestionBank.find({ _id: { $in: [...allBankIds] } }).distinct("categories");
+      fromExamHall.forEach((id) => categoryIds.add(id?.toString?.() || id));
     }
   }
 
@@ -210,12 +308,12 @@ const filterTreeByConnected = (nodes, allowedIds) => {
  * format: "tree" | "flat"
  */
 export const getCategoriesForStudent = async (options = {}) => {
-  const { linkedTo, format = "tree" } = options;
+  const { linkedTo, format = "tree", studentId } = options;
 
   let tree = await categoryRepository.findTree({});
 
   if (linkedTo) {
-    const connectedIds = await getConnectedCategoryIds(linkedTo);
+    const connectedIds = await getConnectedCategoryIds(linkedTo, studentId);
     if (connectedIds && connectedIds.size > 0) {
       const idToParent = buildIdToParentFromTree(tree);
       const allowedIds = new Set(connectedIds);

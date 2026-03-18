@@ -17,6 +17,12 @@ const EVENT_MODEL_MAP = {
   challenge: "Challenge",
 };
 
+const EVENT_TYPE_TO_OFFER_MODULE = {
+  olympiad: "Olympiad",
+  tournament: "Tournament",
+  workshop: "Workshop",
+};
+
 export const registerForEvent = async (
   eventType,
   eventId,
@@ -95,6 +101,8 @@ export const registerForEvent = async (
         status: "registered",
         paymentStatus: "completed",
         paymentId: paymentId || "wallet",
+        paymentMethod: "wallet",
+        amountPaid: regAmountToCharge,
       });
     }
     if (paymentMethod === "gateway") {
@@ -133,6 +141,8 @@ export const registerForEvent = async (
         status: "registered",
         paymentStatus: "completed",
         paymentId: razorpayPaymentId,
+        paymentMethod: "razorpay",
+        amountPaid: intent.amountPaise / 100,
       });
       await razorpayOrderIntentRepository.markReconciled(razorpayOrderId, razorpayPaymentId);
       if (intent.couponId) await couponService.incrementCouponUsedCount(intent.couponId);
@@ -152,6 +162,8 @@ export const registerForEvent = async (
     status: "registered",
     paymentStatus: "completed",
     paymentId: paymentId || undefined,
+    paymentMethod: paymentMethod === "wallet" ? "wallet" : "free",
+    amountPaid: 0,
   });
 };
 
@@ -256,7 +268,8 @@ export const getTournamentProgress = async (tournamentId, studentId) => {
   let qualifiedStages = [];
 
   // Check which stages student has qualified for
-  for (const stage of tournament.stages) {
+  for (const stage of tournament.stages || []) {
+    if (!stage?.test?._id) continue;
     const stageSession = await examSessionRepository.findOne({
       student: studentId,
       test: stage.test._id,

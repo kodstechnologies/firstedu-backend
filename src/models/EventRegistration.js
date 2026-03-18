@@ -40,6 +40,15 @@ const eventRegistrationSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    paymentMethod: {
+      type: String,
+      enum: ["free", "wallet", "razorpay"],
+    },
+    amountPaid: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
     registeredAt: {
       type: Date,
       default: Date.now,
