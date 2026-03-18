@@ -40,6 +40,12 @@ const courseSchema = new mongoose.Schema(
       ref: "Admin",
       required: true,
     },
+    categoryIds: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Category",
+      },
+    ],
   },
   {
     timestamps: true,
