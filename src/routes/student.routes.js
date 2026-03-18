@@ -8,7 +8,10 @@ import {
   resetPassword,
   getProfile,
   updateProfile,
-  changePassword, convertPoints,
+  changePassword,
+  convertPoints,
+  getReferralInfo,
+  getMyReferrals,
 } from "../controllers/studentAuth.controller.js";
 import {
   getCourses,
@@ -78,6 +81,8 @@ import {
   getHallOfFame,
 } from "../controllers/hallOfFame.controller.js";
 import { getMyEventsDashboard } from "../controllers/eventRegistration.controller.js";
+import { getEverydayChallenges } from "../controllers/everydayChallenge.controller.js";
+import { getChallengeYourself } from "../controllers/challengeYourself.controller.js";
 import { getAllEvents } from "../controllers/events.controller.js";
 import { contactUs } from "../controllers/contact.controller.js";
 import { getLeaderboardsForStudent } from "../controllers/leaderboard.controller.js";
@@ -196,6 +201,10 @@ router.post("/forgot-password/reset", resetPassword);
 router.put("/update-profile", verifyJWT, updateProfile);
 router.put("/change-password", verifyJWT, changePassword);
 
+// Refer & Earn (100 points per successful referral signup)
+router.get("/refer-earn", verifyJWT, getReferralInfo);
+router.get("/refer-earn/referrals", verifyJWT, getMyReferrals);
+
 // Marketplace - All Resources (Combined)
 router.get("/marketplace/all", verifyJWT, getAllResources);
 
@@ -292,6 +301,12 @@ router.get("/leaderboard", verifyJWT, getLeaderboardsForStudent);
 
 // My Events Dashboard
 router.get("/my-events", verifyJWT, getMyEventsDashboard);
+
+// Everyday Challenges (daily free challenge, streak-based XP)
+router.get("/everyday-challenges", verifyJWT, getEverydayChallenges);
+
+// Challenge Yourself (6 stages: Bronze → Heroic, free tests only in this API)
+router.get("/challenge-yourself", verifyJWT, getChallengeYourself);
 
 // ==================== EXAM HALL (Examination System) ====================
 

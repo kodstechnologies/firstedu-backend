@@ -268,7 +268,8 @@ export const getTournamentProgress = async (tournamentId, studentId) => {
   let qualifiedStages = [];
 
   // Check which stages student has qualified for
-  for (const stage of tournament.stages) {
+  for (const stage of tournament.stages || []) {
+    if (!stage?.test?._id) continue;
     const stageSession = await examSessionRepository.findOne({
       student: studentId,
       test: stage.test._id,

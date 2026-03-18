@@ -458,3 +458,25 @@ export const convertPoints = asyncHandler(async (req, res) => {
   );
 });
 
+// -------- Refer & Earn --------
+
+/** Get referral code, share link, points per referral and total referrals count */
+export const getReferralInfo = asyncHandler(async (req, res) => {
+  const studentId = req.user._id;
+  const info = await studentService.getReferralInfo(studentId);
+  if (!info) {
+    throw new ApiError(404, "Student not found");
+  }
+  return res.status(200).json(ApiResponse.success(info, "Refer & Earn details fetched successfully"));
+});
+
+/** Get list of users referred by this student (paginated) */
+export const getMyReferrals = asyncHandler(async (req, res) => {
+  const studentId = req.user._id;
+  const { page, limit } = req.query;
+  const result = await studentService.getMyReferrals(studentId, { page, limit });
+  return res.status(200).json(
+    ApiResponse.success(result.referrals, "My referrals fetched successfully", result.pagination)
+  );
+});
+

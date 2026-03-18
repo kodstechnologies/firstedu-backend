@@ -9,6 +9,9 @@ import questionBankRepository from "../repository/questionBank.repository.js";
 import questionRepository from "../repository/question.repository.js";
 import examAnalysisService from "./examAnalysis.service.js";
 import pointsService from "./points.service.js";
+import everydayChallengeService from "./everydayChallenge.service.js";
+import everydayChallengeCompletionRepository from "../repository/everydayChallengeCompletion.repository.js";
+import challengeYourselfService from "./challengeYourself.service.js";
 
 const hasCompletedRegistrationForLinkedEventTest = async (testId, studentId) => {
   const [linkedOlympiads, linkedTournaments] = await Promise.all([
@@ -73,8 +76,8 @@ export const startExamSession = async (testId, studentId) => {
   }
 
   // Check if student can access paid test:
-  // direct purchase OR bundle purchase OR paid registration to linked olympiad/tournament.
-  if (test.price > 0) {
+  // everyday challenge and challenge-yourself tests are always free; otherwise purchase or linked event.
+  if (test.price > 0 && test.applicableFor !== "everyday_challenge" && test.applicableFor !== "challenge_yourself") {
     let purchase = await orderRepository.findTestPurchase({
       student: studentId,
       test: testId,
@@ -132,15 +135,41 @@ export const startExamSession = async (testId, studentId) => {
     return await getExamSession(pausedSession._id, studentId);
   }
 
-  // Check if there's a completed session (prevent retaking)
-  const completedSession = await examSessionRepository.findOne({
-    student: studentId,
-    test: testId,
-    status: "completed",
-  });
-
-  if (completedSession) {
-    throw new ApiError(400, "You have already completed this test");
+  // Challenge-yourself layout: check level unlock and allow retakes (full marks required to unlock next; can retake anytime)
+  const challengeSlot = await challengeYourselfService.getSlotForTest(testId);
+  if (challengeSlot) {
+    const unlocked = await challengeYourselfService.isLevelUnlocked(
+      studentId,
+      challengeSlot.stage,
+      challengeSlot.level
+    );
+    if (!unlocked) {
+      throw new ApiError(
+        403,
+        "This level is not unlocked yet. Score full marks on the previous level to unlock."
+      );
+    }
+    // Allow retakes: no "already completed" block for challenge-yourself
+  } else if (test.applicableFor === "everyday_challenge") {
+    // Everyday challenge (not in challenge-yourself): one completion per day
+    const today = everydayChallengeService.getStartOfDayUTC();
+    const alreadyCompletedToday = await everydayChallengeCompletionRepository.findOne({
+      student: studentId,
+      date: today,
+    });
+    if (alreadyCompletedToday) {
+      throw new ApiError(400, "You have already completed today's everyday challenge");
+    }
+  } else {
+    // Non–everyday challenge: prevent retaking the same test
+    const completedSession = await examSessionRepository.findOne({
+      student: studentId,
+      test: testId,
+      status: "completed",
+    });
+    if (completedSession) {
+      throw new ApiError(400, "You have already completed this test");
+    }
   }
 
   // Create new exam session
@@ -415,19 +444,27 @@ const autoSubmitExam = async (sessionId, studentId, reason = "time_expired") => 
     // Don't fail submission if analysis fails
   }
 
-  // Award points for test completion
+  // Award points: everyday challenge uses streak points; other tests use test completion points
   try {
     const test = await examSessionRepository.findTestById(session.test);
     if (test) {
-      await pointsService.awardTestCompletionPoints(
-        studentId,
-        session.test,
-        test.title || "Test"
-      );
+      if (test.applicableFor === "everyday_challenge") {
+        await everydayChallengeService.recordCompletion(studentId, session);
+      } else {
+        await pointsService.awardTestCompletionPoints(
+          studentId,
+          session.test,
+          test.title || "Test"
+        );
+      }
     }
   } catch (error) {
     console.error("Error awarding points for test completion:", error);
-    // Don't fail submission if points awarding fails
+  }
+  try {
+    await challengeYourselfService.recordProgress(studentId, session);
+  } catch (error) {
+    console.error("Error recording challenge-yourself progress:", error);
   }
 
   console.log(`Exam session ${sessionId} auto-submitted successfully. Reason: ${reason}`);
@@ -550,19 +587,27 @@ export const submitExam = async (sessionId, studentId) => {
     // Don't fail submission if analysis fails
   }
 
-  // Award points for test completion
+  // Award points: everyday challenge uses streak points; other tests use test completion points
   try {
     const test = await examSessionRepository.findTestById(session.test);
     if (test) {
-      await pointsService.awardTestCompletionPoints(
-        studentId,
-        session.test,
-        test.title || "Test"
-      );
+      if (test.applicableFor === "everyday_challenge") {
+        await everydayChallengeService.recordCompletion(studentId, session);
+      } else {
+        await pointsService.awardTestCompletionPoints(
+          studentId,
+          session.test,
+          test.title || "Test"
+        );
+      }
     }
   } catch (error) {
     console.error("Error awarding points for test completion:", error);
-    // Don't fail submission if points awarding fails
+  }
+  try {
+    await challengeYourselfService.recordProgress(studentId, session);
+  } catch (error) {
+    console.error("Error recording challenge-yourself progress:", error);
   }
 
   return await getExamResults(sessionId, studentId);

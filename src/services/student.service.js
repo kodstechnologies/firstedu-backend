@@ -104,14 +104,18 @@ export const ensureWalletExists = async (userId, userType = 'User') => {
   }
 };
 
+/** Points awarded to referrer when a referred user signs up successfully */
+export const REFERRAL_REWARD_POINTS = 100;
+
 /**
  * Process referral reward for the referrer.
- * Adds 50 reward points.
+ * Adds 100 reward points after successful referral signup.
  * @param {string} referrerId - The referrer's ID
+ * @param {string} referredUserId - The referred user's ID
  */
 export const processReferralReward = async (referrerId, referredUserId) => {
   try {
-    const rewardAmount = 50;
+    const rewardAmount = REFERRAL_REWARD_POINTS;
     const wallet = await walletRepository.findWallet(referrerId, 'User');
 
     if (wallet) {
@@ -123,9 +127,9 @@ export const processReferralReward = async (referrerId, referredUserId) => {
         amount: rewardAmount,
         type: 'earned', // ✅ correct enum
         source: 'referral', // ✅ correct enum
-        description: 'Referral Reward',
-        referenceId: referredUserId, // ✅ PASSING NEW USER ID
-        referenceType: 'Referral', // ✅ correct enum
+        description: 'Refer & Earn: Successful referral signup',
+        referenceId: referredUserId,
+        referenceType: 'Referral',
         balanceAfter: wallet.rewardPoints,
       });
 
@@ -143,7 +147,7 @@ export const processReferralReward = async (referrerId, referredUserId) => {
         amount: rewardAmount,
         type: 'earned',
         source: 'referral',
-        description: 'Referral Reward',
+        description: 'Refer & Earn: Successful referral signup',
         referenceId: referredUserId,
         referenceType: 'Referral',
         balanceAfter: rewardAmount,
@@ -233,16 +237,92 @@ export const convertPointsToMoney = async (userId, pointsToConvert) => {
   return updatedWallet;
 };
 
+/**
+ * Get refer-earn info for the logged-in student: referral code, share link, points per referral, and total referrals count.
+ * @param {string} studentId - The student's ID
+ * @returns {Promise<Object>} - { referralCode, shareLink, pointsPerReferral, totalReferrals }
+ */
+export const getReferralInfo = async (studentId) => {
+  const student = await Student.findById(studentId)
+    .select('referralCode referralHistory')
+    .lean();
+  if (!student) return null;
+
+  const totalReferrals = Array.isArray(student.referralHistory)
+    ? student.referralHistory.length
+    : 0;
+  const baseUrl = process.env.STUDENT_APP_URL || process.env.FRONTEND_URL || '';
+  const shareLink = baseUrl
+    ? `${baseUrl.replace(/\/$/, '')}/signup?ref=${student.referralCode || ''}`
+    : null;
+
+  return {
+    referralCode: student.referralCode || null,
+    shareLink,
+    pointsPerReferral: REFERRAL_REWARD_POINTS,
+    totalReferrals,
+    message: `Earn ${REFERRAL_REWARD_POINTS} points for every friend who signs up using your referral.`,
+  };
+};
+
+/**
+ * Get list of users referred by this student (for refer-earn dashboard).
+ * @param {string} studentId - The referrer's ID
+ * @param {Object} options - { page, limit }
+ * @returns {Promise<Object>} - { referrals, pagination }
+ */
+export const getMyReferrals = async (studentId, options = {}) => {
+  const { page = 1, limit = 20 } = options;
+  const student = await Student.findById(studentId).select('referralHistory').lean();
+  if (!student || !Array.isArray(student.referralHistory) || student.referralHistory.length === 0) {
+    return {
+      referrals: [],
+      pagination: { page: 1, limit, total: 0, pages: 1 },
+    };
+  }
+
+  const pageNum = Math.max(1, parseInt(page, 10));
+  const limitNum = Math.min(50, Math.max(1, parseInt(limit, 10)));
+  const skip = (pageNum - 1) * limitNum;
+  const ids = student.referralHistory;
+
+  const [referrals, total] = await Promise.all([
+    Student.find({ _id: { $in: ids } })
+      .select('name email createdAt')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limitNum)
+      .lean(),
+    Student.countDocuments({ _id: { $in: ids } }),
+  ]);
+
+  return {
+    referrals: referrals.map((r) => ({
+      _id: r._id,
+      name: r.name,
+      email: r.email ? `${r.email.slice(0, 3)}***@***` : null,
+      joinedAt: r.createdAt,
+    })),
+    pagination: {
+      page: pageNum,
+      limit: limitNum,
+      total,
+      pages: Math.ceil(total / limitNum) || 1,
+    },
+  };
+};
+
 const studentService = {
   generateReferralCode,
   validateAndGetReferrerId,
   addReferralHistory,
-  generateReferralCode, // Exporting original individual exports as well if needed by object
   ensureWalletExists,
-  processReferralReward,
   processReferralReward,
   handlePostSignupWalletRewards,
   convertPointsToMoney,
+  getReferralInfo,
+  getMyReferrals,
+  REFERRAL_REWARD_POINTS,
 };
 
 export default studentService;
