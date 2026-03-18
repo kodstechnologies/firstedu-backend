@@ -36,7 +36,14 @@ const findSectorById = async (id, populateOptions = {}) => {
     // return await Competition.find({competitionSectorId:id})
     // .populate("tests")
     // .populate("competitionSectorId")
-    return await CompetitionSector.findById(id).populate("competitions").select('title description  competitions')
+    return await CompetitionSector.findById(id)
+    .populate({path:"competitions",
+      populate:{
+        path:"tests"
+      }
+    })
+    
+    // .select('title description  competitions')
   } catch (error) {
     throw new ApiError(500, "Failed to fetch competition sector", error.message);
   }
