@@ -38,6 +38,13 @@ const updateSuccessStory = Joi.object({
   achieveIn: Joi.string().trim().optional().messages({
     "string.empty": "Achieve in cannot be empty",
   }),
+    status: Joi.string()
+    .valid("DRAFT", "PUBLISHED")
+    .optional()
+    .messages({
+      "any.only": "Status must be either DRAFT or PUBLISHED",
+    })
+  
 });
 
 const updateStatus = Joi.object({

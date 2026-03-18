@@ -1,91 +1,36 @@
 import mongoose from "mongoose";
 
-const noticeSchema = new mongoose.Schema(
+const testSchema = new mongoose.Schema(
   {
-    text: { type: String, required: true, trim: true },
-    isLive: { type: Boolean, default: false },
+    title: {
+      type: String,
+      required: true,
+    },
+    description: {
+      type: String,
+    },
   },
-  { _id: true }
+  { timestamps: true },
 );
 
-const competitionSchema = new mongoose.Schema(
-  {
-    // Basic Info
-    label: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-
-    slug: {
-      type: String,
-      required: true,
-      unique: true,
-      trim: true,
-      lowercase: true,
-      index: true,
-    },
-
-    category: {
-      type: String,
-      trim: true,
-      index: true,
-    },
-
-    icon: {
-      type: String,
-      default: "📖",
-    },
-
-    // 🔗 Link to Test (CORE FIELD)
-    test: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Test",
-      required: true,
-      index: true,
-    },
-
-    // Status
-    status: {
-      type: String,
-      enum: ["Draft", "Active", "Paused", "Archived"],
-      default: "Draft",
-      index: true,
-    },
-
-    // Hero Section
-    heroSection: {
-      title: String,
-      subtitle: String,
-      description: String,
-    },
-
-    // Exam Schedule
-    examInfo: {
-      fullName: {
-        type: String,
-        trim: true,
-      },
-
-      examDate: {
-        type: Date,
-        required: true,
-      },
-
-      examTime: {
-        type: String,
-        required: true,
-      },
-    },
-
-    // Notices
-    notices: [noticeSchema],
+const competitionSchema = new mongoose.Schema({
+  competitionSectorId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "CompetitionSector",
   },
-  {
-    timestamps: true,
-    collection: "competitions",
-  }
-);
+  title: { type: String, required: true },
+  description: { type: String, required: true },
+  status: {
+    type: String,
+    enum: ["Draft", "Public"],
+    default: "Public",
+  },
+  tests: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "CompetitionTest",
+  }],
+}, { timestamps: true });
 
-export default mongoose.models.Competition ||
-  mongoose.model("Competition", competitionSchema);
+export const Test= mongoose.models.CompetitionTest|| mongoose.model("CompetitionTest", testSchema);
+export const Competition= mongoose.models.Competition|| mongoose.model("Competition", competitionSchema);
+
