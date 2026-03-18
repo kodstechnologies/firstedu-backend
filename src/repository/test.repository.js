@@ -294,7 +294,7 @@ const sampleRandomQuestionsFromBank = async (questionBankId, count) => {
 const findEverydayChallengeTestIds = async () => {
   try {
     const docs = await Test.find({
-      isEverydayChallenge: true,
+      applicableFor: "everyday_challenge",
       isPublished: true,
     })
       .select("_id")
@@ -309,7 +309,7 @@ const findEverydayChallengeTestIds = async () => {
 const findEverydayChallengeTestsByDifficulty = async () => {
   try {
     const docs = await Test.find({
-      isEverydayChallenge: true,
+      applicableFor: "everyday_challenge",
       isPublished: true,
     })
       .select("_id questionBank")

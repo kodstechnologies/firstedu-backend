@@ -77,7 +77,7 @@ export const startExamSession = async (testId, studentId) => {
 
   // Check if student can access paid test:
   // everyday challenge and challenge-yourself tests are always free; otherwise purchase or linked event.
-  if (test.price > 0 && !test.isEverydayChallenge && test.applicableFor !== "challenge_yourself") {
+  if (test.price > 0 && test.applicableFor !== "everyday_challenge" && test.applicableFor !== "challenge_yourself") {
     let purchase = await orderRepository.findTestPurchase({
       student: studentId,
       test: testId,
@@ -150,7 +150,7 @@ export const startExamSession = async (testId, studentId) => {
       );
     }
     // Allow retakes: no "already completed" block for challenge-yourself
-  } else if (test.isEverydayChallenge) {
+  } else if (test.applicableFor === "everyday_challenge") {
     // Everyday challenge (not in challenge-yourself): one completion per day
     const today = everydayChallengeService.getStartOfDayUTC();
     const alreadyCompletedToday = await everydayChallengeCompletionRepository.findOne({
@@ -448,7 +448,7 @@ const autoSubmitExam = async (sessionId, studentId, reason = "time_expired") => 
   try {
     const test = await examSessionRepository.findTestById(session.test);
     if (test) {
-      if (test.isEverydayChallenge) {
+      if (test.applicableFor === "everyday_challenge") {
         await everydayChallengeService.recordCompletion(studentId, session);
       } else {
         await pointsService.awardTestCompletionPoints(
@@ -591,7 +591,7 @@ export const submitExam = async (sessionId, studentId) => {
   try {
     const test = await examSessionRepository.findTestById(session.test);
     if (test) {
-      if (test.isEverydayChallenge) {
+      if (test.applicableFor === "everyday_challenge") {
         await everydayChallengeService.recordCompletion(studentId, session);
       } else {
         await pointsService.awardTestCompletionPoints(

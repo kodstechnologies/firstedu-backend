@@ -33,7 +33,7 @@ const testSchema = new mongoose.Schema(
     },
     applicableFor: {
       type: String,
-      enum: ["test", "testBundle", "olympiad", "tournament", "challenge_yourself"],
+      enum: ["test", "testBundle", "olympiad", "tournament", "challenge_yourself", "everyday_challenge"],
       default: "test",
       index: true,
     },
@@ -45,11 +45,6 @@ const testSchema = new mongoose.Schema(
     isPublished: {
       type: Boolean,
       default: false,
-    },
-    isEverydayChallenge: {
-      type: Boolean,
-      default: false,
-      index: true,
     },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,

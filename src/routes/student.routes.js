@@ -8,7 +8,10 @@ import {
   resetPassword,
   getProfile,
   updateProfile,
-  changePassword, convertPoints,
+  changePassword,
+  convertPoints,
+  getReferralInfo,
+  getMyReferrals,
 } from "../controllers/studentAuth.controller.js";
 import {
   getCourses,
@@ -197,6 +200,10 @@ router.post("/forgot-password/verify", verifyForgotPasswordOTP);
 router.post("/forgot-password/reset", resetPassword);
 router.put("/update-profile", verifyJWT, updateProfile);
 router.put("/change-password", verifyJWT, changePassword);
+
+// Refer & Earn (100 points per successful referral signup)
+router.get("/refer-earn", verifyJWT, getReferralInfo);
+router.get("/refer-earn/referrals", verifyJWT, getMyReferrals);
 
 // Marketplace - All Resources (Combined)
 router.get("/marketplace/all", verifyJWT, getAllResources);
