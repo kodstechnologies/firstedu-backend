@@ -908,21 +908,38 @@ export const getQuestionPalette = async (sessionId, studentId) => {
  * Calculate percentile for the exam session
  */
 const calculatePercentile = async (session) => {
-  // Get all completed sessions for this test
+  // Build percentile distribution by student best score (not by attempts).
   const allSessions = await examSessionRepository.findAllCompletedSessions(session.test);
+  const bestScoreByStudent = new Map();
 
-  if (allSessions.length === 0) {
-    session.percentile = 100; // First person to complete
+  for (const s of allSessions) {
+    const studentId = s.student?.toString?.();
+    if (!studentId) continue;
+    const existing = bestScoreByStudent.get(studentId);
+    const score = s.score ?? 0;
+    if (existing === undefined || score > existing) {
+      bestScoreByStudent.set(studentId, score);
+    }
+  }
+
+  const currentStudentId = session.student?.toString?.();
+  const currentScore = session.score ?? 0;
+  if (currentStudentId) {
+    const existing = bestScoreByStudent.get(currentStudentId);
+    if (existing === undefined || currentScore > existing) {
+      bestScoreByStudent.set(currentStudentId, currentScore);
+    }
+  }
+
+  const bestScores = [...bestScoreByStudent.values()];
+  if (bestScores.length === 0) {
+    session.percentile = 100;
     return;
   }
 
-  // Count how many people scored less than this student
-  const lowerScores = allSessions.filter(
-    (s) => s.score < session.score
-  ).length;
-
-  // Calculate percentile: (number of people below / total people) * 100
-  session.percentile = Math.round((lowerScores / allSessions.length) * 100 * 100) / 100;
+  // Percentile rank = % students with best score <= current score.
+  const atOrBelow = bestScores.filter((score) => score <= currentScore).length;
+  session.percentile = Math.round((atOrBelow / bestScores.length) * 100 * 100) / 100;
 };
 
 /**
