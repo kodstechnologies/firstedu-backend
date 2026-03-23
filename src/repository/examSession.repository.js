@@ -158,7 +158,7 @@ const findAllCompletedSessions = async (testId) => {
       test: testId,
       status: "completed",
       score: { $ne: null },
-    }).select("score");
+    }).select("student score completedAt");
   } catch (error) {
     throw new ApiError(500, "Failed to fetch completed sessions", error.message);
   }

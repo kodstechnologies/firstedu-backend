@@ -305,6 +305,26 @@ const findEverydayChallengeTestIds = async () => {
   }
 };
 
+const DIFF_RANK = { easy: 0, medium: 1, hard: 2 };
+
+/**
+ * Bucket tests for challenge/everyday layouts. Section-wise banks often keep
+ * overallDifficulty at default "medium" while sections are all "easy" — without
+ * this, Bronze (easy-only slot) never picks those tests.
+ */
+const getEffectiveBankDifficulty = (bank) => {
+  if (!bank) return "medium";
+  if (bank.useSectionWiseDifficulty && Array.isArray(bank.sections) && bank.sections.length > 0) {
+    let easiest = "hard";
+    for (const sec of bank.sections) {
+      const d = sec?.difficulty;
+      if (d && DIFF_RANK[d] < DIFF_RANK[easiest]) easiest = d;
+    }
+    return easiest;
+  }
+  return bank.overallDifficulty || "medium";
+};
+
 /** Get everyday challenge test IDs grouped by questionBank.overallDifficulty (for Bronze stage) */
 const findEverydayChallengeTestsByDifficulty = async () => {
   try {
@@ -313,13 +333,13 @@ const findEverydayChallengeTestsByDifficulty = async () => {
       isPublished: true,
     })
       .select("_id questionBank")
-      .populate("questionBank", "overallDifficulty")
+      .populate("questionBank", "overallDifficulty useSectionWiseDifficulty sections")
       .lean();
     const easy = [];
     const medium = [];
     const hard = [];
     docs.forEach((d) => {
-      const diff = d.questionBank?.overallDifficulty || "medium";
+      const diff = getEffectiveBankDifficulty(d.questionBank);
       if (diff === "easy") easy.push(d._id);
       else if (diff === "medium") medium.push(d._id);
       else if (diff === "hard") hard.push(d._id);
@@ -338,13 +358,13 @@ const findChallengeYourselfTestsByDifficulty = async () => {
       isPublished: true,
     })
       .select("_id questionBank")
-      .populate("questionBank", "overallDifficulty")
+      .populate("questionBank", "overallDifficulty useSectionWiseDifficulty sections")
       .lean();
     const easy = [];
     const medium = [];
     const hard = [];
     docs.forEach((d) => {
-      const diff = d.questionBank?.overallDifficulty || "medium";
+      const diff = getEffectiveBankDifficulty(d.questionBank);
       if (diff === "easy") easy.push(d._id);
       else if (diff === "medium") medium.push(d._id);
       else if (diff === "hard") hard.push(d._id);
