@@ -1,6 +1,6 @@
 import pressAnnouncementRepository from "../repository/pressAnnouncement.repository.js";
 import ApiError from "../utils/ApiError.js";
-import { uploadImageToCloudinary, deleteFileFromCloudinary } from "../utils/cloudinaryUpload.js";
+import { uploadImageToCloudinary, deleteFileFromCloudinary } from "../utils/s3Upload.js";
 
 const PRESS_ANNOUNCEMENT_IMAGE_FOLDER = "press-announcements";
 

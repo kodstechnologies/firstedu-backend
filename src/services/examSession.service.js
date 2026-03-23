@@ -54,7 +54,8 @@ const hasCompletedRegistrationForLinkedEventTest = async (testId, studentId) => 
 /**
  * Start a new exam session
  */
-export const startExamSession = async (testId, studentId) => {
+export const startExamSession = async (testId, studentId, options = {}) => {
+  const { challengeId = null } = options;
   // Check if test exists and is published
   const test = await examSessionRepository.findTestById(testId, { questionBank: "name" });
   if (!test) {
@@ -69,6 +70,13 @@ export const startExamSession = async (testId, studentId) => {
     throw new ApiError(400, "Test has no question bank configured");
   }
 
+  if (test.applicableFor === "challenge_yourfriends" && !challengeId) {
+    throw new ApiError(
+      400,
+      "This challenge exam can only be started by the room creator"
+    );
+  }
+
   // Get all questions from the question bank
   const questions = await questionBankRepository.getQuestionsByBankId(test.questionBank._id);
   if (!questions || questions.length === 0) {
@@ -77,7 +85,12 @@ export const startExamSession = async (testId, studentId) => {
 
   // Check if student can access paid test:
   // everyday challenge and challenge-yourself tests are always free; otherwise purchase or linked event.
-  if (test.price > 0 && test.applicableFor !== "everyday_challenge" && test.applicableFor !== "challenge_yourself") {
+  if (
+    test.price > 0 &&
+    test.applicableFor !== "everyday_challenge" &&
+    test.applicableFor !== "challenge_yourself" &&
+    test.applicableFor !== "challenge_yourfriends"
+  ) {
     let purchase = await orderRepository.findTestPurchase({
       student: studentId,
       test: testId,
@@ -104,10 +117,15 @@ export const startExamSession = async (testId, studentId) => {
   }
 
   // Check if there's an existing in_progress session (resume without pause)
+  const sessionScopeFilter = challengeId
+    ? { challenge: challengeId }
+    : { challenge: null };
+
   const inProgressSession = await examSessionRepository.findOne({
     student: studentId,
     test: testId,
     status: "in_progress",
+    ...sessionScopeFilter,
   });
 
   if (inProgressSession) {
@@ -119,9 +137,13 @@ export const startExamSession = async (testId, studentId) => {
     student: studentId,
     test: testId,
     status: "paused",
+    ...sessionScopeFilter,
   });
 
   if (pausedSession) {
+    if (pausedSession.challenge || challengeId) {
+      throw new ApiError(400, "You can't pause or resume challenge exams");
+    }
     const now = new Date();
     const remainingMs = pausedSession.remainingTimeAtPause ?? 0;
     const newEndTime = new Date(now.getTime() + remainingMs);
@@ -160,12 +182,13 @@ export const startExamSession = async (testId, studentId) => {
     if (alreadyCompletedToday) {
       throw new ApiError(400, "You have already completed today's everyday challenge");
     }
-  } else {
+  } else if (test.applicableFor !== "challenge_yourfriends") {
     // Non–everyday challenge: prevent retaking the same test
     const completedSession = await examSessionRepository.findOne({
       student: studentId,
       test: testId,
       status: "completed",
+      ...sessionScopeFilter,
     });
     if (completedSession) {
       throw new ApiError(400, "You have already completed this test");
@@ -190,6 +213,7 @@ export const startExamSession = async (testId, studentId) => {
   const session = await examSessionRepository.create({
     student: studentId,
     test: testId,
+    challenge: challengeId,
     startTime: now,
     endTime: endTime,
     status: "in_progress",
@@ -532,6 +556,10 @@ export const pauseExamSession = async (sessionId, studentId) => {
 
   if (!session) {
     throw new ApiError(404, "Exam session not found or not in progress");
+  }
+
+  if (session.challenge) {
+    throw new ApiError(400, "You can't pause challenge exams");
   }
 
   const now = new Date();
@@ -965,6 +993,7 @@ export const getInProgressSessions = async (studentId, page = 1, limit = 10) => 
     {
       student: studentId,
       status: "paused",
+      challenge: null,
     },
     {
       page,

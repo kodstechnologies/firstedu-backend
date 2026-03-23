@@ -1,7 +1,7 @@
 import { ApiError } from "../utils/ApiError.js";
 import Certificate from "../models/Certificate.js";
 import User from "../models/Student.js";
-import { uploadPDFToCloudinary } from "../utils/cloudinaryUpload.js";
+import { uploadPDFToCloudinary } from "../utils/s3Upload.js";
 
 /**
  * Upload certificate PDF for a student (admin sends PDF generated from frontend)

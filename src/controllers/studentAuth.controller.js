@@ -3,7 +3,7 @@ import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { generateOTP } from "../utils/otp.js";
 import { sendOTPEmail } from "../utils/sendEmail.js";
-import { uploadImageToCloudinary } from "../utils/cloudinaryUpload.js";
+import { uploadImageToCloudinary } from "../utils/s3Upload.js";
 import studentRepository from "../repository/student.repository.js";
 import studentSessionRepository from "../repository/studentSession.repository.js";
 import userValidator from "../validation/student.validator.js";

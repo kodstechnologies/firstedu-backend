@@ -276,6 +276,68 @@ const getRankedByTest = async (testId, studentIds = null, limit = 10) => {
   }
 };
 
+const getRankedByChallenge = async (challengeId, studentIds = null, limit = 100) => {
+  try {
+    const match = {
+      challenge: new mongoose.Types.ObjectId(challengeId),
+      status: "completed",
+      score: { $ne: null, $gte: 0 },
+    };
+    if (Array.isArray(studentIds) && studentIds.length) {
+      const ids = studentIds
+        .map((id) => (id?.toString?.() ?? id))
+        .filter(Boolean)
+        .map((id) => new mongoose.Types.ObjectId(id));
+      match.student = { $in: ids };
+    }
+    const ranked = await ExamSession.aggregate([
+      { $match: match },
+      { $sort: { score: -1, completedAt: 1 } },
+      {
+        $group: {
+          _id: "$student",
+          score: { $first: "$score" },
+          maxScore: { $first: "$maxScore" },
+          completedAt: { $first: "$completedAt" },
+        },
+      },
+      { $sort: { score: -1, completedAt: 1 } },
+      { $limit: limit },
+      {
+        $lookup: {
+          from: "users",
+          localField: "_id",
+          foreignField: "_id",
+          as: "studentDoc",
+          pipeline: [{ $project: { name: 1, email: 1 } }],
+        },
+      },
+      { $unwind: { path: "$studentDoc", preserveNullAndEmptyArrays: true } },
+      {
+        $project: {
+          student: "$_id",
+          score: 1,
+          maxScore: 1,
+          completedAt: 1,
+          name: "$studentDoc.name",
+          email: "$studentDoc.email",
+        },
+      },
+    ]);
+    return ranked;
+  } catch (error) {
+    throw new ApiError(500, "Failed to fetch challenge rankings", error.message);
+  }
+};
+
+const countDocuments = async (filter = {}) => {
+  try {
+    return await ExamSession.countDocuments(filter);
+  } catch (error) {
+    throw new ApiError(500, "Failed to count exam sessions", error.message);
+  }
+};
+
 export default {
   create,
   findById,
@@ -290,5 +352,7 @@ export default {
   findExpiredInProgressSessions,
   getSessionStatusMapByStudent,
   getRankedByTest,
+  getRankedByChallenge,
+  countDocuments,
 };
 

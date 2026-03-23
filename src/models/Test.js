@@ -33,7 +33,7 @@ const testSchema = new mongoose.Schema(
     },
     applicableFor: {
       type: String,
-      enum: ["test", "testBundle", "olympiad", "tournament", "challenge_yourself", "everyday_challenge"],
+      enum: ["test", "testBundle", "olympiad", "tournament", "challenge_yourself", "everyday_challenge", "challenge_yourfriends"],
       default: "test",
       index: true,
     },

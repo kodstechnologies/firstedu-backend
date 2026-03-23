@@ -6,10 +6,6 @@ const createChallenge = Joi.object({
   title: Joi.string().trim().required(),
   description: Joi.string().trim().allow("", null).optional(),
   testId: objectId.required(),
-  isFriendGroup: Joi.boolean().default(false).optional(),
-  invitedFriends: Joi.array().items(objectId).optional(),
-  startTime: Joi.date().required(),
-  endTime: Joi.date().required(),
 });
 
 const updateChallenge = Joi.object({
@@ -20,13 +16,13 @@ const updateChallenge = Joi.object({
   isActive: Joi.boolean().optional(),
 });
 
-const inviteFriendsToChallenge = Joi.object({
-  friendIds: Joi.array().items(objectId).min(1).required(),
+const joinChallengeByCode = Joi.object({
+  roomCode: Joi.string().trim().length(6).required(),
 });
 
 export default {
   createChallenge,
   updateChallenge,
-  inviteFriendsToChallenge,
+  joinChallengeByCode,
 };
 

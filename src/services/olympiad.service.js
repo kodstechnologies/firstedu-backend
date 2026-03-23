@@ -10,7 +10,7 @@ import examSessionRepository from "../repository/examSession.repository.js";
 import {
   uploadImageToCloudinary,
   deleteFileFromCloudinary,
-} from "../utils/cloudinaryUpload.js";
+} from "../utils/s3Upload.js";
 import { attachOfferToList, attachOfferToItem } from "../utils/offerUtils.js";
 
 const OLYMPIADS_IMAGE_FOLDER = "olympiads";

@@ -1,7 +1,8 @@
 import User from "../models/Student.js";
 import TestPurchase from "../models/TestPurchase.js";
+import CoursePurchase from "../models/CoursePurchase.js";
+import EventRegistration from "../models/EventRegistration.js";
 import SupportTicket from "../models/SupportTicket.js";
-import RazorpayWebhookEvent from "../models/RazorpayWebhookEvent.js";
 
 /**
  * Get start and end of a month (in UTC)
@@ -39,22 +40,87 @@ const computeChange = (currentVal, previousVal, format = "percent") => {
 };
 
 /**
- * Get total revenue from Razorpay payments (all purchases + wallet topups via Razorpay).
- * RazorpayWebhookEvent stores payment.captured events; amount is in paise.
+ * Sum revenue from completed purchases/registrations in a date range.
+ * This does not depend on webhook logs, so dashboard remains correct even if webhook history is partial.
  */
 const getRazorpayRevenueInRange = async (start, end) => {
-  const result = await RazorpayWebhookEvent.aggregate([
-    {
-      $match: {
-        event: "payment.captured",
-        createdAt: { $gte: start, $lte: end },
-        amount: { $exists: true, $ne: null },
+  const [courseAgg, testAgg, eventAgg] = await Promise.all([
+    CoursePurchase.aggregate([
+      {
+        $match: {
+          paymentStatus: "completed",
+          purchaseDate: { $gte: start, $lte: end },
+          purchasePrice: { $exists: true, $ne: null },
+        },
       },
-    },
-    { $group: { _id: null, totalPaise: { $sum: "$amount" } } },
+      { $group: { _id: null, total: { $sum: "$purchasePrice" } } },
+    ]),
+    TestPurchase.aggregate([
+      {
+        $match: {
+          paymentStatus: "completed",
+          purchaseDate: { $gte: start, $lte: end },
+          purchasePrice: { $exists: true, $ne: null },
+        },
+      },
+      { $group: { _id: null, total: { $sum: "$purchasePrice" } } },
+    ]),
+    EventRegistration.aggregate([
+      {
+        $match: {
+          paymentStatus: "completed",
+          registeredAt: { $gte: start, $lte: end },
+          amountPaid: { $exists: true, $ne: null },
+        },
+      },
+      { $group: { _id: null, total: { $sum: "$amountPaid" } } },
+    ]),
   ]);
-  const totalPaise = result[0]?.totalPaise ?? 0;
-  return Math.round(totalPaise / 100); // Convert paise to rupees
+
+  const courseRevenue = courseAgg[0]?.total ?? 0;
+  const testRevenue = testAgg[0]?.total ?? 0;
+  const eventRevenue = eventAgg[0]?.total ?? 0;
+  return Math.round(courseRevenue + testRevenue + eventRevenue);
+};
+
+/**
+ * Get all-time total revenue from completed purchases/registrations.
+ */
+const getRazorpayTotalRevenue = async () => {
+  const [courseAgg, testAgg, eventAgg] = await Promise.all([
+    CoursePurchase.aggregate([
+      {
+        $match: {
+          paymentStatus: "completed",
+          purchasePrice: { $exists: true, $ne: null },
+        },
+      },
+      { $group: { _id: null, total: { $sum: "$purchasePrice" } } },
+    ]),
+    TestPurchase.aggregate([
+      {
+        $match: {
+          paymentStatus: "completed",
+          purchasePrice: { $exists: true, $ne: null },
+        },
+      },
+      { $group: { _id: null, total: { $sum: "$purchasePrice" } } },
+    ]),
+    EventRegistration.aggregate([
+      {
+        $match: {
+          paymentStatus: "completed",
+          amountPaid: { $exists: true, $ne: null },
+        },
+      },
+      { $group: { _id: null, total: { $sum: "$amountPaid" } } },
+    ]),
+  ]);
+
+  const courseRevenue = courseAgg[0]?.total ?? 0;
+  const testRevenue = testAgg[0]?.total ?? 0;
+  const eventRevenue = eventAgg[0]?.total ?? 0;
+  return Math.round(courseRevenue + testRevenue + eventRevenue);
 };
 
 /**
@@ -167,6 +233,7 @@ export const getDashboardData = async () => {
     openTicketsNow,
     ticketsOpenedCurrentMonth,
     ticketsOpenedLastMonth,
+    totalRevenueAllTime,
     revenueChart,
   ] = await Promise.all([
     getRazorpayRevenueInRange(currentMonth.start, currentMonth.end),
@@ -178,6 +245,7 @@ export const getDashboardData = async () => {
     getOpenTicketsCount(),
     getTicketsOpenedInRange(currentMonth.start, currentMonth.end),
     getTicketsOpenedInRange(lastMonth.start, lastMonth.end),
+    getRazorpayTotalRevenue(),
     getRevenueLast7Days(),
   ]);
 
@@ -228,6 +296,9 @@ export const getDashboardData = async () => {
 
   return {
     stats,
+    // Explicit revenue keys for clients expecting direct fields
+    totalRevenue: totalRevenueAllTime,
+    daywiseRevenue: revenueChart,
     revenueData: revenueChart,
     revenueSummary: {
       total: totalRevenue7Days,
