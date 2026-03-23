@@ -45,7 +45,12 @@ const examSessionSchema = new mongoose.Schema(
       {
         type: {
           type: String,
-          enum: ["window_blur", "tab_switch", "fullscreen_exit", "visibility_change"],
+          enum: [
+            "window_blur",
+            "tab_switch",
+            "fullscreen_exit",
+            "visibility_change",
+          ],
         },
         timestamp: {
           type: Date,
@@ -184,7 +189,7 @@ const examSessionSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 // One active session per student per test
@@ -192,4 +197,3 @@ examSessionSchema.index({ student: 1, test: 1, status: 1 });
 
 export default mongoose.models.ExamSession ||
   mongoose.model("ExamSession", examSessionSchema);
-

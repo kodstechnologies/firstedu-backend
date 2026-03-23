@@ -10,12 +10,13 @@ import teacherRepository from "../repository/teacher.repository.js";
  * Get available teachers by subject
  */
 export const getAvailableTeachers = asyncHandler(async (req, res) => {
-  const { subject, page = 1, limit = 10 } = req.query;
+  const { subject, page = 1, limit = 10, search } = req.query;
 
   const result = await teacherConnectService.getAvailableTeachers(
     subject,
     parseInt(page),
-    parseInt(limit)
+    parseInt(limit),
+    search
   );
 
   return res.status(200).json(

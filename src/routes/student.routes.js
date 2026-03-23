@@ -176,6 +176,10 @@ import {
   getMyCertificateById,
 } from "../controllers/certificate.controller.js";
 import { getStudentCompetitionSectors } from "../controllers/studentCompetition.controller.js";
+import {
+  getNeedToImprove,
+  refreshNeedToImprove,
+} from "../controllers/needToImprove.controller.js";
 import { verifyJWT } from "../middleware/auth.middleware.js";
 import { uploadImage, uploadPDF } from "../utils/multerConfig.js";
 import { getCompetitions, getSingleCompetition } from "../controllers/competition.controller.js";
@@ -459,5 +463,9 @@ router.get("/competitions", getStudentCompetitionSectors);
 router.get("/competitions/single/:id", getSingleCompetition);
 router.get("/competitions/:id", getCompetitions);
 // router.get("/competitions/:idOrSlug", getCompetitionByIdOrSlug);
+
+// ==================== NEED TO IMPROVE ====================
+router.get("/need-to-improve", verifyJWT, getNeedToImprove);
+router.post("/need-to-improve/refresh", verifyJWT, refreshNeedToImprove);
 
 export default router;
