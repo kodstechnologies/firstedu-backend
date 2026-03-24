@@ -11,11 +11,15 @@ const createTest = Joi.object({
   proctoringInstructions: Joi.string().trim().optional(),
   price: Joi.number().min(0).default(0),
   applicableFor: Joi.string()
-<<<<<<< HEAD
-    .valid("test", "testBundle", "olympiad", "tournament", "challenge_yourself", "competition_sector", "everyday_challenge")
-=======
-    .valid("test", "testBundle", "olympiad", "tournament", "challenge_yourself", "everyday_challenge", "challenge_yourfriends")
->>>>>>> 914ac906d76f61745167f4c414af0b5d00f98c02
+    .valid(
+      "test",
+      "testBundle",
+      "olympiad",
+      "tournament",
+      "challenge_yourself",
+      "competition_sector",
+      "everyday_challenge",
+    )
     .default("test"),
   isPublished: Joi.boolean().optional(),
 });
@@ -28,11 +32,16 @@ const updateTest = Joi.object({
   proctoringInstructions: Joi.string().trim().optional(),
   price: Joi.number().min(0).optional(),
   applicableFor: Joi.string()
-<<<<<<< HEAD
-    .valid("test", "testBundle", "olympiad", "tournament", "challenge_yourself", "competition_sector", "everyday_challenge")
-=======
-    .valid("test", "testBundle", "olympiad", "tournament", "challenge_yourself", "everyday_challenge", "challenge_yourfriends")
->>>>>>> 914ac906d76f61745167f4c414af0b5d00f98c02
+    .valid(
+      "test",
+      "testBundle",
+      "olympiad",
+      "tournament",
+      "challenge_yourself",
+      "competition_sector",
+      "everyday_challenge",
+      "challenge_yourfriends",
+    )
     .optional(),
   isPublished: Joi.boolean().optional(),
 });
@@ -60,5 +69,3 @@ export default {
   createBundle,
   updateBundle,
 };
-
-

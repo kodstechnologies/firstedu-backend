@@ -181,6 +181,7 @@ import {
   getCompetitions,
   getSingleCompetition,
 } from "../controllers/competition.controller.js";
+import { getStudentDashboardStats } from "../controllers/studentDashboard.controller.js";
 
 const router = Router();
 
@@ -193,6 +194,7 @@ router.post("/contact-us", contactUs);
 router.post("/logout", verifyJWT, logout);
 
 router.get("/profile", verifyJWT, getProfile);
+router.get("/dashboard/stats", verifyJWT, getStudentDashboardStats);
 router.post("/forgot-password/request", requestForgotPasswordOTP);
 router.post("/forgot-password/verify", verifyForgotPasswordOTP);
 router.post("/forgot-password/reset", resetPassword);

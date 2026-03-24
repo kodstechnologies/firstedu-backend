@@ -34,7 +34,6 @@ const testSchema = new mongoose.Schema(
     },
     applicableFor: {
       type: String,
-<<<<<<< HEAD
       enum: [
         "test",
         "testBundle",
@@ -43,10 +42,8 @@ const testSchema = new mongoose.Schema(
         "challenge_yourself",
         "everyday_challenge",
         "competition_sector",
+        "challenge_yourfriends",
       ],
-=======
-      enum: ["test", "testBundle", "olympiad", "tournament", "challenge_yourself", "everyday_challenge", "challenge_yourfriends"],
->>>>>>> 914ac906d76f61745167f4c414af0b5d00f98c02
       default: "test",
       index: true,
     },
