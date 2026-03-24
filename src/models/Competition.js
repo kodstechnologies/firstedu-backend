@@ -2,6 +2,10 @@ import mongoose from "mongoose";
 
 const testSchema = new mongoose.Schema(
   {
+    testId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Test",
+    },
     title: {
       type: String,
       required: true,

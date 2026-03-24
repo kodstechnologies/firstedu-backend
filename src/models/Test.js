@@ -24,7 +24,8 @@ const testSchema = new mongoose.Schema(
     proctoringInstructions: {
       type: String,
       trim: true,
-      default: "Please do not switch tabs or minimize the browser window during the test. Any suspicious activity will be logged.",
+      default:
+        "Please do not switch tabs or minimize the browser window during the test. Any suspicious activity will be logged.",
     },
     price: {
       type: Number,
@@ -33,7 +34,15 @@ const testSchema = new mongoose.Schema(
     },
     applicableFor: {
       type: String,
-      enum: ["test", "testBundle", "olympiad", "tournament", "challenge_yourself", "everyday_challenge"],
+      enum: [
+        "test",
+        "testBundle",
+        "olympiad",
+        "tournament",
+        "challenge_yourself",
+        "everyday_challenge",
+        "competition_sector",
+      ],
       default: "test",
       index: true,
     },
@@ -54,12 +63,10 @@ const testSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 testSchema.index({ title: 1, createdBy: 1 });
 testSchema.index({ questionBank: 1 });
 
 export default mongoose.models.Test || mongoose.model("Test", testSchema);
-
-

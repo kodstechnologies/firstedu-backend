@@ -20,7 +20,10 @@ export const verifyJWT = asyncHandler(async (req, _, next) => {
   try {
     // Check if ACCESS_TOKEN_SECRET is set
     if (!process.env.ACCESS_TOKEN_SECRET) {
-      throw new ApiError(500, "Server configuration error: ACCESS_TOKEN_SECRET is not set");
+      throw new ApiError(
+        500,
+        "Server configuration error: ACCESS_TOKEN_SECRET is not set",
+      );
     }
 
     const decodedToken = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
@@ -40,7 +43,9 @@ export const verifyJWT = asyncHandler(async (req, _, next) => {
     }
 
     if (decodedToken.sessionId) {
-      const session = await studentSessionRepository.findById(decodedToken.sessionId);
+      const session = await studentSessionRepository.findById(
+        decodedToken.sessionId,
+      );
       if (!session || session.student.toString() !== user._id.toString()) {
         throw new ApiError(401, "Session invalidated. Please login again.");
       }

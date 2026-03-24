@@ -77,9 +77,7 @@ import {
   deleteComment,
   deleteReply,
 } from "../controllers/forum.controller.js";
-import {
-  getHallOfFame,
-} from "../controllers/hallOfFame.controller.js";
+import { getHallOfFame } from "../controllers/hallOfFame.controller.js";
 import { getMyEventsDashboard } from "../controllers/eventRegistration.controller.js";
 import { getEverydayChallenges } from "../controllers/everydayChallenge.controller.js";
 import { getChallengeYourself } from "../controllers/challengeYourself.controller.js";
@@ -111,9 +109,7 @@ import {
   claimMerchandise,
   getMyClaims,
 } from "../controllers/merchandise.controller.js";
-import {
-  getMyOrders,
-} from "../controllers/order.controller.js";
+import { getMyOrders } from "../controllers/order.controller.js";
 import {
   getAvailableTeachers,
   getTeacherById,
@@ -132,16 +128,9 @@ import {
   sendMessage,
   getTicketCategories,
 } from "../controllers/studentSupport.controller.js";
-import {
-  submitSupport,
-} from "../controllers/contactSupport.controller.js";
-import {
-  submitBlogRequest,
-} from "../controllers/blogRequest.controller.js";
-import {
-  getAllBlogs,
-  getBlogById,
-} from "../controllers/blog.controller.js";
+import { submitSupport } from "../controllers/contactSupport.controller.js";
+import { submitBlogRequest } from "../controllers/blogRequest.controller.js";
+import { getAllBlogs, getBlogById } from "../controllers/blog.controller.js";
 import {
   getAllQnAUser,
   getQnAByIdUser,
@@ -175,14 +164,21 @@ import {
   getMyCertificates,
   getMyCertificateById,
 } from "../controllers/certificate.controller.js";
-import { getStudentCompetitionSectors } from "../controllers/studentCompetition.controller.js";
+import {
+  getStudentCompetitionSectors,
+  initiateTestPayment as initiateCompetitionTestPayment,
+  purchaseTest as purchaseCompetitionTest,
+} from "../controllers/studentCompetition.controller.js";
 import {
   getNeedToImprove,
   refreshNeedToImprove,
 } from "../controllers/needToImprove.controller.js";
 import { verifyJWT } from "../middleware/auth.middleware.js";
 import { uploadImage, uploadPDF } from "../utils/multerConfig.js";
-import { getCompetitions, getSingleCompetition } from "../controllers/competition.controller.js";
+import {
+  getCompetitions,
+  getSingleCompetition,
+} from "../controllers/competition.controller.js";
 
 const router = Router();
 
@@ -194,7 +190,7 @@ router.post("/login", login);
 router.post("/contact-us", contactUs);
 router.post("/logout", verifyJWT, logout);
 
-router.get('/profile', verifyJWT, getProfile);
+router.get("/profile", verifyJWT, getProfile);
 router.post("/forgot-password/request", requestForgotPasswordOTP);
 router.post("/forgot-password/verify", verifyForgotPasswordOTP);
 router.post("/forgot-password/reset", resetPassword);
@@ -226,7 +222,11 @@ router.post("/tests/:id/purchase", verifyJWT, purchaseTest);
 
 // Marketplace - Test Bundles
 router.get("/test-bundles", getTestBundles);
-router.post("/test-bundles/:id/initiate-payment", verifyJWT, initiateTestBundlePayment);
+router.post(
+  "/test-bundles/:id/initiate-payment",
+  verifyJWT,
+  initiateTestBundlePayment,
+);
 router.post("/test-bundles/:id/purchase", verifyJWT, purchaseTestBundle);
 
 // Categories (taxonomy for filtering tests/question banks)
@@ -242,31 +242,43 @@ router.get("/my-tests", verifyJWT, getMyTests);
 router.get(
   "/exam-sessions/:sessionId/analysis",
   verifyJWT,
-  getDetailedAnalysis
+  getDetailedAnalysis,
 );
 router.post(
   "/exam-sessions/:sessionId/calculate-analysis",
   verifyJWT,
-  calculateAnalysis
+  calculateAnalysis,
 );
 
 // Community & Competitions - Olympiads
 router.get("/olympiads", verifyJWT, getPublishedOlympiads);
 router.get("/olympiads/:id", verifyJWT, getOlympiadDetails);
-router.post("/olympiads/:id/initiate-payment", verifyJWT, initiateOlympiadPayment);
+router.post(
+  "/olympiads/:id/initiate-payment",
+  verifyJWT,
+  initiateOlympiadPayment,
+);
 router.post("/olympiads/:id/register", verifyJWT, registerForOlympiad);
 router.get("/olympiads/:id/lobby", verifyJWT, getOlympiadLobby);
 
 // Community & Competitions - Tournaments
 router.get("/tournaments", verifyJWT, getPublishedTournaments);
 router.get("/tournaments/:id", verifyJWT, getTournamentDetails);
-router.post("/tournaments/:id/initiate-payment", verifyJWT, initiateTournamentPayment);
+router.post(
+  "/tournaments/:id/initiate-payment",
+  verifyJWT,
+  initiateTournamentPayment,
+);
 router.post("/tournaments/:id/register", verifyJWT, registerForTournament);
 
 // Community & Competitions - Workshops
 router.get("/workshops", verifyJWT, getPublishedWorkshops);
 router.get("/workshops/:id", verifyJWT, getWorkshopDetails);
-router.post("/workshops/:id/initiate-payment", verifyJWT, initiateWorkshopPayment);
+router.post(
+  "/workshops/:id/initiate-payment",
+  verifyJWT,
+  initiateWorkshopPayment,
+);
 router.post("/workshops/:id/register", verifyJWT, registerForWorkshop);
 
 // Community & Competitions - Challenges
@@ -277,18 +289,44 @@ router.post("/challenges/:id/join", verifyJWT, joinChallenge);
 router.post("/challenges/:id/invite", verifyJWT, inviteFriendsToChallenge);
 
 // Community - Forums (title, description, tags, topic, attachment; comments & replies)
-router.post("/forums", verifyJWT, uploadImage.single("attachment"), createForum);
+router.post(
+  "/forums",
+  verifyJWT,
+  uploadImage.single("attachment"),
+  createForum,
+);
 router.get("/forums", verifyJWT, getForums);
 router.get("/forums/:id", verifyJWT, getForumById);
-router.put("/forums/:id", verifyJWT, uploadImage.single("attachment"), updateForum);
+router.put(
+  "/forums/:id",
+  verifyJWT,
+  uploadImage.single("attachment"),
+  updateForum,
+);
 router.delete("/forums/:id", verifyJWT, deleteForum);
 router.post("/forums/:forumId/comments", verifyJWT, addComment);
-router.post("/forums/:forumId/comments/:commentId/replies", verifyJWT, replyToComment);
+router.post(
+  "/forums/:forumId/comments/:commentId/replies",
+  verifyJWT,
+  replyToComment,
+);
 router.post("/forums/:forumId/like", verifyJWT, likeForum);
-router.post("/forums/:forumId/comments/:commentId/like", verifyJWT, likeComment);
-router.post("/forums/:forumId/comments/:commentId/replies/:replyId/like", verifyJWT, likeReply);
+router.post(
+  "/forums/:forumId/comments/:commentId/like",
+  verifyJWT,
+  likeComment,
+);
+router.post(
+  "/forums/:forumId/comments/:commentId/replies/:replyId/like",
+  verifyJWT,
+  likeReply,
+);
 router.delete("/forums/:forumId/comments/:commentId", verifyJWT, deleteComment);
-router.delete("/forums/:forumId/comments/:commentId/replies/:replyId", verifyJWT, deleteReply);
+router.delete(
+  "/forums/:forumId/comments/:commentId/replies/:replyId",
+  verifyJWT,
+  deleteReply,
+);
 
 // Community & Competitions - Hall of Fame
 router.get("/hall-of-fame", verifyJWT, getHallOfFame);
@@ -326,16 +364,32 @@ router.get("/exam-sessions/:sessionId", verifyJWT, getExamSession);
 router.post("/exam-sessions/:sessionId/pause", verifyJWT, pauseExam);
 
 // Save Answer
-router.put("/exam-sessions/:sessionId/questions/:questionId/answer", verifyJWT, saveAnswer);
+router.put(
+  "/exam-sessions/:sessionId/questions/:questionId/answer",
+  verifyJWT,
+  saveAnswer,
+);
 
 // Mark for Review
-router.post("/exam-sessions/:sessionId/questions/:questionId/mark-review", verifyJWT, markForReview);
+router.post(
+  "/exam-sessions/:sessionId/questions/:questionId/mark-review",
+  verifyJWT,
+  markForReview,
+);
 
 // Skip Question
-router.post("/exam-sessions/:sessionId/questions/:questionId/skip", verifyJWT, skipQuestion);
+router.post(
+  "/exam-sessions/:sessionId/questions/:questionId/skip",
+  verifyJWT,
+  skipQuestion,
+);
 
 // Log Proctoring Event (window blur, tab switch, etc.)
-router.post("/exam-sessions/:sessionId/proctoring", verifyJWT, logProctoringEvent);
+router.post(
+  "/exam-sessions/:sessionId/proctoring",
+  verifyJWT,
+  logProctoringEvent,
+);
 
 // Submit Exam
 router.post("/exam-sessions/:sessionId/submit", verifyJWT, submitExam);
@@ -373,10 +427,18 @@ router.post("/teachers/:teacherId/rate", verifyJWT, rateTeacher);
 router.get("/teachers/:teacherId/check-balance", verifyJWT, checkWalletBalance);
 
 // Call Management
-router.post("/teachers/:teacherId/request-call", verifyJWT, initiateCallRequest);
+router.post(
+  "/teachers/:teacherId/request-call",
+  verifyJWT,
+  initiateCallRequest,
+);
 router.get("/teacher-sessions", verifyJWT, getCallHistory);
 router.get("/teacher-sessions/recordings", verifyJWT, getCallRecordings);
-router.post("/teacher-sessions/:sessionId/cancel", verifyJWT, cancelCallRequest);
+router.post(
+  "/teacher-sessions/:sessionId/cancel",
+  verifyJWT,
+  cancelCallRequest,
+);
 
 // ==================== SUPPORT DESK ====================
 
@@ -384,7 +446,12 @@ router.post("/teacher-sessions/:sessionId/cancel", verifyJWT, cancelCallRequest)
 router.post("/contact-support", verifyJWT, submitSupport);
 
 // Blog Request (optional image)
-router.post("/blog-request", verifyJWT, uploadImage.single("image"), submitBlogRequest);
+router.post(
+  "/blog-request",
+  verifyJWT,
+  uploadImage.single("image"),
+  submitBlogRequest,
+);
 
 // Approved blogs (approved by admin + admin-added blogs)
 router.get("/blogs", verifyJWT, getAllBlogs);
@@ -411,21 +478,9 @@ router.get("/support/tickets", verifyJWT, getMyTickets);
 
 // Specific routes like '/categories' must come before parameterized routes like '/:ticketId'
 router.get("/support/tickets/categories", verifyJWT, getTicketCategories);
-router.get(
-  "/support/tickets/:ticketId",
-  verifyJWT,
-  getTicketById
-);
-router.get(
-  "/support/tickets/:ticketId/messages",
-  verifyJWT,
-  getTicketMessages
-);
-router.post(
-  "/support/tickets/:ticketId/messages",
-  verifyJWT,
-  sendMessage
-);
+router.get("/support/tickets/:ticketId", verifyJWT, getTicketById);
+router.get("/support/tickets/:ticketId/messages", verifyJWT, getTicketMessages);
+router.post("/support/tickets/:ticketId/messages", verifyJWT, sendMessage);
 
 // ==================== CERTIFICATES ====================
 
@@ -445,7 +500,11 @@ router.get("/notifications", verifyJWT, getMyNotifications);
 router.get("/notifications/unread-count", verifyJWT, getUnreadCount);
 
 // Mark notification as read
-router.put("/notifications/:notificationId/read", verifyJWT, markNotificationAsRead);
+router.put(
+  "/notifications/:notificationId/read",
+  verifyJWT,
+  markNotificationAsRead,
+);
 
 // Mark all notifications as read
 router.put("/notifications/read-all", verifyJWT, markAllNotificationsAsRead);
@@ -453,16 +512,28 @@ router.put("/notifications/read-all", verifyJWT, markAllNotificationsAsRead);
 // ==================== SUCCESS STORIES ====================
 
 // Success Stories (Public)
-router.get("/success-stories/featured", getFeaturedStories);
-router.get("/success-stories", getAllStoriesStudent);
-router.get("/success-stories/:id", getStoryDetailStudent);
+router.get("/success-stories/featured", verifyJWT, getFeaturedStories);
+router.get("/success-stories", verifyJWT, getAllStoriesStudent);
+router.get("/success-stories/:id", verifyJWT, getStoryDetailStudent);
 
 // ==================== COMPETITION MANAGEMENT ====================
 
 router.get("/competitions", getStudentCompetitionSectors);
-router.get("/competitions/single/:id", getSingleCompetition);
-router.get("/competitions/:id", getCompetitions);
+router.get("/competitions/single/:id", verifyJWT, getSingleCompetition);
+router.get("/competitions/:id", verifyJWT, getCompetitions);
 // router.get("/competitions/:idOrSlug", getCompetitionByIdOrSlug);
+
+// Competition Test Purchases
+router.post(
+  "/competitions/tests/:testId/initiate-payment",
+  verifyJWT,
+  initiateCompetitionTestPayment,
+);
+router.post(
+  "/competitions/tests/:testId/purchase",
+  verifyJWT,
+  purchaseCompetitionTest,
+);
 
 // ==================== NEED TO IMPROVE ====================
 router.get("/need-to-improve", verifyJWT, getNeedToImprove);
