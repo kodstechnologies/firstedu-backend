@@ -5,7 +5,7 @@ import orderRepository from "../repository/order.repository.js";
 import {
   uploadImageToCloudinary,
   deleteFileFromCloudinary,
-} from "../utils/cloudinaryUpload.js";
+} from "../utils/s3Upload.js";
 
 const TESTS_IMAGE_FOLDER = "tests";
 

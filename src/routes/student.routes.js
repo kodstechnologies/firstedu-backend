@@ -59,9 +59,11 @@ import {
 import {
   createChallenge,
   getChallenges,
-  getChallengeById,
-  joinChallenge,
-  inviteFriendsToChallenge,
+  joinChallengeByCode,
+  startChallenge,
+  deleteChallenge,
+  getChallengeYourFriendsTests,
+  getCompletedChallenges,
 } from "../controllers/challenge.controller.js";
 import {
   createForum,
@@ -283,10 +285,12 @@ router.post("/workshops/:id/register", verifyJWT, registerForWorkshop);
 
 // Community & Competitions - Challenges
 router.post("/challenges", verifyJWT, createChallenge);
+router.get("/challenges/tests/challenge-yourfriends", verifyJWT, getChallengeYourFriendsTests);
 router.get("/challenges", verifyJWT, getChallenges);
-router.get("/challenges/:id", verifyJWT, getChallengeById);
-router.post("/challenges/:id/join", verifyJWT, joinChallenge);
-router.post("/challenges/:id/invite", verifyJWT, inviteFriendsToChallenge);
+router.get("/challenges/completed-challenges", verifyJWT, getCompletedChallenges);
+router.post("/challenges/join-by-code", verifyJWT, joinChallengeByCode);
+router.post("/challenges/:id/start", verifyJWT, startChallenge);
+router.delete("/challenges/:id", verifyJWT, deleteChallenge);
 
 // Community - Forums (title, description, tags, topic, attachment; comments & replies)
 router.post(

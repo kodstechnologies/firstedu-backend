@@ -4,7 +4,7 @@ import teacherRepository from "../repository/teacher.repository.js";
 import {
   uploadImageToCloudinary,
   deleteFileFromCloudinary,
-} from "../utils/cloudinaryUpload.js";
+} from "../utils/s3Upload.js";
 import { attachOfferToList, attachOfferToItem } from "../utils/offerUtils.js";
 
 const WORKSHOPS_IMAGE_FOLDER = "workshops";

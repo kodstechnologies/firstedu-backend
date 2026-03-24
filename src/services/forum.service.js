@@ -1,6 +1,6 @@
 import { ApiError } from "../utils/ApiError.js";
 import forumRepository from "../repository/forum.repository.js";
-import { uploadImageToCloudinary, deleteFileFromCloudinary } from "../utils/cloudinaryUpload.js";
+import { uploadImageToCloudinary, deleteFileFromCloudinary } from "../utils/s3Upload.js";
 
 const FORUM_IMAGE_FOLDER = "forums";
 

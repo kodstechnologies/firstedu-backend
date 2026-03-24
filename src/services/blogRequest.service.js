@@ -1,7 +1,7 @@
 import blogRequestRepository from "../repository/blogRequest.repository.js";
 import blogRepository from "../repository/blog.repository.js";
 import ApiError from "../utils/ApiError.js";
-import { uploadImageToCloudinary, deleteFileFromCloudinary } from "../utils/cloudinaryUpload.js";
+import { uploadImageToCloudinary, deleteFileFromCloudinary } from "../utils/s3Upload.js";
 
 const BLOG_REQUEST_IMAGE_FOLDER = "blog-requests";
 

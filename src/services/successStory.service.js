@@ -4,7 +4,7 @@ import {
   uploadImageToCloudinary,
   uploadVideoToCloudinary,
   deleteFileFromCloudinary,
-} from '../utils/cloudinaryUpload.js';
+} from '../utils/s3Upload.js';
 
 const VIDEO_MIMETYPES = [
   'video/mp4',

@@ -6,7 +6,7 @@ import {
   uploadVideoToCloudinary,
   uploadAudioToCloudinary,
   deleteFileFromCloudinary,
-} from "../utils/cloudinaryUpload.js";
+} from "../utils/s3Upload.js";
 
 const isVideo = (m) => m && m.startsWith("video/");
 const isAudio = (m) => m && m.startsWith("audio/");

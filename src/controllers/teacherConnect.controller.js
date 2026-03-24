@@ -4,7 +4,7 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import teacherConnectService from "../services/teacherConnect.service.js";
 import teacherConnectValidator from "../validation/teacherConnect.validator.js";
 import teacherRepository from "../repository/teacher.repository.js";
-import { uploadImageToCloudinary } from "../utils/cloudinaryUpload.js";
+import { uploadImageToCloudinary } from "../utils/s3Upload.js";
 
 /**
  * Get teacher profile (current logged-in teacher)
