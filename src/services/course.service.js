@@ -6,7 +6,7 @@ import {
   uploadVideoToCloudinary,
   uploadAudioToCloudinary,
   deleteFileFromCloudinary,
-} from "../utils/cloudinaryUpload.js";
+} from "../utils/s3Upload.js";
 
 const isVideo = (m) => m && m.startsWith("video/");
 const isAudio = (m) => m && m.startsWith("audio/");
@@ -54,6 +54,7 @@ export const createCourse = async (data, adminId, files) => {
     contentType: contentType || "pdf",
     price: data.price || 0,
     isPublished: data.isPublished === true || data.isPublished === "true",
+    categoryIds: data.categoryIds || [],
     createdBy: adminId,
   });
   return course;
@@ -112,6 +113,9 @@ export const updateCourse = async (id, data, files) => {
   };
   if (data.price !== undefined) {
     updateData.price = data.price;
+  }
+  if (data.categoryIds !== undefined) {
+    updateData.categoryIds = data.categoryIds;
   }
 
   return await courseRepository.updateById(id, updateData);

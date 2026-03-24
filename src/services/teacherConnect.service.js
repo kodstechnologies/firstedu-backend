@@ -18,13 +18,17 @@ const omitContactFromTeacher = (teacher) => {
  * Returns all approved teachers (live or not). Each teacher includes isOnline and averageRating.
  * Phone and email are excluded from response.
  */
-export const getAvailableTeachers = async (subject, page = 1, limit = 10) => {
+export const getAvailableTeachers = async (subject, page = 1, limit = 10, search) => {
   const filter = {
     status: "approved",
   };
 
   if (subject) {
     filter.skills = { $in: [new RegExp(subject, "i")] };
+  }
+
+  if (search) {
+    filter.name = { $regex: search, $options: "i" };
   }
 
   const options = {

@@ -1,6 +1,8 @@
 import {Competition,Test} from "../models/Competition.js";
 import CompetitionSector from "../models/CompetitionSector.js";
 import { ApiError } from "../utils/ApiError.js";
+import orderRepository from "./order.repository.js";
+import examSessionRepository from "./examSession.repository.js";
 
 // ========== Competition Repository ==========
 
@@ -22,9 +24,50 @@ const findCompetitionById = async (id) => {
   }
 };
 
-const findCompetitionWithTestsById = async (id) => {
+const findCompetitionWithTestsById = async (id, userId) => {
   try {
-    return await Competition.findById(id).populate("tests").lean();
+    const competition = await Competition.findById(id).populate({
+      path: "tests",
+      populate: {
+        path: "testId"
+      }
+    }).lean();
+
+    if (!competition) return null;
+
+    // Filter out unpublished tests
+    competition.tests = (competition.tests || []).filter(
+      (testEntry) => testEntry.testId && testEntry.testId.isPublished === true
+    );
+
+    // Inject isPurchased per student natively by checking the Order collection
+    if (userId && competition.tests) {
+      // Find all test purchases for this user
+      const userPurchases = await orderRepository.findTestPurchases(userId);
+      const purchasedTestIds = userPurchases.map(p => p.test?._id?.toString() || p.test?.toString());
+
+      // Find all session statuses for this user
+      const testIdsForSessionCheck = competition.tests.map(t => t.testId?._id).filter(Boolean);
+      const sessionStatusMap = await examSessionRepository.getSessionStatusMapByStudent(userId, testIdsForSessionCheck);
+
+      competition.tests = competition.tests.map(testEntry => {
+        if (testEntry.testId) {
+          const testStrId = testEntry.testId._id.toString();
+          const isPurchased = purchasedTestIds.includes(testStrId);
+          const sessionInfo = sessionStatusMap[testStrId] || { status: "not_started", sessionId: null };
+
+          testEntry.testId = {
+            ...testEntry.testId,
+            isPurchased,
+            sessionStatus: sessionInfo.status,
+            sessionId: sessionInfo.sessionId,
+          };
+        }
+        return testEntry;
+      });
+    }
+
+    return competition;
   } catch (error) {
     throw new ApiError(500, "Failed to fetch competition with tests", error.message);
   }
@@ -35,7 +78,8 @@ const findSectorById = async (id, populateOptions = {}) => {
     return await CompetitionSector.findById(id)
     .populate({path:"competitions",
       populate:{
-        path:"tests"
+        path:"tests",
+        populate: { path: "testId" }
       }
     })
 

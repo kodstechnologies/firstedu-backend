@@ -1,10 +1,11 @@
 import { ApiError } from "../utils/ApiError.js";
 import testRepository from "../repository/test.repository.js";
 import questionBankRepository from "../repository/questionBank.repository.js";
+import orderRepository from "../repository/order.repository.js";
 import {
   uploadImageToCloudinary,
   deleteFileFromCloudinary,
-} from "../utils/cloudinaryUpload.js";
+} from "../utils/s3Upload.js";
 
 const TESTS_IMAGE_FOLDER = "tests";
 
@@ -78,6 +79,25 @@ export const getTestById = async (id) => {
 export const updateTest = async (id, data, file) => {
   const existing = await testRepository.findTestById(id);
   if (!existing) throw new ApiError(404, "Test not found");
+
+  // Restrict changing applicableFor once a standalone test ("test") has purchases
+  if (
+    Object.prototype.hasOwnProperty.call(data, "applicableFor") &&
+    data.applicableFor !== existing.applicableFor
+  ) {
+    if (existing.applicableFor === "test") {
+      const purchase = await orderRepository.findTestPurchase({
+        test: id,
+        paymentStatus: "completed",
+      });
+      if (purchase) {
+        throw new ApiError(
+          400,
+          "Cannot change applicableFor: this standalone test has already been purchased by at least one user"
+        );
+      }
+    }
+  }
 
   if (data.questionBank) {
     const bank = await questionBankRepository.findById(data.questionBank);

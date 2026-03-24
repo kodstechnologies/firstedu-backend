@@ -5,7 +5,7 @@ import applyJobService from "../services/applyJob.service.js";
 import jobApplicationService from "../services/jobApplication.service.js";
 import applyJobValidator from "../validation/applyJob.validator.js";
 import jobApplicationValidator from "../validation/jobApplication.validator.js";
-import { uploadPDFToCloudinary } from "../utils/cloudinaryUpload.js";
+import { uploadPDFToCloudinary } from "../utils/s3Upload.js";
 
 function normalizeBody(body) {
   const b = { ...body };

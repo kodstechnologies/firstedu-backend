@@ -26,16 +26,18 @@ const challengeSchema = new mongoose.Schema(
       enum: ["student", "admin", "system"],
       required: true,
     },
-    isFriendGroup: {
-      type: Boolean,
-      default: false,
+    roomCode: {
+      type: String,
+      required: true,
+      index: { unique: true, sparse: true },
+      minlength: 6,
+      maxlength: 6,
     },
-    invitedFriends: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
-      },
-    ],
+    roomStatus: {
+      type: String,
+      enum: ["waiting", "started", "completed"],
+      default: "waiting",
+    },
     participants: [
       {
         student: {
@@ -48,13 +50,13 @@ const challengeSchema = new mongoose.Schema(
         },
       },
     ],
-    startTime: {
+    startedAt: {
       type: Date,
-      required: true,
+      default: null,
     },
-    endTime: {
+    completedAt: {
       type: Date,
-      required: true,
+      default: null,
     },
     isActive: {
       type: Boolean,
@@ -67,7 +69,6 @@ const challengeSchema = new mongoose.Schema(
 );
 
 challengeSchema.index({ createdBy: 1, isActive: 1 });
-challengeSchema.index({ startTime: 1, endTime: 1 });
 
 export default mongoose.models.Challenge || mongoose.model("Challenge", challengeSchema);
 

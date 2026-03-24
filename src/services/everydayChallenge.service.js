@@ -162,7 +162,7 @@ const getNextStreakState = (lastCompletion, today) => {
 export const recordCompletion = async (studentId, session) => {
   const testId = session.test?._id || session.test;
   const test = await testRepository.findTestById(testId);
-  if (!test || !test.isEverydayChallenge) {
+  if (!test || test.applicableFor !== "everyday_challenge") {
     return null;
   }
 

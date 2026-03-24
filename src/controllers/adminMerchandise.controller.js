@@ -4,7 +4,7 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import merchandiseService from "../services/merchandise.service.js";
 import merchandiseRepository from "../repository/merchandise.repository.js";
 import merchandiseValidator from "../validation/merchandise.validator.js";
-import { uploadImageToCloudinary } from "../utils/cloudinaryUpload.js";
+import { uploadImageToCloudinary } from "../utils/s3Upload.js";
 
 /**
  * Get all merchandise items (admin)

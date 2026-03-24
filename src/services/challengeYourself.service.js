@@ -4,15 +4,15 @@ import challengeYourselfProgressRepository from "../repository/challengeYourself
 
 /**
  * 6 stages: Bronze (1), Silver (5), Gold (10), Platinum (15), Diamond (20), Heroic (25) levels.
- * Bronze uses everyday challenge pool (easy). Rest use challenge-yourself pool by difficulty mix.
+ * All stages use only challenge_yourself tests, bucketed by difficulty mix per stage.
  */
 const STAGES = [
-  { name: "Bronze", levels: 1, useEverydayPool: true, easy: 1, medium: 0, hard: 0 },
-  { name: "Silver", levels: 5, useEverydayPool: false, easy: 3, medium: 2, hard: 0 },
-  { name: "Gold", levels: 10, useEverydayPool: false, easy: 4, medium: 4, hard: 2 },
-  { name: "Platinum", levels: 15, useEverydayPool: false, easy: 5, medium: 5, hard: 5 },
-  { name: "Diamond", levels: 20, useEverydayPool: false, easy: 6, medium: 7, hard: 7 },
-  { name: "Heroic", levels: 25, useEverydayPool: false, easy: 8, medium: 8, hard: 9 },
+  { name: "Bronze", levels: 1, easy: 1, medium: 0, hard: 0 },
+  { name: "Silver", levels: 5, easy: 3, medium: 2, hard: 0 },
+  { name: "Gold", levels: 10, easy: 4, medium: 4, hard: 2 },
+  { name: "Platinum", levels: 15, easy: 5, medium: 5, hard: 5 },
+  { name: "Diamond", levels: 20, easy: 6, medium: 7, hard: 7 },
+  { name: "Heroic", levels: 25, easy: 8, medium: 8, hard: 9 },
 ];
 
 /**
@@ -64,8 +64,8 @@ const getDateSeed = () => {
  */
 const buildStageLevels = (stage, pools, dateSeed) => {
   const levels = [];
-  const { name, levels: levelCount, useEverydayPool, easy: e, medium: m, hard: h } = stage;
-  const pool = useEverydayPool ? pools.everyday : pools.challengeYourself;
+  const { name, levels: levelCount, easy: e, medium: m, hard: h } = stage;
+  const pool = pools.challengeYourself;
   const order = [];
   for (let i = 0; i < e; i++) order.push("easy");
   for (let i = 0; i < m; i++) order.push("medium");
@@ -84,19 +84,22 @@ const buildStageLevels = (stage, pools, dateSeed) => {
  * Get today's layout (stage/level -> testId) and reverse map (testId -> { stage, level }).
  */
 export const getLayoutForDate = async (dateSeed) => {
-  const [everydayByDiff, challengeByDiff] = await Promise.all([
-    testRepository.findEverydayChallengeTestsByDifficulty(),
-    testRepository.findChallengeYourselfTestsByDifficulty(),
-  ]);
-  const pools = { everyday: everydayByDiff, challengeYourself: challengeByDiff };
+  const challengeByDiff = await testRepository.findChallengeYourselfTestsByDifficulty();
+  const pools = { challengeYourself: challengeByDiff };
   const stagesWithLevels = STAGES.map((stage) => {
     const levels = buildStageLevels(stage, pools, dateSeed);
     return { name: stage.name, totalLevels: stage.levels, levels };
   });
+  // First occurrence wins (Bronze → … order). Later stages can sample the same testId;
+  // overwriting would make getSlotForTest point at a locked level while the UI still shows Bronze.
   const testIdToSlot = new Map();
   stagesWithLevels.forEach((s) => {
     s.levels.forEach((lev) => {
-      if (lev.testId) testIdToSlot.set(lev.testId.toString(), { stage: s.name, level: lev.level });
+      if (!lev.testId) return;
+      const key = lev.testId.toString();
+      if (!testIdToSlot.has(key)) {
+        testIdToSlot.set(key, { stage: s.name, level: lev.level });
+      }
     });
   });
   return { stagesWithLevels, testIdToSlot };
@@ -113,8 +116,12 @@ export const getSlotForTest = async (testId) => {
 
 /**
  * Check if (stage, level) is unlocked: all previous levels in stage have full marks, and previous stage is fully complete.
+ * Bronze level 1 is always open (entry stage).
  */
 export const isLevelUnlocked = async (studentId, stageName, levelNum) => {
+  const level = Number(levelNum);
+  if (stageName === "Bronze" && level === 1) return true;
+
   const progressList = await challengeYourselfProgressRepository.findByStudent(studentId);
   const progressMap = new Map();
   progressList.forEach((p) => {
@@ -127,11 +134,11 @@ export const isLevelUnlocked = async (studentId, stageName, levelNum) => {
   if (stageIndex < 0) return false;
   const stageConfig = STAGES[stageIndex];
 
-  for (let l = 1; l < levelNum; l++) {
+  for (let l = 1; l < level; l++) {
     const p = getProgress(stageName, l);
     if (!p?.fullMarksAchieved) return false;
   }
-  if (levelNum === 1 && stageIndex > 0) {
+  if (level === 1 && stageIndex > 0) {
     const prevStage = STAGES[stageIndex - 1];
     for (let l = 1; l <= prevStage.levels; l++) {
       const p = getProgress(prevStage.name, l);
@@ -142,7 +149,7 @@ export const isLevelUnlocked = async (studentId, stageName, levelNum) => {
 };
 
 /**
- * Record progress when a challenge-yourself (or Bronze everyday) test is completed. Full marks unlocks next level/stage.
+ * Record progress when a challenge-yourself test is completed. Full marks unlocks next level/stage.
  */
 export const recordProgress = async (studentId, session) => {
   const testId = session.test?._id || session.test;

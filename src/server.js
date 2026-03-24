@@ -7,6 +7,8 @@ import './config/firebase.js';
 import app from './app.js';
 import { setupSupportSocket } from './socket/supportSocket.js';
 import { setupExamSessionSocket } from './socket/examSessionSocket.js';
+import { setupChallengeSocket } from './socket/challengeSocket.js';
+import { setIO } from './socket/socketGateway.js';
 import examSessionService from './services/examSession.service.js';
 
 dotenv.config();
@@ -29,12 +31,14 @@ const startServer = async () => {
         methods: ["GET", "POST"],
       },
     });
+    setIO(io);
 
     // Setup support socket namespace
     setupSupportSocket(io);
 
     // Setup exam session socket namespace (for real-time proctoring)
     setupExamSessionSocket(io);
+    setupChallengeSocket(io);
 
     // ==================== HYBRID AUTO-SUBMISSION APPROACH ====================
     // 

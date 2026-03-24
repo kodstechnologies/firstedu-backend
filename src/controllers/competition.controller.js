@@ -22,8 +22,9 @@ export const getCompetitions = asyncHandler(async (req, res) => {
 
 export const getSingleCompetition = asyncHandler(async (req, res) => {
   const { id } = req.params;
+  const userId = req.user?._id;
   const competition =
-    await competitionService.getSingleCompetitionWithTests(id);
+    await competitionService.getSingleCompetitionWithTests(id, userId);
   return res
     .status(200)
     .json(ApiResponse.success(competition, "Competition fetched successfully"));

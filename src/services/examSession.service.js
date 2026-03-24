@@ -54,7 +54,8 @@ const hasCompletedRegistrationForLinkedEventTest = async (testId, studentId) => 
 /**
  * Start a new exam session
  */
-export const startExamSession = async (testId, studentId) => {
+export const startExamSession = async (testId, studentId, options = {}) => {
+  const { challengeId = null } = options;
   // Check if test exists and is published
   const test = await examSessionRepository.findTestById(testId, { questionBank: "name" });
   if (!test) {
@@ -69,6 +70,13 @@ export const startExamSession = async (testId, studentId) => {
     throw new ApiError(400, "Test has no question bank configured");
   }
 
+  if (test.applicableFor === "challenge_yourfriends" && !challengeId) {
+    throw new ApiError(
+      400,
+      "This challenge exam can only be started by the room creator"
+    );
+  }
+
   // Get all questions from the question bank
   const questions = await questionBankRepository.getQuestionsByBankId(test.questionBank._id);
   if (!questions || questions.length === 0) {
@@ -77,7 +85,12 @@ export const startExamSession = async (testId, studentId) => {
 
   // Check if student can access paid test:
   // everyday challenge and challenge-yourself tests are always free; otherwise purchase or linked event.
-  if (test.price > 0 && !test.isEverydayChallenge && test.applicableFor !== "challenge_yourself") {
+  if (
+    test.price > 0 &&
+    test.applicableFor !== "everyday_challenge" &&
+    test.applicableFor !== "challenge_yourself" &&
+    test.applicableFor !== "challenge_yourfriends"
+  ) {
     let purchase = await orderRepository.findTestPurchase({
       student: studentId,
       test: testId,
@@ -104,10 +117,15 @@ export const startExamSession = async (testId, studentId) => {
   }
 
   // Check if there's an existing in_progress session (resume without pause)
+  const sessionScopeFilter = challengeId
+    ? { challenge: challengeId }
+    : { challenge: null };
+
   const inProgressSession = await examSessionRepository.findOne({
     student: studentId,
     test: testId,
     status: "in_progress",
+    ...sessionScopeFilter,
   });
 
   if (inProgressSession) {
@@ -119,9 +137,13 @@ export const startExamSession = async (testId, studentId) => {
     student: studentId,
     test: testId,
     status: "paused",
+    ...sessionScopeFilter,
   });
 
   if (pausedSession) {
+    if (pausedSession.challenge || challengeId) {
+      throw new ApiError(400, "You can't pause or resume challenge exams");
+    }
     const now = new Date();
     const remainingMs = pausedSession.remainingTimeAtPause ?? 0;
     const newEndTime = new Date(now.getTime() + remainingMs);
@@ -150,7 +172,7 @@ export const startExamSession = async (testId, studentId) => {
       );
     }
     // Allow retakes: no "already completed" block for challenge-yourself
-  } else if (test.isEverydayChallenge) {
+  } else if (test.applicableFor === "everyday_challenge") {
     // Everyday challenge (not in challenge-yourself): one completion per day
     const today = everydayChallengeService.getStartOfDayUTC();
     const alreadyCompletedToday = await everydayChallengeCompletionRepository.findOne({
@@ -160,12 +182,13 @@ export const startExamSession = async (testId, studentId) => {
     if (alreadyCompletedToday) {
       throw new ApiError(400, "You have already completed today's everyday challenge");
     }
-  } else {
+  } else if (test.applicableFor !== "challenge_yourfriends") {
     // Non–everyday challenge: prevent retaking the same test
     const completedSession = await examSessionRepository.findOne({
       student: studentId,
       test: testId,
       status: "completed",
+      ...sessionScopeFilter,
     });
     if (completedSession) {
       throw new ApiError(400, "You have already completed this test");
@@ -190,6 +213,7 @@ export const startExamSession = async (testId, studentId) => {
   const session = await examSessionRepository.create({
     student: studentId,
     test: testId,
+    challenge: challengeId,
     startTime: now,
     endTime: endTime,
     status: "in_progress",
@@ -448,7 +472,7 @@ const autoSubmitExam = async (sessionId, studentId, reason = "time_expired") => 
   try {
     const test = await examSessionRepository.findTestById(session.test);
     if (test) {
-      if (test.isEverydayChallenge) {
+      if (test.applicableFor === "everyday_challenge") {
         await everydayChallengeService.recordCompletion(studentId, session);
       } else {
         await pointsService.awardTestCompletionPoints(
@@ -534,6 +558,10 @@ export const pauseExamSession = async (sessionId, studentId) => {
     throw new ApiError(404, "Exam session not found or not in progress");
   }
 
+  if (session.challenge) {
+    throw new ApiError(400, "You can't pause challenge exams");
+  }
+
   const now = new Date();
   const remainingMs = Math.max(0, new Date(session.endTime).getTime() - now.getTime());
 
@@ -591,7 +619,7 @@ export const submitExam = async (sessionId, studentId) => {
   try {
     const test = await examSessionRepository.findTestById(session.test);
     if (test) {
-      if (test.isEverydayChallenge) {
+      if (test.applicableFor === "everyday_challenge") {
         await everydayChallengeService.recordCompletion(studentId, session);
       } else {
         await pointsService.awardTestCompletionPoints(
@@ -908,21 +936,38 @@ export const getQuestionPalette = async (sessionId, studentId) => {
  * Calculate percentile for the exam session
  */
 const calculatePercentile = async (session) => {
-  // Get all completed sessions for this test
+  // Build percentile distribution by student best score (not by attempts).
   const allSessions = await examSessionRepository.findAllCompletedSessions(session.test);
+  const bestScoreByStudent = new Map();
 
-  if (allSessions.length === 0) {
-    session.percentile = 100; // First person to complete
+  for (const s of allSessions) {
+    const studentId = s.student?.toString?.();
+    if (!studentId) continue;
+    const existing = bestScoreByStudent.get(studentId);
+    const score = s.score ?? 0;
+    if (existing === undefined || score > existing) {
+      bestScoreByStudent.set(studentId, score);
+    }
+  }
+
+  const currentStudentId = session.student?.toString?.();
+  const currentScore = session.score ?? 0;
+  if (currentStudentId) {
+    const existing = bestScoreByStudent.get(currentStudentId);
+    if (existing === undefined || currentScore > existing) {
+      bestScoreByStudent.set(currentStudentId, currentScore);
+    }
+  }
+
+  const bestScores = [...bestScoreByStudent.values()];
+  if (bestScores.length === 0) {
+    session.percentile = 100;
     return;
   }
 
-  // Count how many people scored less than this student
-  const lowerScores = allSessions.filter(
-    (s) => s.score < session.score
-  ).length;
-
-  // Calculate percentile: (number of people below / total people) * 100
-  session.percentile = Math.round((lowerScores / allSessions.length) * 100 * 100) / 100;
+  // Percentile rank = % students with best score <= current score.
+  const atOrBelow = bestScores.filter((score) => score <= currentScore).length;
+  session.percentile = Math.round((atOrBelow / bestScores.length) * 100 * 100) / 100;
 };
 
 /**
@@ -948,6 +993,7 @@ export const getInProgressSessions = async (studentId, page = 1, limit = 10) => 
     {
       student: studentId,
       status: "paused",
+      challenge: null,
     },
     {
       page,

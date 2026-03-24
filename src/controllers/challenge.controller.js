@@ -22,53 +22,20 @@ export const createChallenge = asyncHandler(async (req, res) => {
 });
 
 export const getChallenges = asyncHandler(async (req, res) => {
-  const { page, limit, search, isActive, isFriendGroup } = req.query;
+  const { page, limit, search } = req.query;
   const result = await challengeService.getChallenges({
     page,
     limit,
     search,
-    isActive,
-    isFriendGroup,
-  });
+  }, req.user._id);
 
   return res.status(200).json(
     ApiResponse.success(result.challenges, "Challenges fetched successfully", result.pagination)
   );
 });
 
-export const getChallengeById = asyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const challenge = await challengeService.getChallengeById(id);
-
-  // Check if user is participant
-  const isParticipant = challenge.participants.some(
-    (p) => p.student._id.toString() === req.user._id.toString()
-  );
-
-  return res.status(200).json(
-    ApiResponse.success(
-      {
-        ...challenge.toObject(),
-        isParticipant,
-      },
-      "Challenge fetched successfully"
-    )
-  );
-});
-
-export const joinChallenge = asyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const challenge = await challengeService.joinChallenge(id, req.user._id);
-
-  return res.status(200).json(
-    ApiResponse.success(challenge, "Successfully joined challenge")
-  );
-});
-
-export const inviteFriendsToChallenge = asyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const { error, value } = challengeValidator.inviteFriendsToChallenge.validate(req.body);
-
+export const joinChallengeByCode = asyncHandler(async (req, res) => {
+  const { error, value } = challengeValidator.joinChallengeByCode.validate(req.body);
   if (error) {
     throw new ApiError(
       400,
@@ -77,22 +44,54 @@ export const inviteFriendsToChallenge = asyncHandler(async (req, res) => {
     );
   }
 
-  const challenge = await challengeService.inviteFriendsToChallenge(
-    id,
-    value.friendIds,
-    req.user._id
-  );
-
+  const challenge = await challengeService.joinChallengeByCode(value.roomCode, req.user._id);
   return res.status(200).json(
-    ApiResponse.success(challenge, "Friends invited successfully")
+    ApiResponse.success(challenge, "Successfully joined challenge room")
+  );
+});
+
+export const startChallenge = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const result = await challengeService.startChallenge(id, req.user._id);
+  return res.status(200).json(
+    ApiResponse.success(result, "Challenge started successfully")
+  );
+});
+
+export const deleteChallenge = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const result = await challengeService.deleteChallenge(id, req.user._id);
+  return res.status(200).json(
+    ApiResponse.success(result, "Challenge deleted successfully")
+  );
+});
+
+export const getChallengeYourFriendsTests = asyncHandler(async (req, res) => {
+  const tests = await challengeService.getChallengeYourFriendsTests();
+  return res.status(200).json(
+    ApiResponse.success(tests, "Challenge-yourfriends tests fetched successfully")
+  );
+});
+
+export const getCompletedChallenges = asyncHandler(async (req, res) => {
+  const { page, limit } = req.query;
+  const result = await challengeService.getCompletedChallenges(req.user._id, { page, limit });
+  return res.status(200).json(
+    ApiResponse.success(
+      result.challenges,
+      "Completed challenges fetched successfully",
+      result.pagination
+    )
   );
 });
 
 export default {
   createChallenge,
   getChallenges,
-  getChallengeById,
-  joinChallenge,
-  inviteFriendsToChallenge,
+  joinChallengeByCode,
+  startChallenge,
+  deleteChallenge,
+  getChallengeYourFriendsTests,
+  getCompletedChallenges,
 };
 

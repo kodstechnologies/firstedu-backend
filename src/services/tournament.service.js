@@ -11,7 +11,7 @@ import examSessionRepository from "../repository/examSession.repository.js";
 import {
   uploadImageToCloudinary,
   deleteFileFromCloudinary,
-} from "../utils/cloudinaryUpload.js";
+} from "../utils/s3Upload.js";
 import { attachOfferToList, attachOfferToItem } from "../utils/offerUtils.js";
 
 const TOURNAMENTS_IMAGE_FOLDER = "tournaments";
@@ -163,6 +163,11 @@ const buildStatusQuery = (status) => {
   const now = new Date();
   switch (status) {
     case "close":
+      return {
+        registrationEndTime: { $lt: now },
+        $expr: { $gt: [{ $min: "$stages.startTime" }, now] },
+      };
+    case "upcoming":
       return { registrationStartTime: { $gt: now } };
     case "open":
       return {
@@ -171,18 +176,14 @@ const buildStatusQuery = (status) => {
           { registrationEndTime: { $gte: now } },
         ],
       };
-    case "upcoming":
-      return {
-        registrationEndTime: { $lt: now },
-        $expr: { $gt: [{ $min: "$stages.startTime" }, now] },
-      };
     case "live":
+      // Live only when ANY stage is live (avoid "live" during gaps)
       return {
-        $expr: {
-          $and: [
-            { $lte: [{ $min: "$stages.startTime" }, now] },
-            { $gte: [{ $max: "$stages.endTime" }, now] },
-          ],
+        stages: {
+          $elemMatch: {
+            startTime: { $lte: now },
+            endTime: { $gte: now },
+          },
         },
       };
     case "completed":
