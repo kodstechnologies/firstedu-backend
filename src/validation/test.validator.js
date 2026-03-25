@@ -19,6 +19,7 @@ const createTest = Joi.object({
       "challenge_yourself",
       "competition_sector",
       "everyday_challenge",
+      "challenge_yourfriends",
     )
     .default("test"),
   isPublished: Joi.boolean().optional(),
