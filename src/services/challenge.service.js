@@ -4,12 +4,15 @@ import testRepository from "../repository/test.repository.js";
 import examSessionRepository from "../repository/examSession.repository.js";
 import examSessionService from "./examSession.service.js";
 import { getIO } from "../socket/socketGateway.js";
+import User from "../models/Student.js";
 
 const ROOM_CODE_LENGTH = 6;
 const ROOM_CODE_MAX_TRIES = 10;
 
 const generateNumericCode = () =>
   Math.floor(10 ** (ROOM_CODE_LENGTH - 1) + Math.random() * 9 * 10 ** (ROOM_CODE_LENGTH - 1)).toString();
+
+const escapeRegex = (value = "") => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const createUniqueRoomCode = async () => {
   for (let i = 0; i < ROOM_CODE_MAX_TRIES; i += 1) {
@@ -121,12 +124,16 @@ export const getChallenges = async (options = {}, userId) => {
   const query = {
     $or: [{ createdBy: userId }, { "participants.student": userId }],
     isActive: true,
+    roomStatus: { $ne: "completed" },
   };
-  if (search) {
+  const normalizedSearch = typeof search === "string" ? search.trim() : "";
+  if (normalizedSearch) {
+    const safeSearch = escapeRegex(normalizedSearch);
     query.$and = [{
       $or: [
-      { title: { $regex: search, $options: "i" } },
-      { description: { $regex: search, $options: "i" } },
+      { title: { $regex: safeSearch, $options: "i" } },
+      { description: { $regex: safeSearch, $options: "i" } },
+      { roomCode: { $regex: safeSearch, $options: "i" } },
       ],
     }];
   }
@@ -186,6 +193,29 @@ export const joinChallenge = async (id, userId) => {
     joinedAt: new Date(),
   });
   await challenge.save();
+
+  // Realtime update for room members (host + joined participants watching lobby).
+  const io = getIO();
+  if (io) {
+    const participant = await User.findById(userId).select("_id name email");
+    io.of("/challenge").to(`challenge:${challenge.roomCode}`).emit("participant_joined", {
+      challengeId: challenge._id.toString(),
+      roomCode: challenge.roomCode,
+      participant: participant
+        ? {
+            studentId: participant._id.toString(),
+            name: participant.name || null,
+            email: participant.email || null,
+          }
+        : {
+            studentId: userId.toString(),
+            name: null,
+            email: null,
+          },
+      totalParticipants: challenge.participants.length,
+      joinedAt: new Date(),
+    });
+  }
 
   return challenge;
 };
@@ -253,9 +283,14 @@ export const startChallenge = async (id, userId) => {
     }
   }
 
+  const mySessionId = sessions.find(
+    (row) => row.studentId?.toString?.() === userId?.toString?.()
+  )?.sessionId || null;
+
   return {
     challenge,
     sessions,
+    mySessionId,
   };
 };
 
@@ -273,7 +308,26 @@ export const deleteChallenge = async (id, userId) => {
     throw new ApiError(400, "Started or completed challenge cannot be deleted");
   }
 
+  const participantIds = challenge.participants
+    .map((p) => p.student?.toString?.() ?? p.student)
+    .filter(Boolean);
   await challengeRepository.updateById(id, { isActive: false });
+
+  const io = getIO();
+  if (io) {
+    const payload = {
+      challengeId: challenge._id.toString(),
+      roomCode: challenge.roomCode,
+      deletedBy: userId.toString(),
+      timestamp: new Date(),
+    };
+    const namespace = io.of("/challenge");
+    namespace.to(`challenge:${challenge.roomCode}`).emit("challenge_deleted", payload);
+    for (const participantId of participantIds) {
+      namespace.to(`student:${participantId}`).emit("challenge_deleted", payload);
+    }
+  }
+
   return { challengeId: id, deleted: true };
 };
 
