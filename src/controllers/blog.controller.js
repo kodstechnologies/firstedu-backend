@@ -37,23 +37,53 @@ export const createBlog = asyncHandler(async (req, res) => {
 });
 
 /**
- * Get all approved blogs (students/users - approved requests + admin-added)
- * GET /blogs
+ * List blogs with optional filters, search, sort, and pagination.
+ * GET /user/blogs (student) · GET /admin/blogs (admin)
+ *
+ * Query: subject, source, title | pressname, search, page, limit, sortBy, sortOrder
  */
 export const getAllBlogs = asyncHandler(async (req, res) => {
-  const { subject, source } = req.query;
+  const {
+    subject,
+    source,
+    title,
+    pressname,
+    search,
+    page,
+    limit,
+    sortBy,
+    sortOrder,
+  } = req.query;
   const filters = {};
   if (subject) filters.subject = subject;
   if (source) filters.source = source;
-  const blogs = await blogService.getAllBlogs(filters);
-  return res
-    .status(200)
-    .json(ApiResponse.success(blogs, "Blogs fetched successfully"));
+  // title wins when both title and pressname are sent (both map to title regex filter)
+  const titleSearch =
+    title != null && String(title).trim() !== ""
+      ? String(title).trim()
+      : pressname != null && String(pressname).trim() !== ""
+        ? String(pressname).trim()
+        : "";
+  if (titleSearch) filters.title = titleSearch;
+  const result = await blogService.getAllBlogs(filters, {
+    search,
+    page,
+    limit,
+    sortBy,
+    sortOrder,
+  });
+  return res.status(200).json(
+    ApiResponse.success(
+      result.list,
+      "Blogs fetched successfully",
+      result.pagination
+    )
+  );
 });
 
 /**
  * Get blog by ID
- * GET /blogs/:id
+ * GET /user/blogs/:id · GET /admin/blogs/:id
  */
 export const getBlogById = asyncHandler(async (req, res) => {
   const { id } = req.params;

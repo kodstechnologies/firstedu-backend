@@ -175,7 +175,13 @@ import {
   getBlogRequestById,
   updateBlogRequestStatus,
 } from '../controllers/blogRequest.controller.js';
-import { createBlog, updateBlog, deleteBlog } from '../controllers/blog.controller.js';
+import {
+  createBlog,
+  updateBlog,
+  deleteBlog,
+  getAllBlogs,
+  getBlogById,
+} from '../controllers/blog.controller.js';
 
 
 import {
@@ -412,7 +418,9 @@ router.get('/blog-request', verifyJWT, getAllBlogRequests);
 router.get('/blog-request/:id', verifyJWT, getBlogRequestById);
 router.patch('/blog-request/:id', verifyJWT, updateBlogRequestStatus);
 
-// Admin-added blogs (create, update, delete - admin-created or approved)
+// Blogs (list & get for admin UI; create, update, delete)
+router.get('/blogs', verifyJWT, getAllBlogs);
+router.get('/blogs/:id', verifyJWT, getBlogById);
 router.post('/blogs', verifyJWT, uploadImage.single('image'), createBlog);
 router.put('/blogs/:id', verifyJWT, uploadImage.single('image'), updateBlog);
 router.delete('/blogs/:id', verifyJWT, deleteBlog);

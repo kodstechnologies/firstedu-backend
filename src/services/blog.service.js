@@ -26,10 +26,10 @@ const createBlog = async (data, adminId, file) => {
 };
 
 /**
- * Get all published blogs (approved + admin-added) for users
+ * List published blogs with filters, search, sort, and pagination (admin + student list routes).
  */
-const getAllBlogs = async (filters = {}) => {
-  return await blogRepository.findAll(filters);
+const getAllBlogs = async (filters = {}, options = {}) => {
+  return await blogRepository.findAll(filters, options);
 };
 
 /**
