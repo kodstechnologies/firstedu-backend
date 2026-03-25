@@ -194,12 +194,14 @@ router.post("/contact-us", contactUs);
 router.post("/logout", verifyJWT, logout);
 
 router.get("/profile", verifyJWT, getProfile);
-router.get("/dashboard/stats", verifyJWT, getStudentDashboardStats);
 router.post("/forgot-password/request", requestForgotPasswordOTP);
 router.post("/forgot-password/verify", verifyForgotPasswordOTP);
 router.post("/forgot-password/reset", resetPassword);
 router.put("/update-profile", verifyJWT, updateProfile);
 router.put("/change-password", verifyJWT, changePassword);
+
+// Dadshboard api
+router.get("/dashboard/stats", verifyJWT, getStudentDashboardStats);
 
 // Refer & Earn (100 points per successful referral signup)
 router.get("/refer-earn", verifyJWT, getReferralInfo);
@@ -287,9 +289,17 @@ router.post("/workshops/:id/register", verifyJWT, registerForWorkshop);
 
 // Community & Competitions - Challenges
 router.post("/challenges", verifyJWT, createChallenge);
-router.get("/challenges/tests/challenge-yourfriends", verifyJWT, getChallengeYourFriendsTests);
+router.get(
+  "/challenges/tests/challenge-yourfriends",
+  verifyJWT,
+  getChallengeYourFriendsTests,
+);
 router.get("/challenges", verifyJWT, getChallenges);
-router.get("/challenges/completed-challenges", verifyJWT, getCompletedChallenges);
+router.get(
+  "/challenges/completed-challenges",
+  verifyJWT,
+  getCompletedChallenges,
+);
 router.post("/challenges/join-by-code", verifyJWT, joinChallengeByCode);
 router.post("/challenges/:id/start", verifyJWT, startChallenge);
 router.delete("/challenges/:id", verifyJWT, deleteChallenge);
