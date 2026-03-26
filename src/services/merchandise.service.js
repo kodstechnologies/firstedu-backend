@@ -158,10 +158,14 @@ export const getStudentClaims = async (studentId, page = 1, limit = 10) => {
 /**
  * Get all merchandise claims (for admin)
  */
-export const getAllClaims = async (page = 1, limit = 10, status = null) => {
+export const getAllClaims = async (page = 1, limit = 10, status = null, search = null) => {
   const query = {};
   if (status) {
     query.status = status;
+  }
+  if (search && String(search).trim()) {
+    const regex = { $regex: String(search).trim(), $options: "i" };
+    query.$or = [{ trackingNumber: regex }];
   }
 
   return await merchandiseRepository.findMerchandiseClaims(query, {

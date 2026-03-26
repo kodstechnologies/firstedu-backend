@@ -31,18 +31,28 @@ export const submitSupport = asyncHandler(async (req, res) => {
  * GET /admin/support
  */
 export const getAllSupport = asyncHandler(async (req, res) => {
-    const { status } = req.query;
+    const { status, page, limit, search } = req.query;
 
     const filters = {};
     if (status) {
         filters.status = status;
     }
 
-    const supportMessages = await contactSupportService.getAllSupportMessages(filters);
+    const result = await contactSupportService.getAllSupportMessages(filters, {
+        page,
+        limit,
+        search,
+    });
 
     return res
         .status(200)
-        .json(ApiResponse.success(supportMessages, "Support messages fetched successfully"));
+        .json(
+            ApiResponse.success(
+                result.list,
+                "Support messages fetched successfully",
+                result.pagination
+            )
+        );
 });
 
 /**

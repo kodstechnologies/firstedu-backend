@@ -37,8 +37,12 @@ export const uploadCertificate = async (studentId, pdfBuffer, originalName, admi
 /**
  * Get all issued certificates
  */
-export const getCertificates = async (page = 1, limit = 10, studentId = null) => {
+export const getCertificates = async (page = 1, limit = 10, studentId = null, search = null) => {
   const query = studentId ? { student: studentId } : {};
+  if (search && String(search).trim()) {
+    const regex = { $regex: String(search).trim(), $options: "i" };
+    query.$or = [{ title: regex }, { pdfUrl: regex }];
+  }
   const skip = (page - 1) * limit;
   const [certificates, total] = await Promise.all([
     Certificate.find(query)

@@ -20,11 +20,16 @@ export const getCategories = asyncHandler(async (req, res) => {
  * List all templates, optionally filtered by category
  */
 export const getTemplates = asyncHandler(async (req, res) => {
-  const { category } = req.query;
-  const templates = await emailTemplateService.getTemplates(category || null);
+  const { category, search, page, limit } = req.query;
+  const result = await emailTemplateService.getTemplatesPaginated({
+    category: category || null,
+    search: search || null,
+    page,
+    limit,
+  });
   return res
     .status(200)
-    .json(ApiResponse.success(templates, "Templates fetched successfully"));
+    .json(ApiResponse.success(result.list, "Templates fetched successfully", result.pagination));
 });
 
 /**

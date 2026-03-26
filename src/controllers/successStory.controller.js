@@ -37,18 +37,28 @@ export const addSuccessStory = asyncHandler(async (req, res) => {
  * GET /admin/success-stories?status=PUBLISHED
  */
 export const getAllStoriesAdmin = asyncHandler(async (req, res) => {
-    const { status } = req.query;
+    const { status, page, limit, search } = req.query;
 
     const filters = {};
     if (status) {
         filters.status = status;
     }
 
-    const stories = await successStoryService.getAllStories(filters);
+    const result = await successStoryService.getAllStories(filters, {
+        page,
+        limit,
+        search,
+    });
 
     return res
         .status(200)
-        .json(ApiResponse.success(stories, "Success stories fetched successfully"));
+        .json(
+            ApiResponse.success(
+                result.list,
+                "Success stories fetched successfully",
+                result.pagination
+            )
+        );
 });
 
 /**

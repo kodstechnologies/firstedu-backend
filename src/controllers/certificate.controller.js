@@ -36,11 +36,12 @@ export const uploadCertificate = asyncHandler(async (req, res) => {
  * Get all issued certificates (admin)
  */
 export const getCertificates = asyncHandler(async (req, res) => {
-  const { page = 1, limit = 10, studentId } = req.query;
+  const { page = 1, limit = 10, studentId, search } = req.query;
   const result = await certificateService.getCertificates(
     parseInt(page),
     parseInt(limit),
-    studentId || null
+    studentId || null,
+    search || null
   );
 
   return res.status(200).json(

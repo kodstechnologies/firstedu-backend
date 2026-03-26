@@ -1,5 +1,8 @@
 import QnA from "../models/QnA.js";
 
+const escapeRegex = (value = "") =>
+  String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 const create = async (data) => {
   return await QnA.create(data);
 };
@@ -13,10 +16,15 @@ const findAll = async (filters = {}) => {
 };
 
 const findAllPaginated = async (filters = {}, options = {}) => {
-  const { page = 1, limit = 10 } = options;
+  const { page = 1, limit = 10, search } = options;
   const query = {};
   if (filters.subject) {
     query.subject = filters.subject;
+  }
+  const searchText = typeof search === "string" ? search.trim() : "";
+  if (searchText) {
+    const regex = { $regex: escapeRegex(searchText), $options: "i" };
+    query.$or = [{ question: regex }, { answer: regex }, { subject: regex }];
   }
   const pageNum = Math.max(1, parseInt(page) || 1);
   const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 10));

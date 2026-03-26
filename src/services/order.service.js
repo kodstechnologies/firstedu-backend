@@ -22,6 +22,10 @@ export const getAllOrders = async (page = 1, limit = 10, filters = {}) => {
   if (filters.studentId) {
     query.student = filters.studentId;
   }
+  if (filters.search && String(filters.search).trim()) {
+    const regex = { $regex: String(filters.search).trim(), $options: "i" };
+    query.$or = [{ orderNumber: regex }, { paymentId: regex }];
+  }
 
   return await orderRepository.findOrders(query, { page, limit });
 };

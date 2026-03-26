@@ -14,8 +14,8 @@ import ApiError from "../utils/ApiError.js";
 /**
  * Get all support messages (admin)
  */
-const getAllSupportMessages = async (filters) => {
-  return await supportRepository.findSupportMessages(filters);
+const getAllSupportMessages = async (filters = {}, options = {}) => {
+  return await supportRepository.findSupportMessages(filters, options);
 };
 
 /**

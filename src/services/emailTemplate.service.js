@@ -21,6 +21,42 @@ export const getTemplates = async (category = null) => {
   return templates;
 };
 
+export const getTemplatesPaginated = async ({
+  category = null,
+  search = null,
+  page = 1,
+  limit = 10,
+} = {}) => {
+  const query = {};
+  if (category) query.category = category;
+  if (search && String(search).trim()) {
+    const regex = { $regex: String(search).trim(), $options: "i" };
+    query.$or = [{ name: regex }, { subject: regex }, { slug: regex }, { content: regex }];
+  }
+
+  const pageNum = Math.max(1, parseInt(page, 10) || 1);
+  const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 10));
+  const skip = (pageNum - 1) * limitNum;
+
+  const [list, total] = await Promise.all([
+    EmailTemplate.find(query)
+      .sort({ category: 1, slug: 1 })
+      .skip(skip)
+      .limit(limitNum),
+    EmailTemplate.countDocuments(query),
+  ]);
+
+  return {
+    list,
+    pagination: {
+      page: pageNum,
+      limit: limitNum,
+      total,
+      pages: Math.ceil(total / limitNum) || 1,
+    },
+  };
+};
+
 /**
  * Get template by ID
  */
@@ -111,6 +147,7 @@ export const replaceTemplateVariables = (text, variables = {}) => {
 export default {
   getCategories,
   getTemplates,
+  getTemplatesPaginated,
   getTemplateById,
   getTemplateByCategorySlug,
   createTemplate,

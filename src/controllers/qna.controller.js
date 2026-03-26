@@ -26,10 +26,10 @@ export const createQnA = asyncHandler(async (req, res) => {
  * GET /admin/qna?subject=general&page=1&limit=10
  */
 export const getAllQnAAdmin = asyncHandler(async (req, res) => {
-  const { subject, page, limit } = req.query;
+  const { subject, page, limit, search } = req.query;
   const filters = {};
   if (subject) filters.subject = subject;
-  const result = await qnaService.getAllQnAPaginated(filters, { page, limit });
+  const result = await qnaService.getAllQnAPaginated(filters, { page, limit, search });
   return res.status(200).json(
     ApiResponse.success(result.list, "Q&A list fetched successfully", result.pagination)
   );
@@ -79,12 +79,18 @@ export const deleteQnA = asyncHandler(async (req, res) => {
  * GET /admin/qna-requests?subject=general&status=pending
  */
 export const getAllQnARequests = asyncHandler(async (req, res) => {
-  const { subject, status } = req.query;
+  const { subject, status, page, limit, search } = req.query;
   const filters = {};
   if (subject) filters.subject = subject;
   if (status) filters.status = status;
-  const list = await qnaRequestService.getAllQnARequests(filters);
-  return res.status(200).json(ApiResponse.success(list, "Q&A requests fetched successfully"));
+  const result = await qnaRequestService.getAllQnARequests(filters, {
+    page,
+    limit,
+    search,
+  });
+  return res.status(200).json(
+    ApiResponse.success(result.list, "Q&A requests fetched successfully", result.pagination)
+  );
 });
 
 /**

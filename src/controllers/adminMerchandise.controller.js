@@ -140,9 +140,9 @@ export const deleteMerchandise = asyncHandler(async (req, res) => {
  * Get all merchandise claims (admin)
  */
 export const getMerchandiseRequests = asyncHandler(async (req, res) => {
-  const { page = 1, limit = 10, status } = req.query;
+  const { page = 1, limit = 10, status, search } = req.query;
 
-  const result = await merchandiseService.getAllClaims(page, limit, status);
+  const result = await merchandiseService.getAllClaims(page, limit, status, search);
 
   return res.status(200).json(
     ApiResponse.success(

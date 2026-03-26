@@ -28,12 +28,13 @@ export const getMyOrders = asyncHandler(async (req, res) => {
  * Get all orders (admin)
  */
 export const getAllOrders = asyncHandler(async (req, res) => {
-  const { page = 1, limit = 10, paymentStatus, orderStatus, studentId } = req.query;
+  const { page = 1, limit = 10, paymentStatus, orderStatus, studentId, search } = req.query;
 
   const filters = {
     paymentStatus,
     orderStatus,
     studentId,
+    search,
   };
 
   const result = await orderService.getAllOrders(page, limit, filters);

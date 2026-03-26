@@ -52,18 +52,28 @@ export const submitBlogRequest = asyncHandler(async (req, res) => {
  * GET /admin/blog-request?status=pending
  */
 export const getAllBlogRequests = asyncHandler(async (req, res) => {
-    const { status } = req.query;
+    const { status, page, limit, search } = req.query;
 
     const filters = {};
     if (status) {
         filters.status = status;
     }
 
-    const blogRequests = await blogRequestService.getAllBlogRequests(filters);
+    const result = await blogRequestService.getAllBlogRequests(filters, {
+        page,
+        limit,
+        search,
+    });
 
     return res
         .status(200)
-        .json(ApiResponse.success(blogRequests, "Blog requests fetched successfully"));
+        .json(
+            ApiResponse.success(
+                result.list,
+                "Blog requests fetched successfully",
+                result.pagination
+            )
+        );
 });
 
 /**

@@ -9,8 +9,8 @@ const submitQnARequest = async (data, userId) => {
   });
 };
 
-const getAllQnARequests = async (filters = {}) => {
-  return await qnaRequestRepository.findAll(filters);
+const getAllQnARequests = async (filters = {}, options = {}) => {
+  return await qnaRequestRepository.findAll(filters, options);
 };
 
 const getQnARequestById = async (id) => {
