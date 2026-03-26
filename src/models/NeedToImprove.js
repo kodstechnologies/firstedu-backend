@@ -74,7 +74,5 @@ const needToImproveSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-needToImproveSchema.index({ student: 1 }, { unique: true });
-
 export default mongoose.models.NeedToImprove ||
   mongoose.model("NeedToImprove", needToImproveSchema);
