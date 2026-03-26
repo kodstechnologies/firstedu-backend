@@ -2,6 +2,8 @@ import ExamSession from "../models/ExamSession.js";
 import Olympiad from "../models/Olympiad.js";
 import Tournament from "../models/Tournament.js";
 import Workshop from "../models/Workshop.js";
+import marketplaceService from "./marketplace.service.js";
+import NeedToImprove from "../models/NeedToImprove.js";
 
 export const getStudentDashboardStats = async (studentId) => {
   const sessions = await ExamSession.find({
@@ -143,6 +145,24 @@ export const getStudentDashboardStats = async (studentId) => {
     Workshop.findOne({ isPublished: true, startTime: { $gt: now }, registrationEndTime: { $gte: now } }).sort({ startTime: 1 }).lean(),
   ]);
 
+  const { bundles: featuredBundles } = await marketplaceService.getTestBundles({
+    page: 1,
+    limit: 3,
+    sortBy: "createdAt",
+    sortOrder: "desc",
+  });
+
+  // Read the cached NeedToImprove document — no heavy recompute on every page load
+  const needToImproveDoc = await NeedToImprove.findOne({ student: studentId }).lean();
+  const weakCategories = ((needToImproveDoc?.weakCategories || [])
+    .slice(0, 5)
+    .map((wc) => ({
+      categoryId: wc.categoryId,
+      categoryName: wc.categoryName,
+      percentageScore: wc.percentageScore,
+    }))
+  );
+
   const formatEventDate = (d) => {
     if (!d) return "";
     return new Date(d).toLocaleDateString("en-GB", {
@@ -196,6 +216,8 @@ export const getStudentDashboardStats = async (studentId) => {
     categoryPerformance,
     testTypeStats,  // 🆕 per-type breakdown: count, duration, avgScore, bestScore, monthlyTrend
     upcomingEvents,
+    featuredBundles: featuredBundles || [],
+    weakCategories,
   };
 };
 
