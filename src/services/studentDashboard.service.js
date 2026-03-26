@@ -138,9 +138,9 @@ export const getStudentDashboardStats = async (studentId) => {
   // --- Fetch Upcoming Events ---
   const now = new Date();
   const [upcomingOlympiad, upcomingTournament, upcomingWorkshop] = await Promise.all([
-    Olympiad.findOne({ isPublished: true, startTime: { $gt: now } }).sort({ startTime: 1 }).lean(),
-    Tournament.findOne({ isPublished: true, "stages.startTime": { $gt: now } }).sort({ "stages.startTime": 1 }).lean(),
-    Workshop.findOne({ isPublished: true, startTime: { $gt: now } }).sort({ startTime: 1 }).lean(),
+    Olympiad.findOne({ isPublished: true, startTime: { $gt: now }, registrationEndTime: { $gte: now } }).sort({ startTime: 1 }).lean(),
+    Tournament.findOne({ isPublished: true, "stages.startTime": { $gt: now }, registrationEndTime: { $gte: now } }).sort({ "stages.startTime": 1 }).lean(),
+    Workshop.findOne({ isPublished: true, startTime: { $gt: now }, registrationEndTime: { $gte: now } }).sort({ startTime: 1 }).lean(),
   ]);
 
   const formatEventDate = (d) => {
