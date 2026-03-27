@@ -9,7 +9,7 @@ import certificateService from "../services/certificate.service.js";
  */
 export const uploadCertificate = asyncHandler(async (req, res) => {
   const adminId = req.user._id;
-  const { studentId, title } = req.body;
+  const { studentId, title, fileName } = req.body;
 
   if (!studentId) {
     throw new ApiError(400, "studentId is required");
@@ -24,7 +24,8 @@ export const uploadCertificate = asyncHandler(async (req, res) => {
     req.file.buffer,
     req.file.originalname || "certificate.pdf",
     adminId,
-    title || null
+    title || null,
+    fileName || null
   );
 
   return res.status(201).json(

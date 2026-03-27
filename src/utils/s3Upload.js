@@ -27,7 +27,7 @@ function ensureS3Configured() {
   );
 }
 
-function sanitizeFileName(name = "") {
+export function sanitizeFileName(name = "") {
   return String(name)
     .trim()
     .replace(/\s+/g, "-")
@@ -55,19 +55,43 @@ function getS3PublicUrl(key) {
   return `https://${bucket}.s3.${region}.amazonaws.com/${key}`;
 }
 
-async function uploadBufferToS3(fileBuffer, { folder, originalName, contentType, fallbackExt }) {
+async function uploadBufferToS3(fileBuffer, options) {
+  const {
+    folder,
+    originalName,
+    contentType,
+    fallbackExt,
+    friendlyBaseName,
+    contentDispositionFilename,
+    contentDispositionAttachment,
+  } = options;
   ensureS3Configured();
   if (!fileBuffer) throw new Error("File buffer is required");
 
-  const Key = buildS3ObjectKey(folder, originalName, fallbackExt);
-  await s3Client.send(
-    new PutObjectCommand({
-      Bucket: process.env.AWS_S3_BUCKET_NAME,
-      Key,
-      Body: fileBuffer,
-      ContentType: contentType,
-    })
-  );
+  let Key;
+  if (friendlyBaseName && String(friendlyBaseName).trim()) {
+    const ext = getFileExtension(originalName, fallbackExt);
+    const base = sanitizeFileName(friendlyBaseName).replace(/\.pdf$/i, "") || "file";
+    Key = `${folder}/${base}-${nanoid(6)}${ext}`;
+  } else {
+    Key = buildS3ObjectKey(folder, originalName, fallbackExt);
+  }
+
+  const put = {
+    Bucket: process.env.AWS_S3_BUCKET_NAME,
+    Key,
+    Body: fileBuffer,
+    ContentType: contentType,
+  };
+  if (contentDispositionFilename && String(contentDispositionFilename).trim()) {
+    const safe = sanitizeFileName(contentDispositionFilename);
+    if (safe) {
+      const dispo = contentDispositionAttachment ? "attachment" : "inline";
+      put.ContentDisposition = `${dispo}; filename="${safe}"`;
+    }
+  }
+
+  await s3Client.send(new PutObjectCommand(put));
 
   return getS3PublicUrl(Key);
 }
@@ -101,12 +125,20 @@ export const uploadImageToCloudinary = async (
  * @param {String} folder - Folder path in S3 bucket
  * @returns {Promise<String>} Public URL of uploaded file
  */
-export const uploadPDFToCloudinary = async (fileBuffer, originalName, folder = "courses") => {
+/**
+ * @param {object} [options] - optional: { friendlyBaseName, contentDispositionFilename, contentDispositionAttachment }
+ *        contentDispositionAttachment=true → attachment (download filename); default inline for other PDFs
+ */
+export const uploadPDFToCloudinary = async (fileBuffer, originalName, folder = "courses", options = {}) => {
+  const opts = options && typeof options === "object" ? options : {};
   return uploadBufferToS3(fileBuffer, {
     folder,
     originalName,
     contentType: "application/pdf",
     fallbackExt: ".pdf",
+    friendlyBaseName: opts.friendlyBaseName,
+    contentDispositionFilename: opts.contentDispositionFilename,
+    contentDispositionAttachment: opts.contentDispositionAttachment,
   });
 };
 

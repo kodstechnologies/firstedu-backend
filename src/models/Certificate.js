@@ -26,6 +26,11 @@ const certificateSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    /** Human-friendly download name (e.g. jee-certificate.pdf); shown in API instead of the S3 URL tail */
+    fileName: {
+      type: String,
+      trim: true,
+    },
   },
   { timestamps: true }
 );
