@@ -32,11 +32,11 @@ const confirmNewPassword = Joi.object({
 });
 
 const updateProfile = Joi.object({
-  email: Joi.string().email().trim().lowercase().optional(),
-  name: Joi.string().trim().optional(),
-  schoolOrCollege: Joi.string().trim().optional(),
-  classOrGrade: Joi.string().trim().optional(),
-  phone: Joi.string().trim().optional(),
+  email: Joi.string().email().trim().lowercase().optional().empty("", null),
+  name: Joi.string().trim().optional().empty("", null),
+  schoolOrCollege: Joi.string().trim().optional().empty("", null),
+  classOrGrade: Joi.string().trim().optional().empty("", null),
+  phone: Joi.string().trim().optional().empty("", null),
 });
 
 const changePassword = Joi.object({

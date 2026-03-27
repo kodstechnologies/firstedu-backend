@@ -64,6 +64,7 @@ import {
   deleteChallenge,
   getChallengeYourFriendsTests,
   getCompletedChallenges,
+  getCompletedChallengeById,
 } from "../controllers/challenge.controller.js";
 import {
   createForum,
@@ -197,7 +198,12 @@ router.get("/profile", verifyJWT, getProfile);
 router.post("/forgot-password/request", requestForgotPasswordOTP);
 router.post("/forgot-password/verify", verifyForgotPasswordOTP);
 router.post("/forgot-password/reset", resetPassword);
-router.put("/update-profile", verifyJWT, updateProfile);
+router.put(
+  "/update-profile",
+  verifyJWT,
+  uploadImage.single("profileImage"),
+  updateProfile
+);
 router.put("/change-password", verifyJWT, changePassword);
 
 // Dadshboard api
@@ -299,6 +305,11 @@ router.get(
   "/challenges/completed-challenges",
   verifyJWT,
   getCompletedChallenges,
+);
+router.get(
+  "/challenges/completed-challenges/:id",
+  verifyJWT,
+  getCompletedChallengeById,
 );
 router.post("/challenges/join-by-code", verifyJWT, joinChallengeByCode);
 router.post("/challenges/:id/start", verifyJWT, startChallenge);

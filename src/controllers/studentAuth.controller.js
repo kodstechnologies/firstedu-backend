@@ -3,7 +3,7 @@ import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { generateOTP } from "../utils/otp.js";
 import { sendOTPEmail } from "../utils/sendEmail.js";
-import { uploadImageToCloudinary } from "../utils/s3Upload.js";
+import { uploadImageToCloudinary, deleteFileFromCloudinary } from "../utils/s3Upload.js";
 import studentRepository from "../repository/student.repository.js";
 import studentSessionRepository from "../repository/studentSession.repository.js";
 import userValidator from "../validation/student.validator.js";
@@ -348,9 +348,9 @@ export const getProfile = asyncHandler(async (req, res) => {
     .json(ApiResponse.success(student, "Profile fetched successfully"));
 });
 
-// Update Profile
+// Update Profile (JSON or multipart/form-data; optional file field `profileImage`)
 export const updateProfile = asyncHandler(async (req, res) => {
-  const { error, value } = userValidator.updateProfile.validate(req.body);
+  const { error, value } = userValidator.updateProfile.validate(req.body ?? {});
 
   if (error) {
     throw new ApiError(400, "Validation Error", error.details.map(x => x.message));
@@ -380,7 +380,6 @@ export const updateProfile = asyncHandler(async (req, res) => {
     }
   }
 
-  // Build update object with only provided fields
   const updateData = {};
   if (name !== undefined) updateData.name = name;
   if (phone !== undefined) updateData.phone = phone;
@@ -388,7 +387,35 @@ export const updateProfile = asyncHandler(async (req, res) => {
   if (schoolOrCollege !== undefined) updateData.schoolOrCollege = schoolOrCollege;
   if (classOrGrade !== undefined) updateData.classOrGrade = classOrGrade;
 
-  // Update the student
+  if (req.file) {
+    if (!req.file.mimetype.startsWith("image/")) {
+      throw new ApiError(400, "Only image files are allowed for profile image");
+    }
+    const studentBefore = await studentRepository.findById(req.user._id);
+    if (!studentBefore) {
+      throw new ApiError(404, "Student not found");
+    }
+    let profileImageUrl;
+    try {
+      profileImageUrl = await uploadImageToCloudinary(
+        req.file.buffer,
+        req.file.originalname,
+        "student-profile-images",
+        req.file.mimetype
+      );
+    } catch (uploadError) {
+      throw new ApiError(500, `Failed to upload profile image: ${uploadError.message}`);
+    }
+    if (studentBefore.profileImage) {
+      await deleteFileFromCloudinary(studentBefore.profileImage);
+    }
+    updateData.profileImage = profileImageUrl;
+  }
+
+  if (Object.keys(updateData).length === 0) {
+    throw new ApiError(400, "No fields to update");
+  }
+
   const updatedStudent = await studentRepository.updateById(req.user._id, updateData);
 
   if (!updatedStudent) {

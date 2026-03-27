@@ -85,6 +85,14 @@ export const getCompletedChallenges = asyncHandler(async (req, res) => {
   );
 });
 
+export const getCompletedChallengeById = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const detail = await challengeService.getCompletedChallengeById(id, req.user._id);
+  return res.status(200).json(
+    ApiResponse.success(detail, "Completed challenge details fetched successfully")
+  );
+});
+
 export default {
   createChallenge,
   getChallenges,
@@ -93,5 +101,6 @@ export default {
   deleteChallenge,
   getChallengeYourFriendsTests,
   getCompletedChallenges,
+  getCompletedChallengeById,
 };
 

@@ -1,19 +1,13 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
-import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
+import { throwJoiValidationError } from "../utils/joiValidationError.js";
 import questionBankValidator from "../validation/questionBank.validator.js";
 import questionBankService from "../services/questionBank.service.js";
 
 export const createQuestionBank = asyncHandler(async (req, res) => {
   const { error, value } =
     questionBankValidator.createQuestionBank.validate(req.body);
-  if (error) {
-    throw new ApiError(
-      400,
-      "Validation Error",
-      error.details.map((x) => x.message)
-    );
-  }
+  if (error) throwJoiValidationError(error);
   const created = await questionBankService.createQuestionBank(
     value,
     req.user._id
@@ -28,13 +22,7 @@ export const createQuestionBank = asyncHandler(async (req, res) => {
 export const createQuestionBankWithQuestions = asyncHandler(async (req, res) => {
   const { error, value } =
     questionBankValidator.createQuestionBankWithQuestions.validate(req.body);
-  if (error) {
-    throw new ApiError(
-      400,
-      "Validation Error",
-      error.details.map((x) => x.message)
-    );
-  }
+  if (error) throwJoiValidationError(error);
   const result = await questionBankService.createQuestionBankWithQuestions(
     value,
     req.user._id
@@ -88,13 +76,7 @@ export const updateQuestionBank = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { error, value } =
     questionBankValidator.updateQuestionBank.validate(req.body);
-  if (error) {
-    throw new ApiError(
-      400,
-      "Validation Error",
-      error.details.map((x) => x.message)
-    );
-  }
+  if (error) throwJoiValidationError(error);
   const updated = await questionBankService.updateQuestionBank(id, value);
   return res
     .status(200)

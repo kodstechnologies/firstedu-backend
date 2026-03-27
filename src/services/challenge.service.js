@@ -32,34 +32,69 @@ const getParticipantStats = async (challenge, currentUserId) => {
   );
 
   const rankByStudentId = new Map();
-  rankings.forEach((entry, index) => {
-    rankByStudentId.set(entry.student?.toString(), { ...entry, rank: index + 1 });
+  rankings.forEach((entry) => {
+    rankByStudentId.set(entry.student?.toString(), entry);
   });
 
   const participants = challenge.participants.map((p) => {
     const student = p.student?._id ? p.student : { _id: p.student };
-    const ranking = rankByStudentId.get(student._id?.toString());
+    const sid = student._id?.toString();
+    const ranking = rankByStudentId.get(sid);
     return {
       studentId: student._id,
       name: student.name || ranking?.name || null,
       email: student.email || ranking?.email || null,
       score: ranking?.score ?? null,
-      rank: ranking?.rank ?? null,
+      maxScore: ranking?.maxScore ?? null,
+      completedAt: ranking?.completedAt ?? null,
+      rank: null,
       joinedAt: p.joinedAt,
     };
+  });
+
+  const scoredSorted = participants
+    .filter((p) => p.score != null)
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      const ta = new Date(a.completedAt || 0).getTime();
+      const tb = new Date(b.completedAt || 0).getTime();
+      return ta - tb;
+    });
+
+  for (let i = 0; i < scoredSorted.length; i++) {
+    scoredSorted[i].rank =
+      i > 0 && scoredSorted[i].score === scoredSorted[i - 1].score
+        ? scoredSorted[i - 1].rank
+        : i + 1;
+  }
+
+  const rankByStudent = new Map(scoredSorted.map((p) => [p.studentId?.toString(), p.rank]));
+  participants.forEach((p) => {
+    const r = rankByStudent.get(p.studentId?.toString());
+    if (r != null) p.rank = r;
   });
 
   const myStats = participants.find(
     (p) => p.studentId?.toString?.() === currentUserId?.toString?.()
   ) || { score: null, rank: null };
 
-  const highestScore = rankings.length ? rankings[0].score : null;
+  const highestScore = scoredSorted.length ? scoredSorted[0].score : null;
+
   return {
     myScore: myStats.score ?? null,
     myRank: myStats.rank ?? null,
     highestScore,
     totalParticipants: participants.length,
     participants,
+    leaderboard: scoredSorted.map((p) => ({
+      rank: p.rank,
+      studentId: p.studentId,
+      name: p.name,
+      email: p.email,
+      score: p.score,
+      maxScore: p.maxScore,
+      completedAt: p.completedAt,
+    })),
   };
 };
 
@@ -250,14 +285,16 @@ export const startChallenge = async (id, userId) => {
   const participantIds = challenge.participants.map((p) => p.student);
   const sessions = [];
   for (const participantId of participantIds) {
-    const session = await examSessionService.startExamSession(
+    const examPayload = await examSessionService.startExamSession(
       challenge.test,
       participantId,
       { challengeId: challenge._id }
     );
+    // startExamSession returns getExamSession() shape: { session: { id }, questions, palette } — not a raw doc with _id
+    const sid = examPayload?.session?.id ?? examPayload?.session?._id;
     sessions.push({
       studentId: participantId.toString(),
-      sessionId: session._id?.toString?.(),
+      sessionId: sid?.toString?.() ?? null,
     });
   }
 
@@ -393,6 +430,48 @@ export const getCompletedChallenges = async (userId, options = {}) => {
   };
 };
 
+/**
+ * Full detail for one completed challenge (creator only; same scope as getCompletedChallenges list).
+ */
+export const getCompletedChallengeById = async (challengeId, userId) => {
+  const challenge = await challengeRepository.findById(challengeId, [
+    { path: "test", select: "title description durationMinutes applicableFor isPublished" },
+    { path: "createdBy", select: "name email" },
+    { path: "participants.student", select: "name email" },
+  ]);
+
+  if (!challenge || !challenge.isActive) {
+    throw new ApiError(404, "Completed challenge not found");
+  }
+  const creatorId = challenge.createdBy?._id ?? challenge.createdBy;
+  if (creatorId?.toString() !== userId.toString()) {
+    throw new ApiError(404, "Completed challenge not found");
+  }
+
+  const updated = await syncChallengeCompletion(challenge);
+  if (updated.roomStatus !== "completed") {
+    throw new ApiError(404, "Completed challenge not found");
+  }
+
+  const stats = await getParticipantStats(updated, userId);
+
+  const c = updated.toObject ? updated.toObject() : updated;
+  return {
+    challengeId: c._id,
+    challengeName: c.title,
+    description: c.description ?? null,
+    roomCode: c.roomCode,
+    roomStatus: c.roomStatus,
+    startedAt: c.startedAt,
+    completedAt: c.completedAt,
+    createdAt: c.createdAt,
+    updatedAt: c.updatedAt,
+    test: c.test,
+    createdBy: c.createdBy,
+    ...stats,
+  };
+};
+
 export default {
   createChallenge,
   getChallenges,
@@ -401,5 +480,6 @@ export default {
   deleteChallenge,
   getChallengeYourFriendsTests,
   getCompletedChallenges,
+  getCompletedChallengeById,
 };
 

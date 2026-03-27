@@ -57,7 +57,7 @@ const workshopSchema = new mongoose.Schema(
     },
     eventType: {
       type: String,
-      enum: ["workshop", "essay", "poem", "dance", "singing", "other"],
+      enum: ["workshop"],
       default: "workshop",
     },
     isPublished: {
