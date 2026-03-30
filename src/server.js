@@ -8,6 +8,7 @@ import app from './app.js';
 import { setupSupportSocket } from './socket/supportSocket.js';
 import { setupExamSessionSocket } from './socket/examSessionSocket.js';
 import { setupChallengeSocket } from './socket/challengeSocket.js';
+import { setupTeacherChatSocket } from './socket/teacherChatSocket.js';
 import { setIO } from './socket/socketGateway.js';
 import examSessionService from './services/examSession.service.js';
 
@@ -39,6 +40,7 @@ const startServer = async () => {
     // Setup exam session socket namespace (for real-time proctoring)
     setupExamSessionSocket(io);
     setupChallengeSocket(io);
+    setupTeacherChatSocket(io);
 
     // ==================== HYBRID AUTO-SUBMISSION APPROACH ====================
     // 

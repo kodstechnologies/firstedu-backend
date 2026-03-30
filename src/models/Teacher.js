@@ -61,6 +61,7 @@ const teacherSchema = new mongoose.Schema(
     passwordResetOTP: { type: String, default: null },
     passwordResetOTPExpires: { type: Date, default: null },
     refreshToken: { type: String, default: null },
+    fcmToken: { type: String, default: null, trim: true },
     createdAt: { type: Date, default: Date.now },
     updatedAt: { type: Date, default: Date.now },
   },

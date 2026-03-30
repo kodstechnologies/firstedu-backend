@@ -22,6 +22,20 @@ const teacherSessionSchema = new mongoose.Schema(
       trim: true,
       required: true,
     },
+    sessionKind: {
+      type: String,
+      enum: ["call", "chat"],
+      default: "call",
+    },
+    chatStartedAt: {
+      type: Date,
+      default: null,
+    },
+    sessionEndReason: {
+      type: String,
+      trim: true,
+      default: null,
+    },
     perMinuteRate: {
       type: Number,
       required: true,
@@ -66,6 +80,12 @@ const teacherSessionSchema = new mongoose.Schema(
       type: String,
       trim: true,
       default: null,
+    },
+    /** Who created the session row: student request vs teacher-initiated (future). */
+    initiatedBy: {
+      type: String,
+      enum: ["student", "teacher"],
+      default: "student",
     },
     // Request metadata
     requestedAt: {

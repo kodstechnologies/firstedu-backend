@@ -4,6 +4,7 @@ import teacherSessionRepository from "../repository/teacherSession.repository.js
 import teacherRatingRepository from "../repository/teacherRating.repository.js";
 import walletService from "./wallet.service.js";
 import Teacher from "../models/Teacher.js";
+import { rejectChatSession } from "./teacherChat.service.js";
 
 /** Strip phone and email from teacher object for student-facing responses */
 const omitContactFromTeacher = (teacher) => {
@@ -122,6 +123,7 @@ export const initiateCallRequest = async (studentId, teacherId, subject) => {
     subject: subject || teacher.skills[0] || "General",
     perMinuteRate: teacher.perMinuteRate,
     status: "pending",
+    initiatedBy: "student",
   });
 
   return session;
@@ -135,6 +137,10 @@ export const acceptCallRequest = async (teacherId, sessionId) => {
 
   if (!session) {
     throw new ApiError(404, "Session not found");
+  }
+
+  if (session.sessionKind === "chat") {
+    throw new ApiError(400, "Chat requests must be accepted in the live chat connection");
   }
 
   if (session.teacher._id.toString() !== teacherId.toString()) {
@@ -180,6 +186,10 @@ export const rejectCallRequest = async (teacherId, sessionId, reason) => {
     throw new ApiError(400, `Session is already ${session.status}`);
   }
 
+  if (session.sessionKind === "chat") {
+    return await rejectChatSession(teacherId, sessionId, reason);
+  }
+
   const updatedSession = await teacherSessionRepository.updateById(sessionId, {
     status: "rejected",
     rejectedAt: new Date(),
@@ -197,6 +207,10 @@ export const startCall = async (sessionId, twilioCallSid) => {
 
   if (!session) {
     throw new ApiError(404, "Session not found");
+  }
+
+  if (session.sessionKind === "chat") {
+    throw new ApiError(400, "Chat sessions start automatically when accepted in chat");
   }
 
   if (session.status !== "accepted") {
@@ -220,6 +234,10 @@ export const endCall = async (sessionId, durationMinutes, recordingUrl = null, r
 
   if (!session) {
     throw new ApiError(404, "Session not found");
+  }
+
+  if (session.sessionKind === "chat") {
+    throw new ApiError(400, "End chat sessions through the chat connection");
   }
 
   if (session.status !== "ongoing") {
@@ -318,13 +336,47 @@ export const getTeacherPendingRequests = async (teacherId) => {
 
 /**
  * Get teacher's session history
+ * @param {string|null} search - optional: student name/email, subject, status text, or "chat"/"call"
  */
-export const getTeacherSessionHistory = async (teacherId, page = 1, limit = 10, status = null) => {
+export const getTeacherSessionHistory = async (
+  teacherId,
+  page = 1,
+  limit = 10,
+  status = null,
+  search = null
+) => {
   return await teacherSessionRepository.findTeacherSessions(teacherId, {
     page,
     limit,
     status,
+    search,
   });
+};
+
+/**
+ * Remove a session from the teacher's history (and DB). Own sessions only.
+ * Active (ongoing) sessions must be ended first.
+ */
+export const deleteTeacherSession = async (teacherId, sessionId) => {
+  const session = await teacherSessionRepository.findById(sessionId);
+
+  if (!session) {
+    throw new ApiError(404, "Session not found");
+  }
+
+  if (session.teacher._id.toString() !== teacherId.toString()) {
+    throw new ApiError(403, "Unauthorized to delete this session");
+  }
+
+  if (session.status === "ongoing") {
+    throw new ApiError(
+      400,
+      "Cannot delete an active session. End the call or chat first."
+    );
+  }
+
+  await teacherSessionRepository.deleteById(sessionId);
+  return { deleted: true, sessionId: session._id.toString() };
 };
 
 /**
@@ -368,6 +420,7 @@ export default {
   getStudentRecordings,
   getTeacherPendingRequests,
   getTeacherSessionHistory,
+  deleteTeacherSession,
   getTeacherEarnings,
   rateTeacher,
 };

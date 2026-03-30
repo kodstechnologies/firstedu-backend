@@ -69,9 +69,8 @@ export const login = asyncHandler(async (req, res) => {
 // Teacher Logout
 export const logout = asyncHandler(async (req, res) => {
   await teacherRepository.updateById(req.user._id, {
-    $unset: {
-      refreshToken: 1,
-    },
+    refreshToken: null,
+    fcmToken: null,
   });
 
   const options = {

@@ -1,4 +1,5 @@
 import TeacherSession from "../models/TeacherSession.js";
+import User from "../models/Student.js";
 import { ApiError } from "../utils/ApiError.js";
 
 const create = async (sessionData) => {
@@ -95,13 +96,36 @@ const findTeacherSessions = async (teacherId, options = {}) => {
       page = 1,
       limit = 10,
       status,
+      search,
       sortBy = "createdAt",
       sortOrder = "desc",
     } = options;
 
-    const query = { teacher: teacherId };
+    const match = { teacher: teacherId };
     if (status) {
-      query.status = status;
+      match.status = status;
+    }
+
+    const searchTrim = typeof search === "string" ? search.trim() : "";
+    let finalQuery = match;
+    if (searchTrim) {
+      const esc = searchTrim.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const rx = new RegExp(esc, "i");
+      const matchingStudents = await User.find({
+        $or: [{ name: rx }, { email: rx }],
+      })
+        .select("_id")
+        .lean();
+      const studentIds = matchingStudents.map((s) => s._id);
+      const orConditions = [
+        { subject: rx },
+        { status: rx },
+        { sessionKind: rx },
+      ];
+      if (studentIds.length > 0) {
+        orConditions.push({ student: { $in: studentIds } });
+      }
+      finalQuery = { $and: [match, { $or: orConditions }] };
     }
 
     const pageNum = parseInt(page);
@@ -110,12 +134,12 @@ const findTeacherSessions = async (teacherId, options = {}) => {
     const sort = { [sortBy]: sortOrder === "desc" ? -1 : 1 };
 
     const [sessions, total] = await Promise.all([
-      TeacherSession.find(query)
+      TeacherSession.find(finalQuery)
         .populate("student", "name email")
         .sort(sort)
         .skip(skip)
         .limit(limitNum),
-      TeacherSession.countDocuments(query),
+      TeacherSession.countDocuments(finalQuery),
     ]);
 
     return {
@@ -157,6 +181,52 @@ const findOngoingSession = async (studentId, teacherId) => {
   }
 };
 
+const deleteById = async (sessionId) => {
+  try {
+    return await TeacherSession.findByIdAndDelete(sessionId);
+  } catch (error) {
+    throw new ApiError(500, "Failed to delete session", error.message);
+  }
+};
+
+/** Teacher is in an active chat session (billing / messaging). */
+const findTeacherActiveChatSession = async (teacherId) => {
+  try {
+    return await TeacherSession.findOne({
+      teacher: teacherId,
+      sessionKind: "chat",
+      status: "ongoing",
+    });
+  } catch (error) {
+    throw new ApiError(500, "Failed to fetch teacher chat session", error.message);
+  }
+};
+
+const findStudentOngoingChatSession = async (studentId) => {
+  try {
+    return await TeacherSession.findOne({
+      student: studentId,
+      sessionKind: "chat",
+      status: "ongoing",
+    });
+  } catch (error) {
+    throw new ApiError(500, "Failed to fetch student chat session", error.message);
+  }
+};
+
+const findPendingChatBetween = async (studentId, teacherId) => {
+  try {
+    return await TeacherSession.findOne({
+      student: studentId,
+      teacher: teacherId,
+      sessionKind: "chat",
+      status: "pending",
+    });
+  } catch (error) {
+    throw new ApiError(500, "Failed to fetch pending chat", error.message);
+  }
+};
+
 const calculateTeacherEarnings = async (teacherId, startDate, endDate) => {
   try {
     const query = {
@@ -192,10 +262,14 @@ export default {
   findById,
   findOne,
   updateById,
+  deleteById,
   findStudentSessions,
   findTeacherSessions,
   findPendingRequests,
   findOngoingSession,
+  findTeacherActiveChatSession,
+  findStudentOngoingChatSession,
+  findPendingChatBetween,
   calculateTeacherEarnings,
 };
 

@@ -7,59 +7,113 @@ import studentSessionRepository from "../repository/studentSession.repository.js
 // ==================== ADMIN CONTROLLERS ====================
 
 /**
- * Send notification to a single student (Admin)
+ * Send notification to a single student or teacher (Admin).
+ * Use one of: studentId | teacherId | recipientType + recipientId (recipientType: "student" | "teacher").
  */
 export const sendNotificationToStudent = asyncHandler(async (req, res) => {
-  const { studentId, title, body, type, data } = req.body;
+  const { studentId, teacherId, recipientType, recipientId, title, body, type, data } = req.body;
   const sentBy = req.user._id;
-
-  if (!studentId || !title || !body) {
-    throw new ApiError(400, "Student ID, title, and body are required");
-  }
-
-  const result = await notificationService.sendNotificationToStudent(
-    studentId,
-    title,
-    body,
-    { ...data, type: type || "general" },
-    sentBy
-  );
-
-  return res.status(200).json(
-    ApiResponse.success(
-      result,
-      "Notification sent successfully"
-    )
-  );
-});
-
-/**
- * Send notification to multiple students (Admin)
- */
-export const sendNotificationToMultipleStudents = asyncHandler(async (req, res) => {
-  const { studentIds, title, body, type, data } = req.body;
-  const sentBy = req.user._id;
-
-  if (!studentIds || !Array.isArray(studentIds) || studentIds.length === 0) {
-    throw new ApiError(400, "Student IDs array is required");
-  }
 
   if (!title || !body) {
     throw new ApiError(400, "Title and body are required");
   }
 
-  const result = await notificationService.sendNotificationToMultipleStudents(
-    studentIds,
-    title,
-    body,
-    { ...data, type: type || "general" },
-    sentBy
+  let targetKind;
+  let targetId;
+
+  if (recipientType && recipientId) {
+    targetKind = recipientType;
+    targetId = recipientId;
+  } else if (studentId && !teacherId) {
+    targetKind = "student";
+    targetId = studentId;
+  } else if (teacherId && !studentId) {
+    targetKind = "teacher";
+    targetId = teacherId;
+  } else {
+    throw new ApiError(
+      400,
+      "Provide studentId, or teacherId, or recipientType + recipientId (student | teacher)"
+    );
+  }
+
+  if (!["student", "teacher"].includes(targetKind)) {
+    throw new ApiError(400, "recipientType must be 'student' or 'teacher'");
+  }
+
+  const payload = { ...data, type: type || "general" };
+
+  const result =
+    targetKind === "student"
+      ? await notificationService.sendNotificationToStudent(
+          targetId,
+          title,
+          body,
+          payload,
+          sentBy
+        )
+      : await notificationService.sendNotificationToTeacher(
+          targetId,
+          title,
+          body,
+          payload,
+          sentBy
+        );
+
+  return res.status(200).json(
+    ApiResponse.success(result, "Notification sent successfully")
   );
+});
+
+/**
+ * Send notification to multiple students or multiple teachers (Admin).
+ * Pass exactly one of: studentIds | teacherIds
+ */
+export const sendNotificationToMultipleStudents = asyncHandler(async (req, res) => {
+  const { studentIds, teacherIds, title, body, type, data } = req.body;
+  const sentBy = req.user._id;
+
+  if (!title || !body) {
+    throw new ApiError(400, "Title and body are required");
+  }
+
+  const hasStudents =
+    Array.isArray(studentIds) && studentIds.length > 0;
+  const hasTeachers =
+    Array.isArray(teacherIds) && teacherIds.length > 0;
+
+  if (hasStudents && hasTeachers) {
+    throw new ApiError(400, "Send only one of studentIds or teacherIds");
+  }
+
+  if (!hasStudents && !hasTeachers) {
+    throw new ApiError(400, "studentIds or teacherIds array is required");
+  }
+
+  const payload = { ...data, type: type || "general" };
+
+  const result = hasStudents
+    ? await notificationService.sendNotificationToMultipleStudents(
+        studentIds,
+        title,
+        body,
+        payload,
+        sentBy
+      )
+    : await notificationService.sendNotificationToMultipleTeachers(
+        teacherIds,
+        title,
+        body,
+        payload,
+        sentBy
+      );
+
+  const label = hasStudents ? "students" : "teachers";
 
   return res.status(200).json(
     ApiResponse.success(
       result,
-      `Notification sent to ${result.totalSent} students`
+      `Notification sent to ${result.totalSent} ${label}`
     )
   );
 });
@@ -105,27 +159,86 @@ export const sendNotificationToPurchasers = asyncHandler(async (req, res) => {
 });
 
 /**
- * Send notification to all students (Admin)
+ * Broadcast to all students, all teachers, or both (Admin).
+ * Body: audience — "students" | "teachers" | "both" (default "students" for backward compatibility).
  */
 export const sendNotificationToAllStudents = asyncHandler(async (req, res) => {
-  const { title, body, type, data } = req.body;
+  const { title, body, type, data, audience = "students" } = req.body;
   const sentBy = req.user._id;
 
   if (!title || !body) {
     throw new ApiError(400, "Title and body are required");
   }
 
-  const result = await notificationService.sendNotificationToAllStudents(
-    title,
-    body,
-    { ...data, type: type || "general" },
-    sentBy
-  );
+  const validAudiences = ["students", "teachers", "both"];
+  if (!validAudiences.includes(audience)) {
+    throw new ApiError(
+      400,
+      `audience must be one of: ${validAudiences.join(", ")}`
+    );
+  }
+
+  const payload = { ...data, type: type || "general" };
+
+  if (audience === "students") {
+    const result = await notificationService.sendNotificationToAllStudents(
+      title,
+      body,
+      payload,
+      sentBy
+    );
+    return res.status(200).json(
+      ApiResponse.success(result, "Notification sent to all students")
+    );
+  }
+
+  if (audience === "teachers") {
+    const result = await notificationService.sendNotificationToAllTeachers(
+      title,
+      body,
+      payload,
+      sentBy
+    );
+    return res.status(200).json(
+      ApiResponse.success(result, "Notification sent to all teachers")
+    );
+  }
+
+  let studentResult = { totalSent: 0, fcmSent: 0, fcmFailed: 0 };
+  let teacherResult = { totalSent: 0, fcmSent: 0, fcmFailed: 0 };
+
+  try {
+    studentResult = await notificationService.sendNotificationToAllStudents(
+      title,
+      body,
+      payload,
+      sentBy
+    );
+  } catch (e) {
+    if (e.message !== "No students found") throw e;
+  }
+
+  try {
+    teacherResult = await notificationService.sendNotificationToAllTeachers(
+      title,
+      body,
+      payload,
+      sentBy
+    );
+  } catch (e) {
+    if (e.message !== "No teachers found") throw e;
+  }
 
   return res.status(200).json(
     ApiResponse.success(
-      result,
-      `Notification sent to all students`
+      {
+        students: studentResult,
+        teachers: teacherResult,
+        totalSent: studentResult.totalSent + teacherResult.totalSent,
+        fcmSent: studentResult.fcmSent + teacherResult.fcmSent,
+        fcmFailed: studentResult.fcmFailed + teacherResult.fcmFailed,
+      },
+      "Notification sent to all students and all teachers"
     )
   );
 });
@@ -220,6 +333,84 @@ export const markAllNotificationsAsRead = asyncHandler(async (req, res) => {
   const studentId = req.user._id;
 
   const result = await notificationService.markAllNotificationsAsRead(studentId);
+
+  return res.status(200).json(
+    ApiResponse.success(
+      { modifiedCount: result.modifiedCount },
+      "All notifications marked as read"
+    )
+  );
+});
+
+// ==================== TEACHER CONTROLLERS ====================
+
+/**
+ * List notifications for the logged-in teacher
+ */
+export const getTeacherMyNotifications = asyncHandler(async (req, res) => {
+  const teacherId = req.user._id;
+  const { page = 1, limit = 20, isRead } = req.query;
+
+  const result = await notificationService.getTeacherNotifications(teacherId, {
+    page,
+    limit,
+    isRead,
+    sortBy: "createdAt",
+    sortOrder: "desc",
+  });
+
+  return res.status(200).json(
+    ApiResponse.success(
+      result.notifications,
+      "Notifications fetched successfully",
+      result.pagination
+    )
+  );
+});
+
+/**
+ * Unread count for teacher
+ */
+export const getTeacherUnreadCount = asyncHandler(async (req, res) => {
+  const teacherId = req.user._id;
+  const count = await notificationService.getTeacherUnreadCount(teacherId);
+
+  return res.status(200).json(
+    ApiResponse.success({ unreadCount: count }, "Unread count fetched successfully")
+  );
+});
+
+/**
+ * Mark one notification read (teacher)
+ */
+export const markTeacherNotificationAsRead = asyncHandler(async (req, res) => {
+  const { notificationId } = req.params;
+  const teacherId = req.user._id;
+
+  let notification;
+  try {
+    notification = await notificationService.markTeacherNotificationAsRead(
+      notificationId,
+      teacherId
+    );
+  } catch (e) {
+    const msg = e.message || "Could not update notification";
+    if (msg === "Notification not found") throw new ApiError(404, msg);
+    if (msg.includes("Unauthorized")) throw new ApiError(403, msg);
+    throw new ApiError(400, msg);
+  }
+
+  return res
+    .status(200)
+    .json(ApiResponse.success(notification, "Notification marked as read"));
+});
+
+/**
+ * Mark all notifications read (teacher)
+ */
+export const markAllTeacherNotificationsAsRead = asyncHandler(async (req, res) => {
+  const teacherId = req.user._id;
+  const result = await notificationService.markAllTeacherNotificationsAsRead(teacherId);
 
   return res.status(200).json(
     ApiResponse.success(

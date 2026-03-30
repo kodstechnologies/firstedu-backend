@@ -5,6 +5,7 @@ import teacherConnectService from "../services/teacherConnect.service.js";
 import teacherConnectValidator from "../validation/teacherConnect.validator.js";
 import teacherRepository from "../repository/teacher.repository.js";
 import { uploadImageToCloudinary } from "../utils/s3Upload.js";
+import teacherChatService from "../services/teacherChat.service.js";
 
 /**
  * Get teacher profile (current logged-in teacher)
@@ -168,6 +169,16 @@ export const rejectCallRequest = asyncHandler(async (req, res) => {
 
   const session = await teacherConnectService.rejectCallRequest(teacherId, sessionId, reason);
 
+  if (session?.sessionKind === "chat" && session?.status === "rejected") {
+    const sid = session.student?._id ?? session.student;
+    await teacherChatService.notifyStudentDevices(
+      sid,
+      "Chat request declined",
+      session.rejectionReason || "The teacher declined your chat request.",
+      { type: "teacher_chat_rejected", sessionId: String(session._id) }
+    );
+  }
+
   return res
     .status(200)
     .json(ApiResponse.success(session, "Call request rejected successfully"));
@@ -231,13 +242,14 @@ export const endCall = asyncHandler(async (req, res) => {
  */
 export const getSessionHistory = asyncHandler(async (req, res) => {
   const teacherId = req.user._id;
-  const { page = 1, limit = 10, status } = req.query;
+  const { page = 1, limit = 10, status, search } = req.query;
 
   const result = await teacherConnectService.getTeacherSessionHistory(
     teacherId,
     parseInt(page),
     parseInt(limit),
-    status || null
+    status || null,
+    typeof search === "string" ? search.trim() || null : null
   );
 
   return res.status(200).json(
@@ -247,6 +259,39 @@ export const getSessionHistory = asyncHandler(async (req, res) => {
       result.pagination
     )
   );
+});
+
+/**
+ * Delete a session from history (teacher-owned only; not while ongoing).
+ */
+export const deleteTeacherSession = asyncHandler(async (req, res) => {
+  const teacherId = req.user._id;
+  const { sessionId } = req.params;
+
+  const result = await teacherConnectService.deleteTeacherSession(teacherId, sessionId);
+
+  return res
+    .status(200)
+    .json(ApiResponse.success(result, "Session deleted successfully"));
+});
+
+/**
+ * Register FCM token for push notifications (chat requests, session events).
+ */
+export const registerTeacherFcmToken = asyncHandler(async (req, res) => {
+  const { error, value } = teacherConnectValidator.registerTeacherFcmToken.validate(req.body);
+  if (error) {
+    throw new ApiError(
+      400,
+      "Validation Error",
+      error.details.map((x) => x.message)
+    );
+  }
+  const teacherId = req.user._id;
+  await teacherRepository.updateById(teacherId, {
+    fcmToken: value.fcmToken.trim(),
+  });
+  return res.status(200).json(ApiResponse.success(null, "FCM token registered successfully"));
 });
 
 /**
@@ -274,9 +319,11 @@ export default {
   getPendingRequests,
   acceptCallRequest,
   rejectCallRequest,
+  registerTeacherFcmToken,
   startCall,
   endCall,
   getSessionHistory,
+  deleteTeacherSession,
   getEarnings,
 };
 

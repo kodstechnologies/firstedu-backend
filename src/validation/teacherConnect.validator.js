@@ -37,6 +37,10 @@ const rateTeacher = Joi.object({
   rating: Joi.number().min(1).max(5).integer().required(),
 });
 
+const registerTeacherFcmToken = Joi.object({
+  fcmToken: Joi.string().trim().required(),
+});
+
 export default {
   initiateCallRequest,
   acceptCallRequest,
@@ -46,5 +50,6 @@ export default {
   toggleAvailability,
   startCall,
   rateTeacher,
+  registerTeacherFcmToken,
 };
 

@@ -20,7 +20,7 @@ const notificationSchema = new mongoose.Schema(
     sentBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Admin",
-      required: true,
+      default: null,
     },
     isRead: {
       type: Boolean,

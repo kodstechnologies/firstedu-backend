@@ -17,11 +17,19 @@ import {
   startCall,
   endCall,
   getSessionHistory,
+  deleteTeacherSession,
   getEarnings,
+  registerTeacherFcmToken,
 } from "../controllers/teacherConnect.controller.js";
 import { verifyJWT } from "../middleware/auth.middleware.js";
 import { uploadImage } from "../utils/multerConfig.js";
 import { submitSupport } from "../controllers/contactSupport.controller.js";
+import {
+  getTeacherMyNotifications,
+  getTeacherUnreadCount,
+  markTeacherNotificationAsRead,
+  markAllTeacherNotificationsAsRead,
+} from "../controllers/notification.controller.js";
 
 const router = Router();
 
@@ -44,6 +52,15 @@ router.post("/contact-support",verifyJWT, submitSupport);
 router.get("/profile", verifyJWT, getProfile);
 router.put("/profile", verifyJWT, uploadImage.single("profileImage"), updateProfile);
 router.put("/availability", verifyJWT, toggleAvailability);
+router.post("/notifications/register-token", verifyJWT, registerTeacherFcmToken);
+router.get("/notifications", verifyJWT, getTeacherMyNotifications);
+router.get("/notifications/unread-count", verifyJWT, getTeacherUnreadCount);
+router.put(
+  "/notifications/:notificationId/read",
+  verifyJWT,
+  markTeacherNotificationAsRead
+);
+router.put("/notifications/read-all", verifyJWT, markAllTeacherNotificationsAsRead);
 
 // Call Requests
 router.get("/pending-requests", verifyJWT, getPendingRequests);
@@ -56,6 +73,7 @@ router.post("/sessions/:sessionId/end", verifyJWT, endCall);
 
 // Session History & Earnings
 router.get("/sessions", verifyJWT, getSessionHistory);
+router.delete("/sessions/:sessionId", verifyJWT, deleteTeacherSession);
 router.get("/earnings", verifyJWT, getEarnings);
 
 export default router;
