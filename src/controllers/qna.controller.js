@@ -1,162 +1,118 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
-import qnaService from "../services/qna.service.js";
-import qnaRequestService from "../services/qnaRequest.service.js";
 import qnaValidator from "../validation/qna.validator.js";
-import qnaRequestValidator from "../validation/qnaRequest.validator.js";
+import qnaService from "../services/qna.service.js";
 
-// ==================== ADMIN – Q&A (create, list, get, update, delete) ====================
-
-/**
- * Create Q&A (admin)
- * POST /admin/qna
- */
+// Create QnA
 export const createQnA = asyncHandler(async (req, res) => {
   const { error, value } = qnaValidator.createQnA.validate(req.body);
+
   if (error) {
-    throw new ApiError(400, "Validation Error", error.details.map((x) => x.message));
+    throw new ApiError(
+      400,
+      "Validation Error",
+      error.details.map((x) => x.message)
+    );
   }
-  const qna = await qnaService.createQnA(value, req.user._id);
-  return res.status(201).json(ApiResponse.success(qna, "Q&A created successfully"));
+
+  const createdQnA = await qnaService.createQnA(value, req.user._id);
+
+  return res
+    .status(201)
+    .json(ApiResponse.success(createdQnA, "QnA created successfully"));
 });
 
-/**
- * Get all Q&A (admin) – optional filter by subject, pagination
- * GET /admin/qna?subject=general&page=1&limit=10
- */
-export const getAllQnAAdmin = asyncHandler(async (req, res) => {
-  const { subject, page, limit } = req.query;
-  const filters = {};
-  if (subject) filters.subject = subject;
-  const result = await qnaService.getAllQnAPaginated(filters, { page, limit });
-  return res.status(200).json(
-    ApiResponse.success(result.list, "Q&A list fetched successfully", result.pagination)
-  );
+// Get All QnAs
+export const getAllQnAs = asyncHandler(async (req, res) => {
+  const { page, limit, sortBy, sortOrder,type, search, subject, status } = req.query;
+
+  const filterOptions = {
+    page,
+    limit,
+    sortBy,
+    sortOrder,
+    search,
+    type:type==="all"?"":type,
+  };
+  const result = await qnaService.getAllQnAs(filterOptions);
+  return res
+    .status(200)
+    .json(
+      ApiResponse.success(
+        result.data,
+        "QnAs fetched successfully",
+        result.pagination
+      )
+    );
 });
 
-/**
- * Get Q&A by ID (admin)
- * GET /admin/qna/:id
- */
-export const getQnAByIdAdmin = asyncHandler(async (req, res) => {
+export const selfQnAs = asyncHandler(async (req, res) => {
+  const { _id } = req.user;
+
+  const qna = await qnaService.selfQnAs(_id);
+
+  return res
+    .status(200)
+    .json(ApiResponse.success(qna, "QnA fetched successfully"));
+});
+
+// Get QnA by ID
+export const getQnAById = asyncHandler(async (req, res) => {
   const { id } = req.params;
+
   const qna = await qnaService.getQnAById(id);
-  return res.status(200).json(ApiResponse.success(qna, "Q&A fetched successfully"));
+
+  return res
+    .status(200)
+    .json(ApiResponse.success(qna, "QnA fetched successfully"));
 });
 
-/**
- * Update Q&A (admin)
- * PUT /admin/qna/:id
- */
+// Update QnA
 export const updateQnA = asyncHandler(async (req, res) => {
-  const { error, value } = qnaValidator.updateQnA.validate(req.body);
-  if (error) {
-    throw new ApiError(400, "Validation Error", error.details.map((x) => x.message));
-  }
-  if (Object.keys(value).length === 0) {
-    throw new ApiError(400, "At least one field (question, answer, subject) is required");
-  }
   const { id } = req.params;
-  const qna = await qnaService.updateQnA(id, value);
-  return res.status(200).json(ApiResponse.success(qna, "Q&A updated successfully"));
+  const { error, value } = qnaValidator.updateQnA.validate(req.body);
+
+  if (error) {
+    throw new ApiError(
+      400,
+      "Validation Error",
+      error.details.map((x) => x.message)
+    );
+  }
+
+  const updatedQnA = await qnaService.updateQnA(id, value);
+
+  return res
+    .status(200)
+    .json(ApiResponse.success(updatedQnA, "QnA updated successfully"));
 });
 
-/**
- * Delete Q&A (admin)
- * DELETE /admin/qna/:id
- */
+// approve question
+export const approveQnA = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const updatedQnA = await qnaService.approveQnA(id);
+
+  return res
+    .status(200)
+    .json(ApiResponse.success(updatedQnA, "QnA updated successfully"));
+});
+
+// Delete QnA
 export const deleteQnA = asyncHandler(async (req, res) => {
   const { id } = req.params;
+
   await qnaService.deleteQnA(id);
-  return res.status(200).json(ApiResponse.success(null, "Q&A deleted successfully"));
-});
 
-// ==================== ADMIN – Q&A requests (list, get by id) ====================
-
-/**
- * Get all Q&A requests from users (admin)
- * GET /admin/qna-requests?subject=general&status=pending
- */
-export const getAllQnARequests = asyncHandler(async (req, res) => {
-  const { subject, status } = req.query;
-  const filters = {};
-  if (subject) filters.subject = subject;
-  if (status) filters.status = status;
-  const list = await qnaRequestService.getAllQnARequests(filters);
-  return res.status(200).json(ApiResponse.success(list, "Q&A requests fetched successfully"));
-});
-
-/**
- * Get Q&A request by ID (admin)
- * GET /admin/qna-requests/:id
- */
-export const getQnARequestById = asyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const request = await qnaRequestService.getQnARequestById(id);
-  return res.status(200).json(ApiResponse.success(request, "Q&A request fetched successfully"));
-});
-
-// ==================== USER – Q&A (read only: list, get by id) ====================
-
-/**
- * Get all published Q&A for users (admin-created) – pagination
- * GET /user/qna?subject=general&page=1&limit=10
- */
-export const getAllQnAUser = asyncHandler(async (req, res) => {
-  const { subject, page, limit } = req.query;
-  const filters = {};
-  if (subject) filters.subject = subject;
-  const result = await qnaService.getAllQnAPaginated(filters, { page, limit });
-  return res.status(200).json(
-    ApiResponse.success(result.list, "Q&A list fetched successfully", result.pagination)
-  );
-});
-
-/**
- * Get Q&A by ID (user)
- * GET /user/qna/:id
- */
-export const getQnAByIdUser = asyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const qna = await qnaService.getQnAById(id);
-  return res.status(200).json(ApiResponse.success(qna, "Q&A fetched successfully"));
-});
-
-// ==================== USER – Q&A request (submit, optional: my requests) ====================
-
-/**
- * Submit Q&A request (user)
- * POST /user/qna-request
- */
-export const submitQnARequest = asyncHandler(async (req, res) => {
-  const { error, value } = qnaRequestValidator.submitQnARequest.validate(req.body);
-  if (error) {
-    throw new ApiError(400, "Validation Error", error.details.map((x) => x.message));
-  }
-  const request = await qnaRequestService.submitQnARequest(value, req.user._id);
-  return res.status(201).json(ApiResponse.success(request, "Q&A request submitted successfully"));
-});
-
-/**
- * Get my Q&A requests (user)
- * GET /user/qna-requests
- */
-export const getMyQnARequests = asyncHandler(async (req, res) => {
-  const list = await qnaRequestService.getMyQnARequests(req.user._id);
-  return res.status(200).json(ApiResponse.success(list, "My Q&A requests fetched successfully"));
+  return res
+    .status(200)
+    .json(ApiResponse.success(null, "QnA deleted successfully"));
 });
 
 export default {
   createQnA,
-  getAllQnAAdmin,
-  getQnAByIdAdmin,
+  getAllQnAs,
+  getQnAById,
   updateQnA,
   deleteQnA,
-  getAllQnARequests,
-  getQnARequestById,
-  getAllQnAUser,
-  getQnAByIdUser,
-  submitQnARequest,
-  getMyQnARequests,
 };

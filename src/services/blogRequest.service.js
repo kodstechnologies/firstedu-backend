@@ -28,8 +28,8 @@ const submitBlogRequest = async (data, file) => {
 /**
  * Get all blog requests (admin)
  */
-const getAllBlogRequests = async (filters) => {
-    return await blogRequestRepository.findBlogRequests(filters);
+const getAllBlogRequests = async (filters, page, limit) => {
+    return await blogRequestRepository.findBlogRequests(filters, page, limit);
 };
 
 /**

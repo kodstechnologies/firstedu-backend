@@ -10,17 +10,38 @@ const create = async (data) => {
 };
 
 /**
- * Find all published blogs (for students - no filter by status, all are published)
+ * Find all published blogs with optional filters, pagination and search
  */
-const findAll = async (filters = {}) => {
+const findAll = async (filters = {}, page = 1, limit = 10) => {
   const query = {};
+
   if (filters.subject) {
     query.subject = new RegExp(filters.subject, "i");
   }
+
   if (filters.source) {
     query.source = filters.source;
   }
-  return await Blog.find(query).sort({ createdAt: -1 }).lean();
+
+  if (filters.search) {
+    query.$or = [
+      { title: { $regex: filters.search, $options: "i" } },
+      { authorName: { $regex: filters.search, $options: "i" } },
+    ];
+  }
+
+  const skip = (page - 1) * limit;
+
+  const [blogs, total] = await Promise.all([
+    Blog.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean(),
+    Blog.countDocuments(query),
+  ]);
+
+  return { blogs, total };
 };
 
 /**

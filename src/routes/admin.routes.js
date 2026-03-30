@@ -175,7 +175,7 @@ import {
   getBlogRequestById,
   updateBlogRequestStatus,
 } from '../controllers/blogRequest.controller.js';
-import { createBlog, updateBlog, deleteBlog } from '../controllers/blog.controller.js';
+import { createBlog, updateBlog, deleteBlog, getAllBlogs } from '../controllers/blog.controller.js';
 
 
 import {
@@ -193,15 +193,6 @@ import {
   saveGeneratedQuestions,
 } from '../controllers/aiQuestion.controller.js';
 
-import {
-  createQnA,
-  getAllQnAAdmin,
-  getQnAByIdAdmin,
-  updateQnA,
-  deleteQnA,
-  getAllQnARequests,
-  getQnARequestById,
-} from '../controllers/qna.controller.js';
 import {
   createPressAnnouncement,
   getAllPressAnnouncementsAdmin,
@@ -243,6 +234,14 @@ import {
   updateTests,
   deleteTests,
 } from "../controllers/competition.controller.js";
+import {
+  createQnA,
+  getAllQnAs,
+  getQnAById,
+  updateQnA,
+  deleteQnA,
+  approveQnA,
+} from "../controllers/qna.controller.js";
 import { verifyJWT } from "../middleware/auth.middleware.js";
 import { uploadCourseMaterial, uploadImage, uploadPDF, uploadSuccessStory } from '../utils/multerConfig.js';
 
@@ -286,7 +285,6 @@ router.delete("/questions/:id", verifyJWT, deleteQuestion);
 // Connected Questions Routes
 router.post("/questions/:id/child-questions", verifyJWT, addChildQuestion);
 router.delete("/questions/:id/child-questions/:childId", verifyJWT, removeChildQuestion);
-
 // Analytics Routes
 router.get("/questions/:id/analytics", verifyJWT, getQuestionAnalytics);
 router.post("/questions/:id/analytics/calculate", verifyJWT, calculateAnalytics);
@@ -413,6 +411,7 @@ router.get('/blog-request/:id', verifyJWT, getBlogRequestById);
 router.patch('/blog-request/:id', verifyJWT, updateBlogRequestStatus);
 
 // Admin-added blogs (create, update, delete - admin-created or approved)
+router.get('/blogs',verifyJWT,getAllBlogs)
 router.post('/blogs', verifyJWT, uploadImage.single('image'), createBlog);
 router.put('/blogs/:id', verifyJWT, uploadImage.single('image'), updateBlog);
 router.delete('/blogs/:id', verifyJWT, deleteBlog);
@@ -423,7 +422,7 @@ router.get("/support/tickets/categories", verifyJWT, getTicketCategories);
 router.get("/support/tickets/:ticketId", verifyJWT, getTicketById);
 router.post("/support/tickets/:ticketId/assign", verifyJWT, assignTicket);
 router.put("/support/tickets/:ticketId/status", verifyJWT, updateTicketStatus);
-router.post("/support/tickets/:ticketId/internal-notes", verifyJWT, addInternalNote);
+router.post("/support/tickets/:ticketId/internal-notes",verifyJWT, addInternalNote);
 
 // Chat Management
 router.get("/support/tickets/:ticketId/messages", verifyJWT, getTicketMessages);
@@ -498,16 +497,6 @@ router.post(
   saveGeneratedQuestions
 );
 
-// ==================== Q&A ====================
-// Admin-created Q&A (question, answer, subject)
-router.post('/qna', verifyJWT, createQnA);
-router.get('/qna', verifyJWT, getAllQnAAdmin);
-router.get('/qna/:id', verifyJWT, getQnAByIdAdmin);
-router.put('/qna/:id', verifyJWT, updateQnA);
-router.delete('/qna/:id', verifyJWT, deleteQnA);
-// User Q&A requests (admin can view)
-router.get('/qna-requests', verifyJWT, getAllQnARequests);
-router.get('/qna-requests/:id', verifyJWT, getQnARequestById);
 
 // ==================== PRESS ANNOUNCEMENTS ====================
 router.post('/press-announcements', verifyJWT, uploadImage.single('image'), createPressAnnouncement);
@@ -551,5 +540,13 @@ router.post("/competition-sectors", verifyJWT, createCompetitionSector);
 router.get("/competition-sectors", verifyJWT, listCompetitionSectors);
 router.put("/competition-sectors/:id", verifyJWT, updateCompetitionSector);
 router.delete("/competition-sectors/:id", verifyJWT, deleteCompetitionSector);
+
+// QnA Routes
+router.post("/qna", verifyJWT, createQnA);
+router.get("/qna", verifyJWT, getAllQnAs);
+router.get("/qna/:id", verifyJWT, getQnAById);
+router.put("/qna/:id", verifyJWT, updateQnA);
+router.put("/qna/approve/:id", verifyJWT, approveQnA);
+router.delete("/qna/:id", verifyJWT, deleteQnA);
 
 export default router;

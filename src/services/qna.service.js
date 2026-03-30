@@ -1,49 +1,75 @@
+import { ApiError } from "../utils/ApiError.js";
 import qnaRepository from "../repository/qna.repository.js";
-import ApiError from "../utils/ApiError.js";
 
-const createQnA = async (data, adminId) => {
-  return await qnaRepository.create({
-    ...data,
-    createdBy: adminId,
-  });
+export const createQnA = async (qnaData, createdBy) => {
+  // Add creator info
+  qnaData.createdBy = createdBy;
+  qnaData.creatorModel = "Admin"; // Since this is the admin route
+  qnaData.status = "approved"; // Admin created QnAs are approved by default
+
+  const qna = await qnaRepository.create(qnaData);
+  return await qnaRepository.findById(qna._id);
 };
 
-const getAllQnA = async (filters = {}) => {
-  return await qnaRepository.findAll(filters);
+export const getAllQnAs = async (filterOptions) => {
+  const result = await qnaRepository.findAll({}, filterOptions);
+  return result;
 };
 
-const getAllQnAPaginated = async (filters = {}, options = {}) => {
-  return await qnaRepository.findAllPaginated(filters, options);
-};
-
-const getQnAById = async (id) => {
+export const getQnAById = async (id) => {
   const qna = await qnaRepository.findById(id);
+
   if (!qna) {
-    throw new ApiError(404, "Q&A not found");
+    throw new ApiError(404, "QnA not found");
   }
+
   return qna;
 };
 
-const updateQnA = async (id, data) => {
-  const qna = await qnaRepository.findById(id);
+export const selfQnAs = async (id) => {
+  const qna = await qnaRepository.selfQnAs(id);
+
   if (!qna) {
-    throw new ApiError(404, "Q&A not found");
+    throw new ApiError(404, "QnA not found");
   }
-  return await qnaRepository.updateById(id, data);
+
+  return qna;
 };
 
-const deleteQnA = async (id) => {
+export const updateQnA = async (id, updateData) => {
+  const existingQnA = await qnaRepository.findById(id);
+  if (!existingQnA) {
+    throw new ApiError(404, "QnA not found");
+  }
+
+  const updatedQnA = await qnaRepository.updateById(id, updateData);
+  return updatedQnA;
+};
+
+export const approveQnA = async (id) => {
+  const existingQnA = await qnaRepository.findById(id);
+  if (!existingQnA) {
+    throw new ApiError(404, "QnA not found");
+  }
+  return await qnaRepository.approveQnA(id);
+  
+};
+
+export const deleteQnA = async (id) => {
   const qna = await qnaRepository.findById(id);
   if (!qna) {
-    throw new ApiError(404, "Q&A not found");
+    throw new ApiError(404, "QnA not found");
   }
-  return await qnaRepository.deleteById(id);
+
+  await qnaRepository.deleteById(id);
+  return true;
 };
 
 export default {
   createQnA,
-  getAllQnA,
-  getAllQnAPaginated,
+  approveQnA,
+  selfQnAs,
+  getAllQnAs,
   getQnAById,
   updateQnA,
   deleteQnA,

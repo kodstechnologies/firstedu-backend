@@ -11,44 +11,65 @@ import successStoryValidator from "../validation/successStory.validator.js";
  * POST /admin/success-stories
  */
 export const addSuccessStory = asyncHandler(async (req, res) => {
-    const { error, value } = successStoryValidator.createSuccessStory.validate(req.body);
+  const { error, value } = successStoryValidator.createSuccessStory.validate(
+    req.body,
+  );
 
-    if (error) {
-        throw new ApiError(
-            400,
-            "Validation Error",
-            error.details.map((x) => x.message)
-        );
-    }
+  if (error) {
+    throw new ApiError(
+      400,
+      "Validation Error",
+      error.details.map((x) => x.message),
+    );
+  }
 
-    const adminId = req.user._id;
-    const files = req.files;
+  const adminId = req.user._id;
+  const files = req.files;
 
-    const story = await successStoryService.createSuccessStory(value, files, adminId);
+  const story = await successStoryService.createSuccessStory(
+    value,
+    files,
+    adminId,
+  );
 
-    return res
-        .status(201)
-        .json(ApiResponse.success(story, "Success story created successfully"));
+  return res
+    .status(201)
+    .json(ApiResponse.success(story, "Success story created successfully"));
 });
 
 /**
  * Get all success stories (Admin)
  * GET /admin/success-stories
- * GET /admin/success-stories?status=PUBLISHED
+ * GET /admin/success-stories?status=PUBLISHED&page=1&limit=10&pressname=test
  */
 export const getAllStoriesAdmin = asyncHandler(async (req, res) => {
-    const { status } = req.query;
+  const status = req.query.status;
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const search = req.query.pressname;
 
-    const filters = {};
-    if (status) {
-        filters.status = status;
-    }
+  const filters = {};
+  if (status) {
+    filters.status = status;
+  }
+  if (search) {
+    filters.search = search;
+  }
 
-    const stories = await successStoryService.getAllStories(filters);
+  const { stories, total } = await successStoryService.getAllStories(
+    filters,
+    page,
+    limit,
+  );
 
-    return res
-        .status(200)
-        .json(ApiResponse.success(stories, "Success stories fetched successfully"));
+  return res.status(200).json(
+    ApiResponse.success(stories, "Success stories fetched successfully", {
+      totalResults: total,
+      totalPages: Math.ceil(total / limit),
+      currentPage: page,
+      limit: limit,
+    }),
+  );
 });
 
 /**
@@ -56,13 +77,13 @@ export const getAllStoriesAdmin = asyncHandler(async (req, res) => {
  * GET /admin/success-stories/:id
  */
 export const getStoryByIdAdmin = asyncHandler(async (req, res) => {
-    const { id } = req.params;
+  const { id } = req.params;
 
-    const story = await successStoryService.getStoryById(id);
+  const story = await successStoryService.getStoryById(id);
 
-    return res
-        .status(200)
-        .json(ApiResponse.success(story, "Success story fetched successfully"));
+  return res
+    .status(200)
+    .json(ApiResponse.success(story, "Success story fetched successfully"));
 });
 
 /**
@@ -70,28 +91,39 @@ export const getStoryByIdAdmin = asyncHandler(async (req, res) => {
  * PUT /admin/success-stories/:id
  */
 export const updateSuccessStory = asyncHandler(async (req, res) => {
-    const { error, value } = successStoryValidator.updateSuccessStory.validate(req.body);
+  const { error, value } = successStoryValidator.updateSuccessStory.validate(
+    req.body,
+  );
 
-    if (error) {
-        throw new ApiError(
-            400,
-            "Validation Error",
-            error.details.map((x) => x.message)
-        );
-    }
+  if (error) {
+    throw new ApiError(
+      400,
+      "Validation Error",
+      error.details.map((x) => x.message),
+    );
+  }
 
-    const { id } = req.params;
-    const files = req.files;
-    const hasFiles = files?.media?.[0] || files?.thumbnail?.[0];
-    if (Object.keys(value).length === 0 && !hasFiles) {
-        throw new ApiError(400, "At least one field (name, description, achievement, achieveIn) or file (media, thumbnail) is required");
-    }
+  const { id } = req.params;
+  const files = req.files;
+  const hasFiles = files?.media?.[0] || files?.thumbnail?.[0];
+  if (Object.keys(value).length === 0 && !hasFiles) {
+    throw new ApiError(
+      400,
+      "At least one field (name, description, achievement, achieveIn) or file (media, thumbnail) is required",
+    );
+  }
 
-    const updatedStory = await successStoryService.updateSuccessStory(id, value, files);
+  const updatedStory = await successStoryService.updateSuccessStory(
+    id,
+    value,
+    files,
+  );
 
-    return res
-        .status(200)
-        .json(ApiResponse.success(updatedStory, "Success story updated successfully"));
+  return res
+    .status(200)
+    .json(
+      ApiResponse.success(updatedStory, "Success story updated successfully"),
+    );
 });
 
 /**
@@ -99,24 +131,28 @@ export const updateSuccessStory = asyncHandler(async (req, res) => {
  * PATCH /admin/success-stories/:id/status
  */
 export const updateStoryStatus = asyncHandler(async (req, res) => {
-    const { error, value } = successStoryValidator.updateStatus.validate(req.body);
+  const { error, value } = successStoryValidator.updateStatus.validate(
+    req.body,
+  );
 
-    if (error) {
-        throw new ApiError(
-            400,
-            "Validation Error",
-            error.details.map((x) => x.message)
-        );
-    }
+  if (error) {
+    throw new ApiError(
+      400,
+      "Validation Error",
+      error.details.map((x) => x.message),
+    );
+  }
 
-    const { id } = req.params;
-    const { status } = value;
+  const { id } = req.params;
+  const { status } = value;
 
-    const updatedStory = await successStoryService.updateStoryStatus(id, status);
+  const updatedStory = await successStoryService.updateStoryStatus(id, status);
 
-    return res
-        .status(200)
-        .json(ApiResponse.success(updatedStory, "Story status updated successfully"));
+  return res
+    .status(200)
+    .json(
+      ApiResponse.success(updatedStory, "Story status updated successfully"),
+    );
 });
 
 /**
@@ -124,13 +160,13 @@ export const updateStoryStatus = asyncHandler(async (req, res) => {
  * DELETE /admin/success-stories/:id
  */
 export const deleteSuccessStory = asyncHandler(async (req, res) => {
-    const { id } = req.params;
+  const { id } = req.params;
 
-    await successStoryService.deleteSuccessStory(id);
+  await successStoryService.deleteSuccessStory(id);
 
-    return res
-        .status(200)
-        .json(ApiResponse.success(null, "Success story deleted successfully"));
+  return res
+    .status(200)
+    .json(ApiResponse.success(null, "Success story deleted successfully"));
 });
 
 // ==================== STUDENT CONTROLLERS ====================
@@ -140,13 +176,15 @@ export const deleteSuccessStory = asyncHandler(async (req, res) => {
  * GET /success-stories/featured
  */
 export const getFeaturedStories = asyncHandler(async (req, res) => {
-    const limit = parseInt(req.query.limit) || 3;
+  const limit = parseInt(req.query.limit) || 3;
 
-    const stories = await successStoryService.getFeaturedStories(limit);
+  const stories = await successStoryService.getFeaturedStories(limit);
 
-    return res
-        .status(200)
-        .json(ApiResponse.success(stories, "Featured stories fetched successfully"));
+  return res
+    .status(200)
+    .json(
+      ApiResponse.success(stories, "Featured stories fetched successfully"),
+    );
 });
 
 /**
@@ -154,11 +192,11 @@ export const getFeaturedStories = asyncHandler(async (req, res) => {
  * GET /success-stories
  */
 export const getAllStoriesStudent = asyncHandler(async (req, res) => {
-    const stories = await successStoryService.getAllPublishedStories({});
+  const stories = await successStoryService.getAllPublishedStories({});
 
-    return res
-        .status(200)
-        .json(ApiResponse.success(stories, "Success stories fetched successfully"));
+  return res
+    .status(200)
+    .json(ApiResponse.success(stories, "Success stories fetched successfully"));
 });
 
 /**
@@ -166,25 +204,25 @@ export const getAllStoriesStudent = asyncHandler(async (req, res) => {
  * GET /success-stories/:id
  */
 export const getStoryDetailStudent = asyncHandler(async (req, res) => {
-    const { id } = req.params;
+  const { id } = req.params;
 
-    const story = await successStoryService.getPublishedStoryById(id);
+  const story = await successStoryService.getPublishedStoryById(id);
 
-    return res
-        .status(200)
-        .json(ApiResponse.success(story, "Success story fetched successfully"));
+  return res
+    .status(200)
+    .json(ApiResponse.success(story, "Success story fetched successfully"));
 });
 
 export default {
-    // Admin
-    addSuccessStory,
-    getAllStoriesAdmin,
-    getStoryByIdAdmin,
-    updateSuccessStory,
-    updateStoryStatus,
-    deleteSuccessStory,
-    // Student
-    getFeaturedStories,
-    getAllStoriesStudent,
-    getStoryDetailStudent,
+  // Admin
+  addSuccessStory,
+  getAllStoriesAdmin,
+  getStoryByIdAdmin,
+  updateSuccessStory,
+  updateStoryStatus,
+  deleteSuccessStory,
+  // Student
+  getFeaturedStories,
+  getAllStoriesStudent,
+  getStoryDetailStudent,
 };

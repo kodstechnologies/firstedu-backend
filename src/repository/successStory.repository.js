@@ -10,19 +10,38 @@ const createSuccessStory = async (data) => {
 };
 
 /**
- * Find success stories with optional filters
+ * Find success stories with optional filters, pagination and search
  */
-const findSuccessStories = async (filters = {}) => {
+const findSuccessStories = async (filters = {}, page = 1, limit = 10) => {
   const query = {};
-
+  const { search } = filters;
   if (filters.status) {
     query.status = filters.status;
   }
+  // Search by name(pressname)
+  if (search) {
+    query.$or = [
+      { name: { $regex: filters.search, $options: "i" } },
+      { achievement: { $regex: filters.search, $options: "i" } },
+      { description: { $regex: search, $options: "i" } },
+      { status: { $regex: search, $options: "i" } },
+    ];
+  }
 
-  return await SuccessStory.find(query)
-    .sort({ createdAt: -1 })
-    .populate("createdBy", "name email")
-    .lean();
+
+  const skip = (page - 1) * limit;
+
+  const [stories, total] = await Promise.all([
+    SuccessStory.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .populate("createdBy", "name email")
+      .lean(),
+    SuccessStory.countDocuments(query),
+  ]);
+
+  return { stories, total };
 };
 
 /**
@@ -32,9 +51,8 @@ const findById = async (id) => {
   return await SuccessStory.findById(id).populate("createdBy", "name email");
 };
 
-/**
- * Update success story by ID
- */
+//  Update success story by ID
+ 
 const updateById = async (id, updateData) => {
   return await SuccessStory.findByIdAndUpdate(id, updateData, {
     new: true,

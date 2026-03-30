@@ -10,18 +10,34 @@ const createBlogRequest = async (data) => {
 };
 
 /**
- * Find blog requests with optional filters
+ * Find blog requests with optional filters, pagination and search
  */
-const findBlogRequests = async (filters = {}) => {
+const findBlogRequests = async (filters = {}, page = 1, limit = 10) => {
     const query = {};
 
     if (filters.status) {
         query.status = filters.status;
     }
 
-    return await BlogRequest.find(query)
-        .sort({ createdAt: -1 })
-        .lean();
+    if (filters.search) {
+        query.$or = [
+            { title: { $regex: filters.search, $options: "i" } },
+            { name: { $regex: filters.search, $options: "i" } },
+        ];
+    }
+
+    const skip = (page - 1) * limit;
+
+    const [blogRequests, total] = await Promise.all([
+        BlogRequest.find(query)
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(limit)
+            .lean(),
+        BlogRequest.countDocuments(query),
+    ]);
+
+    return { blogRequests, total };
 };
 
 /**

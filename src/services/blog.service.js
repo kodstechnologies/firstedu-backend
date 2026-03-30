@@ -28,8 +28,8 @@ const createBlog = async (data, adminId, file) => {
 /**
  * Get all published blogs (approved + admin-added) for users
  */
-const getAllBlogs = async (filters = {}) => {
-  return await blogRepository.findAll(filters);
+const getAllBlogs = async (filters, page, limit) => {
+  return await blogRepository.findAll(filters, page, limit);
 };
 
 /**
