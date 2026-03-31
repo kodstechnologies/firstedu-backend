@@ -9,6 +9,7 @@ const MODULE_TO_ITEM_TYPE = {
   Tournament: "tournament",
   Workshop: "workshop",
   Ecommerce: "ecommerce",
+  CompetitionCategory: "competitionCategory",
 };
 
 /**
@@ -109,10 +110,12 @@ export const attachOfferToItem = async (item, moduleType, priceField = "price") 
   itemObj.originalPrice = offerDetails.originalPrice;
   itemObj.discountedPrice = offerDetails.discountedPrice;
   itemObj.discountAmount = offerDetails.discountAmount;
+  itemObj.effectivePrice = offerDetails.discountedPrice;
   if (!offerDetails.appliedOffer) {
     delete itemObj.appliedOffer;
     delete itemObj.discountAmount;
     itemObj.discountedPrice = itemObj.originalPrice;
+    itemObj.effectivePrice = itemObj.originalPrice;
   }
   return itemObj;
 };
@@ -128,6 +131,7 @@ export const attachOfferToList = async (items, moduleType, priceField = "price")
       const p = obj[priceField] != null ? obj[priceField] : 0;
       obj.originalPrice = Number(p);
       obj.discountedPrice = Number(p);
+      obj.effectivePrice = Number(p);
       return obj;
     });
   }
@@ -151,6 +155,7 @@ export const attachOfferToList = async (items, moduleType, priceField = "price")
     obj.appliedOffer = appliedOffer;
     obj.originalPrice = originalPrice;
     obj.discountedPrice = discountedPrice;
+    obj.effectivePrice = discountedPrice;
     if (appliedOffer) obj.discountAmount = discountAmount;
     return obj;
   });

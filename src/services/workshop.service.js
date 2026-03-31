@@ -58,7 +58,7 @@ export const createWorkshop = async (data, adminId, file) => {
       file.buffer,
       file.originalname,
       WORKSHOPS_IMAGE_FOLDER,
-      file.mimetype
+      file.mimetype,
     );
   }
 
@@ -88,7 +88,10 @@ const buildStatusQuery = (status) => {
   const now = new Date();
   switch (status) {
     case "close":
-      return { registrationStartTime: { $gt: now } };
+      return {
+        registrationStartTime: { $gt: now },
+        startTime: { $gt: now },
+      };
     case "open":
       return {
         $and: [
@@ -114,7 +117,15 @@ const buildStatusQuery = (status) => {
 };
 
 export const getWorkshops = async (options = {}) => {
-  const { page = 1, limit = 10, search, isPublished, eventType, teacherId, status } = options;
+  const {
+    page = 1,
+    limit = 10,
+    search,
+    isPublished,
+    eventType,
+    teacherId,
+    status,
+  } = options;
 
   const query = {};
   if (search) {
@@ -156,7 +167,11 @@ export const getWorkshops = async (options = {}) => {
     workshopRepository.count(query),
   ]);
 
-  const workshopsWithOffer = await attachOfferToList(workshops, "Workshop", "price");
+  const workshopsWithOffer = await attachOfferToList(
+    workshops,
+    "Workshop",
+    "price",
+  );
 
   return {
     workshops: workshopsWithOffer,
@@ -195,7 +210,7 @@ export const updateWorkshop = async (id, updateData, file) => {
       file.buffer,
       file.originalname,
       WORKSHOPS_IMAGE_FOLDER,
-      file.mimetype
+      file.mimetype,
     );
   }
 
@@ -237,4 +252,3 @@ export default {
   updateWorkshop,
   deleteWorkshop,
 };
-

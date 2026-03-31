@@ -163,8 +163,12 @@ import {
 } from "../controllers/certificate.controller.js";
 import {
   getStudentCompetitionSectors,
-  initiateTestPayment as initiateCompetitionTestPayment,
-  purchaseTest as purchaseCompetitionTest,
+  getCompetitions,
+  getSingleCompetition,
+  // initiateTestPayment as initiateCompetitionTestPayment,
+  // purchaseTest as purchaseCompetitionTest,
+  initiateCategoryPayment,
+  purchaseCategory,
 } from "../controllers/studentCompetition.controller.js";
 import {
   getNeedToImprove,
@@ -172,10 +176,6 @@ import {
 } from "../controllers/needToImprove.controller.js";
 import { verifyJWT } from "../middleware/auth.middleware.js";
 import { uploadImage, uploadPDF } from "../utils/multerConfig.js";
-import {
-  getCompetitions,
-  getSingleCompetition,
-} from "../controllers/competition.controller.js";
 import { getStudentDashboardStats } from "../controllers/studentDashboard.controller.js";
 
 import {
@@ -548,19 +548,30 @@ router.get("/success-stories/:id", verifyJWT, getStoryDetailStudent);
 router.get("/competitions", getStudentCompetitionSectors);
 router.get("/competitions/single/:id", verifyJWT, getSingleCompetition);
 router.get("/competitions/:id", verifyJWT, getCompetitions);
-// router.get("/competitions/:idOrSlug", getCompetitionByIdOrSlug);
 
-// Competition Test Purchases
+// Competition (Category Bundle) Purchases
 router.post(
-  "/competitions/tests/:testId/initiate-payment",
+  "/competitions/category/:categoryId/initiate-payment",
   verifyJWT,
-  initiateCompetitionTestPayment,
+  initiateCategoryPayment,
 );
 router.post(
-  "/competitions/tests/:testId/purchase",
+  "/competitions/category/:categoryId/purchase",
   verifyJWT,
-  purchaseCompetitionTest,
+  purchaseCategory,
 );
+
+// Individual Competition Test Purchases (Backward compatibility)
+// router.post(
+//   "/competitions/tests/:testId/initiate-payment",
+//   verifyJWT,
+//   initiateCompetitionTestPayment,
+// );
+// router.post(
+//   "/competitions/tests/:testId/purchase",
+//   verifyJWT,
+//   purchaseCompetitionTest,
+// );
 
 // ==================== NEED TO IMPROVE ====================
 router.get("/need-to-improve", verifyJWT, getNeedToImprove);
