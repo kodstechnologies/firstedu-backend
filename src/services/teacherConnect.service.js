@@ -3,6 +3,7 @@ import teacherRepository from "../repository/teacher.repository.js";
 import teacherSessionRepository from "../repository/teacherSession.repository.js";
 import teacherRatingRepository from "../repository/teacherRating.repository.js";
 import walletService from "./wallet.service.js";
+import * as teacherWalletLedger from "./teacherWalletLedger.service.js";
 import Teacher from "../models/Teacher.js";
 import { rejectChatSession } from "./teacherChat.service.js";
 
@@ -19,17 +20,31 @@ const omitContactFromTeacher = (teacher) => {
  * Returns all approved teachers (live or not). Each teacher includes isOnline and averageRating.
  * Phone and email are excluded from response.
  */
-export const getAvailableTeachers = async (subject, page = 1, limit = 10, search) => {
-  const filter = {
+export const getAvailableTeachers = async (
+  subject,
+  page = 1,
+  limit = 10,
+  search,
+  presence
+) => {
+  const baseFilter = {
     status: "approved",
   };
 
   if (subject) {
-    filter.skills = { $in: [new RegExp(subject, "i")] };
+    baseFilter.skills = { $in: [new RegExp(subject, "i")] };
   }
 
   if (search) {
-    filter.name = { $regex: search, $options: "i" };
+    baseFilter.name = { $regex: search, $options: "i" };
+  }
+
+  const filter = { ...baseFilter };
+  const p = (presence || "").toString().trim().toLowerCase();
+  if (p === "online") {
+    filter.isLive = true;
+  } else if (p === "offline") {
+    filter.isLive = false;
   }
 
   const options = {
@@ -41,7 +56,7 @@ export const getAvailableTeachers = async (subject, page = 1, limit = 10, search
 
   const [result, totalOnline] = await Promise.all([
     teacherRepository.findAll(filter, options),
-    Teacher.countDocuments({ ...filter, isLive: true }),
+    Teacher.countDocuments({ ...baseFilter, isLive: true }),
   ]);
 
   const teachers = result.teachers.map((teacher) => ({
@@ -266,6 +281,26 @@ export const endCall = async (sessionId, durationMinutes, recordingUrl = null, r
     recordingUrl,
     recordingSid,
   });
+
+  const teacherId = session.teacher._id || session.teacher;
+  if (totalAmount > 0) {
+    await walletService.addMonetaryBalance(
+      teacherId,
+      totalAmount,
+      `voice_session_${sessionId}`,
+      "Teacher"
+    );
+    const bal = await walletService.getWalletBalance(teacherId, "Teacher");
+    await teacherWalletLedger
+      .recordSessionEarning({
+        teacherId,
+        amount: totalAmount,
+        balanceAfter: bal.monetaryBalance,
+        sessionId: updatedSession._id,
+        sessionKind: "voice",
+      })
+      .catch((e) => console.error("teacherWalletLedger recordSessionEarning:", e));
+  }
 
   return updatedSession;
 };

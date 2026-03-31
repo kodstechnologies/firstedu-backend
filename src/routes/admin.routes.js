@@ -243,6 +243,13 @@ import {
   approveQnA,
 } from "../controllers/qna.controller.js";
 import { verifyJWT } from "../middleware/auth.middleware.js";
+import { verifyAdmin } from "../middleware/admin.middleware.js";
+import {
+  getAdminWithdrawalList,
+  getAdminWithdrawalById,
+  postAdminApproveWithdrawal,
+  postAdminRejectWithdrawal,
+} from "../controllers/teacherWithdrawal.controller.js";
 import { uploadCourseMaterial, uploadImage, uploadPDF, uploadSuccessStory } from '../utils/multerConfig.js';
 
 const router = Router();
@@ -321,6 +328,22 @@ router.post("/teachers/:id/send-credentials", verifyJWT, sendLoginCredentials);
 router.put("/teachers/:id/rate", verifyJWT, updatePerMinuteRate);
 router.put("/teachers/:id", verifyJWT, uploadImage.single("profileImage"), updateTeacher);
 router.delete("/teachers/:id", verifyJWT, deleteTeacher);
+
+// Teacher wallet withdrawals (pending requests; approve/reject notifies teacher via FCM)
+router.get("/teacher-withdrawals", verifyJWT, verifyAdmin, getAdminWithdrawalList);
+router.get("/teacher-withdrawals/:id", verifyJWT, verifyAdmin, getAdminWithdrawalById);
+router.post(
+  "/teacher-withdrawals/:id/approve",
+  verifyJWT,
+  verifyAdmin,
+  postAdminApproveWithdrawal
+);
+router.post(
+  "/teacher-withdrawals/:id/reject",
+  verifyJWT,
+  verifyAdmin,
+  postAdminRejectWithdrawal
+);
 
 // Student Management & Proctoring
 router.get("/students", verifyJWT, getStudents);

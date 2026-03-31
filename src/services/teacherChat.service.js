@@ -2,6 +2,7 @@ import { ApiError } from "../utils/ApiError.js";
 import teacherRepository from "../repository/teacher.repository.js";
 import teacherSessionRepository from "../repository/teacherSession.repository.js";
 import walletService from "./wallet.service.js";
+import * as teacherWalletLedger from "./teacherWalletLedger.service.js";
 import studentSessionRepository from "../repository/studentSession.repository.js";
 import { sendNotificationToDevice } from "./fcm.service.js";
 import * as notificationService from "./notification.service.js";
@@ -266,11 +267,34 @@ export async function finalizeChatSession(
     return session;
   }
 
-  return await teacherSessionRepository.updateById(sessionId, {
+  const updated = await teacherSessionRepository.updateById(sessionId, {
     status: "completed",
     callEndTime: new Date(),
     sessionEndReason,
   });
+
+  const totalAmount = updated?.totalAmount ?? session.totalAmount ?? 0;
+  const teacherId = session.teacher._id || session.teacher;
+  if (totalAmount > 0) {
+    await walletService.addMonetaryBalance(
+      teacherId,
+      totalAmount,
+      `chat_session_${sessionId}`,
+      "Teacher"
+    );
+    const bal = await walletService.getWalletBalance(teacherId, "Teacher");
+    await teacherWalletLedger
+      .recordSessionEarning({
+        teacherId,
+        amount: totalAmount,
+        balanceAfter: bal.monetaryBalance,
+        sessionId: updated._id,
+        sessionKind: "chat",
+      })
+      .catch((e) => console.error("teacherWalletLedger recordSessionEarning:", e));
+  }
+
+  return updated;
 }
 
 export const chatConstants = {

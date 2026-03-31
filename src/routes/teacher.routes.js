@@ -30,6 +30,13 @@ import {
   markTeacherNotificationAsRead,
   markAllTeacherNotificationsAsRead,
 } from "../controllers/notification.controller.js";
+import {
+  getTeacherWallet,
+  putTeacherBankDetails,
+  getTeacherBankDetails,
+  postTeacherWithdrawal,
+  getTeacherWalletTransactions
+} from "../controllers/teacherWithdrawal.controller.js";
 
 const router = Router();
 
@@ -61,6 +68,13 @@ router.put(
   markTeacherNotificationAsRead
 );
 router.put("/notifications/read-all", verifyJWT, markAllTeacherNotificationsAsRead);
+
+// Wallet & withdrawals (Teacher wallet userType: Teacher)
+router.get("/wallet", verifyJWT, getTeacherWallet);
+router.get("/wallet/transactions", verifyJWT, getTeacherWalletTransactions);
+router.put("/wallet/bank-details", verifyJWT, putTeacherBankDetails);
+router.get("/wallet/bank-details", verifyJWT, getTeacherBankDetails);
+router.post("/wallet/withdrawals", verifyJWT, postTeacherWithdrawal);
 
 // Call Requests
 router.get("/pending-requests", verifyJWT, getPendingRequests);
