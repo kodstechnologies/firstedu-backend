@@ -75,8 +75,8 @@ const createSuccessStory = async (data, files, adminId) => {
 /**
  * Get all success stories (Admin - includes drafts)
  */
-const getAllStories = async (filters = {}, options = {}) => {
-  return await successStoryRepository.findSuccessStories(filters, options);
+const getAllStories = async (filters, page, limit) => {
+  return await successStoryRepository.findSuccessStories(filters, page, limit);
 };
 
 /**

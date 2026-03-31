@@ -10,7 +10,9 @@ function normalizeBody(body) {
     try {
       b.keyTakeaways = JSON.parse(b.keyTakeaways);
     } catch {
-      b.keyTakeaways = b.keyTakeaways ? b.keyTakeaways.split(",").map((s) => s.trim()) : [];
+      b.keyTakeaways = b.keyTakeaways
+        ? b.keyTakeaways.split(",").map((s) => s.trim())
+        : [];
     }
   }
   return b;
@@ -27,7 +29,7 @@ export const createBlog = asyncHandler(async (req, res) => {
     throw new ApiError(
       400,
       "Validation Error",
-      error.details.map((x) => x.message)
+      error.details.map((x) => x.message),
     );
   }
   const blog = await blogService.createBlog(value, req.user._id, req.file);
@@ -37,47 +39,36 @@ export const createBlog = asyncHandler(async (req, res) => {
 });
 
 /**
- * List blogs with optional filters, search, sort, and pagination.
- * GET /user/blogs (student) · GET /admin/blogs (admin)
- *
- * Query: subject, source, title | pressname, search, page, limit, sortBy, sortOrder
+ * Get all approved blogs (students/users - approved requests + admin-added)
+ * GET /blogs?page=1&limit=10&search=test&subject=Math
  */
 export const getAllBlogs = asyncHandler(async (req, res) => {
-  const {
-    subject,
-    source,
-    title,
-    pressname,
-    search,
-    page,
-    limit,
-    sortBy,
-    sortOrder,
-  } = req.query;
+  const subject = req.query.subject;
+  const source = req.query.source;
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const search = req.query.search;
+
   const filters = {};
   if (subject) filters.subject = subject;
   if (source) filters.source = source;
-  // title wins when both title and pressname are sent (both map to title regex filter)
-  const titleSearch =
-    title != null && String(title).trim() !== ""
-      ? String(title).trim()
-      : pressname != null && String(pressname).trim() !== ""
-        ? String(pressname).trim()
-        : "";
-  if (titleSearch) filters.title = titleSearch;
-  const result = await blogService.getAllBlogs(filters, {
-    search,
-    page,
-    limit,
-    sortBy,
-    sortOrder,
-  });
+  if (search) filters.search = search;
+
+  const { blogs, total } = await blogService.getAllBlogs(filters, page, limit);
+
   return res.status(200).json(
     ApiResponse.success(
-      result.list,
+      blogs,
+     
       "Blogs fetched successfully",
-      result.pagination
-    )
+       {
+        totalResults: total,
+        totalPages: Math.ceil(total / limit),
+        currentPage: page,
+        limit: limit,
+      }
+     
+    ),
   );
 });
 
@@ -104,11 +95,14 @@ export const updateBlog = asyncHandler(async (req, res) => {
     throw new ApiError(
       400,
       "Validation Error",
-      error.details.map((x) => x.message)
+      error.details.map((x) => x.message),
     );
   }
   if (Object.keys(value).length === 0 && !req.file) {
-    throw new ApiError(400, "At least one field (title, description, subject, keyTakeaways) or image is required");
+    throw new ApiError(
+      400,
+      "At least one field (title, description, subject, keyTakeaways) or image is required",
+    );
   }
   const { id } = req.params;
   const blog = await blogService.updateBlog(id, value, req.file);

@@ -13,46 +13,34 @@ const createBlogRequest = async (data) => {
 };
 
 /**
- * Find blog requests with optional filters
+ * Find blog requests with optional filters, pagination and search
  */
-const findBlogRequests = async (filters = {}, options = {}) => {
-    const { page = 1, limit = 10, search } = options;
+const findBlogRequests = async (filters = {}, page = 1, limit = 10) => {
     const query = {};
 
     if (filters.status) {
         query.status = filters.status;
     }
 
-    const searchText = typeof search === "string" ? search.trim() : "";
-    if (searchText) {
-        const regex = { $regex: escapeRegex(searchText), $options: "i" };
+    if (filters.search) {
         query.$or = [
-            { name: regex },
-            { email: regex },
-            { title: regex },
-            { description: regex },
-            { subject: regex },
+            { title: { $regex: filters.search, $options: "i" } },
+            { name: { $regex: filters.search, $options: "i" } },
         ];
     }
 
-    const pageNum = Math.max(1, parseInt(page, 10) || 1);
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 10));
-    const skip = (pageNum - 1) * limitNum;
+    const skip = (page - 1) * limit;
 
-    const [list, total] = await Promise.all([
-        BlogRequest.find(query).sort({ createdAt: -1 }).skip(skip).limit(limitNum).lean(),
+    const [blogRequests, total] = await Promise.all([
+        BlogRequest.find(query)
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(limit)
+            .lean(),
         BlogRequest.countDocuments(query),
     ]);
 
-    return {
-        list,
-        pagination: {
-            page: pageNum,
-            limit: limitNum,
-            total,
-            pages: Math.ceil(total / limitNum) || 1,
-        },
-    };
+    return { blogRequests, total };
 };
 
 /**

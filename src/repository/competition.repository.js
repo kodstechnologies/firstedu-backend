@@ -75,10 +75,6 @@ const findCompetitionWithTestsById = async (id, userId) => {
 
 const findSectorById = async (id, populateOptions = {}) => {
   try {
-  
-    // return await Competition.find({competitionSectorId:id})
-    // .populate("tests")
-    // .populate("competitionSectorId")
     return await CompetitionSector.findById(id)
     .populate({path:"competitions",
       populate:{
@@ -86,8 +82,7 @@ const findSectorById = async (id, populateOptions = {}) => {
         populate: { path: "testId" }
       }
     })
-    
-    // .select('title description  competitions')
+
   } catch (error) {
     throw new ApiError(500, "Failed to fetch competition sector", error.message);
   }

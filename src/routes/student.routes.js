@@ -135,12 +135,6 @@ import { submitSupport } from "../controllers/contactSupport.controller.js";
 import { submitBlogRequest } from "../controllers/blogRequest.controller.js";
 import { getAllBlogs, getBlogById } from "../controllers/blog.controller.js";
 import {
-  getAllQnAUser,
-  getQnAByIdUser,
-  submitQnARequest,
-  getMyQnARequests,
-} from "../controllers/qna.controller.js";
-import {
   getAllPressAnnouncementsUser,
   getPressAnnouncementByIdUser,
 } from "../controllers/pressAnnouncement.controller.js";
@@ -184,6 +178,13 @@ import {
 } from "../controllers/competition.controller.js";
 import { getStudentDashboardStats } from "../controllers/studentDashboard.controller.js";
 
+import {
+  createQnA,
+  getAllQnAs,
+  getQnAById,
+  selfQnAs,
+} from "../controllers/qna.controller.js";
+import { verify } from "crypto";
 const router = Router();
 
 // Student Authentication Routes
@@ -484,12 +485,11 @@ router.post(
 router.get("/blogs", verifyJWT, getAllBlogs);
 router.get("/blogs/:id", verifyJWT, getBlogById);
 
-// Q&A – view admin-created Q&A and submit requests
-router.get("/qna", verifyJWT, getAllQnAUser);
-router.get("/qna/:id", verifyJWT, getQnAByIdUser);
-router.post("/qna-request", verifyJWT, submitQnARequest);
-router.get("/qna-requests", verifyJWT, getMyQnARequests);
 
+router.post("/qna-request", verifyJWT, createQnA);
+router.get("/qna", verifyJWT, getAllQnAs);
+router.get("/qna/:id", verifyJWT, getQnAById);
+router.get('/qna-request',verifyJWT,selfQnAs)
 // Press announcements (read only)
 router.get("/press-announcements", verifyJWT, getAllPressAnnouncementsUser);
 router.get("/press-announcements/:id", verifyJWT, getPressAnnouncementByIdUser);

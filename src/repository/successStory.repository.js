@@ -13,50 +13,38 @@ const createSuccessStory = async (data) => {
 };
 
 /**
- * Find success stories with optional filters
+ * Find success stories with optional filters, pagination and search
  */
-const findSuccessStories = async (filters = {}, options = {}) => {
-  const { page = 1, limit = 10, search } = options;
+const findSuccessStories = async (filters = {}, page = 1, limit = 10) => {
   const query = {};
-
+  const { search } = filters;
   if (filters.status) {
     query.status = filters.status;
   }
-
-  const searchText = typeof search === "string" ? search.trim() : "";
-  if (searchText) {
-    const regex = { $regex: escapeRegex(searchText), $options: "i" };
+  // Search by name(pressname)
+  if (search) {
     query.$or = [
-      { name: regex },
-      { description: regex },
-      { achievement: regex },
-      { achieveIn: regex },
+      { name: { $regex: filters.search, $options: "i" } },
+      { achievement: { $regex: filters.search, $options: "i" } },
+      { description: { $regex: search, $options: "i" } },
+      { status: { $regex: search, $options: "i" } },
     ];
   }
 
-  const pageNum = Math.max(1, parseInt(page, 10) || 1);
-  const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 10));
-  const skip = (pageNum - 1) * limitNum;
 
-  const [list, total] = await Promise.all([
+  const skip = (page - 1) * limit;
+
+  const [stories, total] = await Promise.all([
     SuccessStory.find(query)
       .sort({ createdAt: -1 })
-      .populate("createdBy", "name email")
       .skip(skip)
-      .limit(limitNum)
+      .limit(limit)
+      .populate("createdBy", "name email")
       .lean(),
     SuccessStory.countDocuments(query),
   ]);
 
-  return {
-    list,
-    pagination: {
-      page: pageNum,
-      limit: limitNum,
-      total,
-      pages: Math.ceil(total / limitNum) || 1,
-    },
-  };
+  return { stories, total };
 };
 
 /**
@@ -66,9 +54,8 @@ const findById = async (id) => {
   return await SuccessStory.findById(id).populate("createdBy", "name email");
 };
 
-/**
- * Update success story by ID
- */
+//  Update success story by ID
+ 
 const updateById = async (id, updateData) => {
   return await SuccessStory.findByIdAndUpdate(id, updateData, {
     new: true,

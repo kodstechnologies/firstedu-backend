@@ -23,77 +23,40 @@ const create = async (data) => {
 };
 
 /**
- * List blogs with filters, optional full-text-style search, sorting, and pagination.
- * Used by GET /admin/blogs and GET /user/blogs (student).
+ * Find all published blogs with optional filters, pagination and search
  */
-const findAll = async (filters = {}, options = {}) => {
-  const {
-    page = 1,
-    limit = 10,
-    sortBy = "createdAt",
-    sortOrder = "desc",
-    search,
-  } = options;
-
-  const andConditions = [];
+const findAll = async (filters = {}, page = 1, limit = 10) => {
+  const query = {};
 
   if (filters.subject) {
     andConditions.push({
       subject: new RegExp(escapeRegex(filters.subject), "i"),
     });
   }
+
   if (filters.source) {
     andConditions.push({ source: filters.source });
   }
-  if (filters.title) {
-    andConditions.push({
-      title: new RegExp(escapeRegex(filters.title), "i"),
-    });
+
+  if (filters.search) {
+    query.$or = [
+      { title: { $regex: filters.search, $options: "i" } },
+      { authorName: { $regex: filters.search, $options: "i" } },
+    ];
   }
 
-  const searchTrimmed =
-    typeof search === "string" ? search.trim() : String(search || "").trim();
-  if (searchTrimmed) {
-    const safe = escapeRegex(searchTrimmed);
-    andConditions.push({
-      $or: [
-        { title: { $regex: safe, $options: "i" } },
-        { description: { $regex: safe, $options: "i" } },
-        { subject: { $regex: safe, $options: "i" } },
-        { authorName: { $regex: safe, $options: "i" } },
-      ],
-    });
-  }
+  const skip = (page - 1) * limit;
 
-  const query =
-    andConditions.length === 0
-      ? {}
-      : andConditions.length === 1
-        ? andConditions[0]
-        : { $and: andConditions };
-
-  const pageNum = Math.max(1, parseInt(page, 10) || 1);
-  const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 10));
-  const skip = (pageNum - 1) * limitNum;
-
-  const sortField = ALLOWED_SORT_FIELDS.has(sortBy) ? sortBy : "createdAt";
-  const sortDir = sortOrder === "asc" ? 1 : -1;
-  const sort = { [sortField]: sortDir };
-
-  const [list, total] = await Promise.all([
-    Blog.find(query).sort(sort).skip(skip).limit(limitNum).lean(),
+  const [blogs, total] = await Promise.all([
+    Blog.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean(),
     Blog.countDocuments(query),
   ]);
 
-  return {
-    list,
-    pagination: {
-      page: pageNum,
-      limit: limitNum,
-      total,
-      pages: Math.ceil(total / limitNum) || 1,
-    },
-  };
+  return { blogs, total };
 };
 
 /**
