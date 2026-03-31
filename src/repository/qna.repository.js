@@ -1,4 +1,4 @@
-import qna from "../models/qna.js";
+import qna from "../models/QnA.js";
 import { ApiError } from "../utils/ApiError.js";
 
 const create = async (Data) => {
