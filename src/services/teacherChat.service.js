@@ -115,6 +115,29 @@ export async function initiateChatRequest(studentId, teacherId, subject) {
   return session;
 }
 
+/**
+ * Student disconnects or leaves before the teacher accepts — clear pending so a new request is allowed.
+ */
+export async function cancelPendingChatRequestByStudent(studentId, sessionId) {
+  const session = await teacherSessionRepository.findById(sessionId);
+  if (!session || session.sessionKind !== "chat") {
+    return null;
+  }
+  if (session.student._id.toString() !== studentId.toString()) {
+    throw new ApiError(403, "Unauthorized to cancel this chat request");
+  }
+  if (session.status !== "pending") {
+    return null;
+  }
+  return await teacherSessionRepository.updateById(sessionId, {
+    status: "cancelled",
+    rejectedAt: new Date(),
+    rejectionReason: "Student left before the chat started",
+    callEndTime: new Date(),
+    sessionEndReason: "student_withdrew_before_accept",
+  });
+}
+
 export async function acceptChatSession(teacherId, sessionId) {
   const session = await teacherSessionRepository.findById(sessionId);
   if (!session) {
@@ -257,6 +280,7 @@ export const chatConstants = {
 
 export default {
   initiateChatRequest,
+  cancelPendingChatRequestByStudent,
   acceptChatSession,
   rejectChatSession,
   assertParticipant,

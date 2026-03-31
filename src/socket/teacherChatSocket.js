@@ -157,6 +157,7 @@ export const setupTeacherChatSocket = (io) => {
       }
       try {
         const session = await teacherChatService.initiateChatRequest(userId, teacherId, subject);
+        socket.data.pendingChatSessionId = session._id.toString();
         socket.emit("chat_request_sent", { session });
 
         await teacherChatService.notifyTeacherDevice(
@@ -276,6 +277,9 @@ export const setupTeacherChatSocket = (io) => {
         const sid = session._id.toString();
         socket.join(`session:${sid}`);
         socket.data.chatSessionId = sid;
+        if (user.role === "student") {
+          delete socket.data.pendingChatSessionId;
+        }
         socket.emit("joined_chat_session", { sessionId: sid, session });
       } catch (err) {
         socket.emit("chat_error", {
@@ -338,6 +342,58 @@ export const setupTeacherChatSocket = (io) => {
       }
     };
 
+    const withdrawStudentPendingChat = async () => {
+      if (user.role !== "student") return null;
+      const pendingId = socket.data.pendingChatSessionId;
+      if (!pendingId) return null;
+      delete socket.data.pendingChatSessionId;
+      try {
+        const sessionDoc = await teacherChatService.cancelPendingChatRequestByStudent(
+          userId,
+          pendingId
+        );
+        if (sessionDoc) {
+          const tid = sessionDoc.teacher._id.toString();
+          ns.to(`teacher:${tid}`).emit("chat_request_withdrawn", {
+            sessionId: sessionDoc._id.toString(),
+            timestamp: new Date(),
+          });
+        }
+        return sessionDoc;
+      } catch (err) {
+        console.error("Withdraw pending chat error:", err);
+        return null;
+      }
+    };
+
+    socket.on("cancel_chat_request", async (payload = {}) => {
+      if (user.role !== "student") {
+        socket.emit("chat_error", { message: "Only students can cancel a chat request" });
+        return;
+      }
+      const requestedId = payload.sessionId || socket.data.pendingChatSessionId;
+      if (!requestedId) {
+        socket.emit("chat_error", { message: "No pending chat request to cancel" });
+        return;
+      }
+      if (
+        socket.data.pendingChatSessionId &&
+        socket.data.pendingChatSessionId !== String(requestedId)
+      ) {
+        socket.emit("chat_error", { message: "sessionId does not match your pending request" });
+        return;
+      }
+      socket.data.pendingChatSessionId = String(requestedId);
+      const withdrawn = await withdrawStudentPendingChat();
+      if (withdrawn) {
+        socket.emit("chat_request_cancelled", { sessionId: withdrawn._id.toString() });
+      } else {
+        socket.emit("chat_error", {
+          message: "No pending chat request to cancel or it was already handled",
+        });
+      }
+    });
+
     socket.on("end_chat", async (payload = {}) => {
       const { sessionId } = payload;
       if (!sessionId) {
@@ -372,6 +428,11 @@ export const setupTeacherChatSocket = (io) => {
     });
 
     socket.on("disconnect", async () => {
+      try {
+        await withdrawStudentPendingChat();
+      } catch (err) {
+        console.error("Teacher chat pending withdraw on disconnect:", err);
+      }
       const sid = socket.data.chatSessionId;
       if (!sid) return;
       try {
