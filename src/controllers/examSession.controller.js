@@ -8,9 +8,10 @@ import examSessionService from "../services/examSession.service.js";
  */
 export const startExam = asyncHandler(async (req, res) => {
   const { testId } = req.params;
+  const { categoryId } = req.body || {};
   const studentId = req.user._id;
 
-  const examSession = await examSessionService.startExamSession(testId, studentId);
+  const examSession = await examSessionService.startExamSession(testId, studentId, { categoryId });
 
   return res.status(201).json(
     ApiResponse.success(examSession, "Exam session started successfully")

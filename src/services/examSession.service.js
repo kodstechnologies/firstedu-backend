@@ -12,6 +12,7 @@ import pointsService from "./points.service.js";
 import everydayChallengeService from "./everydayChallenge.service.js";
 import everydayChallengeCompletionRepository from "../repository/everydayChallengeCompletion.repository.js";
 import challengeYourselfService from "./challengeYourself.service.js";
+import competitionRepository from "../repository/competition.repository.js";
 
 const hasCompletedRegistrationForLinkedEventTest = async (testId, studentId) => {
   const [linkedOlympiads, linkedTournaments] = await Promise.all([
@@ -55,7 +56,7 @@ const hasCompletedRegistrationForLinkedEventTest = async (testId, studentId) => 
  * Start a new exam session
  */
 export const startExamSession = async (testId, studentId, options = {}) => {
-  const { challengeId = null } = options;
+  const { challengeId = null, categoryId = null } = options;
   // Check if test exists and is published
   const test = await examSessionRepository.findTestById(testId, { questionBank: "name" });
   if (!test) {
@@ -97,6 +98,18 @@ export const startExamSession = async (testId, studentId, options = {}) => {
       paymentStatus: "completed",
     });
     if (!purchase) {
+      const categoriesContainingTest = await competitionRepository.findCompetitionTestsByTestId(testId);
+      const categoryIds = categoriesContainingTest.map(c => c.categoryId);
+      
+      if (categoryIds.length > 0) {
+        purchase = await orderRepository.findTestPurchase({
+          student: studentId,
+          competitionCategory: { $in: categoryIds },
+          paymentStatus: "completed"
+        });
+      }
+    }
+    if (!purchase) {
       const bundleIdsContainingTest =
         await testRepository.findBundleIdsContainingTest(testId);
       if (bundleIdsContainingTest.length > 0) {
@@ -117,9 +130,10 @@ export const startExamSession = async (testId, studentId, options = {}) => {
   }
 
   // Check if there's an existing in_progress session (resume without pause)
-  const sessionScopeFilter = challengeId
-    ? { challenge: challengeId }
-    : { challenge: null };
+  const sessionScopeFilter = {
+    challenge: challengeId || null,
+    competitionCategory: categoryId || null,
+  };
 
   const inProgressSession = await examSessionRepository.findOne({
     student: studentId,
@@ -214,6 +228,7 @@ export const startExamSession = async (testId, studentId, options = {}) => {
     student: studentId,
     test: testId,
     challenge: challengeId,
+    competitionCategory: categoryId || null,
     startTime: now,
     endTime: endTime,
     status: "in_progress",
