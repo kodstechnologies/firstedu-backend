@@ -9,6 +9,7 @@ import { setupSupportSocket } from './socket/supportSocket.js';
 import { setupExamSessionSocket } from './socket/examSessionSocket.js';
 import { setupChallengeSocket } from './socket/challengeSocket.js';
 import { setupTeacherChatSocket } from './socket/teacherChatSocket.js';
+import { setupTeacherCallSocket } from './socket/teacherCallSocket.js';
 import { setIO } from './socket/socketGateway.js';
 import examSessionService from './services/examSession.service.js';
 
@@ -41,6 +42,7 @@ const startServer = async () => {
     setupExamSessionSocket(io);
     setupChallengeSocket(io);
     setupTeacherChatSocket(io);
+    setupTeacherCallSocket(io);
 
     // ==================== HYBRID AUTO-SUBMISSION APPROACH ====================
     // 

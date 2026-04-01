@@ -15,6 +15,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.920.0",
     "@google/genai": "^1.41.0",
+    "agora-token": "^2.0.5",
     "axios": "^1.13.1",
     "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.3",

@@ -1,15 +1,10 @@
-import jwt from "jsonwebtoken";
-import User from "../models/Student.js";
-import Teacher from "../models/Teacher.js";
-import studentSessionRepository from "../repository/studentSession.repository.js";
 import teacherSessionRepository from "../repository/teacherSession.repository.js";
 import teacherRepository from "../repository/teacher.repository.js";
 import teacherChatService from "../services/teacherChat.service.js";
-
-const normalizeToken = (raw) => {
-  if (!raw || typeof raw !== "string") return "";
-  return raw.replace(/^Bearer\s+/i, "").replace(/^"+|"+$/g, "").trim();
-};
+import {
+  authenticateTeacherConnectSocket,
+  normalizeSocketAuthToken,
+} from "./socketAuth.util.js";
 
 const chatBillingTimers = new Map();
 
@@ -84,50 +79,16 @@ const startChatBilling = (namespace, sessionId) => {
   chatBillingTimers.set(key, intervalId);
 };
 
-const authenticateChatSocket = async (token) => {
-  try {
-    const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
-    if (decoded.userType === "teacher") {
-      const teacher = await Teacher.findById(decoded._id).select("_id name email status");
-      if (!teacher || teacher.status !== "approved") return null;
-      return {
-        _id: teacher._id,
-        name: teacher.name,
-        email: teacher.email,
-        role: "teacher",
-      };
-    }
-
-    const user = await User.findById(decoded._id).select("_id name email phone status");
-    if (!user || user.status === "banned") return null;
-
-    if (decoded.sessionId) {
-      const session = await studentSessionRepository.findById(decoded.sessionId);
-      if (!session || session.student.toString() !== user._id.toString()) return null;
-    }
-
-    return {
-      _id: user._id,
-      name: user.name,
-      email: user.email,
-      phone: user.phone,
-      role: "student",
-    };
-  } catch {
-    return null;
-  }
-};
-
 export const setupTeacherChatSocket = (io) => {
   const ns = io.of("/teacher-chat");
 
   ns.use(async (socket, next) => {
-    const token = normalizeToken(
+    const token = normalizeSocketAuthToken(
       socket.handshake.auth?.token || socket.handshake.headers?.authorization || ""
     );
     if (!token) return next(new Error("Authentication error: No token provided"));
 
-    const user = await authenticateChatSocket(token);
+    const user = await authenticateTeacherConnectSocket(token);
     if (!user) {
       return next(new Error("Authentication error: Invalid or expired token"));
     }

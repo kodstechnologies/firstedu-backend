@@ -116,13 +116,12 @@ import { getMyOrders } from "../controllers/order.controller.js";
 import {
   getAvailableTeachers,
   getTeacherById,
-  initiateCallRequest,
   getCallHistory,
   getCallRecordings,
-  cancelCallRequest,
   checkWalletBalance,
   rateTeacher,
 } from "../controllers/studentTeacherConnect.controller.js";
+import { postStudentAgoraRtcToken } from "../controllers/agoraRtc.controller.js";
 import {
   createTicket,
   getMyTickets,
@@ -184,7 +183,7 @@ import {
   getQnAById,
   selfQnAs,
 } from "../controllers/qna.controller.js";
-import { verify } from "crypto";
+
 const router = Router();
 
 // Student Authentication Routes
@@ -454,18 +453,13 @@ router.get("/teachers/:teacherId", verifyJWT, getTeacherById);
 router.post("/teachers/:teacherId/rate", verifyJWT, rateTeacher);
 router.get("/teachers/:teacherId/check-balance", verifyJWT, checkWalletBalance);
 
-// Call Management
-router.post(
-  "/teachers/:teacherId/request-call",
-  verifyJWT,
-  initiateCallRequest,
-);
+// Teacher sessions (history) + Agora token after call_accepted on /teacher-call socket
 router.get("/teacher-sessions", verifyJWT, getCallHistory);
 router.get("/teacher-sessions/recordings", verifyJWT, getCallRecordings);
 router.post(
-  "/teacher-sessions/:sessionId/cancel",
+  "/teacher-sessions/:sessionId/agora-token",
   verifyJWT,
-  cancelCallRequest,
+  postStudentAgoraRtcToken
 );
 
 // ==================== SUPPORT DESK ====================

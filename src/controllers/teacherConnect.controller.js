@@ -5,8 +5,6 @@ import teacherConnectService from "../services/teacherConnect.service.js";
 import teacherConnectValidator from "../validation/teacherConnect.validator.js";
 import teacherRepository from "../repository/teacher.repository.js";
 import { uploadImageToCloudinary } from "../utils/s3Upload.js";
-import teacherChatService from "../services/teacherChat.service.js";
-
 /**
  * Get teacher profile (current logged-in teacher)
  */
@@ -123,121 +121,6 @@ export const toggleAvailability = asyncHandler(async (req, res) => {
 });
 
 /**
- * Get pending call requests
- */
-export const getPendingRequests = asyncHandler(async (req, res) => {
-  const teacherId = req.user._id;
-
-  const requests = await teacherConnectService.getTeacherPendingRequests(teacherId);
-
-  return res
-    .status(200)
-    .json(ApiResponse.success(requests, "Pending requests fetched successfully"));
-});
-
-/**
- * Accept incoming call request
- */
-export const acceptCallRequest = asyncHandler(async (req, res) => {
-  const teacherId = req.user._id;
-  const { sessionId } = req.params;
-
-  const session = await teacherConnectService.acceptCallRequest(teacherId, sessionId);
-
-  return res
-    .status(200)
-    .json(ApiResponse.success(session, "Call request accepted successfully"));
-});
-
-/**
- * Reject incoming call request
- */
-export const rejectCallRequest = asyncHandler(async (req, res) => {
-  const { error, value } = teacherConnectValidator.rejectCallRequest.validate(req.body);
-
-  if (error) {
-    throw new ApiError(
-      400,
-      "Validation Error",
-      error.details.map((x) => x.message)
-    );
-  }
-
-  const teacherId = req.user._id;
-  const { sessionId } = req.params;
-  const { reason } = value;
-
-  const session = await teacherConnectService.rejectCallRequest(teacherId, sessionId, reason);
-
-  if (session?.sessionKind === "chat" && session?.status === "rejected") {
-    const sid = session.student?._id ?? session.student;
-    await teacherChatService.notifyStudentDevices(
-      sid,
-      "Chat request declined",
-      session.rejectionReason || "The teacher declined your chat request.",
-      { type: "teacher_chat_rejected", sessionId: String(session._id) }
-    );
-  }
-
-  return res
-    .status(200)
-    .json(ApiResponse.success(session, "Call request rejected successfully"));
-});
-
-/**
- * Start call (when Twilio call is connected)
- */
-export const startCall = asyncHandler(async (req, res) => {
-  const { error, value } = teacherConnectValidator.startCall.validate(req.body);
-
-  if (error) {
-    throw new ApiError(
-      400,
-      "Validation Error",
-      error.details.map((x) => x.message)
-    );
-  }
-
-  const { sessionId } = req.params;
-  const { twilioCallSid } = value;
-
-  const session = await teacherConnectService.startCall(sessionId, twilioCallSid);
-
-  return res
-    .status(200)
-    .json(ApiResponse.success(session, "Call started successfully"));
-});
-
-/**
- * End call and process billing
- */
-export const endCall = asyncHandler(async (req, res) => {
-  const { error, value } = teacherConnectValidator.endCall.validate(req.body);
-
-  if (error) {
-    throw new ApiError(
-      400,
-      "Validation Error",
-      error.details.map((x) => x.message)
-    );
-  }
-
-  const { sessionId } = req.params;
-  const { durationMinutes, recordingUrl, recordingSid } = value;
-
-  const session = await teacherConnectService.endCall(
-    sessionId,
-    durationMinutes,
-    recordingUrl,
-    recordingSid
-  );
-
-  return res
-    .status(200)
-    .json(ApiResponse.success(session, "Call ended and billing processed successfully"));
-});
-
-/**
  * Get teacher's session history
  */
 export const getSessionHistory = asyncHandler(async (req, res) => {
@@ -312,18 +195,22 @@ export const getEarnings = asyncHandler(async (req, res) => {
     .json(ApiResponse.success(earnings, "Earnings fetched successfully"));
 });
 
+/**
+ * Teacher dashboard: income, today's talk time, completed sessions, rating, recent sessions.
+ */
+export const getDashboard = asyncHandler(async (req, res) => {
+  const data = await teacherConnectService.getTeacherDashboard(req.user._id);
+  return res.status(200).json(ApiResponse.success(data, "Dashboard fetched successfully"));
+});
+
 export default {
   getProfile,
   updateProfile,
   toggleAvailability,
-  getPendingRequests,
-  acceptCallRequest,
-  rejectCallRequest,
   registerTeacherFcmToken,
-  startCall,
-  endCall,
   getSessionHistory,
   deleteTeacherSession,
   getEarnings,
+  getDashboard,
 };
 

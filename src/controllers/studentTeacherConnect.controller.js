@@ -45,35 +45,6 @@ export const getTeacherById = asyncHandler(async (req, res) => {
 });
 
 /**
- * Initiate call request to a teacher
- */
-export const initiateCallRequest = asyncHandler(async (req, res) => {
-  const { error, value } = teacherConnectValidator.initiateCallRequest.validate(req.body);
-
-  if (error) {
-    throw new ApiError(
-      400,
-      "Validation Error",
-      error.details.map((x) => x.message)
-    );
-  }
-
-  const studentId = req.user._id;
-  const { teacherId } = req.params;
-  const { subject } = value;
-
-  const session = await teacherConnectService.initiateCallRequest(
-    studentId,
-    teacherId,
-    subject
-  );
-
-  return res
-    .status(201)
-    .json(ApiResponse.success(session, "Call request initiated successfully"));
-});
-
-/**
  * Get student's call history
  */
 export const getCallHistory = asyncHandler(async (req, res) => {
@@ -116,20 +87,6 @@ export const getCallRecordings = asyncHandler(async (req, res) => {
       result.pagination
     )
   );
-});
-
-/**
- * Cancel call request
- */
-export const cancelCallRequest = asyncHandler(async (req, res) => {
-  const studentId = req.user._id;
-  const { sessionId } = req.params;
-
-  const session = await teacherConnectService.cancelCallRequest(studentId, sessionId);
-
-  return res
-    .status(200)
-    .json(ApiResponse.success(session, "Call request cancelled successfully"));
 });
 
 /**
@@ -193,10 +150,8 @@ export const rateTeacher = asyncHandler(async (req, res) => {
 export default {
   getAvailableTeachers,
   getTeacherById,
-  initiateCallRequest,
   getCallHistory,
   getCallRecordings,
-  cancelCallRequest,
   checkWalletBalance,
   rateTeacher,
 };

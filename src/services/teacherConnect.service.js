@@ -5,7 +5,9 @@ import teacherRatingRepository from "../repository/teacherRating.repository.js";
 import walletService from "./wallet.service.js";
 import * as teacherWalletLedger from "./teacherWalletLedger.service.js";
 import Teacher from "../models/Teacher.js";
-import { rejectChatSession } from "./teacherChat.service.js";
+import { rejectChatSession, chatConstants } from "./teacherChat.service.js";
+
+const { INSUFFICIENT_REQUEST_MSG, TEACHER_BUSY_MSG } = chatConstants;
 
 /** Strip phone and email from teacher object for student-facing responses */
 const omitContactFromTeacher = (teacher) => {
@@ -95,10 +97,9 @@ export const getTeacherById = async (teacherId) => {
 };
 
 /**
- * Initiate a call request to a teacher
+ * Initiate a call request (used by socket; same rules as chat request).
  */
 export const initiateCallRequest = async (studentId, teacherId, subject) => {
-  // Check if teacher exists and is approved
   const teacher = await teacherRepository.findById(teacherId);
   if (!teacher) {
     throw new ApiError(404, "Teacher not found");
@@ -116,26 +117,49 @@ export const initiateCallRequest = async (studentId, teacherId, subject) => {
     throw new ApiError(400, "Teacher has not set their rate");
   }
 
-  // Check if there's already an ongoing session
-  const ongoingSession = await teacherSessionRepository.findOngoingSession(
-    studentId,
-    teacherId
-  );
+  const teacherBusyChat = await teacherSessionRepository.findTeacherActiveChatSession(teacherId);
+  if (teacherBusyChat) {
+    throw new ApiError(409, TEACHER_BUSY_MSG);
+  }
+
+  const teacherBusyCall = await teacherSessionRepository.findTeacherActiveCallSession(teacherId);
+  if (teacherBusyCall) {
+    throw new ApiError(409, TEACHER_BUSY_MSG);
+  }
+
+  const studentBusyChat = await teacherSessionRepository.findStudentOngoingChatSession(studentId);
+  if (studentBusyChat) {
+    throw new ApiError(400, "You already have an active chat session");
+  }
+
+  const studentBusyCall = await teacherSessionRepository.findStudentOngoingCallSession(studentId);
+  if (studentBusyCall) {
+    throw new ApiError(400, "You already have an active call");
+  }
+
+  const ongoingSession = await teacherSessionRepository.findOngoingSession(studentId, teacherId);
   if (ongoingSession) {
     throw new ApiError(400, "You already have an ongoing session with this teacher");
   }
 
-  // Check wallet balance (estimate for 1 minute minimum)
-  const wallet = await walletService.getWalletBalance(studentId, "User");
-  if (wallet.monetaryBalance < teacher.perMinuteRate) {
-    throw new ApiError(400, "Insufficient wallet balance");
+  const existingPending = await teacherSessionRepository.findPendingCallBetween(
+    studentId,
+    teacherId
+  );
+  if (existingPending) {
+    throw new ApiError(400, "You already have a pending call request with this teacher");
   }
 
-  // Create session request
+  const wallet = await walletService.getWalletBalance(studentId, "User");
+  if (wallet.monetaryBalance < teacher.perMinuteRate) {
+    throw new ApiError(400, INSUFFICIENT_REQUEST_MSG);
+  }
+
   const session = await teacherSessionRepository.create({
     student: studentId,
     teacher: teacherId,
     subject: subject || teacher.skills[0] || "General",
+    sessionKind: "call",
     perMinuteRate: teacher.perMinuteRate,
     status: "pending",
     initiatedBy: "student",
@@ -166,19 +190,33 @@ export const acceptCallRequest = async (teacherId, sessionId) => {
     throw new ApiError(400, `Session is already ${session.status}`);
   }
 
-  // Update session status
+  if (session.sessionKind === "call") {
+    const teacherBusyChat = await teacherSessionRepository.findTeacherActiveChatSession(teacherId);
+    if (teacherBusyChat) {
+      throw new ApiError(409, TEACHER_BUSY_MSG);
+    }
+    const teacherBusyCall = await teacherSessionRepository.findTeacherActiveCallSession(teacherId);
+    if (teacherBusyCall && teacherBusyCall._id.toString() !== sessionId.toString()) {
+      throw new ApiError(409, TEACHER_BUSY_MSG);
+    }
+
+    const wallet = await walletService.getWalletBalance(session.student._id, "User");
+    if (wallet.monetaryBalance < session.perMinuteRate) {
+      await teacherSessionRepository.updateById(sessionId, {
+        status: "cancelled",
+        rejectedAt: new Date(),
+        rejectionReason: INSUFFICIENT_REQUEST_MSG,
+        sessionEndReason: "insufficient_balance_at_accept",
+        callEndTime: new Date(),
+      });
+      throw new ApiError(400, INSUFFICIENT_REQUEST_MSG);
+    }
+  }
+
   const updatedSession = await teacherSessionRepository.updateById(sessionId, {
     status: "accepted",
     acceptedAt: new Date(),
   });
-
-  // TODO: Integrate Twilio here to initiate the call
-  // For now, we'll just mark it as accepted
-  // When Twilio is integrated, you'll:
-  // 1. Create a Twilio call
-  // 2. Store twilioCallSid
-  // 3. Set status to "ongoing"
-  // 4. Set callStartTime
 
   return updatedSession;
 };
@@ -215,9 +253,9 @@ export const rejectCallRequest = async (teacherId, sessionId, reason) => {
 };
 
 /**
- * Start call (when Twilio call is connected)
+ * Start billing for an Agora RTC session (clients join via POST .../agora-token, then call this when ready).
  */
-export const startCall = async (sessionId, twilioCallSid) => {
+export const startCall = async (sessionId) => {
   const session = await teacherSessionRepository.findById(sessionId);
 
   if (!session) {
@@ -234,7 +272,6 @@ export const startCall = async (sessionId, twilioCallSid) => {
 
   const updatedSession = await teacherSessionRepository.updateById(sessionId, {
     status: "ongoing",
-    twilioCallSid,
     callStartTime: new Date(),
   });
 
@@ -244,7 +281,7 @@ export const startCall = async (sessionId, twilioCallSid) => {
 /**
  * End call and process billing
  */
-export const endCall = async (sessionId, durationMinutes, recordingUrl = null, recordingSid = null) => {
+export const endCall = async (sessionId, durationMinutes, recordingUrl = null, agoraRecordingId = null) => {
   const session = await teacherSessionRepository.findById(sessionId);
 
   if (!session) {
@@ -279,7 +316,7 @@ export const endCall = async (sessionId, durationMinutes, recordingUrl = null, r
     totalAmount,
     amountDeducted: true,
     recordingUrl,
-    recordingSid,
+    agoraRecordingId,
   });
 
   const teacherId = session.teacher._id || session.teacher;
@@ -287,7 +324,7 @@ export const endCall = async (sessionId, durationMinutes, recordingUrl = null, r
     await walletService.addMonetaryBalance(
       teacherId,
       totalAmount,
-      `voice_session_${sessionId}`,
+      `agora_session_${sessionId}`,
       "Teacher"
     );
     const bal = await walletService.getWalletBalance(teacherId, "Teacher");
@@ -297,12 +334,35 @@ export const endCall = async (sessionId, durationMinutes, recordingUrl = null, r
         amount: totalAmount,
         balanceAfter: bal.monetaryBalance,
         sessionId: updatedSession._id,
-        sessionKind: "voice",
+        sessionKind: "agora_call",
       })
       .catch((e) => console.error("teacherWalletLedger recordSessionEarning:", e));
   }
 
   return updatedSession;
+};
+
+/**
+ * Student disconnects before teacher accepts (same pattern as chat).
+ */
+export const cancelPendingCallRequestByStudent = async (studentId, sessionId) => {
+  const session = await teacherSessionRepository.findById(sessionId);
+  if (!session || session.sessionKind !== "call") {
+    return null;
+  }
+  if (session.student._id.toString() !== studentId.toString()) {
+    throw new ApiError(403, "Unauthorized to cancel this call request");
+  }
+  if (session.status !== "pending") {
+    return null;
+  }
+  return await teacherSessionRepository.updateById(sessionId, {
+    status: "cancelled",
+    rejectedAt: new Date(),
+    rejectionReason: "Student left before the call started",
+    callEndTime: new Date(),
+    sessionEndReason: "student_withdrew_before_accept",
+  });
 };
 
 /**
@@ -422,6 +482,32 @@ export const getTeacherEarnings = async (teacherId, startDate = null, endDate = 
 };
 
 /**
+ * Dashboard: income, today's talk time, completed session counts, rating, recent sessions.
+ */
+export const getTeacherDashboard = async (teacherId) => {
+  const teacher = await teacherRepository.findById(teacherId);
+  if (!teacher) {
+    throw new ApiError(404, "Teacher not found");
+  }
+
+  const [stats, history] = await Promise.all([
+    teacherSessionRepository.getTeacherDashboardSessionAggregates(teacherId),
+    teacherSessionRepository.findTeacherSessions(teacherId, { page: 1, limit: 3 }),
+  ]);
+
+  return {
+    totalIncome: stats.totalIncome,
+    todayTalktimeMinutes: stats.todayTalktimeMinutes,
+    totalCompletedSessions: stats.totalCompletedSessions,
+    rating: {
+      averageRating: teacher.averageRating ?? 0,
+      ratingCount: teacher.ratingCount ?? 0,
+    },
+    recentSessions: history.sessions,
+  };
+};
+
+/**
  * Rate a teacher (1-5). Replaces previous rating if student already rated. Auto-updates teacher's averageRating.
  */
 export const rateTeacher = async (teacherId, studentId, rating) => {
@@ -450,6 +536,7 @@ export default {
   rejectCallRequest,
   startCall,
   endCall,
+  cancelPendingCallRequestByStudent,
   cancelCallRequest,
   getStudentCallHistory,
   getStudentRecordings,
@@ -457,6 +544,7 @@ export default {
   getTeacherSessionHistory,
   deleteTeacherSession,
   getTeacherEarnings,
+  getTeacherDashboard,
   rateTeacher,
 };
 

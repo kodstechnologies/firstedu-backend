@@ -13,7 +13,7 @@ const rejectCallRequest = Joi.object({
 const endCall = Joi.object({
   durationMinutes: Joi.number().positive().required(),
   recordingUrl: Joi.string().uri().trim().optional().allow(""),
-  recordingSid: Joi.string().trim().optional().allow(""),
+  agoraRecordingId: Joi.string().trim().optional().allow(""),
 });
 
 // Teacher can update only: name, email, gender, about (profileImage via file)
@@ -29,9 +29,7 @@ const toggleAvailability = Joi.object({
   isLive: Joi.boolean().required(),
 });
 
-const startCall = Joi.object({
-  twilioCallSid: Joi.string().trim().required(),
-});
+const startCall = Joi.object({});
 
 const rateTeacher = Joi.object({
   rating: Joi.number().min(1).max(5).integer().required(),
