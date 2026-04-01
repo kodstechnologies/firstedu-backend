@@ -11,7 +11,7 @@ import {
 } from "../utils/s3Upload.js";
 import walletService from "./wallet.service.js";
 import couponService from "./coupon.service.js";
-import { getAmountToCharge } from "../utils/offerUtils.js";
+import { getAmountToCharge, getApplicableOfferDetails } from "../utils/offerUtils.js";
 import razorpayOrderIntentRepository from "../repository/razorpayOrderIntent.repository.js";
 import { createRazorpayOrder, verifyPaymentSignature } from "../utils/razorpayUtils.js";
 
@@ -262,14 +262,13 @@ export const getSubmissionById = async (id) => {
   return submission;
 };
 
-export const reviewSubmission = async (id, reviewData) => {
+export const reviewSubmission = async (id, { isChecked }) => {
   const submission = await liveCompetitionRepository.findSubmissionById(id);
   if (!submission) throw new ApiError(404, "Submission not found");
 
-  // Mark as REVIEWED whenever admin touches the record
+  // Mark as CHECKED or revert to PENDING
   return await liveCompetitionRepository.updateSubmissionById(id, {
-    ...reviewData,
-    evaluationStatus: "REVIEWED",
+    evaluationStatus: isChecked ? "CHECKED" : "PENDING",
   });
 };
 
@@ -281,33 +280,23 @@ export const deleteSubmission = async (id) => {
 
 // ─── Winner System ────────────────────────────────────────
 
-export const declareWinners = async (eventId, { first, second, third }) => {
+export const declareWinner = async (eventId, { winnerId }) => {
   const event = await liveCompetitionRepository.findEventById(eventId);
   if (!event) throw new ApiError(404, "Live competition not found");
 
-  // Validate provided submission IDs belong to this event
-  const rankMap = { first, second, third };
-  const rankNumbers = { first: 1, second: 2, third: 3 };
-  const ids = [first, second, third].filter(Boolean);
-
-  // Ensure no duplicate IDs across ranks
-  if (new Set(ids).size !== ids.length) {
-    throw new ApiError(400, "Each rank must be assigned to a different submission");
-  }
-
-  for (const subId of ids) {
-    const sub = await liveCompetitionRepository.findSubmissionById(subId);
-    if (!sub) throw new ApiError(404, `Submission ${subId} not found`);
+  // If winnerId is passed, validate it
+  if (winnerId) {
+    const sub = await liveCompetitionRepository.findSubmissionById(winnerId);
+    if (!sub) throw new ApiError(404, `Submission ${winnerId} not found`);
     if (sub.event.toString() !== eventId.toString()) {
-      throw new ApiError(400, `Submission ${subId} does not belong to this event`);
+      throw new ApiError(400, `Submission ${winnerId} does not belong to this event`);
     }
-    // Must have actually submitted work
     if (!sub.submittedAt) {
-      throw new ApiError(400, `Submission ${subId} has not been submitted yet`);
+      throw new ApiError(400, `Submission ${winnerId} has not been submitted yet`);
     }
   }
 
-  // Reset any previously-declared winners for this event
+  // Reset any previously-declared winners for this event (prevent multiple winners)
   const prevWinners = await liveCompetitionRepository.findSubmissions({
     event: eventId,
     isWinner: true,
@@ -315,28 +304,25 @@ export const declareWinners = async (eventId, { first, second, third }) => {
   for (const s of prevWinners) {
     await liveCompetitionRepository.updateSubmissionById(s._id, {
       isWinner: false,
-      rank: null,
     });
   }
 
-  // Assign new winners (only one submission per rank enforced above)
-  const updates = [];
-  if (first)  updates.push(liveCompetitionRepository.updateSubmissionById(first,  { isWinner: true, rank: 1 }));
-  if (second) updates.push(liveCompetitionRepository.updateSubmissionById(second, { isWinner: true, rank: 2 }));
-  if (third)  updates.push(liveCompetitionRepository.updateSubmissionById(third,  { isWinner: true, rank: 3 }));
-  await Promise.all(updates);
+  // If we are clearing the winner, just return the updated event
+  if (!winnerId) {
+    return await liveCompetitionRepository.updateEventById(eventId, {
+      status: "LIVE", // Or keep RESULT_DECLARED? Usually we revert if no winner.
+    });
+  }
 
-  // Mark event as RESULT_DECLARED — winners object removed from model,
-  // truth lives in submission.rank / isWinner
+  // Assign new winner
+  await liveCompetitionRepository.updateSubmissionById(winnerId, { isWinner: true });
+
+  // Mark event as RESULT_DECLARED
   const updatedEvent = await liveCompetitionRepository.updateEventById(eventId, {
     status: "RESULT_DECLARED",
   });
 
   return updatedEvent;
-};
-
-export const updateWinners = async (eventId, winners) => {
-  return await declareWinners(eventId, winners);
 };
 
 // ─── Analytics ────────────────────────────────────────────
@@ -437,6 +423,37 @@ export const getPublishedEvents = async (options = {}) => {
         obj.walletBalance = studentWalletBalance;
       }
 
+      // Inject active offer details
+      const feeAmount = Number(obj.fee?.amount) || 0;
+      if (feeAmount > 0) {
+        const offerDetails = await getApplicableOfferDetails("LiveCompetition", feeAmount);
+        obj.appliedOffer = offerDetails.appliedOffer || null;
+        obj.discountedPrice = offerDetails.discountedPrice;
+      } else {
+        obj.appliedOffer = null;
+        obj.discountedPrice = 0;
+      }
+
+      // Inject winner details for RESULT_DECLARED events
+      if (obj.status === "RESULT_DECLARED") {
+        const winnerSub = await liveCompetitionRepository.findOneSubmission(
+          { event: e._id, isWinner: true },
+          [{ path: "participant", select: "name profilePic email" }]
+        );
+        if (winnerSub && winnerSub.participant) {
+          obj.winner = {
+            submissionId: winnerSub._id,
+            name: winnerSub.participant.name || "Winner",
+            email: winnerSub.participant.email || "",
+            profilePic: winnerSub.participant.profilePic || null,
+          };
+        } else {
+          obj.winner = null;
+        }
+      } else {
+        obj.winner = null;
+      }
+
       return obj;
     })
   );
@@ -485,6 +502,37 @@ export const getPublishedEventById = async (id, studentId = null) => {
     if (walletBalanceObj) {
       obj.walletBalance = walletBalanceObj.monetaryBalance || 0;
     }
+  }
+
+  // Inject active offer details
+  const feeAmount = Number(obj.fee?.amount) || 0;
+  if (feeAmount > 0) {
+    const offerDetails = await getApplicableOfferDetails("LiveCompetition", feeAmount);
+    obj.appliedOffer = offerDetails.appliedOffer || null;
+    obj.discountedPrice = offerDetails.discountedPrice;
+  } else {
+    obj.appliedOffer = null;
+    obj.discountedPrice = 0;
+  }
+
+  // Inject winner details for RESULT_DECLARED events
+  if (obj.status === "RESULT_DECLARED") {
+    const winnerSub = await liveCompetitionRepository.findOneSubmission(
+      { event: id, isWinner: true },
+      [{ path: "participant", select: "name profilePic email" }]
+    );
+    if (winnerSub && winnerSub.participant) {
+      obj.winner = {
+        submissionId: winnerSub._id,
+        name: winnerSub.participant.name || "Winner",
+        email: winnerSub.participant.email || "",
+        profilePic: winnerSub.participant.profilePic || null,
+      };
+    } else {
+      obj.winner = null;
+    }
+  } else {
+    obj.winner = null;
   }
 
   return obj;
@@ -654,22 +702,25 @@ export const completeLiveCompPayment = async (eventId, studentId, data) => {
     throw new ApiError(404, "Submission record not found");
   }
 
+  let submissionToReturn = existing;
+
   if (!intent.reconciled) {
     if (intent.couponId) {
       await couponService.incrementCouponUsedCount(intent.couponId);
     }
-    await liveCompetitionRepository.updateSubmissionById(existing._id, { paymentStatus: "COMPLETED" });
+    submissionToReturn = await liveCompetitionRepository.updateSubmissionById(existing._id, { paymentStatus: "COMPLETED" });
     await razorpayOrderIntentRepository.markReconciled(razorpayOrderId, razorpayPaymentId);
   }
 
-  return existing;
+  return submissionToReturn;
 };
 
 export const startEssaySession = async (eventId, studentId) => {
-  const event = await liveCompetitionRepository.findEventById(eventId);
+  const event = await liveCompetitionRepository.findEventById(eventId, [{ path: "category" }]);
   if (!event || !event.isPublished) throw new ApiError(404, "Live competition not found");
 
-  if (event.submission.type !== "TEXT") {
+  const submissionType = event.category?.submissionType || event.submission?.type;
+  if (submissionType !== "TEXT") {
     throw new ApiError(400, "This event does not support live essay sessions");
   }
 
@@ -717,7 +768,7 @@ export const saveDraft = async (eventId, studentId, { text }) => {
 };
 
 export const submitWork = async (eventId, studentId, { text }, files = []) => {
-  const event = await liveCompetitionRepository.findEventById(eventId);
+  const event = await liveCompetitionRepository.findEventById(eventId, [{ path: "category" }]);
   if (!event || !event.isPublished) throw new ApiError(404, "Live competition not found");
 
   const now = new Date();
@@ -747,7 +798,7 @@ export const submitWork = async (eventId, studentId, { text }, files = []) => {
     throw new ApiError(403, "Payment is required before submitting");
   }
 
-  const submissionType = event.submission.type; // "TEXT" or "FILE"
+  const submissionType = event.category?.submissionType || event.submission?.type; // "TEXT" or "FILE"
 
   // ── Type-specific content validation ─────────────────────────────────────
   if (submissionType === "TEXT") {
@@ -890,8 +941,7 @@ export default {
   getSubmissionById,
   reviewSubmission,
   deleteSubmission,
-  declareWinners,
-  updateWinners,
+  declareWinner,
   getEventStats,
   // Student
   getPublishedEvents,

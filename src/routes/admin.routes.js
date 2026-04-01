@@ -261,8 +261,7 @@ import {
   getSubmissionById,
   reviewSubmission,
   deleteSubmission,
-  declareWinners,
-  updateWinners,
+  declareWinner,
   getEventStats,
 } from "../controllers/liveCompetition.controller.js";
 import {
@@ -596,8 +595,7 @@ router.patch("/live-competition-submissions/:id/review", verifyJWT, reviewSubmis
 router.delete("/live-competition-submissions/:id", verifyJWT, deleteSubmission);
 
 // Winner System
-router.post("/live-competitions/:id/winners", verifyJWT, declareWinners);
-router.put("/live-competitions/:id/winners", verifyJWT, updateWinners);
+router.put("/live-competitions/:id/winner", verifyJWT, declareWinner);
 
 // Analytics
 router.get("/live-competitions/:id/stats", verifyJWT, getEventStats);

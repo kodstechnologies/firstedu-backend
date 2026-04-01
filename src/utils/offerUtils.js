@@ -9,6 +9,7 @@ const MODULE_TO_ITEM_TYPE = {
   Tournament: "tournament",
   Workshop: "workshop",
   Ecommerce: "ecommerce",
+  LiveCompetition: "live_competition",
 };
 
 /**
