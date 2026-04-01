@@ -18,7 +18,7 @@ const razorpayOrderIntentSchema = new mongoose.Schema(
     type: {
       type: String,
       required: true,
-      enum: ["course", "test", "bundle", "olympiad", "tournament", "workshop", "wallet"],
+      enum: ["course", "test", "bundle", "olympiad", "tournament", "workshop", "wallet", "live_competition"],
       index: true,
     },
     entityId: {
@@ -30,7 +30,7 @@ const razorpayOrderIntentSchema = new mongoose.Schema(
     entityModel: {
       type: String,
       required: true,
-      enum: ["Course", "Test", "TestBundle", "Olympiad", "Tournament", "Workshop", "User"],
+      enum: ["Course", "Test", "TestBundle", "Olympiad", "Tournament", "Workshop", "User", "LiveCompetition"],
     },
     amountPaise: { type: Number, required: true },
     currency: { type: String, default: "INR" },

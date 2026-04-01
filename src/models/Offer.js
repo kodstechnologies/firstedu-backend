@@ -12,7 +12,7 @@ const offerSchema = new mongoose.Schema(
     // 🔹 Where the offer applies
     applicableOn: {
       type: String,
-      enum: ["Test", "TestSeries", "Course", "Olympiad", "Tournament", "Workshop", "Ecommerce"],
+      enum: ["Test", "TestSeries", "Course", "Olympiad", "Tournament", "Workshop", "Ecommerce", "LiveCompetition"],
       required: true,
     },
 

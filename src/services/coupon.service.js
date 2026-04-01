@@ -134,6 +134,7 @@ export const validateCoupon = async (code, purchaseAmount, itemType = "all") => 
     workshops: "Workshop",
     ecommerce: "Ecommerce",
     merchandise: "Ecommerce",
+    live_competition: "LiveCompetition",
   };
   const normalizedItemType = ITEM_TYPE_MAP[itemType] || itemType;
   if (coupon.applicableTo !== "all" && coupon.applicableTo !== normalizedItemType) {

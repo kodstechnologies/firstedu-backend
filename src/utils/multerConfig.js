@@ -101,6 +101,59 @@ export const uploadSuccessStory = multer({
   limits: { fileSize: 500 * 1024 * 1024 }, // 500MB
 });
 
+// Live Competition Content Filter
+const liveCompetitionFileFilter = (req, file, cb) => {
+  const allowedTypes = [
+    // Documents
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document", // docx
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // xlsx
+    "application/vnd.ms-powerpoint",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation", // pptx
+    // Images
+    "image/jpeg",
+    "image/png",
+    "image/jpg",
+    "image/webp",
+    // Videos
+    "video/mp4",
+    "video/mpeg",
+    "video/quicktime",
+    "video/x-msvideo",
+    "video/webm",
+    "video/x-ms-wmv",
+    "video/3gpp",
+    // Audio
+    "audio/mpeg",
+    "audio/mp3",
+    "audio/wav",
+    "audio/webm",
+    "audio/ogg",
+    "audio/mp4",
+    "audio/x-wav",
+  ];
+
+  if (allowedTypes.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(
+      new Error(
+        "Invalid file type. Allowed types: PDF, DOCX, XLSX, PPTX, Images, MP4, MP3, WAV, etc."
+      ),
+      false
+    );
+  }
+};
+
+export const uploadLiveCompetitionContent = multer({
+  storage,
+  fileFilter: liveCompetitionFileFilter,
+  limits: { fileSize: 500 * 1024 * 1024 }, // 500MB
+});
+
+
 // Course: image = cover/thumbnail only; pdf = study material (PDF, video, audio only)
 const courseImageTypes = ["image/jpeg", "image/png", "image/jpg", "image/webp"];
 const courseStudyMaterialTypes = [
