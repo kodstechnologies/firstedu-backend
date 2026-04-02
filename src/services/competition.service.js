@@ -118,6 +118,17 @@ const updateSector = async (id, data) => {
 };
 
 const deleteSector = async (id) => {
+  // Check if any category under this sector has purchaseCount > 0
+  const categoriesRaw = await competitionRepository.findCategoriesBySectorId(id);
+  const hasPurchasedCategory = categoriesRaw.some((cat) => cat.purchaseCount > 0);
+
+  if (hasPurchasedCategory) {
+    throw new ApiError(
+      403,
+      "Cannot delete this sector minimum one test has been purchased by a student"
+    );
+  }
+
   const sector = await competitionRepository.deleteSectorById(id);
   if (!sector) throw new ApiError(404, "Competition Sector not found");
   return true;

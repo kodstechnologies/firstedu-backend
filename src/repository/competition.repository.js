@@ -213,7 +213,22 @@ const createSector = async (data) => {
 
 const findAllSectors = async () => {
   try {
-    return await CompetitionSector.find().sort({ createdAt: -1 });
+    const sectors = await CompetitionSector.find().lean().sort({ createdAt: -1 });
+    const categories = await CompetitionCategory.find({
+      sectorId: { $in: sectors.map((s) => s._id) },
+    }).lean();
+
+    const purchaseMap = {};
+    for (const cat of categories) {
+      if (cat.purchaseCount > 0) {
+        purchaseMap[cat.sectorId.toString()] = true;
+      }
+    }
+
+    return sectors.map((s) => ({
+      ...s,
+      hasPurchase: !!purchaseMap[s._id.toString()],
+    }));
   } catch (error) {
     throw new ApiError(500, "Failed to fetch competition sectors", error.message);
   }
