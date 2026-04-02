@@ -28,6 +28,8 @@ const startServer = async () => {
           "http://localhost:3000",
           "http://localhost:5173",
           "http://localhost:5174",
+          "https://iscorre.com",
+          "https://admin.iscorre.com"
         ],
         credentials: true,
         methods: ["GET", "POST"],
