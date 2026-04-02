@@ -75,7 +75,7 @@ export const reviewSubmission = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Validation Error", error.details.map((x) => x.message));
   }
   const submission = await liveCompetitionService.reviewSubmission(id, value);
-  return res.status(200).json(ApiResponse.success(submission, "Submission reviewed successfully"));
+  return res.status(200).json(ApiResponse.success(submission, "Submission checked successfully"));
 });
 
 export const deleteSubmission = asyncHandler(async (req, res) => {
@@ -86,24 +86,14 @@ export const deleteSubmission = asyncHandler(async (req, res) => {
 
 // ─── Winner System ────────────────────────────────────────
 
-export const declareWinners = asyncHandler(async (req, res) => {
+export const declareWinner = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { error, value } = liveCompetitionValidator.declareWinners.validate(req.body);
+  const { error, value } = liveCompetitionValidator.declareWinner.validate(req.body);
   if (error) {
     throw new ApiError(400, "Validation Error", error.details.map((x) => x.message));
   }
-  const result = await liveCompetitionService.declareWinners(id, value);
-  return res.status(200).json(ApiResponse.success(result, "Winners declared successfully"));
-});
-
-export const updateWinners = asyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const { error, value } = liveCompetitionValidator.declareWinners.validate(req.body);
-  if (error) {
-    throw new ApiError(400, "Validation Error", error.details.map((x) => x.message));
-  }
-  const result = await liveCompetitionService.updateWinners(id, value);
-  return res.status(200).json(ApiResponse.success(result, "Winners updated successfully"));
+  const result = await liveCompetitionService.declareWinner(id, value);
+  return res.status(200).json(ApiResponse.success(result, "Winner declared successfully"));
 });
 
 // ─── Analytics ────────────────────────────────────────────

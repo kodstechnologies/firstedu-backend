@@ -75,20 +75,13 @@ const liveCompetitionSubmissionSchema = new mongoose.Schema(
 
     /**
      * PENDING = not yet reviewed by admin.
-     * REVIEWED = admin has scored / remarked this submission.
+     * CHECKED = admin has viewed and marked this submission as checked.
      */
     evaluationStatus: {
       type: String,
-      enum: ["PENDING", "REVIEWED"],
+      enum: ["PENDING", "CHECKED"],
       default: "PENDING",
     },
-
-    score: {
-      type: Number,
-      default: 0,
-    },
-
-    adminRemarks: String,
 
     /**
      * Rank within this event — 1 (gold), 2 (silver), 3 (bronze).

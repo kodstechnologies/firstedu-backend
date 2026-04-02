@@ -83,17 +83,12 @@ const updateEvent = Joi.object({
 });
 
 const reviewSubmission = Joi.object({
-  score:        Joi.number().min(0).optional(),
-  adminRemarks: Joi.string().trim().allow("", null).optional(),
-  rank:         Joi.number().integer().valid(1, 2, 3).optional().allow(null),
-  isWinner:     Joi.boolean().optional(),
-}).min(1);
+  isChecked: Joi.boolean().required(),
+});
 
-const declareWinners = Joi.object({
-  first:  objectId.optional().allow(null, ""),
-  second: objectId.optional().allow(null, ""),
-  third:  objectId.optional().allow(null, ""),
-}).min(1);
+const declareWinner = Joi.object({
+  winnerId: objectId.allow(null, "").optional(),
+});
 
 // ─── Student ─────────────────────────────────────────────────────────────────
 
@@ -120,7 +115,7 @@ export default {
   createEvent,
   updateEvent,
   reviewSubmission,
-  declareWinners,
+  declareWinner,
   initiateLiveCompPayment,
   completeLiveCompPayment,
   submitWork,

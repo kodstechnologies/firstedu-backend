@@ -3,6 +3,7 @@ import CoursePurchase from "../models/CoursePurchase.js";
 import TestPurchase from "../models/TestPurchase.js";
 import MerchandiseClaim from "../models/MerchandiseClaim.js";
 import EventRegistration from "../models/EventRegistration.js";
+import LiveCompetitionSubmission from "../models/LiveCompetitionSubmission.js";
 import { ApiError } from "../utils/ApiError.js";
 
 const findOrderById = async (id) => {
@@ -136,6 +137,19 @@ const findEventRegistrations = async (studentId) => {
   }
 };
 
+const findLiveCompetitionRegistrations = async (studentId) => {
+  try {
+    return await LiveCompetitionSubmission.find({
+      participant: studentId,
+      paymentStatus: "COMPLETED",
+    })
+      .populate("event", "title fee")
+      .sort({ createdAt: -1 });
+  } catch (error) {
+    throw new ApiError(500, "Failed to fetch live competition registrations", error.message);
+  }
+};
+
 const findCoursePurchase = async (filter) => {
   try {
     return await CoursePurchase.findOne(filter);
@@ -185,6 +199,7 @@ export default {
   findTestPurchasesForExamHall,
   findMerchandiseClaims,
   findEventRegistrations,
+  findLiveCompetitionRegistrations,
   findCoursePurchase,
   createCoursePurchase,
   findTestPurchase,

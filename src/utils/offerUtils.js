@@ -10,6 +10,7 @@ const MODULE_TO_ITEM_TYPE = {
   Workshop: "workshop",
   Ecommerce: "ecommerce",
   CompetitionCategory: "competitionCategory",
+  LiveCompetition: "live_competition",
 };
 
 /**
