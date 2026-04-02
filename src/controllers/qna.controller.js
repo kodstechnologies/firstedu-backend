@@ -15,8 +15,8 @@ export const createQnA = asyncHandler(async (req, res) => {
       error.details.map((x) => x.message)
     );
   }
-
-  const createdQnA = await qnaService.createQnA(value, req.user._id);
+  const{_id,userType}=req.user;
+  const createdQnA = await qnaService.createQnA(value,_id,userType);
 
   return res
     .status(201)
@@ -25,25 +25,21 @@ export const createQnA = asyncHandler(async (req, res) => {
 
 // Get All QnAs
 export const getAllQnAs = asyncHandler(async (req, res) => {
-  const { page, limit, sortBy, sortOrder,type, search, subject, status } = req.query;
-
-  const filterOptions = {
-    page,
-    limit,
-    sortBy,
-    sortOrder,
-    search,
-    type:type==="all"?"":type,
-  };
-  const result = await qnaService.getAllQnAs(filterOptions);
+  const { type } = req.query;
+  const { userType } = req.user;
+  const result = await qnaService.getAllQnAs({
+    ...req.query,
+    status: userType === "Admin" ? "" : "approved",
+    type: type === "all" ? "" : type,
+  });
   return res
     .status(200)
     .json(
       ApiResponse.success(
         result.data,
         "QnAs fetched successfully",
-        result.pagination
-      )
+        result.pagination,
+      ),
     );
 });
 
@@ -77,7 +73,7 @@ export const updateQnA = asyncHandler(async (req, res) => {
     throw new ApiError(
       400,
       "Validation Error",
-      error.details.map((x) => x.message)
+      error.details.map((x) => x.message),
     );
   }
 

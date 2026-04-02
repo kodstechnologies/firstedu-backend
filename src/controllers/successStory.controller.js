@@ -52,6 +52,7 @@ export const getAllStoriesAdmin = asyncHandler(async (req, res) => {
   if (status) {
     filters.status = status;
   }
+  
   if (search) {
     filters.search = search;
   }

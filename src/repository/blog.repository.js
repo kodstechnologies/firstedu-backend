@@ -27,6 +27,7 @@ const create = async (data) => {
  */
 const findAll = async (filters = {}, page = 1, limit = 10) => {
   const query = {};
+   const andConditions = [];
 
   if (filters.subject) {
     andConditions.push({
@@ -39,10 +40,12 @@ const findAll = async (filters = {}, page = 1, limit = 10) => {
   }
 
   if (filters.search) {
-    query.$or = [
-      { title: { $regex: filters.search, $options: "i" } },
-      { authorName: { $regex: filters.search, $options: "i" } },
-    ];
+    andConditions.push({
+      $or: [
+        { title: { $regex: filters.search, $options: "i" } },
+        { authorName: { $regex: filters.search, $options: "i" } },
+      ],
+    });
   }
 
   const skip = (page - 1) * limit;
