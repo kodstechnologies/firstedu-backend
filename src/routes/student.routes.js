@@ -180,10 +180,10 @@ import {
   uploadPDF,
   uploadLiveCompetitionContent,
 } from "../utils/multerConfig.js";
-import {
-  getCompetitions,
-  getSingleCompetition,
-} from "../controllers/competition.controller.js";
+// import {
+//   getCompetitions,
+//   getSingleCompetition,
+// } from "../controllers/competition.controller.js";
 import { getStudentDashboardStats } from "../controllers/studentDashboard.controller.js";
 import {
   getPublishedEvents as getPublishedLiveCompetitions,

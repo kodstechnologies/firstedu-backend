@@ -8,7 +8,12 @@ export const createCompetition = asyncHandler(async (req, res) => {
   const competition = await competitionService.createCompetition(req.body);
   return res
     .status(201)
-    .json(ApiResponse.success(competition, "Competition category created successfully"));
+    .json(
+      ApiResponse.success(
+        competition,
+        "Competition category created successfully",
+      ),
+    );
 });
 
 export const getCompetitions = asyncHandler(async (req, res) => {
@@ -17,16 +22,29 @@ export const getCompetitions = asyncHandler(async (req, res) => {
   const categories = await competitionService.getCompetitionsBySector(id);
   return res
     .status(200)
-    .json(ApiResponse.success(categories, "Competition categories fetched successfully"));
+    .json(
+      ApiResponse.success(
+        categories,
+        "Competition categories fetched successfully",
+      ),
+    );
 });
 
 export const getSingleCompetition = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const userId = req.user?._id;
-  const category = await competitionService.getSingleCompetitionWithTests(id, userId);
+  const category = await competitionService.getSingleCompetitionWithTests(
+    id,
+    userId,
+  );
   return res
     .status(200)
-    .json(ApiResponse.success(category, "Competition category fetched successfully"));
+    .json(
+      ApiResponse.success(
+        category,
+        "Competition category fetched successfully",
+      ),
+    );
 });
 
 export const updateCompetition = asyncHandler(async (req, res) => {
@@ -34,7 +52,9 @@ export const updateCompetition = asyncHandler(async (req, res) => {
   const updated = await competitionService.updateCompetition(id, req.body);
   return res
     .status(200)
-    .json(ApiResponse.success(updated, "Competition category updated successfully"));
+    .json(
+      ApiResponse.success(updated, "Competition category updated successfully"),
+    );
 });
 
 export const deleteCompetition = asyncHandler(async (req, res) => {
@@ -42,7 +62,9 @@ export const deleteCompetition = asyncHandler(async (req, res) => {
   await competitionService.deleteCompetition(id);
   return res
     .status(200)
-    .json(ApiResponse.success(null, "Competition category deleted successfully"));
+    .json(
+      ApiResponse.success(null, "Competition category deleted successfully"),
+    );
 });
 
 // ==================== COMPETITION TESTS ====================
@@ -53,7 +75,9 @@ export const createTests = asyncHandler(async (req, res) => {
   const testEntry = await competitionService.createTest(categoryId, rest);
   return res
     .status(201)
-    .json(ApiResponse.success(testEntry, "Competition test created successfully"));
+    .json(
+      ApiResponse.success(testEntry, "Competition test created successfully"),
+    );
 });
 
 export const updateTests = asyncHandler(async (req, res) => {
@@ -61,7 +85,9 @@ export const updateTests = asyncHandler(async (req, res) => {
   const updated = await competitionService.updateTest(id, req.body);
   return res
     .status(200)
-    .json(ApiResponse.success(updated, "Competition test updated successfully"));
+    .json(
+      ApiResponse.success(updated, "Competition test updated successfully"),
+    );
 });
 
 export const deleteTests = asyncHandler(async (req, res) => {
@@ -78,14 +104,18 @@ export const createCompetitionSector = asyncHandler(async (req, res) => {
   const sector = await competitionService.createSector(req.body);
   return res
     .status(201)
-    .json(ApiResponse.success(sector, "Competition Sector created successfully"));
+    .json(
+      ApiResponse.success(sector, "Competition Sector created successfully"),
+    );
 });
 
 export const listCompetitionSectors = asyncHandler(async (req, res) => {
   const sectors = await competitionService.listSectors();
   return res
     .status(200)
-    .json(ApiResponse.success(sectors, "Competition Sectors fetched successfully"));
+    .json(
+      ApiResponse.success(sectors, "Competition Sectors fetched successfully"),
+    );
 });
 
 export const updateCompetitionSector = asyncHandler(async (req, res) => {
@@ -93,7 +123,9 @@ export const updateCompetitionSector = asyncHandler(async (req, res) => {
   const updated = await competitionService.updateSector(id, req.body);
   return res
     .status(200)
-    .json(ApiResponse.success(updated, "Competition Sector updated successfully"));
+    .json(
+      ApiResponse.success(updated, "Competition Sector updated successfully"),
+    );
 });
 
 export const deleteCompetitionSector = asyncHandler(async (req, res) => {
