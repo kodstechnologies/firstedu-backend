@@ -251,6 +251,26 @@ import {
   postAdminRejectWithdrawal,
 } from "../controllers/teacherWithdrawal.controller.js";
 import { uploadCourseMaterial, uploadImage, uploadPDF, uploadSuccessStory } from '../utils/multerConfig.js';
+import {
+  createEvent as createLiveCompetition,
+  getEvents as getLiveCompetitions,
+  getEventById as getLiveCompetitionById,
+  updateEvent as updateLiveCompetition,
+  deleteEvent as deleteLiveCompetition,
+  getSubmissionsByEvent,
+  getSubmissionById,
+  reviewSubmission,
+  deleteSubmission,
+  declareWinners,
+  updateWinners,
+  getEventStats,
+} from "../controllers/liveCompetition.controller.js";
+import {
+  createCategory as createLiveCategory,
+  getAllCategories as getLiveCategories,
+  updateCategory as updateLiveCategory,
+  deleteCategory as deleteLiveCategory,
+} from "../controllers/liveCompetitionCategory.controller.js";
 
 const router = Router();
 
@@ -571,5 +591,32 @@ router.get("/qna/:id", verifyJWT, getQnAById);
 router.put("/qna/:id", verifyJWT, updateQnA);
 router.put("/qna/approve/:id", verifyJWT, approveQnA);
 router.delete("/qna/:id", verifyJWT, deleteQnA);
+// ==================== LIVE COMPETITIONS ====================
+
+// Event Management (CRUD)
+router.post("/live-competitions", verifyJWT, uploadImage.single("banner"), createLiveCompetition);
+router.get("/live-competitions", verifyJWT, getLiveCompetitions);
+router.get("/live-competitions/:id", verifyJWT, getLiveCompetitionById);
+router.put("/live-competitions/:id", verifyJWT, uploadImage.single("banner"), updateLiveCompetition);
+router.delete("/live-competitions/:id", verifyJWT, deleteLiveCompetition);
+
+// Submission Management
+router.get("/live-competitions/:id/submissions", verifyJWT, getSubmissionsByEvent);
+router.get("/live-competition-submissions/:id", verifyJWT, getSubmissionById);
+router.patch("/live-competition-submissions/:id/review", verifyJWT, reviewSubmission);
+router.delete("/live-competition-submissions/:id", verifyJWT, deleteSubmission);
+
+// Winner System
+router.post("/live-competitions/:id/winners", verifyJWT, declareWinners);
+router.put("/live-competitions/:id/winners", verifyJWT, updateWinners);
+
+// Analytics
+router.get("/live-competitions/:id/stats", verifyJWT, getEventStats);
+
+// ==================== LIVE COMPETITION CATEGORIES ====================
+router.post("/live-competition-categories", verifyJWT, createLiveCategory);
+router.get("/live-competition-categories", verifyJWT, getLiveCategories);
+router.put("/live-competition-categories/:id", verifyJWT, updateLiveCategory);
+router.delete("/live-competition-categories/:id", verifyJWT, deleteLiveCategory);
 
 export default router;

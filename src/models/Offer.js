@@ -12,7 +12,17 @@ const offerSchema = new mongoose.Schema(
     // 🔹 Where the offer applies
     applicableOn: {
       type: String,
-      enum: ["Test", "TestSeries", "Course", "Olympiad", "Tournament", "Workshop", "Ecommerce", "CompetitionCategory"],
+      enum: [
+        "Test",
+        "TestSeries",
+        "Course",
+        "Olympiad",
+        "Tournament",
+        "Workshop",
+        "Ecommerce",
+        "CompetitionCategory",
+        "LiveCompetition",
+      ],
       required: true,
     },
 
@@ -51,13 +61,13 @@ const offerSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 // 🔐 Only ONE active offer per module type
 offerSchema.index(
   { applicableOn: 1, status: 1 },
-  { unique: true, partialFilterExpression: { status: "active" } }
+  { unique: true, partialFilterExpression: { status: "active" } },
 );
 
 export default mongoose.model("Offer", offerSchema);

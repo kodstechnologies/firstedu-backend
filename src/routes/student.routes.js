@@ -174,8 +174,28 @@ import {
   refreshNeedToImprove,
 } from "../controllers/needToImprove.controller.js";
 import { verifyJWT } from "../middleware/auth.middleware.js";
-import { uploadImage, uploadPDF } from "../utils/multerConfig.js";
+import {
+  upload,
+  uploadImage,
+  uploadPDF,
+  uploadLiveCompetitionContent,
+} from "../utils/multerConfig.js";
+import {
+  getCompetitions,
+  getSingleCompetition,
+} from "../controllers/competition.controller.js";
 import { getStudentDashboardStats } from "../controllers/studentDashboard.controller.js";
+import {
+  getPublishedEvents as getPublishedLiveCompetitions,
+  getPublishedEventById as getPublishedLiveCompetitionById,
+  initiateLiveCompetitionPayment,
+  completeLiveCompetitionRegistration,
+  submitWork as submitLiveCompetitionWork,
+  getMySubmissions as getMyLiveCompetitionSubmissions,
+  startEssaySession,
+  saveDraft as saveLiveEssayDraft,
+} from "../controllers/liveCompetition.controller.js";
+import { getActiveCategories } from "../controllers/liveCompetitionCategory.controller.js";
 
 import {
   createQnA,
@@ -202,7 +222,7 @@ router.put(
   "/update-profile",
   verifyJWT,
   uploadImage.single("profileImage"),
-  updateProfile
+  updateProfile,
 );
 router.put("/change-password", verifyJWT, changePassword);
 
@@ -459,7 +479,7 @@ router.get("/teacher-sessions/recordings", verifyJWT, getCallRecordings);
 router.post(
   "/teacher-sessions/:sessionId/agora-token",
   verifyJWT,
-  postStudentAgoraRtcToken
+  postStudentAgoraRtcToken,
 );
 
 // ==================== SUPPORT DESK ====================
@@ -479,11 +499,10 @@ router.post(
 router.get("/blogs", verifyJWT, getAllBlogs);
 router.get("/blogs/:id", verifyJWT, getBlogById);
 
-
 router.post("/qna-request", verifyJWT, createQnA);
 router.get("/qna", verifyJWT, getAllQnAs);
 router.get("/qna/:id", verifyJWT, getQnAById);
-router.get('/qna-request',verifyJWT,selfQnAs)
+router.get("/qna-request", verifyJWT, selfQnAs);
 // Press announcements (read only)
 router.get("/press-announcements", verifyJWT, getAllPressAnnouncementsUser);
 router.get("/press-announcements/:id", verifyJWT, getPressAnnouncementByIdUser);
@@ -570,5 +589,47 @@ router.post(
 // ==================== NEED TO IMPROVE ====================
 router.get("/need-to-improve", verifyJWT, getNeedToImprove);
 router.post("/need-to-improve/refresh", verifyJWT, refreshNeedToImprove);
+
+// ==================== LIVE COMPETITIONS ====================
+
+// Event Browsing
+router.get("/live-competitions", verifyJWT, getPublishedLiveCompetitions);
+router.get(
+  "/live-competitions/:id",
+  verifyJWT,
+  getPublishedLiveCompetitionById,
+);
+
+// Registration — initiate handles free / wallet / razorpay in one place
+router.post(
+  "/live-competitions/:id/initiate-payment",
+  verifyJWT,
+  initiateLiveCompetitionPayment,
+);
+router.post(
+  "/live-competitions/:id/complete-payment",
+  verifyJWT,
+  completeLiveCompetitionRegistration,
+);
+
+// Submission (supports file uploads via uploadLiveCompetitionContent.array("files", 5))
+router.post(
+  "/live-competitions/:id/submit",
+  verifyJWT,
+  uploadLiveCompetitionContent.array("files", 5),
+  submitLiveCompetitionWork,
+);
+router.get("/my-live-submissions", verifyJWT, getMyLiveCompetitionSubmissions);
+
+// Live Essay Session
+router.post("/live-competitions/:id/start", verifyJWT, startEssaySession);
+router.patch(
+  "/live-competitions/:id/save-draft",
+  verifyJWT,
+  saveLiveEssayDraft,
+);
+
+// ==================== LIVE COMPETITION CATEGORIES (Public) ====================
+router.get("/live-competition-categories", verifyJWT, getActiveCategories);
 
 export default router;

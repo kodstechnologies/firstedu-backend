@@ -6,7 +6,9 @@ import couponRepository from "../repository/coupon.repository.js";
  */
 export const createCoupon = async (couponData) => {
   // Check if code already exists
-  const existingCoupon = await couponRepository.findCouponByCode(couponData.code);
+  const existingCoupon = await couponRepository.findCouponByCode(
+    couponData.code,
+  );
   if (existingCoupon) {
     throw new ApiError(400, "Coupon code already exists");
   }
@@ -17,7 +19,10 @@ export const createCoupon = async (couponData) => {
   }
 
   // Validate discount value
-  if (couponData.discountType === "percentage" && couponData.discountValue > 100) {
+  if (
+    couponData.discountType === "percentage" &&
+    couponData.discountValue > 100
+  ) {
     throw new ApiError(400, "Percentage discount cannot exceed 100%");
   }
 
@@ -30,7 +35,12 @@ export const createCoupon = async (couponData) => {
 /**
  * Get all coupons
  */
-export const getCoupons = async (page = 1, limit = 10, isActive = null, search = null) => {
+export const getCoupons = async (
+  page = 1,
+  limit = 10,
+  isActive = null,
+  search = null,
+) => {
   const query = {};
   if (isActive !== null) {
     query.isActive = isActive === "true";
@@ -68,7 +78,9 @@ export const updateCoupon = async (couponId, updateData) => {
 
   // If code is being updated, check for duplicates
   if (updateData.code && updateData.code.toUpperCase() !== coupon.code) {
-    const existingCoupon = await couponRepository.findCouponByCode(updateData.code);
+    const existingCoupon = await couponRepository.findCouponByCode(
+      updateData.code,
+    );
     if (existingCoupon && existingCoupon._id.toString() !== couponId) {
       throw new ApiError(400, "Coupon code already exists");
     }
@@ -99,7 +111,11 @@ export const deleteCoupon = async (couponId) => {
 /**
  * Validate and apply coupon
  */
-export const validateCoupon = async (code, purchaseAmount, itemType = "all") => {
+export const validateCoupon = async (
+  code,
+  purchaseAmount,
+  itemType = "all",
+) => {
   const coupon = await couponRepository.findCouponByCode(code);
 
   if (!coupon) {
@@ -135,9 +151,13 @@ export const validateCoupon = async (code, purchaseAmount, itemType = "all") => 
     ecommerce: "Ecommerce",
     merchandise: "Ecommerce",
     competitionCategory: "CompetitionCategory",
+    live_competition: "LiveCompetition",
   };
   const normalizedItemType = ITEM_TYPE_MAP[itemType] || itemType;
-  if (coupon.applicableTo !== "all" && coupon.applicableTo !== normalizedItemType) {
+  if (
+    coupon.applicableTo !== "all" &&
+    coupon.applicableTo !== normalizedItemType
+  ) {
     throw new ApiError(400, `Coupon is not applicable to ${itemType}`);
   }
 
@@ -173,4 +193,3 @@ export default {
   validateCoupon,
   incrementCouponUsedCount,
 };
-
