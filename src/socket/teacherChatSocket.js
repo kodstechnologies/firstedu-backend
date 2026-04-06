@@ -1,15 +1,10 @@
-import jwt from "jsonwebtoken";
-import User from "../models/Student.js";
-import Teacher from "../models/Teacher.js";
-import studentSessionRepository from "../repository/studentSession.repository.js";
 import teacherSessionRepository from "../repository/teacherSession.repository.js";
 import teacherRepository from "../repository/teacher.repository.js";
 import teacherChatService from "../services/teacherChat.service.js";
-
-const normalizeToken = (raw) => {
-  if (!raw || typeof raw !== "string") return "";
-  return raw.replace(/^Bearer\s+/i, "").replace(/^"+|"+$/g, "").trim();
-};
+import {
+  authenticateTeacherConnectSocket,
+  normalizeSocketAuthToken,
+} from "./socketAuth.util.js";
 
 const chatBillingTimers = new Map();
 
@@ -84,50 +79,16 @@ const startChatBilling = (namespace, sessionId) => {
   chatBillingTimers.set(key, intervalId);
 };
 
-const authenticateChatSocket = async (token) => {
-  try {
-    const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
-    if (decoded.userType === "teacher") {
-      const teacher = await Teacher.findById(decoded._id).select("_id name email status");
-      if (!teacher || teacher.status !== "approved") return null;
-      return {
-        _id: teacher._id,
-        name: teacher.name,
-        email: teacher.email,
-        role: "teacher",
-      };
-    }
-
-    const user = await User.findById(decoded._id).select("_id name email phone status");
-    if (!user || user.status === "banned") return null;
-
-    if (decoded.sessionId) {
-      const session = await studentSessionRepository.findById(decoded.sessionId);
-      if (!session || session.student.toString() !== user._id.toString()) return null;
-    }
-
-    return {
-      _id: user._id,
-      name: user.name,
-      email: user.email,
-      phone: user.phone,
-      role: "student",
-    };
-  } catch {
-    return null;
-  }
-};
-
 export const setupTeacherChatSocket = (io) => {
   const ns = io.of("/teacher-chat");
 
   ns.use(async (socket, next) => {
-    const token = normalizeToken(
+    const token = normalizeSocketAuthToken(
       socket.handshake.auth?.token || socket.handshake.headers?.authorization || ""
     );
     if (!token) return next(new Error("Authentication error: No token provided"));
 
-    const user = await authenticateChatSocket(token);
+    const user = await authenticateTeacherConnectSocket(token);
     if (!user) {
       return next(new Error("Authentication error: Invalid or expired token"));
     }
@@ -157,6 +118,7 @@ export const setupTeacherChatSocket = (io) => {
       }
       try {
         const session = await teacherChatService.initiateChatRequest(userId, teacherId, subject);
+        socket.data.pendingChatSessionId = session._id.toString();
         socket.emit("chat_request_sent", { session });
 
         await teacherChatService.notifyTeacherDevice(
@@ -276,6 +238,9 @@ export const setupTeacherChatSocket = (io) => {
         const sid = session._id.toString();
         socket.join(`session:${sid}`);
         socket.data.chatSessionId = sid;
+        if (user.role === "student") {
+          delete socket.data.pendingChatSessionId;
+        }
         socket.emit("joined_chat_session", { sessionId: sid, session });
       } catch (err) {
         socket.emit("chat_error", {
@@ -338,6 +303,58 @@ export const setupTeacherChatSocket = (io) => {
       }
     };
 
+    const withdrawStudentPendingChat = async () => {
+      if (user.role !== "student") return null;
+      const pendingId = socket.data.pendingChatSessionId;
+      if (!pendingId) return null;
+      delete socket.data.pendingChatSessionId;
+      try {
+        const sessionDoc = await teacherChatService.cancelPendingChatRequestByStudent(
+          userId,
+          pendingId
+        );
+        if (sessionDoc) {
+          const tid = sessionDoc.teacher._id.toString();
+          ns.to(`teacher:${tid}`).emit("chat_request_withdrawn", {
+            sessionId: sessionDoc._id.toString(),
+            timestamp: new Date(),
+          });
+        }
+        return sessionDoc;
+      } catch (err) {
+        console.error("Withdraw pending chat error:", err);
+        return null;
+      }
+    };
+
+    socket.on("cancel_chat_request", async (payload = {}) => {
+      if (user.role !== "student") {
+        socket.emit("chat_error", { message: "Only students can cancel a chat request" });
+        return;
+      }
+      const requestedId = payload.sessionId || socket.data.pendingChatSessionId;
+      if (!requestedId) {
+        socket.emit("chat_error", { message: "No pending chat request to cancel" });
+        return;
+      }
+      if (
+        socket.data.pendingChatSessionId &&
+        socket.data.pendingChatSessionId !== String(requestedId)
+      ) {
+        socket.emit("chat_error", { message: "sessionId does not match your pending request" });
+        return;
+      }
+      socket.data.pendingChatSessionId = String(requestedId);
+      const withdrawn = await withdrawStudentPendingChat();
+      if (withdrawn) {
+        socket.emit("chat_request_cancelled", { sessionId: withdrawn._id.toString() });
+      } else {
+        socket.emit("chat_error", {
+          message: "No pending chat request to cancel or it was already handled",
+        });
+      }
+    });
+
     socket.on("end_chat", async (payload = {}) => {
       const { sessionId } = payload;
       if (!sessionId) {
@@ -372,6 +389,11 @@ export const setupTeacherChatSocket = (io) => {
     });
 
     socket.on("disconnect", async () => {
+      try {
+        await withdrawStudentPendingChat();
+      } catch (err) {
+        console.error("Teacher chat pending withdraw on disconnect:", err);
+      }
       const sid = socket.data.chatSessionId;
       if (!sid) return;
       try {

@@ -11,14 +11,10 @@ import {
   getProfile,
   updateProfile,
   toggleAvailability,
-  getPendingRequests,
-  acceptCallRequest,
-  rejectCallRequest,
-  startCall,
-  endCall,
   getSessionHistory,
   deleteTeacherSession,
   getEarnings,
+  getDashboard,
   registerTeacherFcmToken,
 } from "../controllers/teacherConnect.controller.js";
 import { verifyJWT } from "../middleware/auth.middleware.js";
@@ -30,6 +26,14 @@ import {
   markTeacherNotificationAsRead,
   markAllTeacherNotificationsAsRead,
 } from "../controllers/notification.controller.js";
+import {
+  getTeacherWallet,
+  putTeacherBankDetails,
+  getTeacherBankDetails,
+  postTeacherWithdrawal,
+  getTeacherWalletTransactions
+} from "../controllers/teacherWithdrawal.controller.js";
+import { postTeacherAgoraRtcToken } from "../controllers/agoraRtc.controller.js";
 
 const router = Router();
 
@@ -52,6 +56,7 @@ router.post("/contact-support",verifyJWT, submitSupport);
 router.get("/profile", verifyJWT, getProfile);
 router.put("/profile", verifyJWT, uploadImage.single("profileImage"), updateProfile);
 router.put("/availability", verifyJWT, toggleAvailability);
+router.get("/dashboard", verifyJWT, getDashboard);
 router.post("/notifications/register-token", verifyJWT, registerTeacherFcmToken);
 router.get("/notifications", verifyJWT, getTeacherMyNotifications);
 router.get("/notifications/unread-count", verifyJWT, getTeacherUnreadCount);
@@ -62,14 +67,15 @@ router.put(
 );
 router.put("/notifications/read-all", verifyJWT, markAllTeacherNotificationsAsRead);
 
-// Call Requests
-router.get("/pending-requests", verifyJWT, getPendingRequests);
-router.post("/sessions/:sessionId/accept", verifyJWT, acceptCallRequest);
-router.post("/sessions/:sessionId/reject", verifyJWT, rejectCallRequest);
+// Wallet & withdrawals (Teacher wallet userType: Teacher)
+router.get("/wallet", verifyJWT, getTeacherWallet);
+router.get("/wallet/transactions", verifyJWT, getTeacherWalletTransactions);
+router.put("/wallet/bank-details", verifyJWT, putTeacherBankDetails);
+router.get("/wallet/bank-details", verifyJWT, getTeacherBankDetails);
+router.post("/wallet/withdrawals", verifyJWT, postTeacherWithdrawal);
 
-// Call Management
-router.post("/sessions/:sessionId/start", verifyJWT, startCall);
-router.post("/sessions/:sessionId/end", verifyJWT, endCall);
+// Agora RTC token (join channel after call_accepted on /teacher-call socket)
+router.post("/sessions/:sessionId/agora-token", verifyJWT, postTeacherAgoraRtcToken);
 
 // Session History & Earnings
 router.get("/sessions", verifyJWT, getSessionHistory);

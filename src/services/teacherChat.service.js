@@ -2,6 +2,7 @@ import { ApiError } from "../utils/ApiError.js";
 import teacherRepository from "../repository/teacher.repository.js";
 import teacherSessionRepository from "../repository/teacherSession.repository.js";
 import walletService from "./wallet.service.js";
+import * as teacherWalletLedger from "./teacherWalletLedger.service.js";
 import studentSessionRepository from "../repository/studentSession.repository.js";
 import { sendNotificationToDevice } from "./fcm.service.js";
 import * as notificationService from "./notification.service.js";
@@ -113,6 +114,29 @@ export async function initiateChatRequest(studentId, teacherId, subject) {
   });
 
   return session;
+}
+
+/**
+ * Student disconnects or leaves before the teacher accepts — clear pending so a new request is allowed.
+ */
+export async function cancelPendingChatRequestByStudent(studentId, sessionId) {
+  const session = await teacherSessionRepository.findById(sessionId);
+  if (!session || session.sessionKind !== "chat") {
+    return null;
+  }
+  if (session.student._id.toString() !== studentId.toString()) {
+    throw new ApiError(403, "Unauthorized to cancel this chat request");
+  }
+  if (session.status !== "pending") {
+    return null;
+  }
+  return await teacherSessionRepository.updateById(sessionId, {
+    status: "cancelled",
+    rejectedAt: new Date(),
+    rejectionReason: "Student left before the chat started",
+    callEndTime: new Date(),
+    sessionEndReason: "student_withdrew_before_accept",
+  });
 }
 
 export async function acceptChatSession(teacherId, sessionId) {
@@ -243,11 +267,34 @@ export async function finalizeChatSession(
     return session;
   }
 
-  return await teacherSessionRepository.updateById(sessionId, {
+  const updated = await teacherSessionRepository.updateById(sessionId, {
     status: "completed",
     callEndTime: new Date(),
     sessionEndReason,
   });
+
+  const totalAmount = updated?.totalAmount ?? session.totalAmount ?? 0;
+  const teacherId = session.teacher._id || session.teacher;
+  if (totalAmount > 0) {
+    await walletService.addMonetaryBalance(
+      teacherId,
+      totalAmount,
+      `chat_session_${sessionId}`,
+      "Teacher"
+    );
+    const bal = await walletService.getWalletBalance(teacherId, "Teacher");
+    await teacherWalletLedger
+      .recordSessionEarning({
+        teacherId,
+        amount: totalAmount,
+        balanceAfter: bal.monetaryBalance,
+        sessionId: updated._id,
+        sessionKind: "chat",
+      })
+      .catch((e) => console.error("teacherWalletLedger recordSessionEarning:", e));
+  }
+
+  return updated;
 }
 
 export const chatConstants = {
@@ -257,6 +304,7 @@ export const chatConstants = {
 
 export default {
   initiateChatRequest,
+  cancelPendingChatRequestByStudent,
   acceptChatSession,
   rejectChatSession,
   assertParticipant,

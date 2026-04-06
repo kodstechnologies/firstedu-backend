@@ -116,13 +116,12 @@ import { getMyOrders } from "../controllers/order.controller.js";
 import {
   getAvailableTeachers,
   getTeacherById,
-  initiateCallRequest,
   getCallHistory,
   getCallRecordings,
-  cancelCallRequest,
   checkWalletBalance,
   rateTeacher,
 } from "../controllers/studentTeacherConnect.controller.js";
+import { postStudentAgoraRtcToken } from "../controllers/agoraRtc.controller.js";
 import {
   createTicket,
   getMyTickets,
@@ -163,20 +162,40 @@ import {
 } from "../controllers/certificate.controller.js";
 import {
   getStudentCompetitionSectors,
-  initiateTestPayment as initiateCompetitionTestPayment,
-  purchaseTest as purchaseCompetitionTest,
+  getCompetitions,
+  getSingleCompetition,
+  // initiateTestPayment as initiateCompetitionTestPayment,
+  // purchaseTest as purchaseCompetitionTest,
+  initiateCategoryPayment,
+  purchaseCategory,
 } from "../controllers/studentCompetition.controller.js";
 import {
   getNeedToImprove,
   refreshNeedToImprove,
 } from "../controllers/needToImprove.controller.js";
 import { verifyJWT } from "../middleware/auth.middleware.js";
-import { uploadImage, uploadPDF } from "../utils/multerConfig.js";
 import {
-  getCompetitions,
-  getSingleCompetition,
-} from "../controllers/competition.controller.js";
+  upload,
+  uploadImage,
+  uploadPDF,
+  uploadLiveCompetitionContent,
+} from "../utils/multerConfig.js";
+// import {
+//   getCompetitions,
+//   getSingleCompetition,
+// } from "../controllers/competition.controller.js";
 import { getStudentDashboardStats } from "../controllers/studentDashboard.controller.js";
+import {
+  getPublishedEvents as getPublishedLiveCompetitions,
+  getPublishedEventById as getPublishedLiveCompetitionById,
+  initiateLiveCompetitionPayment,
+  completeLiveCompetitionRegistration,
+  submitWork as submitLiveCompetitionWork,
+  getMySubmissions as getMyLiveCompetitionSubmissions,
+  startEssaySession,
+  saveDraft as saveLiveEssayDraft,
+} from "../controllers/liveCompetition.controller.js";
+import { getActiveCategories } from "../controllers/liveCompetitionCategory.controller.js";
 
 import {
   createQnA,
@@ -184,7 +203,7 @@ import {
   getQnAById,
   selfQnAs,
 } from "../controllers/qna.controller.js";
-import { verify } from "crypto";
+
 const router = Router();
 
 // Student Authentication Routes
@@ -203,7 +222,7 @@ router.put(
   "/update-profile",
   verifyJWT,
   uploadImage.single("profileImage"),
-  updateProfile
+  updateProfile,
 );
 router.put("/change-password", verifyJWT, changePassword);
 
@@ -454,18 +473,13 @@ router.get("/teachers/:teacherId", verifyJWT, getTeacherById);
 router.post("/teachers/:teacherId/rate", verifyJWT, rateTeacher);
 router.get("/teachers/:teacherId/check-balance", verifyJWT, checkWalletBalance);
 
-// Call Management
-router.post(
-  "/teachers/:teacherId/request-call",
-  verifyJWT,
-  initiateCallRequest,
-);
+// Teacher sessions (history) + Agora token after call_accepted on /teacher-call socket
 router.get("/teacher-sessions", verifyJWT, getCallHistory);
 router.get("/teacher-sessions/recordings", verifyJWT, getCallRecordings);
 router.post(
-  "/teacher-sessions/:sessionId/cancel",
+  "/teacher-sessions/:sessionId/agora-token",
   verifyJWT,
-  cancelCallRequest,
+  postStudentAgoraRtcToken,
 );
 
 // ==================== SUPPORT DESK ====================
@@ -485,11 +499,10 @@ router.post(
 router.get("/blogs", verifyJWT, getAllBlogs);
 router.get("/blogs/:id", verifyJWT, getBlogById);
 
-
 router.post("/qna-request", verifyJWT, createQnA);
 router.get("/qna", verifyJWT, getAllQnAs);
 router.get("/qna/:id", verifyJWT, getQnAById);
-router.get('/qna-request',verifyJWT,selfQnAs)
+router.get("/qna-request", verifyJWT, selfQnAs);
 // Press announcements (read only)
 router.get("/press-announcements", verifyJWT, getAllPressAnnouncementsUser);
 router.get("/press-announcements/:id", verifyJWT, getPressAnnouncementByIdUser);
@@ -548,22 +561,75 @@ router.get("/success-stories/:id", verifyJWT, getStoryDetailStudent);
 router.get("/competitions", getStudentCompetitionSectors);
 router.get("/competitions/single/:id", verifyJWT, getSingleCompetition);
 router.get("/competitions/:id", verifyJWT, getCompetitions);
-// router.get("/competitions/:idOrSlug", getCompetitionByIdOrSlug);
 
-// Competition Test Purchases
+// Competition (Category Bundle) Purchases
 router.post(
-  "/competitions/tests/:testId/initiate-payment",
+  "/competitions/category/:categoryId/initiate-payment",
   verifyJWT,
-  initiateCompetitionTestPayment,
+  initiateCategoryPayment,
 );
 router.post(
-  "/competitions/tests/:testId/purchase",
+  "/competitions/category/:categoryId/purchase",
   verifyJWT,
-  purchaseCompetitionTest,
+  purchaseCategory,
 );
+
+// Individual Competition Test Purchases (Backward compatibility)
+// router.post(
+//   "/competitions/tests/:testId/initiate-payment",
+//   verifyJWT,
+//   initiateCompetitionTestPayment,
+// );
+// router.post(
+//   "/competitions/tests/:testId/purchase",
+//   verifyJWT,
+//   purchaseCompetitionTest,
+// );
 
 // ==================== NEED TO IMPROVE ====================
 router.get("/need-to-improve", verifyJWT, getNeedToImprove);
 router.post("/need-to-improve/refresh", verifyJWT, refreshNeedToImprove);
+
+// ==================== LIVE COMPETITIONS ====================
+
+// Event Browsing
+router.get("/live-competitions", verifyJWT, getPublishedLiveCompetitions);
+router.get(
+  "/live-competitions/:id",
+  verifyJWT,
+  getPublishedLiveCompetitionById,
+);
+
+// Registration — initiate handles free / wallet / razorpay in one place
+router.post(
+  "/live-competitions/:id/initiate-payment",
+  verifyJWT,
+  initiateLiveCompetitionPayment,
+);
+router.post(
+  "/live-competitions/:id/complete-payment",
+  verifyJWT,
+  completeLiveCompetitionRegistration,
+);
+
+// Submission (supports file uploads via uploadLiveCompetitionContent.array("files", 5))
+router.post(
+  "/live-competitions/:id/submit",
+  verifyJWT,
+  uploadLiveCompetitionContent.array("files", 5),
+  submitLiveCompetitionWork,
+);
+router.get("/my-live-submissions", verifyJWT, getMyLiveCompetitionSubmissions);
+
+// Live Essay Session
+router.post("/live-competitions/:id/start", verifyJWT, startEssaySession);
+router.patch(
+  "/live-competitions/:id/save-draft",
+  verifyJWT,
+  saveLiveEssayDraft,
+);
+
+// ==================== LIVE COMPETITION CATEGORIES (Public) ====================
+router.get("/live-competition-categories", verifyJWT, getActiveCategories);
 
 export default router;

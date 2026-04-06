@@ -15,6 +15,10 @@ const testPurchaseSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "TestBundle",
     },
+    competitionCategory: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "CompetitionCategory",
+    },
     purchasePrice: {
       type: Number,
       required: true,
@@ -41,11 +45,12 @@ const testPurchaseSchema = new mongoose.Schema(
 
 // Ensure either test or testBundle is provided, not both
 testPurchaseSchema.pre("validate", function (next) {
-  if (!this.test && !this.testBundle) {
-    return next(new Error("Either test or testBundle must be provided"));
+  const providers = [this.test, this.testBundle, this.competitionCategory].filter(Boolean);
+  if (providers.length === 0) {
+    return next(new Error("Either test, testBundle, or competitionCategory must be provided"));
   }
-  if (this.test && this.testBundle) {
-    return next(new Error("Cannot provide both test and testBundle"));
+  if (providers.length > 1) {
+    return next(new Error("Only one of test, testBundle, or competitionCategory can be provided"));
   }
   next();
 });
@@ -59,6 +64,12 @@ testPurchaseSchema.index(
 testPurchaseSchema.index(
   { student: 1, testBundle: 1 },
   { unique: true, partialFilterExpression: { testBundle: { $exists: true } } }
+);
+
+// Prevent duplicate purchases for competition categories
+testPurchaseSchema.index(
+  { student: 1, competitionCategory: 1 },
+  { unique: true, partialFilterExpression: { competitionCategory: { $exists: true } } }
 );
 
 export default mongoose.models.TestPurchase ||

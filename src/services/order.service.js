@@ -107,11 +107,12 @@ export const getAggregatedOrderHistory = async (
   };
 
   // Get all purchases, registrations and claims
-  const [coursePurchases, testPurchases, merchandiseClaims, eventRegistrations] = await Promise.all([
+  const [coursePurchases, testPurchases, merchandiseClaims, eventRegistrations, liveCompRegistrations] = await Promise.all([
     orderRepository.findCoursePurchases(studentId),
     orderRepository.findTestPurchases(studentId),
     orderRepository.findMerchandiseClaims(studentId),
     orderRepository.findEventRegistrations(studentId),
+    orderRepository.findLiveCompetitionRegistrations(studentId),
   ]);
 
   // Combine and format into one normalized response
@@ -131,8 +132,8 @@ export const getAggregatedOrderHistory = async (
       id: p._id,
       type: p.test ? "test" : "testbundle",
       date: p.purchaseDate || p.createdAt,
-      title: p.test?.title || p.testBundle?.name || "Test/Bundle",
-      itemName: p.test?.title || p.testBundle?.name || "Test/Bundle",
+      title: p.test?.title || p.competitionCategory?.title || p.testBundle?.name || "Test/Bundle",
+      itemName: p.test?.title || p.competitionCategory?.title || p.testBundle?.name || "Test/Bundle",
       amount: toNumber(p.purchasePrice),
       paymentMethod: normalizePaymentMethod(p.paymentId, p.purchasePrice),
       status: p.paymentStatus,
@@ -160,6 +161,22 @@ export const getAggregatedOrderHistory = async (
           methodFromModel || normalizePaymentMethod(r.paymentId, amountPaid),
         status: r.paymentStatus,
         data: r,
+      };
+    }),
+    ...liveCompRegistrations.map((lc) => {
+      const fallbackAmount = toNumber(lc.event?.fee?.amount);
+      const amountPaid = fallbackAmount; // Live competition submission doesn't currently store `amountPaid` directly
+      
+      return {
+        id: lc._id,
+        type: "live_competition",
+        date: lc.createdAt,
+        title: lc.event?.title || "Live Competition",
+        itemName: lc.event?.title || "Live Competition",
+        amount: amountPaid,
+        paymentMethod: normalizePaymentMethod("razorpay", amountPaid), // Assuming razorpay or wallet
+        status: lc.paymentStatus,
+        data: lc,
       };
     }),
     ...merchandiseClaims.map((c) => ({

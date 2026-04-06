@@ -243,7 +243,33 @@ import {
   approveQnA,
 } from "../controllers/qna.controller.js";
 import { verifyJWT } from "../middleware/auth.middleware.js";
+import { verifyAdmin } from "../middleware/admin.middleware.js";
+import {
+  getAdminWithdrawalList,
+  getAdminWithdrawalById,
+  postAdminApproveWithdrawal,
+  postAdminRejectWithdrawal,
+} from "../controllers/teacherWithdrawal.controller.js";
 import { uploadCourseMaterial, uploadImage, uploadPDF, uploadSuccessStory } from '../utils/multerConfig.js';
+import {
+  createEvent as createLiveCompetition,
+  getEvents as getLiveCompetitions,
+  getEventById as getLiveCompetitionById,
+  updateEvent as updateLiveCompetition,
+  deleteEvent as deleteLiveCompetition,
+  getSubmissionsByEvent,
+  getSubmissionById,
+  reviewSubmission,
+  deleteSubmission,
+  declareWinner,
+  getEventStats,
+} from "../controllers/liveCompetition.controller.js";
+import {
+  createCategory as createLiveCategory,
+  getAllCategories as getLiveCategories,
+  updateCategory as updateLiveCategory,
+  deleteCategory as deleteLiveCategory,
+} from "../controllers/liveCompetitionCategory.controller.js";
 
 const router = Router();
 
@@ -321,6 +347,22 @@ router.post("/teachers/:id/send-credentials", verifyJWT, sendLoginCredentials);
 router.put("/teachers/:id/rate", verifyJWT, updatePerMinuteRate);
 router.put("/teachers/:id", verifyJWT, uploadImage.single("profileImage"), updateTeacher);
 router.delete("/teachers/:id", verifyJWT, deleteTeacher);
+
+// Teacher wallet withdrawals (pending requests; approve/reject notifies teacher via FCM)
+router.get("/teacher-withdrawals", verifyJWT, verifyAdmin, getAdminWithdrawalList);
+router.get("/teacher-withdrawals/:id", verifyJWT, verifyAdmin, getAdminWithdrawalById);
+router.post(
+  "/teacher-withdrawals/:id/approve",
+  verifyJWT,
+  verifyAdmin,
+  postAdminApproveWithdrawal
+);
+router.post(
+  "/teacher-withdrawals/:id/reject",
+  verifyJWT,
+  verifyAdmin,
+  postAdminRejectWithdrawal
+);
 
 // Student Management & Proctoring
 router.get("/students", verifyJWT, getStudents);
@@ -548,5 +590,31 @@ router.get("/qna/:id", verifyJWT, getQnAById);
 router.put("/qna/:id", verifyJWT, updateQnA);
 router.put("/qna/approve/:id", verifyJWT, approveQnA);
 router.delete("/qna/:id", verifyJWT, deleteQnA);
+// ==================== LIVE COMPETITIONS ====================
+
+// Event Management (CRUD)
+router.post("/live-competitions", verifyJWT, uploadImage.single("banner"), createLiveCompetition);
+router.get("/live-competitions", verifyJWT, getLiveCompetitions);
+router.get("/live-competitions/:id", verifyJWT, getLiveCompetitionById);
+router.put("/live-competitions/:id", verifyJWT, uploadImage.single("banner"), updateLiveCompetition);
+router.delete("/live-competitions/:id", verifyJWT, deleteLiveCompetition);
+
+// Submission Management
+router.get("/live-competitions/:id/submissions", verifyJWT, getSubmissionsByEvent);
+router.get("/live-competition-submissions/:id", verifyJWT, getSubmissionById);
+router.patch("/live-competition-submissions/:id/review", verifyJWT, reviewSubmission);
+router.delete("/live-competition-submissions/:id", verifyJWT, deleteSubmission);
+
+// Winner System
+router.put("/live-competitions/:id/winner", verifyJWT, declareWinner);
+
+// Analytics
+router.get("/live-competitions/:id/stats", verifyJWT, getEventStats);
+
+// ==================== LIVE COMPETITION CATEGORIES ====================
+router.post("/live-competition-categories", verifyJWT, createLiveCategory);
+router.get("/live-competition-categories", verifyJWT, getLiveCategories);
+router.put("/live-competition-categories/:id", verifyJWT, updateLiveCategory);
+router.delete("/live-competition-categories/:id", verifyJWT, deleteLiveCategory);
 
 export default router;

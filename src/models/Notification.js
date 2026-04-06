@@ -36,7 +36,16 @@ const notificationSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ["general", "announcement", "course", "test", "event", "system"],
+      enum: [
+        "general",
+        "announcement",
+        "course",
+        "test",
+        "event",
+        "system",
+        "teacher_withdrawal_approved",
+        "teacher_withdrawal_rejected",
+      ],
       default: "general",
     },
     fcmSent: {

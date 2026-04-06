@@ -41,12 +41,7 @@ const teacherSessionSchema = new mongoose.Schema(
       required: true,
       min: 0,
     },
-    // Call details
-    twilioCallSid: {
-      type: String,
-      trim: true,
-      default: null,
-    },
+    // Agora RTC voice/video call
     callStartTime: {
       type: Date,
       default: null,
@@ -76,7 +71,8 @@ const teacherSessionSchema = new mongoose.Schema(
       trim: true,
       default: null,
     },
-    recordingSid: {
+    // Optional: Agora Cloud Recording resource id (or similar)
+    agoraRecordingId: {
       type: String,
       trim: true,
       default: null,
@@ -115,7 +111,6 @@ const teacherSessionSchema = new mongoose.Schema(
 teacherSessionSchema.index({ student: 1, createdAt: -1 });
 teacherSessionSchema.index({ teacher: 1, createdAt: -1 });
 teacherSessionSchema.index({ status: 1 });
-teacherSessionSchema.index({ twilioCallSid: 1 });
 
 export default mongoose.models.TeacherSession ||
   mongoose.model("TeacherSession", teacherSessionSchema);

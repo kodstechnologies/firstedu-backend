@@ -1,103 +1,109 @@
 import competitionRepository from "../repository/competition.repository.js";
 import { ApiError } from "../utils/ApiError.js";
+import { attachOfferToList, attachOfferToItem } from "../utils/offerUtils.js";
 
-// ==================== COMPETITIONS ====================
+// ==================== COMPETITION CATEGORIES (was Competitions) ====================
 
 const createCompetition = async (data) => {
-  if (!data.title || !data.description || !data.competitionSectorId) {
-    throw new ApiError(
-      400,
-      "Title, description, and competitionSectorId are required",
-    );
+  if (!data.sectorId || !data.title) {
+    throw new ApiError(400, "sectorId and title are required");
   }
-
-  const competition = await competitionRepository.createCompetition(data);
-
-  // Link to Sector
-  await competitionRepository.updateSectorPushCompetition(
-    data.competitionSectorId,
-    competition._id,
-  );
-
-  return competition;
+  return await competitionRepository.createCompetition(data);
 };
 
 const getSingleCompetitionWithTests = async (id, userId) => {
-  const comp = await competitionRepository.findCompetitionWithTestsById(id, userId);
-  if (!comp) throw new ApiError(404, "Competition not found");
-  return comp;
+  const category = await competitionRepository.findCompetitionWithTestsById(id, userId);
+  if (!category) throw new ApiError(404, "Competition category not found");
+  return await attachOfferToItem(category, "CompetitionCategory", "price");
 };
 
 const getCompetitionsBySector = async (sectorId) => {
-  const sector = await competitionRepository.findSectorById(sectorId, {
-    competitions: true,
-  });
-  if (!sector) {
-    throw new ApiError(404, "Competition Sector not found");
-  }
-  return sector;
+  if (!sectorId) throw new ApiError(400, "sectorId is required");
+  const categoriesRaw = await competitionRepository.findCategoriesBySectorId(sectorId);
+  return await attachOfferToList(categoriesRaw, "CompetitionCategory", "price");
 };
 
 const updateCompetition = async (id, data) => {
   const existing = await competitionRepository.findCompetitionById(id);
-  if (!existing) throw new ApiError(404, "Competition not found");
+  if (!existing) throw new ApiError(404, "Competition category not found");
 
-  return await competitionRepository.updateCompetitionById(id, data);
+  // Block price change if any student has purchased this category
+  const isPriceChanging =
+    data.price !== undefined && Number(data.price) !== Number(existing.price);
+  const isDiscountChanging =
+    data.discountedPrice !== undefined &&
+    Number(data.discountedPrice) !== Number(existing.discountedPrice);
+
+  if (existing.purchaseCount > 0 && (isPriceChanging || isDiscountChanging)) {
+    throw new ApiError(
+      403,
+      "Cannot change price — this category has already been purchased by students"
+    );
+  }
+
+  // Strip price fields from update if blocked (extra safety)
+  const safeData = { ...data };
+  if (existing.purchaseCount > 0) {
+    delete safeData.price;
+    delete safeData.discountedPrice;
+    delete safeData.isFree;
+  }
+
+  return await competitionRepository.updateCompetitionById(id, safeData);
 };
 
 const deleteCompetition = async (id) => {
-  const competition = await competitionRepository.findCompetitionById(id);
-  if (!competition) throw new ApiError(404, "Competition not found");
+  const category = await competitionRepository.findCompetitionById(id);
+  if (!category) throw new ApiError(404, "Competition category not found");
 
-  await competitionRepository.deleteCompetitionById(id);
-
-  // Unlink from Sector
-  if (competition.competitionSectorId) {
-    await competitionRepository.updateSectorPullCompetition(
-      competition.competitionSectorId,
-      id,
+  if (category.purchaseCount > 0) {
+    throw new ApiError(
+      403,
+      "Cannot delete this category — it has been purchased by students"
     );
   }
 
+  await competitionRepository.deleteCompetitionById(id);
   return true;
 };
 
-const createTest = async (competition_id,data) => {
+// ==================== COMPETITION TESTS ====================
 
-  if (!data.title || !data.description) {
-    throw new ApiError(
-      400,
-      "Title, description, and competitionSectorId are required",
-    );
-  }
+const createTest = async (categoryId, data) => {
+  if (!categoryId) throw new ApiError(400, "categoryId is required");
+  if (!data.title) throw new ApiError(400, "title is required");
+  if (!data.testId) throw new ApiError(400, "testId is required");
 
-  const testData = await competitionRepository.createTest(competition_id,data);
+  // Verify the parent category exists
+  const category = await competitionRepository.findCompetitionById(categoryId);
+  if (!category) throw new ApiError(404, "Competition category not found");
 
-  return testData;
+  return await competitionRepository.createTest(categoryId, data);
 };
 
 const updateTest = async (id, data) => {
-  const existing = await competitionRepository.updateTest(id);
-  if (!existing) throw new ApiError(404, "Test not found");
+  const existing = await competitionRepository.findTestById(id);
+  if (!existing) throw new ApiError(404, "Competition test not found");
 
-  return await competitionRepository.updateTest(id, data);
+  // Only title and description are editable
+  const allowedUpdate = {};
+  if (data.title !== undefined) allowedUpdate.title = data.title;
+  if (data.description !== undefined) allowedUpdate.description = data.description;
+
+  return await competitionRepository.updateTest(id, allowedUpdate);
 };
 
 const deleteTest = async (id) => {
-  const competition = await competitionRepository.deleteTest(id);
-  if (!competition) throw new ApiError(404, "Test not found");
-
-  await competitionRepository.deleteTest(id);
-
+  // Guard (purchaseCount > 0) is enforced inside the repository
+  const result = await competitionRepository.deleteTest(id);
+  if (!result) throw new ApiError(404, "Competition test not found");
   return true;
 };
 
 // ==================== COMPETITION SECTORS ====================
 
 const createSector = async (data) => {
-  if (!data.title) {
-    throw new ApiError(400, "Title is required");
-  }
+  if (!data.title) throw new ApiError(400, "Title is required");
   return await competitionRepository.createSector(data);
 };
 
@@ -112,6 +118,17 @@ const updateSector = async (id, data) => {
 };
 
 const deleteSector = async (id) => {
+  // Check if any category under this sector has purchaseCount > 0
+  const categoriesRaw = await competitionRepository.findCategoriesBySectorId(id);
+  const hasPurchasedCategory = categoriesRaw.some((cat) => cat.purchaseCount > 0);
+
+  if (hasPurchasedCategory) {
+    throw new ApiError(
+      403,
+      "Cannot delete this sector minimum one test has been purchased by a student"
+    );
+  }
+
   const sector = await competitionRepository.deleteSectorById(id);
   if (!sector) throw new ApiError(404, "Competition Sector not found");
   return true;
@@ -123,10 +140,10 @@ export default {
   getCompetitionsBySector,
   updateCompetition,
   deleteCompetition,
-  createSector,
   createTest,
   updateTest,
   deleteTest,
+  createSector,
   listSectors,
   updateSector,
   deleteSector,

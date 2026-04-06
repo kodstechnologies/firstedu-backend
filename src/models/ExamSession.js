@@ -17,6 +17,11 @@ const examSessionSchema = new mongoose.Schema(
       ref: "Challenge",
       default: null,
     },
+    competitionCategory: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "CompetitionCategory",
+      default: null,
+    },
     startTime: {
       type: Date,
       required: true,
@@ -197,8 +202,8 @@ const examSessionSchema = new mongoose.Schema(
   },
 );
 
-// One active session per student per test
-examSessionSchema.index({ student: 1, test: 1, status: 1 });
+// One active session per student per test & bundle context
+examSessionSchema.index({ student: 1, test: 1, competitionCategory: 1, status: 1 });
 examSessionSchema.index({ challenge: 1, student: 1, status: 1 });
 
 export default mongoose.models.ExamSession ||

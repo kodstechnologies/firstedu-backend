@@ -3,6 +3,7 @@ import CoursePurchase from "../models/CoursePurchase.js";
 import TestPurchase from "../models/TestPurchase.js";
 import MerchandiseClaim from "../models/MerchandiseClaim.js";
 import EventRegistration from "../models/EventRegistration.js";
+import LiveCompetitionSubmission from "../models/LiveCompetitionSubmission.js";
 import { ApiError } from "../utils/ApiError.js";
 
 const findOrderById = async (id) => {
@@ -69,6 +70,7 @@ const findTestPurchases = async (studentId) => {
     return await TestPurchase.find({ student: studentId, paymentStatus: "completed" })
       .populate("test", "title description price")
       .populate("testBundle", "name description price")
+      .populate("competitionCategory", "title description price")
       .sort({ purchaseDate: -1 });
   } catch (error) {
     throw new ApiError(500, "Failed to fetch test purchases", error.message);
@@ -90,6 +92,19 @@ const findTestPurchasesForExamHall = async (studentId) => {
           path: "tests",
           select: "title description durationMinutes questionBank",
           populate: { path: "questionBank", select: "categories" },
+        },
+      })
+      .populate({
+        path: "competitionCategory",
+        select: "title description price tests",
+        populate: {
+          path: "tests",
+          select: "title description testId",
+          populate: {
+            path: "testId",
+            select: "title description durationMinutes questionBank",
+            populate: { path: "questionBank", select: "categories" },
+          },
         },
       })
       .sort({ purchaseDate: -1 });
@@ -119,6 +134,19 @@ const findEventRegistrations = async (studentId) => {
       .sort({ registeredAt: -1 });
   } catch (error) {
     throw new ApiError(500, "Failed to fetch event registrations", error.message);
+  }
+};
+
+const findLiveCompetitionRegistrations = async (studentId) => {
+  try {
+    return await LiveCompetitionSubmission.find({
+      participant: studentId,
+      paymentStatus: "COMPLETED",
+    })
+      .populate("event", "title fee")
+      .sort({ createdAt: -1 });
+  } catch (error) {
+    throw new ApiError(500, "Failed to fetch live competition registrations", error.message);
   }
 };
 
@@ -155,6 +183,7 @@ const createTestPurchase = async (purchaseData) => {
     return await TestPurchase.findById(purchase._id)
       .populate("test", "title description durationMinutes questionBank")
       .populate("testBundle", "name description tests price")
+      .populate("competitionCategory", "title description price tests")
       .populate("student", "name email");
   } catch (error) {
     throw new ApiError(500, "Failed to create test purchase", error.message);
@@ -170,6 +199,7 @@ export default {
   findTestPurchasesForExamHall,
   findMerchandiseClaims,
   findEventRegistrations,
+  findLiveCompetitionRegistrations,
   findCoursePurchase,
   createCoursePurchase,
   findTestPurchase,

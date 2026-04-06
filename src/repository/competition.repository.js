@@ -1,144 +1,203 @@
-import {Competition,Test} from "../models/Competition.js";
+import CompetitionCategory from "../models/CompetitionCategory.js";
+import CompetitionTest from "../models/CompetitionTest.js";
 import CompetitionSector from "../models/CompetitionSector.js";
 import { ApiError } from "../utils/ApiError.js";
 import orderRepository from "./order.repository.js";
 import examSessionRepository from "./examSession.repository.js";
 
-// ========== Competition Repository ==========
+// ========== CompetitionCategory Repository ==========
 
 const createCompetition = async (data) => {
   try {
-    const res = await Competition.create(data);
-    return res;
+    return await CompetitionCategory.create(data);
   } catch (error) {
-    throw new ApiError(500, "Failed to create competition", error.message);
+    if (error.code === 11000) {
+      throw new ApiError(409, "A category with this title already exists in this sector");
+    }
+    throw new ApiError(500, "Failed to create competition category", error.message);
   }
 };
 
 const findCompetitionById = async (id) => {
   try {
-   
-    return await Competition.findById(id).sort({createdAt:-1});;
+    return await CompetitionCategory.findById(id);
   } catch (error) {
-    throw new ApiError(500, "Failed to fetch competition", error.message);
+    throw new ApiError(500, "Failed to fetch competition category", error.message);
   }
 };
 
 const findCompetitionWithTestsById = async (id, userId) => {
   try {
-    const competition = await Competition.findById(id).populate({
-      path: "tests",
-      populate: {
-        path: "testId"
-      }
-    }).lean();
+    const category = await CompetitionCategory.findById(id)
+      .populate({
+        path: "tests",
+        populate: { path: "testId" },
+      })
+      .lean();
 
-    if (!competition) return null;
+    if (!category) return null;
 
-    // Filter out unpublished tests
-    competition.tests = (competition.tests || []).filter(
-      (testEntry) => testEntry.testId && testEntry.testId.isPublished === true
+    // Filter out tests whose linked Test is unpublished
+    category.tests = (category.tests || []).filter(
+      (entry) => entry.testId && entry.testId.isPublished === true
     );
 
-    // Inject isPurchased per student natively by checking the Order collection
-    if (userId && competition.tests) {
-      // Find all test purchases for this user
+    // Inject isPurchased + sessionStatus per student
+    if (userId && category.tests.length > 0) {
       const userPurchases = await orderRepository.findTestPurchases(userId);
-      const purchasedTestIds = userPurchases.map(p => p.test?._id?.toString() || p.test?.toString());
+      const purchasedTestIds = userPurchases.map(
+        (p) => p.test?._id?.toString() || p.test?.toString()
+      );
 
-      // Find all session statuses for this user
-      const testIdsForSessionCheck = competition.tests.map(t => t.testId?._id).filter(Boolean);
-      const sessionStatusMap = await examSessionRepository.getSessionStatusMapByStudent(userId, testIdsForSessionCheck);
+      const testIdsForSession = category.tests.map((t) => t.testId?._id).filter(Boolean);
+      const sessionStatusMap = await examSessionRepository.getSessionStatusMapByStudent(
+        userId,
+        testIdsForSession
+      );
 
-      competition.tests = competition.tests.map(testEntry => {
-        if (testEntry.testId) {
-          const testStrId = testEntry.testId._id.toString();
+      category.tests = category.tests.map((entry) => {
+        if (entry.testId) {
+          const testStrId = entry.testId._id.toString();
           const isPurchased = purchasedTestIds.includes(testStrId);
-          const sessionInfo = sessionStatusMap[testStrId] || { status: "not_started", sessionId: null };
-
-          testEntry.testId = {
-            ...testEntry.testId,
-            isPurchased,
-            sessionStatus: sessionInfo.status,
-            sessionId: sessionInfo.sessionId,
+          const sessionInfo = sessionStatusMap[testStrId] || {
+            status: "not_started",
+            sessionId: null,
           };
+          entry.testId = { ...entry.testId, isPurchased, ...sessionInfo };
         }
-        return testEntry;
+        return entry;
       });
     }
 
-    return competition;
+    return category;
   } catch (error) {
-    throw new ApiError(500, "Failed to fetch competition with tests", error.message);
+    throw new ApiError(500, "Failed to fetch competition category with tests", error.message);
   }
 };
 
-const findSectorById = async (id, populateOptions = {}) => {
+// Returns all categories for a sector (replaces old findSectorById)
+const findCategoriesBySectorId = async (sectorId) => {
   try {
-    return await CompetitionSector.findById(id)
-    .populate({path:"competitions",
-      populate:{
-        path:"tests",
-        populate: { path: "testId" }
-      }
-    })
-
+    return await CompetitionCategory.find({ sectorId })
+      .populate("tests")
+      .sort({ createdAt: -1 });
   } catch (error) {
-    throw new ApiError(500, "Failed to fetch competition sector", error.message);
-  }
-};
-
-const findAllCompetitions = async (filter = {}) => {
-  try {
-    return await Competition.find(filter).sort({createdAt:-1});
-   
-  } catch (error) {
-    throw new ApiError(500, "Failed to fetch competitions", error.message);
+    throw new ApiError(500, "Failed to fetch categories for sector", error.message);
   }
 };
 
 const updateCompetitionById = async (id, data) => {
   try {
-    return await Competition.findByIdAndUpdate(id, { $set: data }, { new: true });
+    return await CompetitionCategory.findByIdAndUpdate(id, { $set: data }, { new: true });
   } catch (error) {
-    throw new ApiError(500, "Failed to update competition", error.message);
+    throw new ApiError(500, "Failed to update competition category", error.message);
   }
 };
 
 const deleteCompetitionById = async (id) => {
   try {
-     const res= await Competition.findByIdAndDelete(id);
-  await CompetitionSector.updateOne({_id:res.competitionSectorId},{$Pull:{competitions:id}})
-    return res
+    return await CompetitionCategory.findByIdAndDelete(id);
   } catch (error) {
-    throw new ApiError(500, "Failed to update competition", error.message);
+    throw new ApiError(500, "Failed to delete competition category", error.message);
   }
 };
 
- const createTest = async (id, data) => {
+// ========== CompetitionTest Repository ==========
+
+const createTest = async (categoryId, data) => {
   try {
-    const testData=await Test.create(data)
-   await Competition.updateOne({_id:id},{$addToSet:{tests:testData._id}})
-   return testData
+    const category = await CompetitionCategory.findById(categoryId);
+    if (!category) throw new ApiError(404, "Competition category not found");
+
+    if (category.purchaseCount > 0) {
+      throw new ApiError(403, "Cannot add new tests — this category has already been purchased by students");
+    }
+
+    const testEntry = await CompetitionTest.create({
+      categoryId,
+      title: data.title,
+      description: data.description || "",
+      testId: data.testId,
+    });
+
+    // Link test into the category's tests array
+    await CompetitionCategory.findByIdAndUpdate(categoryId, {
+      $addToSet: { tests: testEntry._id },
+    });
+
+    return testEntry;
   } catch (error) {
-    throw new ApiError(500, "Failed to update competition", error.message);
+    if (error.code === 11000) {
+      const key = error.keyPattern;
+      if (key?.testId) throw new ApiError(409, "This test is already added to this category");
+      if (key?.title) throw new ApiError(409, "A test with this title already exists in this category");
+    }
+    throw new ApiError(500, "Failed to create competition test", error.message);
+  }
+};
+
+const findTestById = async (id) => {
+  try {
+    return await CompetitionTest.findById(id);
+  } catch (error) {
+    throw new ApiError(500, "Failed to fetch competition test", error.message);
+  }
+};
+
+const findCompetitionTestsByTestId = async (testId) => {
+  try {
+    return await CompetitionTest.find({ testId });
+  } catch (error) {
+    throw new ApiError(500, "Failed to find competition test mappings", error.message);
   }
 };
 
 const updateTest = async (id, data) => {
   try {
-    return await Test.findByIdAndUpdate(id, { $set: data }, { new: true });
+    const existing = await CompetitionTest.findById(id);
+    if (!existing) return null;
+
+    if (existing.purchaseCount > 0) {
+      throw new ApiError(403, "Cannot edit this test — it has already been purchased by students");
+    }
+
+    return await CompetitionTest.findByIdAndUpdate(
+      id,
+      { $set: { title: data.title, description: data.description } },
+      { new: true }
+    );
   } catch (error) {
-    throw new ApiError(500, "Failed to update competition", error.message);
+    if (error.code === 11000) {
+      throw new ApiError(409, "A test with this title already exists in this category");
+    }
+    throw new ApiError(500, "Failed to update competition test", error.message);
   }
 };
 
-const deleteTest = async (id,compitition_id) => {
+const deleteTest = async (id) => {
   try {
-    await Competition.updateOne({_id:compitition_id},{$pull:{tests:id}})
-    return await Test.deleteOne({_id:id});
+    const testEntry = await CompetitionTest.findById(id);
+    if (!testEntry) return null;
+
+    // Guard: block delete if purchased
+    if (testEntry.purchaseCount > 0) {
+      throw new ApiError(
+        403,
+        "Cannot delete this test — it has been purchased by students"
+      );
+    }
+
+    await CompetitionTest.findByIdAndDelete(id);
+
+    // Unlink from category
+    await CompetitionCategory.findByIdAndUpdate(testEntry.categoryId, {
+      $pull: { tests: id },
+    });
+
+    return testEntry;
   } catch (error) {
-    throw new ApiError(500, "Failed to delete competition", error.message);
+    if (error instanceof ApiError) throw error;
+    throw new ApiError(500, "Failed to delete competition test", error.message);
   }
 };
 
@@ -152,11 +211,24 @@ const createSector = async (data) => {
   }
 };
 
-
-
 const findAllSectors = async () => {
   try {
-    return await CompetitionSector.find().sort({ createdAt: -1 });
+    const sectors = await CompetitionSector.find().lean().sort({ createdAt: -1 });
+    const categories = await CompetitionCategory.find({
+      sectorId: { $in: sectors.map((s) => s._id) },
+    }).lean();
+
+    const purchaseMap = {};
+    for (const cat of categories) {
+      if (cat.purchaseCount > 0) {
+        purchaseMap[cat.sectorId.toString()] = true;
+      }
+    }
+
+    return sectors.map((s) => ({
+      ...s,
+      hasPurchase: !!purchaseMap[s._id.toString()],
+    }));
   } catch (error) {
     throw new ApiError(500, "Failed to fetch competition sectors", error.message);
   }
@@ -178,41 +250,23 @@ const deleteSectorById = async (id) => {
   }
 };
 
-const updateSectorPushCompetition = async (sectorId, competitionId) => {
-  try {
-    return await CompetitionSector.findByIdAndUpdate(sectorId, {
-      $push: { competitions: competitionId },
-    });
-  } catch (error) {
-    throw new ApiError(500, "Failed to link competition to sector", error.message);
-  }
-};
-
-const updateSectorPullCompetition = async (sectorId, competitionId) => {
-  try {
-    return await CompetitionSector.findByIdAndUpdate(sectorId, {
-      $pull: { competitions: competitionId },
-    });
-  } catch (error) {
-    throw new ApiError(500, "Failed to unlink competition from sector", error.message);
-  }
-};
-
 export default {
+  // Category (was Competition)
   createCompetition,
   findCompetitionById,
   findCompetitionWithTestsById,
-  findAllCompetitions,
+  findCategoriesBySectorId,
   updateCompetitionById,
   deleteCompetitionById,
+  // Test
   createTest,
+  findTestById,
+  findCompetitionTestsByTestId,
   updateTest,
   deleteTest,
+  // Sector
   createSector,
-  findSectorById,
   findAllSectors,
   updateSectorById,
   deleteSectorById,
-  updateSectorPushCompetition,
-  updateSectorPullCompetition,
 };

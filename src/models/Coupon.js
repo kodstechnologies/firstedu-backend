@@ -45,19 +45,28 @@ const couponSchema = new mongoose.Schema(
     },
     applicableTo: {
       type: String,
-      enum: ["all", "Test", "TestSeries", "Course", "Olympiad", "Tournament", "Workshop", "Ecommerce"],
+      enum: [
+        "all",
+        "Test",
+        "TestSeries",
+        "Course",
+        "Olympiad",
+        "Tournament",
+        "Workshop",
+        "Ecommerce",
+        "CompetitionCategory",
+        "LiveCompetition",
+      ],
       default: "all",
     },
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 // Index for querying active coupons
 couponSchema.index({ code: 1, isActive: 1 });
 couponSchema.index({ validFrom: 1, validUntil: 1 });
 
-export default mongoose.models.Coupon ||
-  mongoose.model("Coupon", couponSchema);
-
+export default mongoose.models.Coupon || mongoose.model("Coupon", couponSchema);
