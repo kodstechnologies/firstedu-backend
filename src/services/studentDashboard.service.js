@@ -201,6 +201,24 @@ export const getStudentDashboardStats = async (studentId) => {
       : null,
   ].filter(Boolean);
 
+  const recentPausedSession = await ExamSession.findOne({
+    student: studentId,
+    status: "paused",
+    challenge: null,
+  })
+    .populate("test", "title _id")
+    .sort({ startTime: -1 })
+    .lean();
+
+  const recentResumeExam = recentPausedSession
+    ? {
+        ...recentPausedSession,
+        title: recentPausedSession.test?.title || "Paused Test",
+        testId: recentPausedSession.test?._id || recentPausedSession.test,
+        sessionId: recentPausedSession._id,
+      }
+    : null;
+
   return {
     totalTestsTaken,
     averageScore: Math.round(averageScore * 10) / 10,
@@ -218,6 +236,7 @@ export const getStudentDashboardStats = async (studentId) => {
     upcomingEvents,
     featuredBundles: featuredBundles || [],
     weakCategories,
+    recentResumeExam,
   };
 };
 

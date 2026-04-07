@@ -71,6 +71,7 @@ export const logout = asyncHandler(async (req, res) => {
   await teacherRepository.updateById(req.user._id, {
     refreshToken: null,
     fcmToken: null,
+    isLive: false,  // automatically go offline on logout
   });
 
   const options = {

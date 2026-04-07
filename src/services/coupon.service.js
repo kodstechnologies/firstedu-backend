@@ -13,6 +13,13 @@ export const createCoupon = async (couponData) => {
     throw new ApiError(400, "Coupon code already exists");
   }
 
+  // Validate validFrom is at least tomorrow (start of today UTC as boundary)
+  const startOfTodayUTC = new Date();
+  startOfTodayUTC.setUTCHours(0, 0, 0, 0);
+  if (new Date(couponData.validFrom) <= startOfTodayUTC) {
+    throw new ApiError(400, "Valid From date must start from tomorrow, not today or earlier");
+  }
+
   // Validate dates
   if (new Date(couponData.validUntil) <= new Date(couponData.validFrom)) {
     throw new ApiError(400, "Valid until date must be after valid from date");

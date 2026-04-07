@@ -1,6 +1,7 @@
 import { ApiError } from "../utils/ApiError.js";
 import workshopRepository from "../repository/workshop.repository.js";
 import teacherRepository from "../repository/teacher.repository.js";
+import eventRegistrationRepository from "../repository/eventRegistration.repository.js";
 import {
   uploadImageToCloudinary,
   deleteFileFromCloudinary,
@@ -173,8 +174,21 @@ export const getWorkshops = async (options = {}) => {
     "price",
   );
 
+  // Attach purchasedCount to each workshop so the frontend can lock edit/delete
+  const workshopsWithPurchaseCount = await Promise.all(
+    workshopsWithOffer.map(async (ws) => {
+      const wsObj = ws?.toObject ? ws.toObject() : { ...ws };
+      const purchasedCount = await eventRegistrationRepository.count({
+        eventType: "workshop",
+        eventId: wsObj._id,
+        paymentStatus: "completed",
+      });
+      return { ...wsObj, purchasedCount };
+    })
+  );
+
   return {
-    workshops: workshopsWithOffer,
+    workshops: workshopsWithPurchaseCount,
     pagination: {
       page: pageNum,
       limit: limitNum,
@@ -200,6 +214,19 @@ export const updateWorkshop = async (id, updateData, file) => {
   const workshop = await workshopRepository.findById(id);
   if (!workshop) {
     throw new ApiError(404, "Workshop not found");
+  }
+
+  // Block edit if any student has purchased this workshop
+  const purchasedCount = await eventRegistrationRepository.count({
+    eventType: "workshop",
+    eventId: id,
+    paymentStatus: "completed",
+  });
+  if (purchasedCount > 0) {
+    throw new ApiError(
+      400,
+      `This workshop has been purchased by ${purchasedCount} student(s) and cannot be edited.`
+    );
   }
 
   if (file) {
@@ -239,6 +266,20 @@ export const deleteWorkshop = async (id) => {
   if (!workshop) {
     throw new ApiError(404, "Workshop not found");
   }
+
+  // Block delete if any student has purchased this workshop
+  const purchasedCount = await eventRegistrationRepository.count({
+    eventType: "workshop",
+    eventId: id,
+    paymentStatus: "completed",
+  });
+  if (purchasedCount > 0) {
+    throw new ApiError(
+      400,
+      `This workshop has been purchased by ${purchasedCount} student(s) and cannot be deleted.`
+    );
+  }
+
   if (workshop.imageUrl) {
     await deleteFileFromCloudinary(workshop.imageUrl);
   }
