@@ -474,9 +474,9 @@ export const convertPoints = asyncHandler(async (req, res) => {
     throw new ApiError(400, "pointsToConvert is required");
   }
 
-  const result = await studentService.convertPointsToMoney(studentId, parseInt(pointsToConvert));
+  const result = await studentService.convertPointsToMoney(studentId, parseFloat(pointsToConvert));
 
-  const balanceAdded = (parseInt(pointsToConvert) / 100) * 10;
+  const balanceAdded = (parseFloat(pointsToConvert) / 100) * 10;
   return res.status(200).json(
     ApiResponse.success(
       result,

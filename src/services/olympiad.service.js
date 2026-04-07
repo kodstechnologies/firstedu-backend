@@ -82,7 +82,7 @@ export const createOlympiad = async (data, adminId, file) => {
   if (existingOlympiadWithSameTest) {
     throw new ApiError(
       400,
-      "This test is already linked to another olympiad. Please create or clone a new test for this olympiad."
+      "This test is already linked to another olympiad."
     );
   }
 
@@ -283,7 +283,7 @@ export const updateOlympiad = async (id, updateData, file) => {
     if (existingOlympiadWithSameTest) {
       throw new ApiError(
         400,
-        "This test is already linked to another olympiad. Please create or clone a new test for this olympiad."
+        "This test is already linked to another olympiad."
       );
     }
 
