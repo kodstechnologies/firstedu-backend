@@ -62,14 +62,21 @@ export const getTests = async (options = {}) => {
     query.applicableFor = options.applicableFor;
   }
 
-  if ((options.excludeAssigned === 'true' || options.excludeAssigned === true) && options.applicableFor === 'olympiad') {
-    const olympiads = await olympiadRepository.find({}, { limit: 10000 });
-    let usedIds = olympiads.map((o) => o.test?._id?.toString() || o.test?.toString()).filter(Boolean);
-    if (options.includeTestId) {
-      usedIds = usedIds.filter((id) => id !== options.includeTestId.toString());
-    }
-    if (usedIds.length > 0) {
-      query._id = { $nin: usedIds };
+  if (options.excludeAssigned === 'true' || options.excludeAssigned === true) {
+    if (options.applicableFor === 'olympiad') {
+      const olympiads = await olympiadRepository.find({}, { limit: 10000 });
+      let usedIds = olympiads.map((o) => o.test?._id?.toString() || o.test?.toString()).filter(Boolean);
+      if (options.includeTestId) {
+        usedIds = usedIds.filter((id) => id !== options.includeTestId.toString());
+      }
+      if (usedIds.length > 0) {
+        query._id = { $nin: usedIds };
+      }
+    } else if (options.applicableFor === 'testBundle') {
+      const usedIds = await testRepository.findAllUsedBundleTestIds(options.includeBundleId);
+      if (usedIds.length > 0) {
+        query._id = { $nin: usedIds };
+      }
     }
   }
   const result = await testRepository.findAllTests(query, options);
