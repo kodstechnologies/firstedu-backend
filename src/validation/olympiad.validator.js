@@ -1,6 +1,7 @@
 import Joi from "joi";
 
 const objectId = Joi.string().regex(/^[0-9a-fA-F]{24}$/);
+const priceSchema = Joi.number().min(0).precision(2);
 
 const createOlympiad = Joi.object({
   title: Joi.string().trim().required(),
@@ -12,7 +13,7 @@ const createOlympiad = Joi.object({
   testId: Joi.alternatives().try(objectId, Joi.string().required()).required(),
   registrationStartTime: Joi.date().required(),
   registrationEndTime: Joi.date().required(),
-  price: Joi.number().min(0).default(0).optional(),
+  price: priceSchema.default(0).optional(),
   firstPlacePoints: Joi.number().min(0).default(0).optional(),
   secondPlacePoints: Joi.number().min(0).default(0).optional(),
   thirdPlacePoints: Joi.number().min(0).default(0).optional(),
@@ -30,7 +31,7 @@ const updateOlympiad = Joi.object({
   testId: Joi.alternatives().try(objectId, Joi.string()).optional(),
   registrationStartTime: Joi.date().optional(),
   registrationEndTime: Joi.date().optional(),
-  price: Joi.number().min(0).optional(),
+  price: priceSchema.optional(),
   firstPlacePoints: Joi.number().min(0).optional(),
   secondPlacePoints: Joi.number().min(0).optional(),
   thirdPlacePoints: Joi.number().min(0).optional(),

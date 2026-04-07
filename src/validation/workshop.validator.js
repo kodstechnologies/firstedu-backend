@@ -1,6 +1,7 @@
 import Joi from "joi";
 
 const objectId = Joi.string().regex(/^[0-9a-fA-F]{24}$/);
+const priceSchema = Joi.number().min(0).precision(2);
 
 const createWorkshop = Joi.object({
   title: Joi.string().trim().required(),
@@ -10,7 +11,7 @@ const createWorkshop = Joi.object({
   endTime: Joi.date().required(),
   meetingLink: Joi.string().trim().uri().required(),
   meetingPassword: Joi.string().trim().optional().allow("", null),
-  price: Joi.number().min(0).default(0).optional(),
+  price: priceSchema.default(0).optional(),
   maxParticipants: Joi.number().integer().min(1).optional().allow(null),
   registrationStartTime: Joi.date().required(),
   registrationEndTime: Joi.date().required(),
@@ -29,7 +30,7 @@ const updateWorkshop = Joi.object({
   endTime: Joi.date().optional(),
   meetingLink: Joi.string().trim().uri().optional(),
   meetingPassword: Joi.string().trim().optional().allow("", null),
-  price: Joi.number().min(0).optional(),
+  price: priceSchema.optional(),
   maxParticipants: Joi.number().integer().min(1).optional().allow(null),
   registrationStartTime: Joi.date().optional(),
   registrationEndTime: Joi.date().optional(),

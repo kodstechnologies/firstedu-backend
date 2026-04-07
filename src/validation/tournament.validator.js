@@ -1,6 +1,7 @@
 import Joi from "joi";
 
 const objectId = Joi.string().regex(/^[0-9a-fA-F]{24}$/);
+const priceSchema = Joi.number().min(0).precision(2);
 
 const tournamentStageSchema = Joi.object({
   name: Joi.string().valid("Qualifier", "Semi-Final", "Final").required(),
@@ -18,7 +19,7 @@ const createTournament = Joi.object({
   stages: Joi.array().items(tournamentStageSchema).min(1).required(),
   registrationStartTime: Joi.date().required(),
   registrationEndTime: Joi.date().required(),
-  price: Joi.number().min(0).default(0).optional(),
+  price: priceSchema.default(0).optional(),
   firstPlacePoints: Joi.number().min(0).default(0).optional(),
   secondPlacePoints: Joi.number().min(0).default(0).optional(),
   thirdPlacePoints: Joi.number().min(0).default(0).optional(),
@@ -31,7 +32,7 @@ const updateTournament = Joi.object({
   stages: Joi.array().items(tournamentStageSchema).optional(),
   registrationStartTime: Joi.date().optional(),
   registrationEndTime: Joi.date().optional(),
-  price: Joi.number().min(0).optional(),
+  price: priceSchema.optional(),
   firstPlacePoints: Joi.number().min(0).optional(),
   secondPlacePoints: Joi.number().min(0).optional(),
   thirdPlacePoints: Joi.number().min(0).optional(),

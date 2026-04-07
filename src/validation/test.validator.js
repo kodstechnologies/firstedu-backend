@@ -1,6 +1,7 @@
 import Joi from "joi";
 
 const objectId = Joi.string().regex(/^[0-9a-fA-F]{24}$/);
+const priceSchema = Joi.number().min(0).precision(2);
 
 // Test
 const createTest = Joi.object({
@@ -9,7 +10,7 @@ const createTest = Joi.object({
   questionBank: objectId.required(),
   durationMinutes: Joi.number().integer().min(1).required(),
   proctoringInstructions: Joi.string().trim().optional(),
-  price: Joi.number().min(0).default(0),
+  price: priceSchema.default(0),
   applicableFor: Joi.string()
     .valid(
       "test",
@@ -31,7 +32,7 @@ const updateTest = Joi.object({
   questionBank: objectId.optional(),
   durationMinutes: Joi.number().integer().min(1).optional(),
   proctoringInstructions: Joi.string().trim().optional(),
-  price: Joi.number().min(0).optional(),
+  price: priceSchema.optional(),
   applicableFor: Joi.string()
     .valid(
       "test",
@@ -52,7 +53,7 @@ const createBundle = Joi.object({
   name: Joi.string().trim().required(),
   description: Joi.string().trim().allow("", null),
   tests: Joi.array().items(objectId).min(1).required(),
-  price: Joi.number().min(0).default(0),
+  price: priceSchema.default(0),
   isActive: Joi.boolean().optional(),
 });
 
@@ -60,7 +61,7 @@ const updateBundle = Joi.object({
   name: Joi.string().trim().optional(),
   description: Joi.string().trim().allow("", null).optional(),
   tests: Joi.array().items(objectId).optional(),
-  price: Joi.number().min(0).optional(),
+  price: priceSchema.optional(),
   isActive: Joi.boolean().optional(),
 });
 
