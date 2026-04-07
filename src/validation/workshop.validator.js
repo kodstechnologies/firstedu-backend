@@ -6,8 +6,14 @@ const createWorkshop = Joi.object({
   title: Joi.string().trim().required(),
   description: Joi.string().trim().allow("", null).optional(),
   teacherId: objectId.required(),
-  startTime: Joi.date().required(),
-  endTime: Joi.date().required(),
+  startTime: Joi.date().required().messages({
+    "date.base": "Start time must be a valid date",
+    "any.required": "Start time is required"
+  }),
+  endTime: Joi.date().required().messages({
+    "date.base": "End time must be a valid date",
+    "any.required": "End time is required"
+  }),
   meetingLink: Joi.string().trim().uri().required(),
   meetingPassword: Joi.string().trim().optional().allow("", null),
   price: Joi.number().min(0).default(0).optional(),

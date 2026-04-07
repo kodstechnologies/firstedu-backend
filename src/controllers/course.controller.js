@@ -6,6 +6,7 @@ import courseService from "../services/course.service.js";
 
 export const createCourse = asyncHandler(async (req, res) => {
   // Validate text fields (file validation is handled by multer)
+
   const { error, value } = courseValidator.createCourse.validate(req.body);
 
   if (error) {

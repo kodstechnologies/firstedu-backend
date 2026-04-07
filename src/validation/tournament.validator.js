@@ -6,8 +6,14 @@ const tournamentStageSchema = Joi.object({
   name: Joi.string().valid("Qualifier", "Semi-Final", "Final").required(),
   test: objectId.required(),
   subject: Joi.string().trim().optional(),
-  startTime: Joi.date().required(),
-  endTime: Joi.date().required(),
+  startTime: Joi.date().required().messages({
+    "date.base": "Start time must be a valid date",
+    "any.required": "Start time is required"
+  }),
+  endTime: Joi.date().required().messages({
+    "date.base": "End time must be a valid date",
+    "any.required": "End time is required"
+  }),
   minimumMarksToQualify: Joi.number().min(0).default(0).optional(),
   maxParticipants: Joi.number().integer().min(1).optional().allow(null),
 });
@@ -16,8 +22,14 @@ const createTournament = Joi.object({
   title: Joi.string().trim().required(),
   description: Joi.string().trim().allow("", null).optional(),
   stages: Joi.array().items(tournamentStageSchema).min(1).required(),
-  registrationStartTime: Joi.date().required(),
-  registrationEndTime: Joi.date().required(),
+  registrationStartTime: Joi.date().required().messages({
+    "date.base": "Start time must be a valid date",
+    "any.required": "registration start time is required"
+  }),
+  registrationEndTime: Joi.date().required().messages({
+    "date.base": "registration end time must be a valid date",
+    "any.required": "registration end time is required"
+  }),
   price: Joi.number().min(0).default(0).optional(),
   firstPlacePoints: Joi.number().min(0).default(0).optional(),
   secondPlacePoints: Joi.number().min(0).default(0).optional(),

@@ -6,12 +6,24 @@ const createOlympiad = Joi.object({
   title: Joi.string().trim().required(),
   description: Joi.string().trim().allow("", null).optional(),
   subject: Joi.string().trim().optional(),
-  startTime: Joi.date().required(),
-  endTime: Joi.date().required(),
+  startTime: Joi.date().required().messages({
+    "date.base": "Start time must be a valid date",
+    "any.required": "Start time is required"
+  }),
+  endTime: Joi.date().required().messages({
+    "date.base": "End time must be a valid date",
+    "any.required": "End time is required"
+  }),
   rules: Joi.string().trim().allow("", null).optional(),
   testId: Joi.alternatives().try(objectId, Joi.string().required()).required(),
-  registrationStartTime: Joi.date().required(),
-  registrationEndTime: Joi.date().required(),
+  registrationStartTime: Joi.date().required().messages({
+     "date.base": "End time must be a valid date",
+    "any.required": "Start registration time is required"
+  }),
+  registrationEndTime: Joi.date().required().messages({
+     "date.base": "End time must be a valid date",
+    "any.required": "End registration time is required"
+  }),
   price: Joi.number().min(0).default(0).optional(),
   firstPlacePoints: Joi.number().min(0).default(0).optional(),
   secondPlacePoints: Joi.number().min(0).default(0).optional(),
