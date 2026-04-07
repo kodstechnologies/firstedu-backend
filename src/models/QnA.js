@@ -27,7 +27,7 @@ const qnaSchema = new mongoose.Schema(
     creatorModel: {
       type: String,
       required: true,
-      enum: ["User", "Admin"],
+      enum: ["User", "Admin","Teacher"],
     },
 
     status: {
@@ -51,9 +51,9 @@ const priorityMap = {
   approved: 1
 };
 // 🔥 AUTO STATUS LOGIC
-qnaSchema.pre("save", function (next) {
-  if (this.isNew) {
-    if (this.creatorModel === "Admin") {
+qnaSchema.pre("save",function (next){
+  if (this.isNew){
+    if (this.creatorModel === "Admin"||this.creatorModel === "Teacher"){
       this.status = "approved";
     } else if (this.creatorModel === "User") {
       this.status = "pending";
@@ -62,18 +62,5 @@ qnaSchema.pre("save", function (next) {
   this.priority = priorityMap[this.status];
   next();
 });
-
-
-// 🔥 UPDATE: sync priority when status changes
-// qnaSchema.pre("findByIdAndUpdate", function (next) {
-
-//   const update = this.getUpdate();
-
-//   if (update.status) {
-//     update.priority = priorityMap[update.status];
-//   }
-
-//   next();
-// });
 
 export default mongoose.models.Qna || mongoose.model("QnA", qnaSchema);

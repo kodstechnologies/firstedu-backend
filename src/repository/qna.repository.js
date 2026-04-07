@@ -12,8 +12,7 @@ const create = async (Data) => {
 
 const findById = async (id) => {
   try {
-    return await qna.findById(id)
-    .populate("createdBy", "name email");
+    return await qna.findById(id).populate("createdBy", "name email");
   } catch (error) {
     throw new ApiError(500, "Failed to fetch ", error.message);
   }
@@ -21,8 +20,9 @@ const findById = async (id) => {
 // selfQnAs
 const selfQnAs = async (id) => {
   try {
-    return await qna.findById({createdBy:id})
-    .populate("createdBy", "name email");
+    return await qna
+      .findById({ createdBy: id })
+      .populate("createdBy", "name email");
   } catch (error) {
     throw new ApiError(500, "Failed to fetch ", error.message);
   }
@@ -32,27 +32,33 @@ const findAll = async (filter = {}, options = {}) => {
   try {
     const {
       page = 1,
-      limit = 10,
+      limit,
       sortBy = "createdAt",
       sortOrder = "desc",
       search,
       type,
+      status,
+      subject,
     } = options;
 
-    const query = { ...filter };
+    const query = { ...filter, subject: subject || "general" };
 
     if (search) {
       query.$or = [
-        { question: { $regex: search, $options: "i" }},
+        { question: { $regex: search, $options: "i" } },
         { answer: { $regex: search, $options: "i" } },
         { status: { $regex: search, $options: "i" } },
         { subject: { $regex: search, $options: "i" } },
+
         { creatorModel: { $regex: search, $options: "i" } },
       ];
     }
 
     if (type) {
       query.creatorModel = type;
+    }
+    if (status) {
+      query.status = status;
     }
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const sort = { [sortBy]: sortOrder === "desc" ? -1 : 1 };
