@@ -616,7 +616,7 @@ router.post(
 router.post(
   "/live-competitions/:id/submit",
   verifyJWT,
-  uploadLiveCompetitionContent.array("files", 5),
+  uploadLiveCompetitionContent.array("files", 1),
   submitLiveCompetitionWork,
 );
 router.get("/my-live-submissions", verifyJWT, getMyLiveCompetitionSubmissions);

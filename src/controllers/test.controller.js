@@ -34,6 +34,8 @@ export const getTests = asyncHandler(async (req, res) => {
     isPublished,
     sortBy,
     sortOrder,
+    excludeAssigned,
+    includeTestId,
   } = req.query;
 
   const result = await testService.getTests({
@@ -45,6 +47,8 @@ export const getTests = asyncHandler(async (req, res) => {
     isPublished,
     sortBy,
     sortOrder,
+    excludeAssigned,
+    includeTestId,
   });
 
   return res

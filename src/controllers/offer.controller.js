@@ -33,6 +33,15 @@ export const createOffer = asyncHandler(async (req, res) => {
         description
     };
 
+    // If validTill is provided, ensure it is at least tomorrow
+    if (validTill) {
+        const startOfTodayUTC = new Date();
+        startOfTodayUTC.setUTCHours(0, 0, 0, 0);
+        if (new Date(validTill) <= startOfTodayUTC) {
+            throw new ApiError(400, "Valid Till date must be at least tomorrow, not today or earlier");
+        }
+    }
+
     const offer = await offerRepository.createOffer(offerData);
 
     return res.status(201).json(ApiResponse.success(offer, "Offer created successfully"));

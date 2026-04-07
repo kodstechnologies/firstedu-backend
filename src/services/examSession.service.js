@@ -252,10 +252,10 @@ export const getExamSession = async (sessionId, studentId) => {
     {
       test: "title description durationMinutes proctoringInstructions",
       answers: {
-        select: "questionText questionType options subject topic marks negativeMarks isParent passage parentQuestionId childQuestions",
+        select: "questionText questionType options subject topic marks negativeMarks difficulty isParent passage parentQuestionId childQuestions",
         populate: {
           path: "childQuestions",
-          select: "questionText questionType options marks negativeMarks",
+          select: "questionText questionType options marks negativeMarks difficulty",
         },
       },
     }
@@ -280,10 +280,10 @@ export const getExamSession = async (sessionId, studentId) => {
         {
           test: "title description durationMinutes proctoringInstructions",
           answers: {
-            select: "questionText questionType options subject topic marks negativeMarks isParent passage parentQuestionId childQuestions",
+            select: "questionText questionType options subject topic marks negativeMarks difficulty isParent passage parentQuestionId childQuestions",
             populate: {
               path: "childQuestions",
-              select: "questionText questionType options marks negativeMarks",
+              select: "questionText questionType options marks negativeMarks difficulty",
             },
           },
         }
@@ -784,7 +784,7 @@ const checkAnswerCorrectness = (question, studentAnswer) => {
       );
 
     case "true_false":
-      return Boolean(studentAnswer) === Boolean(correctAnswer);
+      return String(studentAnswer).toLowerCase() === String(correctAnswer).toLowerCase();
 
     default:
       return false;
