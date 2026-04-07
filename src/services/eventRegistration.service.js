@@ -83,12 +83,13 @@ export const registerForEvent = async (
 
   const price = Number(event.price) || 0;
 
-  // When event has a price, payment is required before registration
-  if (price > 0) {
-    const offerModule = EVENT_TYPE_TO_OFFER_MODULE[eventType];
-    const { amountToCharge: regAmountToCharge, couponId } = offerModule
-      ? await getAmountToCharge(offerModule, price, couponCode)
-      : { amountToCharge: price, couponId: null };
+  const offerModule = EVENT_TYPE_TO_OFFER_MODULE[eventType];
+  const { amountToCharge: regAmountToCharge, couponId } = offerModule
+    ? await getAmountToCharge(offerModule, price, couponCode)
+    : { amountToCharge: price, couponId: null };
+
+  // When event has an amount to charge, payment is required before registration
+  if (regAmountToCharge > 0) {
 
     if (paymentMethod === "wallet") {
       await walletService.deductMonetaryBalance(studentId, regAmountToCharge, "User");
@@ -370,7 +371,7 @@ export const initiateEventRegistration = async (
     : { amountToCharge: price, couponId: null, appliedOffer: null, appliedCoupon: null };
 
   if (paymentMethod === "free") {
-    if (price > 0) {
+    if (amountToCharge > 0) {
       throw new ApiError(400, "This event is paid. Use paymentMethod: wallet or razorpay.");
     }
     const registration = await registerForEvent(eventType, eventId, studentId, {});
@@ -386,7 +387,7 @@ export const initiateEventRegistration = async (
   }
 
   if (paymentMethod === "razorpay") {
-    if (price < 1) {
+    if (amountToCharge < 1) {
       throw new ApiError(400, "This event is free. Use paymentMethod: free.");
     }
     const razorpayKeyId = process.env.RAZORPAY_KEY_ID;

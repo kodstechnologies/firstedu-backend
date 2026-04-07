@@ -125,8 +125,10 @@ export const initiateCoursePayment = async (courseId, studentId, paymentMethod, 
 
   const price = Number(course.price) || 0;
 
+  const { amountToCharge, couponId, appliedOffer, appliedCoupon } = await getAmountToCharge("Course", price, couponCode);
+
   if (paymentMethod === "free") {
-    if (price > 0) {
+    if (amountToCharge > 0) {
       throw new ApiError(400, "This course is paid. Use paymentMethod: wallet or razorpay.");
     }
     const purchase = await orderRepository.createCoursePurchase({
@@ -144,10 +146,8 @@ export const initiateCoursePayment = async (courseId, studentId, paymentMethod, 
     return { purchase, completed: true };
   }
 
-  const { amountToCharge, couponId, appliedOffer, appliedCoupon } = await getAmountToCharge("Course", price, couponCode);
-
   if (paymentMethod === "wallet") {
-    if (price < 1) {
+    if (amountToCharge < 1) {
       throw new ApiError(400, "This course is free. Use paymentMethod: free.");
     }
     await walletService.deductMonetaryBalance(studentId, amountToCharge, "User");
@@ -170,7 +170,7 @@ export const initiateCoursePayment = async (courseId, studentId, paymentMethod, 
   }
 
   if (paymentMethod === "razorpay") {
-    if (price < 1) {
+    if (amountToCharge < 1) {
       throw new ApiError(400, "This course is free. Use paymentMethod: free.");
     }
     const razorpayKeyId = process.env.RAZORPAY_KEY_ID;
@@ -595,8 +595,10 @@ export const initiateTestPayment = async (testId, studentId, paymentMethod, opti
 
   const price = Number(test.price) || 0;
 
+  const { amountToCharge, couponId, appliedOffer, appliedCoupon } = await getAmountToCharge("Test", price, couponCode);
+
   if (paymentMethod === "free") {
-    if (price > 0) {
+    if (amountToCharge > 0) {
       throw new ApiError(400, "This test is paid. Use paymentMethod: wallet or razorpay.");
     }
     const purchase = await orderRepository.createTestPurchase({
@@ -609,10 +611,8 @@ export const initiateTestPayment = async (testId, studentId, paymentMethod, opti
     return { purchase, completed: true };
   }
 
-  const { amountToCharge, couponId, appliedOffer, appliedCoupon } = await getAmountToCharge("Test", price, couponCode);
-
   if (paymentMethod === "wallet") {
-    if (price < 1) {
+    if (amountToCharge < 1) {
       throw new ApiError(400, "This test is free. Use paymentMethod: free.");
     }
     await walletService.deductMonetaryBalance(studentId, amountToCharge, "User");
@@ -630,7 +630,7 @@ export const initiateTestPayment = async (testId, studentId, paymentMethod, opti
   }
 
   if (paymentMethod === "razorpay") {
-    if (price < 1) {
+    if (amountToCharge < 1) {
       throw new ApiError(400, "This test is free. Use paymentMethod: free.");
     }
     const razorpayKeyId = process.env.RAZORPAY_KEY_ID;
@@ -841,8 +841,10 @@ export const initiateTestBundlePayment = async (bundleId, studentId, paymentMeth
 
   const price = Number(bundle.price) || 0;
 
+  const { amountToCharge, couponId, appliedOffer, appliedCoupon } = await getAmountToCharge("TestSeries", price, couponCode);
+
   if (paymentMethod === "free") {
-    if (price > 0) {
+    if (amountToCharge > 0) {
       throw new ApiError(400, "This test bundle is paid. Use paymentMethod: wallet or razorpay.");
     }
     const purchase = await orderRepository.createTestPurchase({
@@ -855,10 +857,8 @@ export const initiateTestBundlePayment = async (bundleId, studentId, paymentMeth
     return { purchase, completed: true };
   }
 
-  const { amountToCharge, couponId, appliedOffer, appliedCoupon } = await getAmountToCharge("TestSeries", price, couponCode);
-
   if (paymentMethod === "wallet") {
-    if (price < 1) {
+    if (amountToCharge < 1) {
       throw new ApiError(400, "This test bundle is free. Use paymentMethod: free.");
     }
     await walletService.deductMonetaryBalance(studentId, amountToCharge, "User");
@@ -876,7 +876,7 @@ export const initiateTestBundlePayment = async (bundleId, studentId, paymentMeth
   }
 
   if (paymentMethod === "razorpay") {
-    if (price < 1) {
+    if (amountToCharge < 1) {
       throw new ApiError(400, "This test bundle is free. Use paymentMethod: free.");
     }
     const razorpayKeyId = process.env.RAZORPAY_KEY_ID;

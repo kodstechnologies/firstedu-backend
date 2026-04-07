@@ -155,8 +155,10 @@ const initiateTestPayment = async (testId, studentId, paymentMethod, options = {
 
   const price = Number(test.price) || 0;
 
+  const { amountToCharge, couponId, appliedOffer, appliedCoupon } = await getAmountToCharge("Test", price, couponCode);
+
   if (paymentMethod === "free") {
-    if (price > 0) {
+    if (amountToCharge > 0) {
       throw new ApiError(400, "This test is paid. Use paymentMethod: wallet or razorpay.");
     }
     const purchase = await orderRepository.createTestPurchase({
@@ -169,10 +171,8 @@ const initiateTestPayment = async (testId, studentId, paymentMethod, options = {
     return { purchase, completed: true };
   }
 
-  const { amountToCharge, couponId, appliedOffer, appliedCoupon } = await getAmountToCharge("Test", price, couponCode);
-
   if (paymentMethod === "wallet") {
-    if (price < 1) {
+    if (amountToCharge < 1) {
       throw new ApiError(400, "This test is free. Use paymentMethod: free.");
     }
     await walletService.deductMonetaryBalance(studentId, amountToCharge, "User");
@@ -190,7 +190,7 @@ const initiateTestPayment = async (testId, studentId, paymentMethod, options = {
   }
 
   if (paymentMethod === "razorpay") {
-    if (price < 1) {
+    if (amountToCharge < 1) {
       throw new ApiError(400, "This test is free. Use paymentMethod: free.");
     }
     const razorpayKeyId = process.env.RAZORPAY_KEY_ID;
@@ -322,8 +322,10 @@ const initiateCategoryPayment = async (categoryId, studentId, paymentMethod, opt
 
   const price = category.price || 0;
 
+  const { amountToCharge, couponId, appliedOffer, appliedCoupon } = await getAmountToCharge("CompetitionCategory", price, couponCode);
+
   if (paymentMethod === "free") {
-    if (!category.isFree && price > 0) {
+    if (!category.isFree && amountToCharge > 0) {
       throw new ApiError(400, "This category is paid. Use wallet or razorpay.");
     }
     const purchase = await orderRepository.createTestPurchase({
@@ -339,8 +341,6 @@ const initiateCategoryPayment = async (categoryId, studentId, paymentMethod, opt
     
     return { purchase, completed: true };
   }
-
-  const { amountToCharge, couponId, appliedOffer, appliedCoupon } = await getAmountToCharge("CompetitionCategory", price, couponCode);
 
   if (paymentMethod === "wallet") {
     await walletService.deductMonetaryBalance(studentId, amountToCharge, "User");

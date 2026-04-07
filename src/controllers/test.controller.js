@@ -36,6 +36,7 @@ export const getTests = asyncHandler(async (req, res) => {
     sortOrder,
     excludeAssigned,
     includeTestId,
+    includeBundleId,
   } = req.query;
 
   const result = await testService.getTests({
@@ -49,6 +50,7 @@ export const getTests = asyncHandler(async (req, res) => {
     sortOrder,
     excludeAssigned,
     includeTestId,
+    includeBundleId,
   });
 
   return res

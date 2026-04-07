@@ -375,6 +375,25 @@ const findChallengeYourselfTestsByDifficulty = async () => {
   }
 };
 
+const findAllUsedBundleTestIds = async (excludeBundleId) => {
+  try {
+    const query = {};
+    if (excludeBundleId) {
+      query._id = { $ne: excludeBundleId };
+    }
+    const bundles = await TestBundle.find(query).select("tests").lean();
+    const usedIds = [];
+    bundles.forEach((b) => {
+      if (b.tests && Array.isArray(b.tests)) {
+        b.tests.forEach((t) => usedIds.push(t.toString()));
+      }
+    });
+    return usedIds;
+  } catch (error) {
+    throw new ApiError(500, "Failed to fetch used bundle test IDs", error.message);
+  }
+};
+
 export default {
   // Test methods
   createTest,
@@ -392,6 +411,7 @@ export default {
   findAllBundles,
   updateBundleById,
   deleteBundleById,
+  findAllUsedBundleTestIds,
   // Question helper methods
   findQuestionsByIds,
   sampleRandomQuestions,
