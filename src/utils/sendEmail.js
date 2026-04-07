@@ -3,6 +3,7 @@ import nodemailer from 'nodemailer';
 import dotenv from "dotenv";
 import { ApiError } from './ApiError.js';
 import emailTemplateService from '../services/emailTemplate.service.js';
+import { getDefaultTemplateByCategorySlug } from "./emailTemplateCategories.js";
 
 dotenv.config();
 
@@ -20,6 +21,23 @@ const resolveTemplate = async (category, slug, variables) => {
   } catch {
     return null;
   }
+};
+
+const resolveFallbackTemplate = ({
+  category,
+  slug,
+  variables = {},
+  defaultSubject,
+  defaultHtml,
+}) => {
+  const defaultTemplate = getDefaultTemplateByCategorySlug(category, slug);
+  const fallbackSubjectTemplate = defaultTemplate?.subject || defaultSubject || "";
+  const fallbackHtmlTemplate = defaultTemplate?.html || defaultHtml || "";
+
+  return {
+    subject: emailTemplateService.replaceTemplateVariables(fallbackSubjectTemplate, variables),
+    html: emailTemplateService.replaceTemplateVariables(fallbackHtmlTemplate, variables),
+  };
 };
 
 // Validate required environment variables
@@ -65,31 +83,25 @@ export const sendOTPEmail = async (email, otp, name) => {
       throw new ApiError(500, `SMTP configuration incomplete. Missing: ${missingVars.join(', ')}`);
     }
 
-    const defaultSubject = 'Your Password Change OTP';
-    const defaultHtml = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #333;">Hello ${name || 'Student'},</h2>
-        <p style="color: #666;">Use this OTP to change your password:</p>
-        <div style="background-color: #f4f4f4; padding: 20px; text-align: center; margin: 20px 0; border-radius: 5px;">
-          <h1 style="letter-spacing: 8px; color: #333; margin: 0;">${otp}</h1>
-        </div>
-        <p style="color: #666;">This OTP is valid for <strong>10 minutes</strong>.</p>
-        <p style="color: #999; font-size: 12px;">If you didn't request this, please ignore this email.</p>
-      </div>
-    `;
-
-    const resolved = await resolveTemplate('login_otp', 'password_reset', { name: name || 'Student', otp });
-    const subject = resolved?.subject ?? defaultSubject;
-    const html = resolved?.html ?? defaultHtml;
-
-    const mailOptions = {
-      from: `"Your App" <${process.env.SMTP_EMAIL}>`,
+    const info = await sendEmailWithTemplate({
       to: email,
-      subject,
-      html,
-    };
-
-    const info = await transporter.sendMail(mailOptions);
+      category: "login_otp",
+      slug: "password_reset",
+      variables: { name: name || "Student", otp },
+      defaultSubject: "Your Password Change OTP",
+      defaultHtml: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #333;">Hello ${name || "Student"},</h2>
+          <p style="color: #666;">Use this OTP to change your password:</p>
+          <div style="background-color: #f4f4f4; padding: 20px; text-align: center; margin: 20px 0; border-radius: 5px;">
+            <h1 style="letter-spacing: 8px; color: #333; margin: 0;">${otp}</h1>
+          </div>
+          <p style="color: #666;">This OTP is valid for <strong>10 minutes</strong>.</p>
+          <p style="color: #999; font-size: 12px;">If you did not request this, please ignore this email.</p>
+        </div>
+      `,
+      from: `"Your App" <${process.env.SMTP_EMAIL}>`,
+    });
     console.log(`✅ Email sent successfully to ${email}. Message ID: ${info.messageId}`);
     return info;
   } catch (error) {
@@ -113,15 +125,25 @@ export const sendEmailWithTemplate = async ({
   variables = {},
   defaultSubject,
   defaultHtml,
-  from = `"FirstEdu" <${process.env.SMTP_EMAIL}>`,
+  from = `"Iscorre" <${process.env.SMTP_EMAIL}>`,
 }) => {
   if (!email) throw new ApiError(400, 'Email address is required');
   if (missingVars.length > 0) {
     throw new ApiError(500, `SMTP configuration incomplete. Missing: ${missingVars.join(', ')}`);
   }
   const resolved = await resolveTemplate(category, slug, variables);
-  const subject = resolved?.subject ?? defaultSubject;
-  const html = resolved?.html ?? defaultHtml;
+  const fallback = resolveFallbackTemplate({
+    category,
+    slug,
+    variables,
+    defaultSubject,
+    defaultHtml,
+  });
+  const subject = resolved?.subject ?? fallback.subject;
+  const html = resolved?.html ?? fallback.html;
+  if (!subject || !html) {
+    throw new ApiError(500, `No email template content found for ${category}/${slug}`);
+  }
   const info = await transporter.sendMail({ from, to: email, subject, html });
   console.log(`✅ Email sent to ${email}. Message ID: ${info.messageId}`);
   return info;
@@ -146,7 +168,7 @@ export const sendContactUsEmail = async ({ name, phone, email, message }) => {
     }
 
     const mailOptions = {
-      from: `"FirstEdu Contact" <${process.env.SMTP_EMAIL}>`,
+      from: `"Iscorre Contact" <${process.env.SMTP_EMAIL}>`,
       to: adminEmail,
       replyTo: email,
       subject: `Contact Us: ${name}`,
@@ -159,7 +181,7 @@ export const sendContactUsEmail = async ({ name, phone, email, message }) => {
             <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Phone</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${phone || '—'}</td></tr>
             <tr><td style="padding: 8px 0; vertical-align: top;"><strong>Message</strong></td><td style="padding: 8px 0;">${message.replace(/\n/g, '<br>')}</td></tr>
           </table>
-          <p style="color: #999; font-size: 12px; margin-top: 20px;">Sent from FirstEdu Contact Us form.</p>
+          <p style="color: #999; font-size: 12px; margin-top: 20px;">Sent from Iscorre Contact Us form.</p>
         </div>
       `,
     };
@@ -196,39 +218,34 @@ export const sendInterviewScheduledEmail = async ({
     }
 
     const dateStr = interviewDate ? new Date(interviewDate).toLocaleDateString("en-IN", { dateStyle: "long" }) : "—";
-    const defaultSubject = `Interview Scheduled – ${jobTitle}`;
-    const defaultHtml = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #333;">Hello ${teacherName || "Candidate"},</h2>
-        <p style="color: #666;">Your interview has been scheduled for the position: <strong>${jobTitle}</strong>.</p>
-        <table style="width: 100%; border-collapse: collapse; color: #666;">
-          <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Date</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${dateStr}</td></tr>
-          <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Time</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${interviewTime || "—"}</td></tr>
-          <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Platform</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${interviewProvider || "—"}</td></tr>
-          <tr><td style="padding: 8px 0;"><strong>Join Link</strong></td><td style="padding: 8px 0;">${providerLink ? `<a href="${providerLink}">${providerLink}</a>` : "—"}</td></tr>
-        </table>
-        <p style="color: #999; font-size: 12px; margin-top: 20px;">FirstEdu Teacher Connect</p>
-      </div>
-    `;
-
-    const resolved = await resolveTemplate('teacher_application', 'interview_scheduled', {
-      name: teacherName || "Candidate",
-      jobTitle,
-      interviewDate: dateStr,
-      interviewTime: interviewTime || "—",
-      providerLink: providerLink || "",
-    });
-    const subject = resolved?.subject ?? defaultSubject;
-    const html = resolved?.html ?? defaultHtml;
-
-    const mailOptions = {
-      from: `"FirstEdu Teacher Connect" <${process.env.SMTP_EMAIL}>`,
+    const info = await sendEmailWithTemplate({
       to: toEmail,
-      subject,
-      html,
-    };
-
-    const info = await transporter.sendMail(mailOptions);
+      category: "teacher_application",
+      slug: "interview_scheduled",
+      variables: {
+        name: teacherName || "Candidate",
+        jobTitle,
+        interviewDate: dateStr,
+        interviewTime: interviewTime || "—",
+        providerLink: providerLink || "",
+        interviewProvider: interviewProvider || "—",
+      },
+      defaultSubject: `Interview Scheduled - ${jobTitle}`,
+      defaultHtml: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #333;">Hello ${teacherName || "Candidate"},</h2>
+          <p style="color: #666;">Your interview has been scheduled for the position: <strong>${jobTitle}</strong>.</p>
+          <table style="width: 100%; border-collapse: collapse; color: #666;">
+            <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Date</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${dateStr}</td></tr>
+            <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Time</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${interviewTime || "—"}</td></tr>
+            <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Platform</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${interviewProvider || "—"}</td></tr>
+            <tr><td style="padding: 8px 0;"><strong>Join Link</strong></td><td style="padding: 8px 0;">${providerLink ? `<a href="${providerLink}">${providerLink}</a>` : "—"}</td></tr>
+          </table>
+          <p style="color: #999; font-size: 12px; margin-top: 20px;">Iscorre Teacher Connect</p>
+        </div>
+      `,
+      from: `"Iscorre Teacher Connect" <${process.env.SMTP_EMAIL}>`,
+    });
     console.log(`✅ Interview scheduled email sent to ${toEmail}. Message ID: ${info.messageId}`);
     return info;
   } catch (error) {
@@ -255,21 +272,25 @@ export const sendTeacherApprovalConfirmationEmail = async ({
       throw new ApiError(500, `SMTP configuration incomplete. Missing: ${missingVars.join(", ")}`);
     }
 
-    const mailOptions = {
-      from: `"FirstEdu Teacher Connect" <${process.env.SMTP_EMAIL}>`,
+    const info = await sendEmailWithTemplate({
       to: toEmail,
-      subject: "Congratulations – You have been selected as a Teacher",
-      html: `
+      category: "teacher_application",
+      slug: "approval_confirmation",
+      variables: {
+        name: teacherName || "Candidate",
+        jobTitle: jobTitle || "Teacher position",
+      },
+      defaultSubject: "Congratulations - You have been selected as a Teacher",
+      defaultHtml: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #333;">Hello ${teacherName || "Candidate"},</h2>
           <p style="color: #666;">Congratulations! You have been selected for ${jobTitle ? `<strong>${jobTitle}</strong>` : "the teacher position"}.</p>
           <p style="color: #666;">You will receive your login credentials separately. Please check your email or contact the admin if you have any questions.</p>
-          <p style="color: #999; font-size: 12px; margin-top: 20px;">FirstEdu Teacher Connect</p>
+          <p style="color: #999; font-size: 12px; margin-top: 20px;">Iscorre Teacher Connect</p>
         </div>
       `,
-    };
-
-    const info = await transporter.sendMail(mailOptions);
+      from: `"Iscorre Teacher Connect" <${process.env.SMTP_EMAIL}>`,
+    });
     console.log(`✅ Teacher approval confirmation email sent to ${toEmail}. Message ID: ${info.messageId}`);
     return info;
   } catch (error) {
@@ -297,36 +318,30 @@ export const sendTeacherApprovalWithCredentialsEmail = async ({
       throw new ApiError(500, `SMTP configuration incomplete. Missing: ${missingVars.join(", ")}`);
     }
 
-    const defaultSubject = "Congratulations – You have been selected as a Teacher";
-    const defaultHtml = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #333;">Hello ${teacherName || "Teacher"},</h2>
-        <p style="color: #666;">Congratulations! You have been selected. Please use the following credentials to log in to the teacher portal.</p>
-        <table style="width: 100%; border-collapse: collapse; color: #666;">
-          <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Email</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${email}</td></tr>
-          <tr><td style="padding: 8px 0;"><strong>Password</strong></td><td style="padding: 8px 0;"><code style="background: #f4f4f4; padding: 4px 8px;">${password}</code></td></tr>
-        </table>
-        <p style="color: #666;">Please change your password after first login.</p>
-        <p style="color: #999; font-size: 12px; margin-top: 20px;">FirstEdu Teacher Connect</p>
-      </div>
-    `;
-
-    const resolved = await resolveTemplate('teacher_application', 'approval', {
-      name: teacherName || "Teacher",
-      email,
-      password,
-    });
-    const subject = resolved?.subject ?? defaultSubject;
-    const html = resolved?.html ?? defaultHtml;
-
-    const mailOptions = {
-      from: `"FirstEdu Teacher Connect" <${process.env.SMTP_EMAIL}>`,
+    const info = await sendEmailWithTemplate({
       to: toEmail,
-      subject,
-      html,
-    };
-
-    const info = await transporter.sendMail(mailOptions);
+      category: "teacher_application",
+      slug: "approval",
+      variables: {
+        name: teacherName || "Teacher",
+        email,
+        password,
+      },
+      defaultSubject: "Congratulations - You have been selected as a Teacher",
+      defaultHtml: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #333;">Hello ${teacherName || "Teacher"},</h2>
+          <p style="color: #666;">Congratulations! You have been selected. Please use the following credentials to log in to the teacher portal.</p>
+          <table style="width: 100%; border-collapse: collapse; color: #666;">
+            <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Email</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${email}</td></tr>
+            <tr><td style="padding: 8px 0;"><strong>Password</strong></td><td style="padding: 8px 0;"><code style="background: #f4f4f4; padding: 4px 8px;">${password}</code></td></tr>
+          </table>
+          <p style="color: #666;">Please change your password after first login.</p>
+          <p style="color: #999; font-size: 12px; margin-top: 20px;">Iscorre Teacher Connect</p>
+        </div>
+      `,
+      from: `"Iscorre Teacher Connect" <${process.env.SMTP_EMAIL}>`,
+    });
     console.log(`✅ Teacher approval email sent to ${toEmail}. Message ID: ${info.messageId}`);
     return info;
   } catch (error) {
@@ -349,31 +364,25 @@ export const sendTeacherRejectionEmail = async ({ toEmail, teacherName, jobTitle
       throw new ApiError(500, `SMTP configuration incomplete. Missing: ${missingVars.join(", ")}`);
     }
 
-    const defaultSubject = `Update on your application – ${jobTitle || "Teacher Position"}`;
-    const defaultHtml = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #333;">Hello ${teacherName || "Candidate"},</h2>
-        <p style="color: #666;">Thank you for your interest. After careful consideration, we have decided not to move forward with your application for ${jobTitle ? `<strong>${jobTitle}</strong>` : "this position"}.</p>
-        <p style="color: #666;">We encourage you to apply for other openings in the future.</p>
-        <p style="color: #999; font-size: 12px; margin-top: 20px;">FirstEdu Teacher Connect</p>
-      </div>
-    `;
-
-    const resolved = await resolveTemplate('teacher_application', 'rejection', {
-      name: teacherName || "Candidate",
-      jobTitle: jobTitle || "Teacher Position",
-    });
-    const subject = resolved?.subject ?? defaultSubject;
-    const html = resolved?.html ?? defaultHtml;
-
-    const mailOptions = {
-      from: `"FirstEdu Teacher Connect" <${process.env.SMTP_EMAIL}>`,
+    const info = await sendEmailWithTemplate({
       to: toEmail,
-      subject,
-      html,
-    };
-
-    const info = await transporter.sendMail(mailOptions);
+      category: "teacher_application",
+      slug: "rejection",
+      variables: {
+        name: teacherName || "Candidate",
+        jobTitle: jobTitle || "Teacher Position",
+      },
+      defaultSubject: `Update on your application - ${jobTitle || "Teacher Position"}`,
+      defaultHtml: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #333;">Hello ${teacherName || "Candidate"},</h2>
+          <p style="color: #666;">Thank you for your interest. After careful consideration, we have decided not to move forward with your application for ${jobTitle ? `<strong>${jobTitle}</strong>` : "this position"}.</p>
+          <p style="color: #666;">We encourage you to apply for other openings in the future.</p>
+          <p style="color: #999; font-size: 12px; margin-top: 20px;">Iscorre Teacher Connect</p>
+        </div>
+      `,
+      from: `"Iscorre Teacher Connect" <${process.env.SMTP_EMAIL}>`,
+    });
     console.log(`✅ Teacher rejection email sent to ${toEmail}. Message ID: ${info.messageId}`);
     return info;
   } catch (error) {

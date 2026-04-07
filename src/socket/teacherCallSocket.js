@@ -7,6 +7,19 @@ import {
   normalizeSocketAuthToken,
 } from "./socketAuth.util.js";
 
+const CALL_REQUEST_AUTO_CANCEL_MS = 45_000;
+const pendingCallCancelTimers = new Map();
+
+const clearPendingCallAutoCancel = (sessionId) => {
+  const key = sessionId?.toString?.() ?? String(sessionId || "");
+  if (!key) return;
+  const timerId = pendingCallCancelTimers.get(key);
+  if (timerId) {
+    clearTimeout(timerId);
+    pendingCallCancelTimers.delete(key);
+  }
+};
+
 function assertCallParticipant(session, userId, role) {
   const studentId = session.student._id?.toString?.() ?? String(session.student);
   const teacherId = session.teacher._id?.toString?.() ?? String(session.teacher);
@@ -56,6 +69,32 @@ export const setupTeacherCallSocket = (io) => {
       socket.join(`student:${userId}`);
     }
 
+    const schedulePendingCallAutoCancel = (sessionId, teacherId) => {
+      const sid = sessionId.toString();
+      clearPendingCallAutoCancel(sid);
+      const timerId = setTimeout(async () => {
+        pendingCallCancelTimers.delete(sid);
+        try {
+          const sessionDoc = await teacherConnectService.cancelPendingCallRequestByStudent(userId, sid);
+          if (!sessionDoc) return;
+          delete socket.data.pendingCallSessionId;
+          const endedPayload = {
+            sessionId: sid,
+            reason: "teacher_no_response_timeout",
+            message: "Teacher did not accept within 45 seconds.",
+            autoCancelled: true,
+            timeoutMs: CALL_REQUEST_AUTO_CANCEL_MS,
+            timestamp: new Date(),
+          };
+          socket.emit("call_request_cancelled", endedPayload);
+          ns.to(`teacher:${teacherId}`).emit("call_request_withdrawn", endedPayload);
+        } catch (err) {
+          console.error("Auto-cancel pending call error:", err);
+        }
+      }, CALL_REQUEST_AUTO_CANCEL_MS);
+      pendingCallCancelTimers.set(sid, timerId);
+    };
+
     socket.on("call_request", async (payload = {}) => {
       if (user.role !== "student") {
         socket.emit("call_error", { message: "Only students can request a call" });
@@ -69,6 +108,7 @@ export const setupTeacherCallSocket = (io) => {
       try {
         const session = await teacherConnectService.initiateCallRequest(userId, teacherId, subject);
         socket.data.pendingCallSessionId = session._id.toString();
+        schedulePendingCallAutoCancel(session._id, teacherId);
         socket.emit("call_request_sent", { session });
 
         await teacherChatService.notifyTeacherDevice(
@@ -113,6 +153,7 @@ export const setupTeacherCallSocket = (io) => {
         await teacherConnectService.acceptCallRequest(userId, sessionId);
         const session = await teacherConnectService.startCall(sessionId);
         const sid = session._id.toString();
+        clearPendingCallAutoCancel(sid);
         const studentRef = session.student._id ?? session.student;
         const studentId = studentRef.toString();
 
@@ -158,6 +199,7 @@ export const setupTeacherCallSocket = (io) => {
           return;
         }
         const sessionDoc = await teacherConnectService.rejectCallRequest(userId, sessionId, reason);
+        clearPendingCallAutoCancel(sessionDoc._id);
         const studentId = sessionDoc.student._id.toString();
         const endedPayload = {
           sessionId: sessionDoc._id.toString(),
@@ -202,6 +244,7 @@ export const setupTeacherCallSocket = (io) => {
         socket.join(`session:${sid}`);
         socket.data.callSessionId = sid;
         if (user.role === "student") {
+          clearPendingCallAutoCancel(sid);
           delete socket.data.pendingCallSessionId;
         }
         socket.emit("joined_call_session", { sessionId: sid, session });
@@ -241,6 +284,7 @@ export const setupTeacherCallSocket = (io) => {
       if (user.role !== "student") return null;
       const pendingId = socket.data.pendingCallSessionId;
       if (!pendingId) return null;
+      clearPendingCallAutoCancel(pendingId);
       delete socket.data.pendingCallSessionId;
       try {
         const sessionDoc = await teacherConnectService.cancelPendingCallRequestByStudent(

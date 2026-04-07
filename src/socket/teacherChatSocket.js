@@ -6,6 +6,19 @@ import {
   normalizeSocketAuthToken,
 } from "./socketAuth.util.js";
 
+const CHAT_REQUEST_AUTO_CANCEL_MS = 45_000;
+const pendingChatCancelTimers = new Map();
+
+const clearPendingChatAutoCancel = (sessionId) => {
+  const key = sessionId?.toString?.() ?? String(sessionId || "");
+  if (!key) return;
+  const timerId = pendingChatCancelTimers.get(key);
+  if (timerId) {
+    clearTimeout(timerId);
+    pendingChatCancelTimers.delete(key);
+  }
+};
+
 const chatBillingTimers = new Map();
 
 const stopChatBilling = (sessionId) => {
@@ -106,6 +119,32 @@ export const setupTeacherChatSocket = (io) => {
       socket.join(`student:${userId}`);
     }
 
+    const schedulePendingChatAutoCancel = (sessionId, teacherId) => {
+      const sid = sessionId.toString();
+      clearPendingChatAutoCancel(sid);
+      const timerId = setTimeout(async () => {
+        pendingChatCancelTimers.delete(sid);
+        try {
+          const sessionDoc = await teacherChatService.cancelPendingChatRequestByStudent(userId, sid);
+          if (!sessionDoc) return;
+          delete socket.data.pendingChatSessionId;
+          const endedPayload = {
+            sessionId: sid,
+            reason: "teacher_no_response_timeout",
+            message: "Teacher did not accept within 45 seconds.",
+            autoCancelled: true,
+            timeoutMs: CHAT_REQUEST_AUTO_CANCEL_MS,
+            timestamp: new Date(),
+          };
+          socket.emit("chat_request_cancelled", endedPayload);
+          ns.to(`teacher:${teacherId}`).emit("chat_request_withdrawn", endedPayload);
+        } catch (err) {
+          console.error("Auto-cancel pending chat error:", err);
+        }
+      }, CHAT_REQUEST_AUTO_CANCEL_MS);
+      pendingChatCancelTimers.set(sid, timerId);
+    };
+
     socket.on("chat_request", async (payload = {}) => {
       if (user.role !== "student") {
         socket.emit("chat_error", { message: "Only students can request a chat" });
@@ -119,6 +158,7 @@ export const setupTeacherChatSocket = (io) => {
       try {
         const session = await teacherChatService.initiateChatRequest(userId, teacherId, subject);
         socket.data.pendingChatSessionId = session._id.toString();
+        schedulePendingChatAutoCancel(session._id, teacherId);
         socket.emit("chat_request_sent", { session });
 
         await teacherChatService.notifyTeacherDevice(
@@ -153,6 +193,7 @@ export const setupTeacherChatSocket = (io) => {
       try {
         const session = await teacherChatService.acceptChatSession(userId, sessionId);
         const sid = session._id.toString();
+        clearPendingChatAutoCancel(sid);
         const studentRef = session.student._id ?? session.student;
         const studentId = studentRef.toString();
 
@@ -195,6 +236,7 @@ export const setupTeacherChatSocket = (io) => {
       }
       try {
         const sessionDoc = await teacherChatService.rejectChatSession(userId, sessionId, reason);
+        clearPendingChatAutoCancel(sessionDoc._id);
         const studentId = sessionDoc.student._id.toString();
         const endedPayload = {
           sessionId: sessionDoc._id.toString(),
@@ -239,6 +281,7 @@ export const setupTeacherChatSocket = (io) => {
         socket.join(`session:${sid}`);
         socket.data.chatSessionId = sid;
         if (user.role === "student") {
+          clearPendingChatAutoCancel(sid);
           delete socket.data.pendingChatSessionId;
         }
         socket.emit("joined_chat_session", { sessionId: sid, session });
@@ -307,6 +350,7 @@ export const setupTeacherChatSocket = (io) => {
       if (user.role !== "student") return null;
       const pendingId = socket.data.pendingChatSessionId;
       if (!pendingId) return null;
+      clearPendingChatAutoCancel(pendingId);
       delete socket.data.pendingChatSessionId;
       try {
         const sessionDoc = await teacherChatService.cancelPendingChatRequestByStudent(
