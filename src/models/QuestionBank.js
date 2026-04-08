@@ -2,12 +2,20 @@ import mongoose from "mongoose";
 
 const sectionSchema = new mongoose.Schema(
   {
+    id: { type: Number },
+    name: { type: String, trim: true },
     count: { type: Number, required: true, min: 1 },
     difficulty: {
       type: String,
       enum: ["easy", "medium", "hard"],
       required: true,
     },
+    questions: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Question",
+      },
+    ],
   },
   { _id: false }
 );
@@ -35,6 +43,10 @@ const questionBankSchema = new mongoose.Schema(
       default: "medium",
     },
     sections: [sectionSchema],
+    useSectionWiseQuestions: {
+      type: Boolean,
+      default: false,
+    },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Admin",

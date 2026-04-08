@@ -161,6 +161,7 @@ import {
   getQuestionBankById,
   getQuestionsByBankId,
   updateQuestionBank,
+  toggleSectionWiseQuestions,
   deleteQuestionBank,
 } from "../controllers/questionBank.controller.js";
 
@@ -299,6 +300,11 @@ router.get("/question-banks", verifyJWT, getQuestionBanks);
 router.get("/question-banks/:id", verifyJWT, getQuestionBankById);
 router.get("/question-banks/:id/questions", verifyJWT, getQuestionsByBankId);
 router.put("/question-banks/:id", verifyJWT, updateQuestionBank);
+router.patch(
+  "/question-banks/:id/section-wise-questions",
+  verifyJWT,
+  toggleSectionWiseQuestions
+);
 router.delete("/question-banks/:id", verifyJWT, deleteQuestionBank);
 
 // Question Bank Management Routes (individual questions - create, list all, get, update, delete)

@@ -21,6 +21,16 @@ const validateQuestionOptions = (questionType, options) => {
   }
 };
 
+const getSectionIndexByCount = (sectionConfigs = [], questionIndex = 0) => {
+  let cursor = 0;
+  for (let i = 0; i < sectionConfigs.length; i++) {
+    const count = Number(sectionConfigs[i]?.count || 0);
+    if (questionIndex < cursor + count) return i;
+    cursor += count;
+  }
+  return undefined;
+};
+
 export const createQuestionBank = async (data, createdBy) => {
   const categoryIds = data.categories || [];
   for (const catId of categoryIds) {
@@ -32,7 +42,11 @@ export const createQuestionBank = async (data, createdBy) => {
     categories: categoryIds,
     useSectionWiseDifficulty: data.useSectionWiseDifficulty ?? false,
     overallDifficulty: data.overallDifficulty || "medium",
-    sections: data.sections || [],
+    sections: (data.sections || []).map((section) => ({
+      ...section,
+      questions: Array.isArray(section.questions) ? section.questions : [],
+    })),
+    useSectionWiseQuestions: data.useSectionWiseQuestions ?? false,
     createdBy,
   };
   return await questionBankRepository.create(payload);
@@ -47,11 +61,12 @@ export const createQuestionBankWithQuestions = async (data, createdBy) => {
 
   const useSectionWise = data.useSectionWiseDifficulty ?? false;
   const sections = data.sections || [];
+  const useSectionWiseQuestions = data.useSectionWiseQuestions ?? false;
   const questionsInput = data.questions || [];
   const overallDifficulty = data.overallDifficulty || "medium";
 
   let expectedCount = 0;
-  if (useSectionWise && sections.length) {
+  if ((useSectionWise || useSectionWiseQuestions) && sections.length) {
     expectedCount = sections.reduce((sum, s) => sum + s.count, 0);
   } else {
     expectedCount = questionsInput.length;
@@ -63,12 +78,20 @@ export const createQuestionBankWithQuestions = async (data, createdBy) => {
     );
   }
 
+  if (useSectionWiseQuestions && sections.length === 0) {
+    throw new ApiError(
+      400,
+      "sections must be configured when section-wise questions is enabled"
+    );
+  }
+
   const bankPayload = {
     name: data.name,
     categories: categoryIds,
     useSectionWiseDifficulty: useSectionWise,
     overallDifficulty,
-    sections,
+    sections: sections.map((section) => ({ ...section, questions: [] })),
+    useSectionWiseQuestions,
     createdBy,
   };
   const bank = await questionBankRepository.create(bankPayload);
@@ -98,11 +121,26 @@ export const createQuestionBankWithQuestions = async (data, createdBy) => {
   };
 
   const createdQuestions = [];
+  const sectionsWithIds = (sections || []).map((section) => ({
+    ...section,
+    questions: [],
+  }));
   for (let i = 0; i < questionsInput.length; i++) {
     questionIndex = i;
     const q = questionsInput[i];
     validateQuestionOptions(q.questionType, q.options);
-    const { difficulty, sectionIndex, orderInBank } = buildDifficultyAndSection();
+    const {
+      difficulty,
+      sectionIndex: sectionIndexByDifficulty,
+      orderInBank,
+    } = buildDifficultyAndSection();
+    const sectionIndexByQuestionMode = useSectionWiseQuestions
+      ? getSectionIndexByCount(sections, questionIndex)
+      : undefined;
+    const sectionIndex =
+      sectionIndexByQuestionMode !== undefined
+        ? sectionIndexByQuestionMode
+        : sectionIndexByDifficulty;
     const questionData = {
       questionText: q.questionText,
       questionType: q.questionType || "single",
@@ -122,6 +160,20 @@ export const createQuestionBankWithQuestions = async (data, createdBy) => {
     };
     const created = await questionRepository.create(questionData);
     createdQuestions.push(created);
+
+    if (
+      useSectionWiseQuestions &&
+      sectionIndex !== undefined &&
+      sectionsWithIds[sectionIndex]
+    ) {
+      sectionsWithIds[sectionIndex].questions.push(created._id);
+    }
+  }
+
+  if (useSectionWiseQuestions) {
+    await questionBankRepository.updateById(bank._id, {
+      sections: sectionsWithIds,
+    });
   }
 
   const bankWithPopulate = await questionBankRepository.findById(bank._id);
@@ -156,7 +208,50 @@ export const updateQuestionBank = async (id, updateData) => {
       if (!cat) throw new ApiError(404, `Category not found: ${catId}`);
     }
   }
+
+  if (Object.prototype.hasOwnProperty.call(updateData, "sections")) {
+    updateData.sections = (updateData.sections || []).map(
+      (section, index) => ({
+        ...(existing.sections?.[index]?.toObject?.() ||
+          existing.sections?.[index] ||
+          {}),
+        ...section,
+        questions: Array.isArray(section.questions)
+          ? section.questions
+          : existing.sections?.[index]?.questions || [],
+      })
+    );
+  }
+
+  if (updateData.useSectionWiseQuestions === true) {
+    const effectiveSections = updateData.sections ?? existing.sections ?? [];
+    if (!Array.isArray(effectiveSections) || effectiveSections.length === 0) {
+      throw new ApiError(
+        400,
+        "sections must be configured before enabling section-wise questions"
+      );
+    }
+  }
+
   return await questionBankRepository.updateById(id, updateData);
+};
+
+export const toggleSectionWiseQuestions = async (id, useSectionWiseQuestions) => {
+  const existing = await questionBankRepository.findById(id, false);
+  if (!existing) throw new ApiError(404, "Question bank not found");
+
+  if (useSectionWiseQuestions === true) {
+    const hasSections =
+      Array.isArray(existing.sections) && existing.sections.length > 0;
+    if (!hasSections) {
+      throw new ApiError(
+        400,
+        "Cannot enable section-wise questions without sections configuration"
+      );
+    }
+  }
+
+  return await questionBankRepository.updateById(id, { useSectionWiseQuestions });
 };
 
 export const deleteQuestionBank = async (id) => {
@@ -173,5 +268,6 @@ export default {
   getQuestionBankById,
   getQuestionsByBankId,
   updateQuestionBank,
+  toggleSectionWiseQuestions,
   deleteQuestionBank,
 };

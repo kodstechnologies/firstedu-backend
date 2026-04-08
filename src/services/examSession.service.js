@@ -52,13 +52,207 @@ const hasCompletedRegistrationForLinkedEventTest = async (testId, studentId) => 
   return false;
 };
 
+const allocateIntegerShares = (total, ratios) => {
+  if (!Number.isFinite(total) || total <= 0 || !Array.isArray(ratios) || ratios.length === 0) {
+    return [];
+  }
+  const ratioSum = ratios.reduce((sum, r) => sum + (Number(r) > 0 ? Number(r) : 0), 0);
+  if (ratioSum <= 0) return ratios.map(() => 0);
+
+  const rawShares = ratios.map((r) => (Math.max(0, Number(r) || 0) / ratioSum) * total);
+  const baseShares = rawShares.map((s) => Math.floor(s));
+  let remainder = total - baseShares.reduce((sum, s) => sum + s, 0);
+
+  const indicesByFractionDesc = rawShares
+    .map((value, index) => ({ index, fraction: value - Math.floor(value) }))
+    .sort((a, b) => b.fraction - a.fraction)
+    .map((item) => item.index);
+
+  let ptr = 0;
+  while (remainder > 0 && indicesByFractionDesc.length > 0) {
+    const index = indicesByFractionDesc[ptr % indicesByFractionDesc.length];
+    baseShares[index] += 1;
+    remainder -= 1;
+    ptr += 1;
+  }
+
+  return baseShares;
+};
+
+const buildPerQuestionTimePlan = (questions, sectionConfig, durationMinutes) => {
+  const totalDurationMs = Math.max(0, Math.round((Number(durationMinutes) || 0) * 60 * 1000));
+  const questionCount = Array.isArray(questions) ? questions.length : 0;
+  if (questionCount === 0 || totalDurationMs <= 0) {
+    return {
+      questionTimesMs: new Array(questionCount).fill(0),
+      sectionTimesMs: {},
+      strategy: "equal",
+    };
+  }
+
+  // Normal banks: equal split across all questions.
+  if (!Array.isArray(sectionConfig) || sectionConfig.length === 0) {
+    const questionTimesMs = allocateIntegerShares(
+      totalDurationMs,
+      new Array(questionCount).fill(1)
+    );
+    return { questionTimesMs, sectionTimesMs: {}, strategy: "equal" };
+  }
+
+  // Section-wise banks: split equally by section, then equally within each section.
+  const questionIndexesBySection = sectionConfig.map((section) =>
+    questions
+      .map((q, idx) => {
+        const sectionIndex = q?.question?.sectionIndex ?? q?.sectionIndex;
+        return sectionIndex === section.index ? idx : null;
+      })
+      .filter((idx) => idx !== null)
+  );
+
+  const activeSectionEntries = sectionConfig
+    .map((section, idx) => ({
+      section,
+      idx,
+      questionIndexes: questionIndexesBySection[idx],
+    }))
+    .filter((entry) => entry.questionIndexes.length > 0);
+
+  // Fallback to equal split if section indexes are missing on questions.
+  if (activeSectionEntries.length === 0) {
+    const questionTimesMs = allocateIntegerShares(
+      totalDurationMs,
+      new Array(questionCount).fill(1)
+    );
+    return { questionTimesMs, sectionTimesMs: {}, strategy: "equal" };
+  }
+
+  const sectionRatios = new Array(activeSectionEntries.length).fill(1);
+  const sectionBudgets = allocateIntegerShares(totalDurationMs, sectionRatios);
+
+  const questionTimesMs = new Array(questionCount).fill(0);
+  const sectionTimesMs = {};
+
+  activeSectionEntries.forEach((entry, activeIndex) => {
+    const sectionBudgetMs = sectionBudgets[activeIndex] || 0;
+    const perQuestionShares = allocateIntegerShares(
+      sectionBudgetMs,
+      new Array(entry.questionIndexes.length).fill(1)
+    );
+    sectionTimesMs[entry.section.index] = sectionBudgetMs;
+    entry.questionIndexes.forEach((questionIndex, i) => {
+      questionTimesMs[questionIndex] = perQuestionShares[i] || 0;
+    });
+  });
+
+  return {
+    questionTimesMs,
+    sectionTimesMs,
+    strategy: "section_equal",
+  };
+};
+
+const getAnswerRemainingTimeMs = (answer, now = new Date()) => {
+  const baseRemaining = Number(answer?.remainingTimeMs ?? answer?.questionTimeLimitMs ?? 0);
+  if (!answer?.timerStartedAt || answer?.timeExpiredAt) {
+    return Math.max(0, baseRemaining);
+  }
+  const elapsed = Math.max(0, now.getTime() - new Date(answer.timerStartedAt).getTime());
+  return Math.max(0, baseRemaining - elapsed);
+};
+
+const pauseActiveQuestionTimer = (session, now = new Date()) => {
+  if (!session?.activeQuestionId) return false;
+  const activeId = session.activeQuestionId?.toString?.() || String(session.activeQuestionId);
+  const answer = session.answers.find(
+    (a) => (a.questionId?.toString?.() || String(a.questionId)) === activeId
+  );
+
+  if (!answer) {
+    session.activeQuestionId = null;
+    return true;
+  }
+
+  if (answer.timeExpiredAt) {
+    answer.remainingTimeMs = 0;
+    answer.timerStartedAt = null;
+    session.activeQuestionId = null;
+    return true;
+  }
+
+  const newRemaining = getAnswerRemainingTimeMs(answer, now);
+  answer.remainingTimeMs = newRemaining;
+  answer.timerStartedAt = null;
+
+  if (newRemaining <= 0) {
+    answer.timeExpiredAt = now;
+    session.activeQuestionId = null;
+  }
+  return true;
+};
+
+const ensureActiveQuestionNotExpired = (session, now = new Date()) => {
+  if (!session?.activeQuestionId) return false;
+  const activeId = session.activeQuestionId?.toString?.() || String(session.activeQuestionId);
+  const answer = session.answers.find(
+    (a) => (a.questionId?.toString?.() || String(a.questionId)) === activeId
+  );
+  if (!answer) {
+    session.activeQuestionId = null;
+    return true;
+  }
+
+  if (answer.timeExpiredAt) {
+    answer.remainingTimeMs = 0;
+    answer.timerStartedAt = null;
+    session.activeQuestionId = null;
+    return true;
+  }
+
+  const remaining = getAnswerRemainingTimeMs(answer, now);
+  if (remaining <= 0) {
+    answer.remainingTimeMs = 0;
+    answer.timerStartedAt = null;
+    answer.timeExpiredAt = now;
+    session.activeQuestionId = null;
+    return true;
+  }
+  return false;
+};
+
+const startOrResumeQuestionTimer = (session, questionId, now = new Date()) => {
+  const answer = session.answers.find(
+    (a) => (a.questionId?.toString?.() || String(a.questionId)) === questionId.toString()
+  );
+  if (!answer) {
+    throw new ApiError(404, "Question not found in this exam session");
+  }
+
+  const remaining = getAnswerRemainingTimeMs(answer, now);
+  if (answer.timeExpiredAt || remaining <= 0) {
+    answer.remainingTimeMs = 0;
+    answer.timerStartedAt = null;
+    answer.timeExpiredAt = answer.timeExpiredAt || now;
+    throw new ApiError(400, "Time is over for this question. You cannot open it again.");
+  }
+
+  answer.remainingTimeMs = remaining;
+  answer.timerStartedAt = now;
+  if (answer.status === "not_visited") {
+    answer.status = "skipped";
+  }
+  session.activeQuestionId = answer.questionId;
+  return answer;
+};
+
 /**
  * Start a new exam session
  */
 export const startExamSession = async (testId, studentId, options = {}) => {
   const { challengeId = null, categoryId = null } = options;
   // Check if test exists and is published
-  const test = await examSessionRepository.findTestById(testId, { questionBank: "name" });
+  const test = await examSessionRepository.findTestById(testId, {
+    questionBank: "name sections useSectionWiseQuestions useSectionWiseDifficulty",
+  });
   if (!test) {
     throw new ApiError(404, "Test not found");
   }
@@ -214,12 +408,31 @@ export const startExamSession = async (testId, studentId, options = {}) => {
   const durationMs = test.durationMinutes * 60 * 1000;
   const endTime = new Date(now.getTime() + durationMs);
 
+  const sectionConfigForTiming =
+    test?.questionBank?.useSectionWiseQuestions &&
+    Array.isArray(test?.questionBank?.sections)
+      ? test.questionBank.sections.map((section, index) => ({
+          index,
+          count: section.count,
+          difficulty: section.difficulty,
+        }))
+      : [];
+  const { questionTimesMs } = buildPerQuestionTimePlan(
+    questions,
+    sectionConfigForTiming,
+    test.durationMinutes
+  );
+
   // Initialize answers array for all questions from the bank
-  const answers = questions.map((question) => ({
+  const answers = questions.map((question, index) => ({
     questionId: question._id,
     answer: null,
     status: "not_visited",
     answeredAt: null,
+    questionTimeLimitMs: questionTimesMs[index] || 0,
+    remainingTimeMs: questionTimesMs[index] || 0,
+    timerStartedAt: null,
+    timeExpiredAt: null,
   }));
 
   const maxScore = questions.reduce((sum, q) => sum + (q.marks || 0), 0);
@@ -233,6 +446,7 @@ export const startExamSession = async (testId, studentId, options = {}) => {
     endTime: endTime,
     status: "in_progress",
     answers: answers,
+    activeQuestionId: null,
     proctoringEvents: [],
     maxScore,
   });
@@ -250,9 +464,10 @@ export const getExamSession = async (sessionId, studentId) => {
       student: studentId,
     },
     {
-      test: "title description durationMinutes proctoringInstructions",
+      test: "title description durationMinutes proctoringInstructions questionBank",
       answers: {
-        select: "questionText questionType options subject topic marks negativeMarks difficulty isParent passage parentQuestionId childQuestions",
+        select:
+          "questionText questionType options subject topic marks negativeMarks difficulty isParent passage parentQuestionId childQuestions sectionIndex orderInBank",
         populate: {
           path: "childQuestions",
           select: "questionText questionType options marks negativeMarks difficulty",
@@ -278,9 +493,10 @@ export const getExamSession = async (sessionId, studentId) => {
           student: studentId,
         },
         {
-          test: "title description durationMinutes proctoringInstructions",
+          test: "title description durationMinutes proctoringInstructions questionBank",
           answers: {
-            select: "questionText questionType options subject topic marks negativeMarks difficulty isParent passage parentQuestionId childQuestions",
+            select:
+              "questionText questionType options subject topic marks negativeMarks difficulty isParent passage parentQuestionId childQuestions sectionIndex orderInBank",
             populate: {
               path: "childQuestions",
               select: "questionText questionType options marks negativeMarks difficulty",
@@ -306,6 +522,12 @@ export const getExamSession = async (sessionId, studentId) => {
     }
   }
 
+  // Expire currently active question if its own timer is over.
+  const timerStateChanged = ensureActiveQuestionNotExpired(session, now);
+  if (timerStateChanged && session.status === "in_progress") {
+    await examSessionRepository.save(session);
+  }
+
   // Calculate remaining time (use stored value when paused)
   const remainingTime =
     session.status === "paused" && session.remainingTimeAtPause != null
@@ -329,12 +551,20 @@ export const getExamSession = async (sessionId, studentId) => {
     const questionObj = question.toObject ? question.toObject() : question;
     delete questionObj.correctAnswer;
 
+    const remainingQuestionTimeMs = getAnswerRemainingTimeMs(answer, now);
     return {
       questionId: questionObj._id,
       question: questionObj,
       answer: answer.answer,
       status: answer.status,
       answeredAt: answer.answeredAt,
+      recommendedTimeMs: Number(answer.questionTimeLimitMs || 0),
+      recommendedTimeSeconds: Math.round(Number(answer.questionTimeLimitMs || 0) / 1000),
+      recommendedTimeFormatted: formatTime(Number(answer.questionTimeLimitMs || 0)),
+      remainingQuestionTimeMs,
+      remainingQuestionTimeSeconds: Math.round(remainingQuestionTimeMs / 1000),
+      remainingQuestionTimeFormatted: formatTime(remainingQuestionTimeMs),
+      questionTimeExpired: Boolean(answer.timeExpiredAt) || remainingQuestionTimeMs <= 0,
     };
   }).filter((q) => q !== null);
 
@@ -347,6 +577,117 @@ export const getExamSession = async (sessionId, studentId) => {
     total: session.answers.length,
   };
 
+  // Add section metadata for section-wise exam UI (single API response).
+  let sectionConfig = [];
+  const hasSectionIndexedQuestions = questions.some(
+    (q) => q?.question?.sectionIndex !== undefined && q?.question?.sectionIndex !== null
+  );
+  const questionBankId = session?.test?.questionBank?._id || session?.test?.questionBank;
+  if (questionBankId) {
+    const questionBank = await questionBankRepository.findById(questionBankId, false);
+    if (
+      Array.isArray(questionBank.sections) &&
+      questionBank.sections.length > 0 &&
+      (
+        questionBank?.useSectionWiseQuestions ||
+        questionBank?.useSectionWiseDifficulty ||
+        hasSectionIndexedQuestions
+      )
+    ) {
+      sectionConfig = questionBank.sections.map((section, index) => ({
+        index,
+        id: section.id ?? index + 1,
+        name: section.name || `Section ${String.fromCharCode(65 + index)}`,
+        count: section.count,
+        difficulty: section.difficulty,
+      }));
+    }
+  }
+
+  // Fallback: derive sections from question.sectionIndex when bank section config is absent.
+  if (sectionConfig.length === 0 && hasSectionIndexedQuestions) {
+    const grouped = new Map();
+    questions.forEach((q) => {
+      const idx = q?.question?.sectionIndex;
+      if (idx === undefined || idx === null) return;
+      if (!grouped.has(idx)) grouped.set(idx, []);
+      grouped.get(idx).push(q);
+    });
+
+    sectionConfig = [...grouped.keys()]
+      .sort((a, b) => a - b)
+      .map((index) => {
+        const sectionQuestions = grouped.get(index) || [];
+        const firstDifficulty =
+          sectionQuestions.find((q) => q?.question?.difficulty)?.question?.difficulty ||
+          "medium";
+        return {
+          index,
+          id: index + 1,
+          name: `Section ${String.fromCharCode(65 + Number(index))}`,
+          count: sectionQuestions.length,
+          difficulty: firstDifficulty,
+        };
+      });
+  }
+
+  const sectionedQuestions =
+    sectionConfig.length > 0
+      ? sectionConfig.map((section) => ({
+          ...section,
+          questions: questions.filter(
+            (q) => q?.question?.sectionIndex === section.index
+          ),
+        }))
+      : [];
+
+  const { questionTimesMs, sectionTimesMs, strategy } = buildPerQuestionTimePlan(
+    questions,
+    sectionConfig,
+    session?.test?.durationMinutes
+  );
+  const questionsWithTime = questions.map((q, index) => ({
+    ...q,
+    // Keep compatibility: if historical sessions don't have stored limits, fallback to computed.
+    recommendedTimeMs:
+      Number(q.recommendedTimeMs || 0) > 0
+        ? Number(q.recommendedTimeMs || 0)
+        : questionTimesMs[index] || 0,
+    recommendedTimeSeconds: Math.round(
+      (Number(q.recommendedTimeMs || 0) > 0
+        ? Number(q.recommendedTimeMs || 0)
+        : questionTimesMs[index] || 0) / 1000
+    ),
+    recommendedTimeFormatted: formatTime(
+      Number(q.recommendedTimeMs || 0) > 0
+        ? Number(q.recommendedTimeMs || 0)
+        : questionTimesMs[index] || 0
+    ),
+  }));
+  const sectionedQuestionsWithTime =
+    sectionedQuestions.length > 0
+      ? sectionedQuestions.map((section) => {
+          const sectionTotalMs = sectionTimesMs[section.index] || 0;
+          const sectionQuestions = questionsWithTime.filter(
+            (q) => q?.question?.sectionIndex === section.index
+          );
+          return {
+            ...section,
+            recommendedTotalTimeMs: sectionTotalMs,
+            recommendedTotalTimeFormatted: formatTime(sectionTotalMs),
+            recommendedPerQuestionMs:
+              sectionQuestions.length > 0
+                ? Math.round(sectionTotalMs / sectionQuestions.length)
+                : 0,
+            recommendedPerQuestionFormatted:
+              sectionQuestions.length > 0
+                ? formatTime(Math.round(sectionTotalMs / sectionQuestions.length))
+                : formatTime(0),
+            questions: sectionQuestions,
+          };
+        })
+      : [];
+
   return {
     session: {
       id: session._id,
@@ -357,9 +698,14 @@ export const getExamSession = async (sessionId, studentId) => {
       maxScore: session.maxScore,
       remainingTime, // in milliseconds
       remainingTimeFormatted: formatTime(remainingTime),
+      sectionWiseQuestionsEnabled: sectionConfig.length > 0,
+      timeAllocationStrategy: strategy,
+      activeQuestionId: session.activeQuestionId || null,
     },
-    questions,
+    questions: questionsWithTime,
     palette,
+    sectionConfig,
+    sectionedQuestions: sectionedQuestionsWithTime,
   };
 };
 
@@ -385,6 +731,8 @@ export const saveAnswer = async (sessionId, questionId, answer, studentId, statu
     throw new ApiError(400, "Exam session has expired");
   }
 
+  pauseActiveQuestionTimer(session, now);
+
   // Find the answer entry
   const answerEntry = session.answers.find(
     (a) => a.questionId.toString() === questionId.toString()
@@ -393,6 +741,8 @@ export const saveAnswer = async (sessionId, questionId, answer, studentId, statu
   if (!answerEntry) {
     throw new ApiError(404, "Question not found in this exam session");
   }
+
+  startOrResumeQuestionTimer(session, questionId, now);
 
   // Update answer
   answerEntry.answer = answer;
@@ -420,6 +770,16 @@ export const markForReview = async (sessionId, questionId, studentId) => {
     throw new ApiError(404, "Exam session not found or already completed");
   }
 
+  const now = new Date();
+  if (new Date(session.endTime) < now) {
+    session.status = "expired";
+    await examSessionRepository.save(session);
+    throw new ApiError(400, "Exam session has expired");
+  }
+
+  pauseActiveQuestionTimer(session, now);
+  startOrResumeQuestionTimer(session, questionId, now);
+
   const answerEntry = session.answers.find(
     (a) => a.questionId.toString() === questionId.toString()
   );
@@ -439,6 +799,34 @@ export const markForReview = async (sessionId, questionId, studentId) => {
  */
 export const skipQuestion = async (sessionId, questionId, studentId) => {
   return await saveAnswer(sessionId, questionId, null, studentId, "skipped");
+};
+
+/**
+ * Visit/open a question: pauses previous question timer and starts/resumes selected question timer.
+ */
+export const visitQuestion = async (sessionId, questionId, studentId) => {
+  const session = await examSessionRepository.findOne({
+    _id: sessionId,
+    student: studentId,
+    status: "in_progress",
+  });
+
+  if (!session) {
+    throw new ApiError(404, "Exam session not found or already completed");
+  }
+
+  const now = new Date();
+  if (new Date(session.endTime) < now) {
+    session.status = "expired";
+    await examSessionRepository.save(session);
+    throw new ApiError(400, "Exam session has expired");
+  }
+
+  pauseActiveQuestionTimer(session, now);
+  startOrResumeQuestionTimer(session, questionId, now);
+  await examSessionRepository.save(session);
+
+  return await getExamSession(sessionId, studentId);
 };
 
 /**
@@ -579,6 +967,7 @@ export const pauseExamSession = async (sessionId, studentId) => {
 
   const now = new Date();
   const remainingMs = Math.max(0, new Date(session.endTime).getTime() - now.getTime());
+  pauseActiveQuestionTimer(session, now);
 
   session.status = "paused";
   session.pausedAt = now;
@@ -614,6 +1003,7 @@ export const submitExam = async (sessionId, studentId) => {
   }
 
   // Mark as completed
+  pauseActiveQuestionTimer(session, new Date());
   session.status = "completed";
   session.completedAt = new Date();
 
@@ -1024,6 +1414,7 @@ export default {
   pauseExamSession,
   getExamSession,
   saveAnswer,
+  visitQuestion,
   markForReview,
   skipQuestion,
   logProctoringEvent,

@@ -92,6 +92,7 @@ import {
   pauseExam,
   getExamSession,
   saveAnswer,
+  visitQuestion,
   markForReview,
   skipQuestion,
   logProctoringEvent,
@@ -415,6 +416,13 @@ router.put(
   "/exam-sessions/:sessionId/questions/:questionId/answer",
   verifyJWT,
   saveAnswer,
+);
+
+// Visit/Open Question (pause previous question timer, start/resume selected question timer)
+router.post(
+  "/exam-sessions/:sessionId/questions/:questionId/visit",
+  verifyJWT,
+  visitQuestion,
 );
 
 // Mark for Review

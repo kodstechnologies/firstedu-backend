@@ -82,6 +82,24 @@ export const skipQuestion = asyncHandler(async (req, res) => {
 });
 
 /**
+ * Visit/Open a question (pause previous question timer, resume selected question timer)
+ */
+export const visitQuestion = asyncHandler(async (req, res) => {
+  const { sessionId, questionId } = req.params;
+  const studentId = req.user._id;
+
+  const examSession = await examSessionService.visitQuestion(
+    sessionId,
+    questionId,
+    studentId
+  );
+
+  return res.status(200).json(
+    ApiResponse.success(examSession, "Question opened successfully")
+  );
+});
+
+/**
  * Pause exam session (stops timer; call start-exam to resume)
  */
 export const pauseExam = asyncHandler(async (req, res) => {
@@ -180,6 +198,7 @@ export default {
   pauseExam,
   getExamSession,
   saveAnswer,
+  visitQuestion,
   markForReview,
   skipQuestion,
   logProctoringEvent,

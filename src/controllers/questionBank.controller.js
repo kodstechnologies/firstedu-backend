@@ -85,6 +85,27 @@ export const updateQuestionBank = asyncHandler(async (req, res) => {
     );
 });
 
+export const toggleSectionWiseQuestions = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { error, value } =
+    questionBankValidator.toggleSectionWiseQuestions.validate(req.body);
+  if (error) throwJoiValidationError(error);
+
+  const updated = await questionBankService.toggleSectionWiseQuestions(
+    id,
+    value.useSectionWiseQuestions
+  );
+
+  return res.status(200).json(
+    ApiResponse.success(
+      updated,
+      `Section-wise questions ${
+        value.useSectionWiseQuestions ? "enabled" : "disabled"
+      } successfully`
+    )
+  );
+});
+
 export const deleteQuestionBank = asyncHandler(async (req, res) => {
   const { id } = req.params;
   await questionBankService.deleteQuestionBank(id);

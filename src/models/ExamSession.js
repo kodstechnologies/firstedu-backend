@@ -49,8 +49,17 @@ const examSessionSchema = new mongoose.Schema(
           default: "not_visited",
         },
         answeredAt: Date,
+        questionTimeLimitMs: { type: Number, default: 0 },
+        remainingTimeMs: { type: Number, default: 0 },
+        timerStartedAt: { type: Date, default: null },
+        timeExpiredAt: { type: Date, default: null },
       },
     ],
+    activeQuestionId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Question",
+      default: null,
+    },
     proctoringEvents: [
       {
         type: {

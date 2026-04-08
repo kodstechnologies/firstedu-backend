@@ -13,6 +13,7 @@ const sectionSchema = Joi.object({
     .lowercase(),
   id: Joi.number().optional(),
   name: Joi.string().trim().optional(),
+  questions: Joi.array().items(Joi.string()).optional(),
 });
 
 const questionItemSchema = Joi.object({
@@ -59,28 +60,42 @@ const createQuestionBank = Joi.object({
   name: Joi.string().required().trim(),
   categories: Joi.array().items(Joi.string()).min(1).required(),
   useSectionWiseDifficulty: Joi.boolean().default(false),
+  useSectionWiseQuestions: Joi.boolean().default(false),
   overallDifficulty: Joi.string()
     .valid("easy", "medium", "hard")
     .default("medium"),
-  sections: Joi.when("useSectionWiseDifficulty", {
-    is: true,
-    then: Joi.array().items(sectionSchema).min(1).required(),
-    otherwise: Joi.array().optional(),
-  }),
+  sections: Joi.array()
+    .items(sectionSchema)
+    .when("useSectionWiseDifficulty", {
+      is: true,
+      then: Joi.array().items(sectionSchema).min(1).required(),
+    })
+    .when("useSectionWiseQuestions", {
+      is: true,
+      then: Joi.array().items(sectionSchema).min(1).required(),
+    })
+    .optional(),
 });
 
 const createQuestionBankWithQuestions = Joi.object({
   name: Joi.string().required().trim(),
   categories: Joi.array().items(Joi.string()).min(1).required(),
   useSectionWiseDifficulty: Joi.boolean().default(false),
+  useSectionWiseQuestions: Joi.boolean().default(false),
   overallDifficulty: Joi.string()
     .valid("easy", "medium", "hard")
     .default("medium"),
-  sections: Joi.when("useSectionWiseDifficulty", {
-    is: true,
-    then: Joi.array().items(sectionSchema).min(1).required(),
-    otherwise: Joi.array().optional(),
-  }),
+  sections: Joi.array()
+    .items(sectionSchema)
+    .when("useSectionWiseDifficulty", {
+      is: true,
+      then: Joi.array().items(sectionSchema).min(1).required(),
+    })
+    .when("useSectionWiseQuestions", {
+      is: true,
+      then: Joi.array().items(sectionSchema).min(1).required(),
+    })
+    .optional(),
   questions: Joi.array().items(questionItemSchema).min(1).required(),
 });
 
@@ -88,12 +103,18 @@ const updateQuestionBank = Joi.object({
   name: Joi.string().trim().optional(),
   categories: Joi.array().items(Joi.string()).min(1).optional(),
   useSectionWiseDifficulty: Joi.boolean().optional(),
+  useSectionWiseQuestions: Joi.boolean().optional(),
   overallDifficulty: Joi.string().valid("easy", "medium", "hard").optional(),
   sections: Joi.array().items(sectionSchema).optional(),
+});
+
+const toggleSectionWiseQuestions = Joi.object({
+  useSectionWiseQuestions: Joi.boolean().required(),
 });
 
 export default {
   createQuestionBank,
   createQuestionBankWithQuestions,
   updateQuestionBank,
+  toggleSectionWiseQuestions,
 };

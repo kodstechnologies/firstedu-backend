@@ -1,5 +1,6 @@
 import { ApiError } from "../utils/ApiError.js";
 import questionRepository from "../repository/question.repository.js";
+import questionBankRepository from "../repository/questionBank.repository.js";
 
 // Validate question options and correct answer
 const validateQuestionOptions = (questionType, options) => {
@@ -30,9 +31,64 @@ export const createQuestion = async (questionData, createdBy) => {
   // Validate correct answer matches options for single/multiple choice
   validateQuestionOptions(questionData.questionType, questionData.options);
 
-  const question = await questionRepository.create(questionData);
-  const createdQuestion = await questionRepository.findById(question._id);
+  let sectionAwareBank = null;
+  if (questionData.questionBank) {
+    sectionAwareBank = await questionBankRepository.findById(
+      questionData.questionBank,
+      false
+    );
+    if (!sectionAwareBank) {
+      throw new ApiError(404, "Question bank not found");
+    }
 
+    if (sectionAwareBank.useSectionWiseQuestions) {
+      if (
+        questionData.sectionIndex === undefined ||
+        questionData.sectionIndex === null
+      ) {
+        throw new ApiError(
+          400,
+          "sectionIndex is required when section-wise questions is enabled"
+        );
+      }
+
+      const sectionIndex = Number(questionData.sectionIndex);
+      if (
+        Number.isNaN(sectionIndex) ||
+        sectionIndex < 0 ||
+        sectionIndex >= (sectionAwareBank.sections || []).length
+      ) {
+        throw new ApiError(400, "Invalid sectionIndex for question bank");
+      }
+
+      const selectedSection = sectionAwareBank.sections[sectionIndex];
+      const existingCount = selectedSection?.questions?.length || 0;
+      const allowedCount = Number(selectedSection?.count || 0);
+      if (allowedCount > 0 && existingCount >= allowedCount) {
+        throw new ApiError(
+          400,
+          `Selected section already has maximum ${allowedCount} question(s)`
+        );
+      }
+
+      questionData.sectionIndex = sectionIndex;
+    }
+  }
+
+  const question = await questionRepository.create(questionData);
+
+  if (sectionAwareBank?.useSectionWiseQuestions) {
+    const sections = (sectionAwareBank.sections || []).map((section) => ({
+      ...section,
+      questions: [...(section.questions || [])],
+    }));
+    sections[questionData.sectionIndex].questions.push(question._id);
+    await questionBankRepository.updateById(sectionAwareBank._id, {
+      sections,
+    });
+  }
+
+  const createdQuestion = await questionRepository.findById(question._id);
   return createdQuestion;
 };
 
