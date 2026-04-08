@@ -391,3 +391,138 @@ export const sendTeacherRejectionEmail = async ({ toEmail, teacherName, jobTitle
     throw new ApiError(500, `Failed to send rejection email: ${error.message}`);
   }
 };
+
+/**
+ * Send Welcome Email to student upon signup
+ */
+export const sendWelcomeEmail = async (email, name) => {
+  try {
+    const info = await sendEmailWithTemplate({
+      to: email,
+      category: "registration",
+      slug: "welcome_email",
+      variables: { name: name || "Student" },
+    });
+    return info;
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    console.error("❌ Error sending welcome email:", error.message);
+  }
+};
+
+/**
+ * Send Course Enrollment Email
+ */
+export const sendCourseEnrollmentEmail = async (email, name, courseTitle, amount, date) => {
+  try {
+    const info = await sendEmailWithTemplate({
+      to: email,
+      category: "enrolment",
+      slug: "course_enrollment",
+      variables: { 
+        name: name || "Student", 
+        courseTitle: courseTitle || "Course", 
+        amount: amount != null ? amount.toString() : "0", 
+        date: date ? new Date(date).toLocaleDateString() : new Date().toLocaleDateString() 
+      },
+    });
+    return info;
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    console.error("❌ Error sending course enrollment email:", error.message);
+  }
+};
+
+/**
+ * Send Test Bundle Purchase Email
+ */
+export const sendTestBundlePurchaseEmail = async (email, name, bundleName, amount, date) => {
+  try {
+    const info = await sendEmailWithTemplate({
+      to: email,
+      category: "enrolment",
+      slug: "test_bundle_purchase",
+      variables: { 
+        name: name || "Student", 
+        bundleName: bundleName || "Bundle", 
+        amount: amount != null ? amount.toString() : "0", 
+        date: date ? new Date(date).toLocaleDateString() : new Date().toLocaleDateString() 
+      },
+    });
+    return info;
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    console.error("❌ Error sending test bundle purchase email:", error.message);
+  }
+};
+
+/**
+ * Send Event Registration Email
+ */
+export const sendEventRegistrationEmail = async (eventType, email, name, eventTitle, amount, date) => {
+  let slug = "olympiad_registration";
+  if (eventType === "tournament") slug = "tournament_registration";
+  if (eventType === "workshop") slug = "workshop_registration";
+
+  try {
+    const info = await sendEmailWithTemplate({
+      to: email,
+      category: "enrolment",
+      slug,
+      variables: { 
+        name: name || "Student", 
+        eventTitle: eventTitle || "Event", 
+        amount: amount != null ? amount.toString() : "0", 
+        date: date ? new Date(date).toLocaleDateString() : new Date().toLocaleDateString() 
+      },
+    });
+    return info;
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    console.error(`❌ Error sending ${slug} email:`, error.message);
+  }
+};
+
+/**
+ * Send Support Ticket Received Email
+ */
+export const sendTicketReceivedEmail = async (email, name, ticketNumber, subject) => {
+  try {
+    const info = await sendEmailWithTemplate({
+      to: email,
+      category: "support_ticket",
+      slug: "ticket_received",
+      variables: { 
+        name: name || "Student", 
+        ticketNumber: ticketNumber || "—", 
+        subject: subject || "Support Ticket" 
+      },
+    });
+    return info;
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    console.error("❌ Error sending ticket received email:", error.message);
+  }
+};
+
+/**
+ * Send Support Ticket Reply Email
+ */
+export const sendTicketReplyEmail = async (email, name, ticketNumber, message) => {
+  try {
+    const info = await sendEmailWithTemplate({
+      to: email,
+      category: "support_ticket",
+      slug: "ticket_reply",
+      variables: { 
+        name: name || "Student", 
+        ticketNumber: ticketNumber || "—", 
+        message: message || "You have a new reply to your ticket." 
+      },
+    });
+    return info;
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    console.error("❌ Error sending ticket reply email:", error.message);
+  }
+};

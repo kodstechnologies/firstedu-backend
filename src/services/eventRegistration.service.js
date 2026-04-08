@@ -9,6 +9,8 @@ import razorpayOrderIntentRepository from "../repository/razorpayOrderIntent.rep
 import { createRazorpayOrder, verifyPaymentSignature } from "../utils/razorpayUtils.js";
 import { getAmountToCharge } from "../utils/offerUtils.js";
 import couponService from "./coupon.service.js";
+import studentRepository from "../repository/student.repository.js";
+import { sendEventRegistrationEmail } from "../utils/sendEmail.js";
 
 const EVENT_MODEL_MAP = {
   olympiad: "Olympiad",
@@ -94,7 +96,7 @@ export const registerForEvent = async (
     if (paymentMethod === "wallet") {
       await walletService.deductMonetaryBalance(studentId, regAmountToCharge, "User");
       if (couponId) await couponService.incrementCouponUsedCount(couponId);
-      return await eventRegistrationRepository.create({
+      const created = await eventRegistrationRepository.create({
         student: studentId,
         eventType,
         eventId,
@@ -105,6 +107,15 @@ export const registerForEvent = async (
         paymentMethod: "wallet",
         amountPaid: regAmountToCharge,
       });
+      (async () => {
+        try {
+          const student = await studentRepository.findById(studentId);
+          if (student) await sendEventRegistrationEmail(eventType, student.email, student.name, event.title || "Event", regAmountToCharge, new Date());
+        } catch (err) {
+          console.error("Error sending event registration email:", err);
+        }
+      })();
+      return created;
     }
     if (paymentMethod === "gateway") {
       if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
@@ -147,6 +158,14 @@ export const registerForEvent = async (
       });
       await razorpayOrderIntentRepository.markReconciled(razorpayOrderId, razorpayPaymentId);
       if (intent.couponId) await couponService.incrementCouponUsedCount(intent.couponId);
+      (async () => {
+        try {
+          const student = await studentRepository.findById(studentId);
+          if (student) await sendEventRegistrationEmail(eventType, student.email, student.name, event.title || "Event", intent.amountPaise / 100, new Date());
+        } catch (err) {
+          console.error("Error sending event registration email:", err);
+        }
+      })();
       return created;
     }
     throw new ApiError(
@@ -155,7 +174,7 @@ export const registerForEvent = async (
     );
   }
 
-  return await eventRegistrationRepository.create({
+  const created = await eventRegistrationRepository.create({
     student: studentId,
     eventType,
     eventId,
@@ -166,6 +185,15 @@ export const registerForEvent = async (
     paymentMethod: paymentMethod === "wallet" ? "wallet" : "free",
     amountPaid: 0,
   });
+  (async () => {
+    try {
+      const student = await studentRepository.findById(studentId);
+      if (student) await sendEventRegistrationEmail(eventType, student.email, student.name, event.title || "Event", 0, new Date());
+    } catch (err) {
+      console.error("Error sending event registration email:", err);
+    }
+  })();
+  return created;
 };
 
 export const getRegistrations = async (options = {}) => {

@@ -2,7 +2,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { generateOTP } from "../utils/otp.js";
-import { sendOTPEmail } from "../utils/sendEmail.js";
+import { sendOTPEmail, sendWelcomeEmail } from "../utils/sendEmail.js";
 import { uploadImageToCloudinary, deleteFileFromCloudinary } from "../utils/s3Upload.js";
 import studentRepository from "../repository/student.repository.js";
 import studentSessionRepository from "../repository/studentSession.repository.js";
@@ -81,6 +81,13 @@ export const signup = asyncHandler(async (req, res) => {
       } catch (err) {
         console.error("Error updating referral history:", err);
       }
+    }
+
+    // Send Welcome Email
+    try {
+      await sendWelcomeEmail(createdStudent.email, createdStudent.name);
+    } catch (err) {
+      console.error("Error sending welcome email:", err);
     }
 
     // Handle Wallet Rewards (New Wallet + Referrer Reward)
