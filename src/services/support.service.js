@@ -1,6 +1,8 @@
 import { ApiError } from '../utils/ApiError.js';
 import supportTicketRepository from '../repository/supportTicket.repository.js';
 import supportMessageRepository from '../repository/supportMessage.repository.js';
+import studentRepository from '../repository/student.repository.js';
+import { sendTicketReceivedEmail, sendTicketReplyEmail } from '../utils/sendEmail.js';
 
 const SUPPORT_TICKET_CATEGORIES = [
   'technical',
@@ -62,6 +64,15 @@ export const createTicket = async (studentId, ticketData) => {
     priority: getPriorityForCategory(category),
     status: 'open',
   });
+
+  (async () => {
+    try {
+      const student = await studentRepository.findById(studentId);
+      if (student) await sendTicketReceivedEmail(student.email, student.name, ticket.ticketNumber, ticket.subject);
+    } catch (err) {
+      console.error("Error sending ticket received email:", err);
+    }
+  })();
 
   return ticket;
 };
@@ -267,6 +278,18 @@ export const sendMessage = async (
       resolvedAt: null,
       closedAt: null,
     });
+  }
+
+  if (senderType.toLowerCase() === 'admin') {
+    (async () => {
+      try {
+        const studentId = ticket.student._id || ticket.student;
+        const student = await studentRepository.findById(studentId);
+        if (student) await sendTicketReplyEmail(student.email, student.name, ticket.ticketNumber, message);
+      } catch (err) {
+        console.error("Error sending ticket reply email:", err);
+      }
+    })();
   }
 
   return newMessage;

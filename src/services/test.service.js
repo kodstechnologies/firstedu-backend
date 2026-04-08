@@ -3,6 +3,7 @@ import testRepository from "../repository/test.repository.js";
 import questionBankRepository from "../repository/questionBank.repository.js";
 import orderRepository from "../repository/order.repository.js";
 import olympiadRepository from "../repository/olympiad.repository.js";
+import TestPurchase from "../models/TestPurchase.js";
 import {
   uploadImageToCloudinary,
   deleteFileFromCloudinary,
@@ -81,6 +82,22 @@ export const getTests = async (options = {}) => {
   }
   const result = await testRepository.findAllTests(query, options);
   await enrichTestsWithBankStats(result.tests);
+
+  // Batch-check: attach isPurchased (boolean) to each test — no count needed
+  if (result.tests && result.tests.length > 0) {
+    const testIds = result.tests.map((t) => t?._id).filter(Boolean);
+    const purchasedIds = await TestPurchase.distinct("test", {
+      test: { $in: testIds },
+      paymentStatus: "completed",
+    });
+    const purchasedSet = new Set(purchasedIds.map((id) => id.toString()));
+    result.tests.forEach((t) => {
+      const isPurchased = purchasedSet.has(t._id?.toString());
+      t.isPurchased = isPurchased;
+      if (t._doc) t._doc.isPurchased = isPurchased;
+    });
+  }
+
   return result;
 };
 
@@ -143,6 +160,19 @@ export const updateTest = async (id, data, file) => {
 export const deleteTest = async (id) => {
   const existing = await testRepository.findTestById(id);
   if (!existing) throw new ApiError(404, "Test not found");
+
+  // Block deletion if any student has purchased this test
+  const purchaseExists = await TestPurchase.exists({
+    test: id,
+    paymentStatus: "completed",
+  });
+  if (purchaseExists) {
+    throw new ApiError(
+      400,
+      "Cannot delete this test: it has already been purchased by one or more students."
+    );
+  }
+
   if (existing.imageUrl) {
     await deleteFileFromCloudinary(existing.imageUrl);
   }

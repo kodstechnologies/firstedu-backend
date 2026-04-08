@@ -16,6 +16,8 @@ import {
 } from "../utils/razorpayUtils.js";
 import { attachOfferToList, attachOfferToItem, getApplicableOfferDetails, getAmountToCharge } from "../utils/offerUtils.js";
 import couponService from "./coupon.service.js";
+import studentRepository from "../repository/student.repository.js";
+import { sendCourseEnrollmentEmail, sendTestBundlePurchaseEmail } from "../utils/sendEmail.js";
 
 const isStandaloneMarketplaceTest = (test) =>
   (test?.applicableFor ?? "test") === "test";
@@ -143,6 +145,14 @@ export const initiateCoursePayment = async (courseId, studentId, paymentMethod, 
     } catch (error) {
       console.error("Error awarding points for course purchase:", error);
     }
+    (async () => {
+      try {
+        const student = await studentRepository.findById(studentId);
+        if (student) await sendCourseEnrollmentEmail(student.email, student.name, course.title || "Course", amountToCharge, new Date());
+      } catch (err) {
+        console.error("Error sending course enrollment email:", err);
+      }
+    })();
     return { purchase, completed: true };
   }
 
@@ -166,6 +176,14 @@ export const initiateCoursePayment = async (courseId, studentId, paymentMethod, 
     } catch (error) {
       console.error("Error awarding points for course purchase:", error);
     }
+    (async () => {
+      try {
+        const student = await studentRepository.findById(studentId);
+        if (student) await sendCourseEnrollmentEmail(student.email, student.name, course.title || "Course", amountToCharge, new Date());
+      } catch (err) {
+        console.error("Error sending course enrollment email:", err);
+      }
+    })();
     return { purchase, completed: true };
   }
 
@@ -298,6 +316,15 @@ export const purchaseCourse = async (
   } catch (error) {
     console.error("Error awarding points for course purchase:", error);
   }
+
+  (async () => {
+    try {
+      const student = await studentRepository.findById(studentId);
+      if (student) await sendCourseEnrollmentEmail(student.email, student.name, course.title || "Course", purchasePrice, new Date());
+    } catch (err) {
+      console.error("Error sending course enrollment email:", err);
+    }
+  })();
 
   return purchaseData;
 };
@@ -854,6 +881,14 @@ export const initiateTestBundlePayment = async (bundleId, studentId, paymentMeth
       paymentId: "free",
       paymentStatus: "completed",
     });
+    (async () => {
+      try {
+        const student = await studentRepository.findById(studentId);
+        if (student) await sendTestBundlePurchaseEmail(student.email, student.name, bundle.name || "Bundle", amountToCharge, new Date());
+      } catch (err) {
+        console.error("Error sending test bundle purchase email:", err);
+      }
+    })();
     return { purchase, completed: true };
   }
 
@@ -872,6 +907,14 @@ export const initiateTestBundlePayment = async (bundleId, studentId, paymentMeth
     if (couponId) {
       await couponService.incrementCouponUsedCount(couponId);
     }
+    (async () => {
+      try {
+        const student = await studentRepository.findById(studentId);
+        if (student) await sendTestBundlePurchaseEmail(student.email, student.name, bundle.name || "Bundle", amountToCharge, new Date());
+      } catch (err) {
+        console.error("Error sending test bundle purchase email:", err);
+      }
+    })();
     return { purchase, completed: true };
   }
 
@@ -997,6 +1040,14 @@ export const purchaseTestBundle = async (
   if (intent.couponId) {
     await couponService.incrementCouponUsedCount(intent.couponId);
   }
+  (async () => {
+    try {
+      const student = await studentRepository.findById(studentId);
+      if (student) await sendTestBundlePurchaseEmail(student.email, student.name, bundle.name || "Bundle", purchasePrice, new Date());
+    } catch (err) {
+      console.error("Error sending test bundle purchase email:", err);
+    }
+  })();
   return purchase;
 };
 

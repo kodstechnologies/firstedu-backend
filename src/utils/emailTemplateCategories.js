@@ -17,11 +17,21 @@ export const EMAIL_TEMPLATE_CATEGORIES = [
         requiredVariables: ["name"],
         defaultSubject: "Welcome to Iscorre, {{name}}!",
         defaultContent: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #333;">Hello {{name}},</h2>
-            <p style="color: #666;">Welcome to Iscorre. We are excited to have you with us.</p>
-            <p style="color: #666;">Start exploring courses, tests, and learning tools from your dashboard.</p>
-            <p style="color: #999; font-size: 12px;">Iscorre Team</p>
+          <div style="font-family: 'Inter', Helvetica, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
+            <div style="background-color: #f8fafc; padding: 24px; text-align: center; border-bottom: 1px solid #e2e8f0;">
+              <h1 style="color: #2563eb; margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.5px;">Iscorre</h1>
+            </div>
+            <div style="padding: 32px 24px;">
+              <h2 style="color: #0f172a; font-size: 20px; font-weight: 600; margin-top: 0;">Hello {{name}},</h2>
+              <p style="color: #475569; font-size: 16px; line-height: 1.6; margin-bottom: 24px;">Welcome to the learning platform! We are absolutely thrilled to have you with us.</p>
+              <p style="color: #475569; font-size: 16px; line-height: 1.6; margin-bottom: 24px;">You can now start exploring courses, taking tests, and utilizing our learning tools directly from your student dashboard.</p>
+              <div style="text-align: center; margin: 32px 0;">
+                <a href="#" style="display:inline-block; padding: 12px 24px; background-color: #2563eb; color: #ffffff; text-decoration: none; font-weight: 600; border-radius: 6px;">Go to Dashboard</a>
+              </div>
+            </div>
+            <div style="background-color: #f1f5f9; padding: 20px; text-align: center; border-top: 1px solid #e2e8f0;">
+              <p style="color: #64748b; font-size: 13px; margin: 0;">Happy Learning,<br/><strong>The Iscorre Team</strong></p>
+            </div>
           </div>
         `,
       },
@@ -32,11 +42,20 @@ export const EMAIL_TEMPLATE_CATEGORIES = [
         requiredVariables: ["name", "link"],
         defaultSubject: "Verify your Iscorre email address",
         defaultContent: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #333;">Hello {{name}},</h2>
-            <p style="color: #666;">Please verify your email address to continue using your Iscorre account.</p>
-            <p><a href="{{link}}" style="display:inline-block;padding:10px 16px;background:#2563eb;color:#fff;text-decoration:none;border-radius:4px;">Verify Email</a></p>
-            <p style="color: #999; font-size: 12px;">If this was not you, please ignore this email.</p>
+          <div style="font-family: 'Inter', Helvetica, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
+            <div style="background-color: #f8fafc; padding: 24px; text-align: center; border-bottom: 1px solid #e2e8f0;">
+              <h1 style="color: #2563eb; margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.5px;">Iscorre</h1>
+            </div>
+            <div style="padding: 32px 24px;">
+              <h2 style="color: #0f172a; font-size: 20px; font-weight: 600; margin-top: 0;">Hello {{name}},</h2>
+              <p style="color: #475569; font-size: 16px; line-height: 1.6; margin-bottom: 24px;">Please verify your email address to secure your account and continue using all features of the platform.</p>
+              <div style="text-align: center; margin: 32px 0;">
+                <a href="{{link}}" style="display:inline-block; padding: 12px 24px; background-color: #2563eb; color: #ffffff; text-decoration: none; font-weight: 600; border-radius: 6px;">Verify Email Address</a>
+              </div>
+            </div>
+            <div style="background-color: #f1f5f9; padding: 20px; text-align: center; border-top: 1px solid #e2e8f0;">
+              <p style="color: #64748b; font-size: 13px; margin: 0;">If you did not create this account, please ignore this email.</p>
+            </div>
           </div>
         `,
       },
@@ -56,14 +75,21 @@ export const EMAIL_TEMPLATE_CATEGORIES = [
         requiredVariables: ["name", "otp"],
         defaultSubject: "Your Password Change OTP",
         defaultContent: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #333;">Hello {{name}},</h2>
-            <p style="color: #666;">Use this OTP to change your password:</p>
-            <div style="background-color: #f4f4f4; padding: 20px; text-align: center; margin: 20px 0; border-radius: 5px;">
-              <h1 style="letter-spacing: 8px; color: #333; margin: 0;">{{otp}}</h1>
+          <div style="font-family: 'Inter', Helvetica, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
+            <div style="background-color: #f8fafc; padding: 24px; text-align: center; border-bottom: 1px solid #e2e8f0;">
+              <h1 style="color: #2563eb; margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.5px;">Iscorre</h1>
             </div>
-            <p style="color: #666;">This OTP is valid for <strong>10 minutes</strong>.</p>
-            <p style="color: #999; font-size: 12px;">If you did not request this, please ignore this email.</p>
+            <div style="padding: 32px 24px;">
+              <h2 style="color: #0f172a; font-size: 20px; font-weight: 600; margin-top: 0;">Hello {{name}},</h2>
+              <p style="color: #475569; font-size: 16px; line-height: 1.6; margin-bottom: 16px;">We received a request to change the password for your account. Please use the following One-Time Password (OTP) to securely reset your password:</p>
+              <div style="background-color: #f8fafc; border: 1px dashed #cbd5e1; padding: 20px; text-align: center; margin: 24px 0; border-radius: 8px;">
+                <h1 style="letter-spacing: 12px; color: #0f172a; font-size: 36px; margin: 0; padding-left: 12px;">{{otp}}</h1>
+              </div>
+              <p style="color: #ef4444; font-size: 14px; text-align: center; font-weight: 500;">This OTP is valid for exactly 10 minutes.</p>
+            </div>
+            <div style="background-color: #f1f5f9; padding: 20px; text-align: center; border-top: 1px solid #e2e8f0;">
+              <p style="color: #64748b; font-size: 13px; margin: 0;">If you did not request this, please safely ignore this email.</p>
+            </div>
           </div>
         `,
       },
@@ -74,14 +100,21 @@ export const EMAIL_TEMPLATE_CATEGORIES = [
         requiredVariables: ["name", "otp"],
         defaultSubject: "Your Iscorre login OTP",
         defaultContent: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #333;">Hello {{name}},</h2>
-            <p style="color: #666;">Use the OTP below to complete your login:</p>
-            <div style="background-color: #f4f4f4; padding: 20px; text-align: center; margin: 20px 0; border-radius: 5px;">
-              <h1 style="letter-spacing: 8px; color: #333; margin: 0;">{{otp}}</h1>
+          <div style="font-family: 'Inter', Helvetica, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
+            <div style="background-color: #f8fafc; padding: 24px; text-align: center; border-bottom: 1px solid #e2e8f0;">
+              <h1 style="color: #2563eb; margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.5px;">Iscorre</h1>
             </div>
-            <p style="color: #666;">This OTP is valid for a short time only.</p>
-            <p style="color: #999; font-size: 12px;">Do not share this OTP with anyone.</p>
+            <div style="padding: 32px 24px;">
+              <h2 style="color: #0f172a; font-size: 20px; font-weight: 600; margin-top: 0;">Hello {{name}},</h2>
+              <p style="color: #475569; font-size: 16px; line-height: 1.6; margin-bottom: 16px;">Please enter the following OTP to securely complete your login process:</p>
+              <div style="background-color: #f8fafc; border: 1px dashed #cbd5e1; padding: 20px; text-align: center; margin: 24px 0; border-radius: 8px;">
+                <h1 style="letter-spacing: 12px; color: #0f172a; font-size: 36px; margin: 0; padding-left: 12px;">{{otp}}</h1>
+              </div>
+              <p style="color: #475569; font-size: 14px; text-align: center;">For your security, do not share this code with anyone.</p>
+            </div>
+            <div style="background-color: #f1f5f9; padding: 20px; text-align: center; border-top: 1px solid #e2e8f0;">
+              <p style="color: #64748b; font-size: 13px; margin: 0;">This is an automated security message.</p>
+            </div>
           </div>
         `,
       },
@@ -101,11 +134,35 @@ export const EMAIL_TEMPLATE_CATEGORIES = [
         requiredVariables: ["name", "course", "amount", "date"],
         defaultSubject: "Enrollment confirmed: {{course}}",
         defaultContent: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #333;">Hello {{name}},</h2>
-            <p style="color: #666;">Your enrollment is confirmed for <strong>{{course}}</strong>.</p>
-            <p style="color: #666;">Amount: <strong>{{amount}}</strong> | Date: <strong>{{date}}</strong></p>
-            <p style="color: #999; font-size: 12px;">Happy learning with Iscorre.</p>
+          <div style="font-family: 'Inter', Helvetica, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
+            <div style="background-color: #f8fafc; padding: 24px; text-align: center; border-bottom: 1px solid #e2e8f0;">
+              <h1 style="color: #2563eb; margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.5px;">Iscorre</h1>
+            </div>
+            <div style="padding: 32px 24px;">
+              <h2 style="color: #0f172a; font-size: 20px; font-weight: 600; margin-top: 0;">Purchase Successful!</h2>
+              <p style="color: #475569; font-size: 16px; line-height: 1.6;">Hello {{name}}, your enrollment into the course has been successfully processed.</p>
+              
+              <div style="margin: 24px 0; border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden;">
+                <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                  <tr style="background-color: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+                    <th style="padding: 12px 16px; font-size: 14px; color: #475569; font-weight: 600;">Course Name</th>
+                  </tr>
+                  <tr>
+                    <td style="padding: 16px; font-size: 15px; color: #0f172a; border-bottom: 1px solid #e2e8f0;"><strong>{{course}}</strong></td>
+                  </tr>
+                </table>
+                <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                  <tr>
+                    <td style="padding: 12px 16px; font-size: 14px; color: #475569; border-right: 1px solid #e2e8f0;">Date: <strong>{{date}}</strong></td>
+                    <td style="padding: 12px 16px; font-size: 14px; color: #475569;">Amount Paid: <strong style="color: #2563eb;">{{amount}}</strong></td>
+                  </tr>
+                </table>
+              </div>
+              <p style="color: #475569; font-size: 15px;">You can access your course materials from your dashboard.</p>
+            </div>
+            <div style="background-color: #f1f5f9; padding: 20px; text-align: center; border-top: 1px solid #e2e8f0;">
+              <p style="color: #64748b; font-size: 13px; margin: 0;">Happy Learning,<br/><strong>The Iscorre Team</strong></p>
+            </div>
           </div>
         `,
       },
@@ -116,12 +173,35 @@ export const EMAIL_TEMPLATE_CATEGORIES = [
         requiredVariables: ["name", "testBundle", "amount", "date"],
         defaultSubject: "Test bundle purchase confirmed",
         defaultContent: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #333;">Hello {{name}},</h2>
-            <p style="color: #666;">Your test bundle purchase is successful.</p>
-            <p style="color: #666;">Bundle: <strong>{{testBundle}}</strong></p>
-            <p style="color: #666;">Amount: <strong>{{amount}}</strong> | Date: <strong>{{date}}</strong></p>
-            <p style="color: #999; font-size: 12px;">All the best for your preparation.</p>
+          <div style="font-family: 'Inter', Helvetica, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
+            <div style="background-color: #f8fafc; padding: 24px; text-align: center; border-bottom: 1px solid #e2e8f0;">
+              <h1 style="color: #2563eb; margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.5px;">Iscorre</h1>
+            </div>
+            <div style="padding: 32px 24px;">
+              <h2 style="color: #0f172a; font-size: 20px; font-weight: 600; margin-top: 0;">Test Bundle Unlocked!</h2>
+              <p style="color: #475569; font-size: 16px; line-height: 1.6;">Hello {{name}}, your test bundle purchase has been successfully processed.</p>
+              
+              <div style="margin: 24px 0; border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden;">
+                <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                  <tr style="background-color: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+                    <th style="padding: 12px 16px; font-size: 14px; color: #475569; font-weight: 600;">Test Bundle</th>
+                  </tr>
+                  <tr>
+                    <td style="padding: 16px; font-size: 15px; color: #0f172a; border-bottom: 1px solid #e2e8f0;"><strong>{{testBundle}}</strong></td>
+                  </tr>
+                </table>
+                <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                  <tr>
+                    <td style="padding: 12px 16px; font-size: 14px; color: #475569; border-right: 1px solid #e2e8f0;">Date: <strong>{{date}}</strong></td>
+                    <td style="padding: 12px 16px; font-size: 14px; color: #475569;">Amount Paid: <strong style="color: #2563eb;">{{amount}}</strong></td>
+                  </tr>
+                </table>
+              </div>
+              <p style="color: #475569; font-size: 15px;">All the best for your preparations!</p>
+            </div>
+            <div style="background-color: #f1f5f9; padding: 20px; text-align: center; border-top: 1px solid #e2e8f0;">
+              <p style="color: #64748b; font-size: 13px; margin: 0;"><strong>The Iscorre Team</strong></p>
+            </div>
           </div>
         `,
       },
@@ -132,11 +212,35 @@ export const EMAIL_TEMPLATE_CATEGORIES = [
         requiredVariables: ["name", "event", "amount", "date"],
         defaultSubject: "Olympiad registration confirmed",
         defaultContent: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #333;">Hello {{name}},</h2>
-            <p style="color: #666;">You are successfully registered for <strong>{{event}}</strong>.</p>
-            <p style="color: #666;">Amount: <strong>{{amount}}</strong> | Date: <strong>{{date}}</strong></p>
-            <p style="color: #999; font-size: 12px;">Best wishes from Iscorre.</p>
+          <div style="font-family: 'Inter', Helvetica, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
+            <div style="background-color: #f8fafc; padding: 24px; text-align: center; border-bottom: 1px solid #e2e8f0;">
+              <h1 style="color: #2563eb; margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.5px;">Iscorre</h1>
+            </div>
+            <div style="padding: 32px 24px;">
+              <h2 style="color: #0f172a; font-size: 20px; font-weight: 600; margin-top: 0;">Registration Confirmed!</h2>
+              <p style="color: #475569; font-size: 16px; line-height: 1.6;">Hello {{name}}, you are officially registered for the upcoming Olympiad.</p>
+              
+              <div style="margin: 24px 0; border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden;">
+                <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                  <tr style="background-color: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+                    <th style="padding: 12px 16px; font-size: 14px; color: #475569; font-weight: 600;">Olympiad Event</th>
+                  </tr>
+                  <tr>
+                    <td style="padding: 16px; font-size: 15px; color: #0f172a; border-bottom: 1px solid #e2e8f0;"><strong>{{event}}</strong></td>
+                  </tr>
+                </table>
+                <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                  <tr>
+                    <td style="padding: 12px 16px; font-size: 14px; color: #475569; border-right: 1px solid #e2e8f0;">Date: <strong>{{date}}</strong></td>
+                    <td style="padding: 12px 16px; font-size: 14px; color: #475569;">Transaction: <strong style="color: #2563eb;">{{amount}}</strong></td>
+                  </tr>
+                </table>
+              </div>
+              <p style="color: #475569; font-size: 15px;">Keep an eye out for updates as the event approaches.</p>
+            </div>
+            <div style="background-color: #f1f5f9; padding: 20px; text-align: center; border-top: 1px solid #e2e8f0;">
+              <p style="color: #64748b; font-size: 13px; margin: 0;"><strong>The Iscorre Team</strong></p>
+            </div>
           </div>
         `,
       },
@@ -147,11 +251,35 @@ export const EMAIL_TEMPLATE_CATEGORIES = [
         requiredVariables: ["name", "event", "amount", "date"],
         defaultSubject: "Tournament registration confirmed",
         defaultContent: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #333;">Hello {{name}},</h2>
-            <p style="color: #666;">Your registration for <strong>{{event}}</strong> is confirmed.</p>
-            <p style="color: #666;">Amount: <strong>{{amount}}</strong> | Date: <strong>{{date}}</strong></p>
-            <p style="color: #999; font-size: 12px;">See you at the event.</p>
+          <div style="font-family: 'Inter', Helvetica, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
+            <div style="background-color: #f8fafc; padding: 24px; text-align: center; border-bottom: 1px solid #e2e8f0;">
+              <h1 style="color: #2563eb; margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.5px;">Iscorre</h1>
+            </div>
+            <div style="padding: 32px 24px;">
+              <h2 style="color: #0f172a; font-size: 20px; font-weight: 600; margin-top: 0;">You're in the Tournament!</h2>
+              <p style="color: #475569; font-size: 16px; line-height: 1.6;">Hello {{name}}, your registration for the tournament is confirmed.</p>
+              
+              <div style="margin: 24px 0; border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden;">
+                <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                  <tr style="background-color: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+                    <th style="padding: 12px 16px; font-size: 14px; color: #475569; font-weight: 600;">Tournament</th>
+                  </tr>
+                  <tr>
+                    <td style="padding: 16px; font-size: 15px; color: #0f172a; border-bottom: 1px solid #e2e8f0;"><strong>{{event}}</strong></td>
+                  </tr>
+                </table>
+                <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                  <tr>
+                    <td style="padding: 12px 16px; font-size: 14px; color: #475569; border-right: 1px solid #e2e8f0;">Date: <strong>{{date}}</strong></td>
+                    <td style="padding: 12px 16px; font-size: 14px; color: #475569;">Transaction: <strong style="color: #2563eb;">{{amount}}</strong></td>
+                  </tr>
+                </table>
+              </div>
+              <p style="color: #475569; font-size: 15px;">See you at the event!</p>
+            </div>
+            <div style="background-color: #f1f5f9; padding: 20px; text-align: center; border-top: 1px solid #e2e8f0;">
+              <p style="color: #64748b; font-size: 13px; margin: 0;"><strong>The Iscorre Team</strong></p>
+            </div>
           </div>
         `,
       },
@@ -162,11 +290,34 @@ export const EMAIL_TEMPLATE_CATEGORIES = [
         requiredVariables: ["name", "event", "amount", "date"],
         defaultSubject: "Workshop registration confirmed",
         defaultContent: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #333;">Hello {{name}},</h2>
-            <p style="color: #666;">You are successfully registered for <strong>{{event}}</strong>.</p>
-            <p style="color: #666;">Amount: <strong>{{amount}}</strong> | Date: <strong>{{date}}</strong></p>
-            <p style="color: #999; font-size: 12px;">Thank you for choosing Iscorre.</p>
+          <div style="font-family: 'Inter', Helvetica, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
+            <div style="background-color: #f8fafc; padding: 24px; text-align: center; border-bottom: 1px solid #e2e8f0;">
+              <h1 style="color: #2563eb; margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.5px;">Iscorre</h1>
+            </div>
+            <div style="padding: 32px 24px;">
+              <h2 style="color: #0f172a; font-size: 20px; font-weight: 600; margin-top: 0;">Workshop Registration Confirmed!</h2>
+              <p style="color: #475569; font-size: 16px; line-height: 1.6;">Hello {{name}}, you are officially registered for our learning workshop.</p>
+              
+              <div style="margin: 24px 0; border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden;">
+                <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                  <tr style="background-color: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+                    <th style="padding: 12px 16px; font-size: 14px; color: #475569; font-weight: 600;">Workshop Event</th>
+                  </tr>
+                  <tr>
+                    <td style="padding: 16px; font-size: 15px; color: #0f172a; border-bottom: 1px solid #e2e8f0;"><strong>{{event}}</strong></td>
+                  </tr>
+                </table>
+                <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                  <tr>
+                    <td style="padding: 12px 16px; font-size: 14px; color: #475569; border-right: 1px solid #e2e8f0;">Date: <strong>{{date}}</strong></td>
+                    <td style="padding: 12px 16px; font-size: 14px; color: #475569;">Transaction: <strong style="color: #2563eb;">{{amount}}</strong></td>
+                  </tr>
+                </table>
+              </div>
+            </div>
+            <div style="background-color: #f1f5f9; padding: 20px; text-align: center; border-top: 1px solid #e2e8f0;">
+              <p style="color: #64748b; font-size: 13px; margin: 0;"><strong>The Iscorre Team</strong></p>
+            </div>
           </div>
         `,
       },
@@ -186,12 +337,33 @@ export const EMAIL_TEMPLATE_CATEGORIES = [
         requiredVariables: ["name", "ticketNumber", "subject"],
         defaultSubject: "Ticket received: {{ticketNumber}}",
         defaultContent: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #333;">Hello {{name}},</h2>
-            <p style="color: #666;">We have received your support ticket.</p>
-            <p style="color: #666;">Ticket No: <strong>{{ticketNumber}}</strong></p>
-            <p style="color: #666;">Subject: <strong>{{subject}}</strong></p>
-            <p style="color: #999; font-size: 12px;">Our team will respond shortly.</p>
+          <div style="font-family: 'Inter', Helvetica, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
+            <div style="background-color: #f8fafc; padding: 24px; text-align: center; border-bottom: 1px solid #e2e8f0;">
+              <h1 style="color: #2563eb; margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.5px;">Iscorre</h1>
+            </div>
+            <div style="padding: 32px 24px;">
+              <h2 style="color: #0f172a; font-size: 20px; font-weight: 600; margin-top: 0;">We've received your request!</h2>
+              <p style="color: #475569; font-size: 16px; line-height: 1.6;">Hello {{name}}, our support team has received your ticket and will be in touch shortly.</p>
+              
+              <div style="margin: 24px 0; border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden;">
+                <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                  <tr style="background-color: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+                    <th style="padding: 12px 16px; font-size: 14px; color: #475569; font-weight: 600;">Subject</th>
+                  </tr>
+                  <tr>
+                    <td style="padding: 16px; font-size: 15px; color: #0f172a; border-bottom: 1px solid #e2e8f0;"><strong>{{subject}}</strong></td>
+                  </tr>
+                </table>
+                <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                  <tr>
+                    <td style="padding: 12px 16px; font-size: 14px; color: #475569;">Ticket Reference ID: <strong style="color: #2563eb; background-color: #dbeafe; padding: 2px 6px; border-radius: 4px;">{{ticketNumber}}</strong></td>
+                  </tr>
+                </table>
+              </div>
+            </div>
+            <div style="background-color: #f1f5f9; padding: 20px; text-align: center; border-top: 1px solid #e2e8f0;">
+              <p style="color: #64748b; font-size: 13px; margin: 0;">Iscorre Customer Support System</p>
+            </div>
           </div>
         `,
       },
@@ -202,11 +374,23 @@ export const EMAIL_TEMPLATE_CATEGORIES = [
         requiredVariables: ["name", "ticketNumber", "message"],
         defaultSubject: "Update on ticket {{ticketNumber}}",
         defaultContent: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #333;">Hello {{name}},</h2>
-            <p style="color: #666;">There is an update on your ticket <strong>{{ticketNumber}}</strong>.</p>
-            <p style="color: #666;">{{message}}</p>
-            <p style="color: #999; font-size: 12px;">Please reply if you need more help.</p>
+          <div style="font-family: 'Inter', Helvetica, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
+            <div style="background-color: #f8fafc; padding: 24px; text-align: center; border-bottom: 1px solid #e2e8f0;">
+              <h1 style="color: #2563eb; margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.5px;">Iscorre</h1>
+            </div>
+            <div style="padding: 32px 24px;">
+              <p style="color: #475569; font-size: 14px; float: right; margin: 0; background-color: #f1f5f9; padding: 4px 8px; border-radius: 4px;">#{{ticketNumber}}</p>
+              <h2 style="color: #0f172a; font-size: 20px; font-weight: 600; margin-top: 0;">Ticket Update</h2>
+              <p style="color: #475569; font-size: 16px; line-height: 1.6;">Hello {{name}}, an admin has replied to your support ticket:</p>
+              
+              <div style="background-color: #f8fafc; border-left: 4px solid #2563eb; padding: 16px; margin: 24px 0; border-radius: 0 4px 4px 0;">
+                <p style="color: #0f172a; font-size: 15px; margin: 0; font-style: italic;">{{message}}</p>
+              </div>
+              <p style="color: #475569; font-size: 14px;">Please login to your dashboard to continue the conversation or mark it as resolved.</p>
+            </div>
+            <div style="background-color: #f1f5f9; padding: 20px; text-align: center; border-top: 1px solid #e2e8f0;">
+              <p style="color: #64748b; font-size: 13px; margin: 0;">Iscorre Customer Support System</p>
+            </div>
           </div>
         `,
       },
@@ -226,13 +410,30 @@ export const EMAIL_TEMPLATE_CATEGORIES = [
         requiredVariables: ["name", "jobTitle", "interviewDate", "interviewTime", "providerLink"],
         defaultSubject: "Interview Scheduled - {{jobTitle}}",
         defaultContent: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #333;">Hello {{name}},</h2>
-            <p style="color: #666;">Your interview is scheduled for <strong>{{jobTitle}}</strong>.</p>
-            <p style="color: #666;">Date: <strong>{{interviewDate}}</strong></p>
-            <p style="color: #666;">Time: <strong>{{interviewTime}}</strong></p>
-            <p style="color: #666;">Join Link: <a href="{{providerLink}}">{{providerLink}}</a></p>
-            <p style="color: #999; font-size: 12px;">Iscorre Teacher Connect</p>
+          <div style="font-family: 'Inter', Helvetica, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
+            <div style="background-color: #f8fafc; padding: 24px; text-align: center; border-bottom: 1px solid #e2e8f0;">
+              <h1 style="color: #2563eb; margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.5px;">Iscorre</h1>
+            </div>
+            <div style="padding: 32px 24px;">
+              <h2 style="color: #0f172a; font-size: 20px; font-weight: 600; margin-top: 0;">Interview Scheduled</h2>
+              <p style="color: #475569; font-size: 16px; line-height: 1.6;">Hello {{name}}, your interview has been successfully scheduled for the <strong>{{jobTitle}}</strong> position.</p>
+              
+              <div style="margin: 24px 0; border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden;">
+                <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                  <tr>
+                    <td style="padding: 12px 16px; font-size: 14px; color: #475569; border-bottom: 1px solid #e2e8f0; border-right: 1px solid #e2e8f0;">Date: <strong style="color:#0f172a;">{{interviewDate}}</strong></td>
+                    <td style="padding: 12px 16px; font-size: 14px; color: #475569; border-bottom: 1px solid #e2e8f0;">Time: <strong style="color:#0f172a;">{{interviewTime}}</strong></td>
+                  </tr>
+                  <tr style="background-color: #f8fafc;">
+                    <td colspan="2" style="padding: 16px; font-size: 15px; text-align: center;">Join Link: <br/><a href="{{providerLink}}" style="color: #2563eb; text-decoration: none; font-weight: 500; word-break: break-all;">{{providerLink}}</a></td>
+                  </tr>
+                </table>
+              </div>
+              <p style="color: #475569; font-size: 15px;">We look forward to speaking with you!</p>
+            </div>
+            <div style="background-color: #f1f5f9; padding: 20px; text-align: center; border-top: 1px solid #e2e8f0;">
+              <p style="color: #64748b; font-size: 13px; margin: 0;">Iscorre Teacher Connect</p>
+            </div>
           </div>
         `,
       },
@@ -243,12 +444,25 @@ export const EMAIL_TEMPLATE_CATEGORIES = [
         requiredVariables: ["name", "email", "password"],
         defaultSubject: "Congratulations - You have been selected as a Teacher",
         defaultContent: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #333;">Hello {{name}},</h2>
-            <p style="color: #666;">Congratulations! You have been selected as a teacher.</p>
-            <p style="color: #666;">Login Email: <strong>{{email}}</strong></p>
-            <p style="color: #666;">Password: <strong>{{password}}</strong></p>
-            <p style="color: #999; font-size: 12px;">Please change your password after first login.</p>
+          <div style="font-family: 'Inter', Helvetica, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
+            <div style="background-color: #f8fafc; padding: 24px; text-align: center; border-bottom: 1px solid #e2e8f0;">
+              <h1 style="color: #2563eb; margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.5px;">Iscorre</h1>
+            </div>
+            <div style="padding: 32px 24px;">
+              <h2 style="color: #0f172a; font-size: 20px; font-weight: 600; margin-top: 0;">Welcome to the Team!</h2>
+              <p style="color: #475569; font-size: 16px; line-height: 1.6;">Hello {{name}}, congratulations! You have been officially selected to join us as a teacher. Below are your login credentials for the portal:</p>
+              
+              <div style="margin: 24px 0; border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden;">
+                <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                  <tr><td style="padding: 12px 16px; font-size: 14px; color: #475569; border-bottom: 1px solid #e2e8f0;">Login Email: <strong style="color: #0f172a;">{{email}}</strong></td></tr>
+                  <tr><td style="padding: 12px 16px; font-size: 14px; color: #475569;">Temporary Password: <strong style="color: #0f172a; background-color: #f1f5f9; padding: 2px 6px; border-radius: 4px; letter-spacing: 1px;">{{password}}</strong></td></tr>
+                </table>
+              </div>
+              <p style="color: #475569; font-size: 14px; font-style: italic;">For security reasons, please ensure you change your password immediately upon your first login.</p>
+            </div>
+            <div style="background-color: #f1f5f9; padding: 20px; text-align: center; border-top: 1px solid #e2e8f0;">
+              <p style="color: #64748b; font-size: 13px; margin: 0;">Iscorre Teacher Connect</p>
+            </div>
           </div>
         `,
       },
@@ -259,11 +473,18 @@ export const EMAIL_TEMPLATE_CATEGORIES = [
         requiredVariables: ["name", "jobTitle"],
         defaultSubject: "Congratulations - You are selected as a Teacher",
         defaultContent: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #333;">Hello {{name}},</h2>
-            <p style="color: #666;">Congratulations! You have been selected for {{jobTitle}}.</p>
-            <p style="color: #666;">You will receive login details separately.</p>
-            <p style="color: #999; font-size: 12px;">Iscorre Teacher Connect</p>
+          <div style="font-family: 'Inter', Helvetica, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
+            <div style="background-color: #f8fafc; padding: 24px; text-align: center; border-bottom: 1px solid #e2e8f0;">
+              <h1 style="color: #2563eb; margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.5px;">Iscorre</h1>
+            </div>
+            <div style="padding: 32px 24px;">
+              <h2 style="color: #0f172a; font-size: 20px; font-weight: 600; margin-top: 0;">Congratulations!</h2>
+              <p style="color: #475569; font-size: 16px; line-height: 1.6;">Hello {{name}}, we are excited to inform you that you have been selected for the <strong>{{jobTitle}}</strong> position.</p>
+              <p style="color: #475569; font-size: 16px; line-height: 1.6;">You will receive your portal login details and next steps in a separate communication soon.</p>
+            </div>
+            <div style="background-color: #f1f5f9; padding: 20px; text-align: center; border-top: 1px solid #e2e8f0;">
+              <p style="color: #64748b; font-size: 13px; margin: 0;">Iscorre Teacher Connect</p>
+            </div>
           </div>
         `,
       },
@@ -274,11 +495,20 @@ export const EMAIL_TEMPLATE_CATEGORIES = [
         requiredVariables: ["name", "jobTitle"],
         defaultSubject: "Update on your application - {{jobTitle}}",
         defaultContent: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #333;">Hello {{name}},</h2>
-            <p style="color: #666;">Thank you for applying for <strong>{{jobTitle}}</strong>.</p>
-            <p style="color: #666;">At this time, we are not moving forward with your application.</p>
-            <p style="color: #999; font-size: 12px;">We appreciate your interest in Iscorre.</p>
+          <div style="font-family: 'Inter', Helvetica, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
+            <div style="background-color: #f8fafc; padding: 24px; text-align: center; border-bottom: 1px solid #e2e8f0;">
+              <h1 style="color: #64748b; margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.5px;">Iscorre</h1>
+            </div>
+            <div style="padding: 32px 24px;">
+              <h2 style="color: #0f172a; font-size: 20px; font-weight: 600; margin-top: 0;">Application Update</h2>
+              <p style="color: #475569; font-size: 16px; line-height: 1.6;">Hello {{name}},</p>
+              <p style="color: #475569; font-size: 16px; line-height: 1.6;">Thank you for your interest and for taking the time to apply for the <strong>{{jobTitle}}</strong> position.</p>
+              <p style="color: #475569; font-size: 16px; line-height: 1.6;">While we were impressed with your background, we have decided not to move forward with your application at this time.</p>
+              <p style="color: #475569; font-size: 16px; line-height: 1.6;">We encourage you to apply for future openings that match your skill set.</p>
+            </div>
+            <div style="background-color: #f1f5f9; padding: 20px; text-align: center; border-top: 1px solid #e2e8f0;">
+              <p style="color: #64748b; font-size: 13px; margin: 0;">Iscorre Teacher Connect</p>
+            </div>
           </div>
         `,
       },
