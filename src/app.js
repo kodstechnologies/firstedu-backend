@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import studentRoutes from "./routes/student.routes.js";
+import landingPageRoutes from "./routes/landingPage.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
 import teacherRoutes from "./routes/teacher.routes.js";
 import webhooksRoutes from "./routes/webhooks.routes.js";
@@ -48,6 +49,7 @@ app.use(express.json({ limit: "16kb" }));
 app.use("/user", studentRoutes);
 app.use("/admin", adminRoutes);
 app.use("/teacher", teacherRoutes);
+app.use('/landing-page',landingPageRoutes);
 // Test Route
 app.get("/test", (req, res) => {
 

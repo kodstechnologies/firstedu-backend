@@ -32,12 +32,12 @@ export const getCategories = asyncHandler(async (req, res) => {
     sortOrder,
   });
   return res.status(200).json(
-    ApiResponse.success(
-      result.items,
-      "Categories fetched successfully",
+      ApiResponse.success(
+        result.items,
+        "Categories fetched successfully",
       result.pagination
     )
-  );
+    );
 });
 
 export const getCategoryTree = asyncHandler(async (req, res) => {
@@ -60,7 +60,7 @@ export const getCategoryTree = asyncHandler(async (req, res) => {
  */
 export const getCategoriesForStudent = asyncHandler(async (req, res) => {
   const { linkedTo, format = "tree" } = req.query;
-  const studentId = req.user._id;
+  const studentId = req.user?._id;
 
   const validLinkedTo = ["all", "questionBank", "test", "testBundle", "both", "olympiad", "tournament", "examhall"].includes(linkedTo)
     ? linkedTo
@@ -74,13 +74,13 @@ export const getCategoriesForStudent = asyncHandler(async (req, res) => {
   });
 
   return res.status(200).json(
-    ApiResponse.success(
-      result,
-      validLinkedTo && validLinkedTo !== "all"
-        ? `Categories filtered by ${validLinkedTo} fetched successfully`
+      ApiResponse.success(
+        result,
+        validLinkedTo && validLinkedTo !== "all"
+          ? `Categories filtered by ${validLinkedTo} fetched successfully`
         : "Categories fetched successfully"
     )
-  );
+    );
 });
 
 export const getCategoryById = asyncHandler(async (req, res) => {
@@ -97,7 +97,7 @@ export const getCategoryChildren = asyncHandler(async (req, res) => {
   const children = await categoryService.getChildren(parentId);
   return res.status(200).json(
     ApiResponse.success(children, "Child categories fetched successfully")
-  );
+    );
 });
 
 export const updateCategory = asyncHandler(async (req, res) => {
