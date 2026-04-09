@@ -7,6 +7,7 @@ import tournamentRepository from "../repository/tournament.repository.js";
 import eventRegistrationRepository from "../repository/eventRegistration.repository.js";
 import questionBankRepository from "../repository/questionBank.repository.js";
 import questionRepository from "../repository/question.repository.js";
+import categoryRepository from "../repository/category.repository.js";
 import examAnalysisService from "./examAnalysis.service.js";
 import pointsService from "./points.service.js";
 import everydayChallengeService from "./everydayChallenge.service.js";
@@ -50,6 +51,71 @@ const hasCompletedRegistrationForLinkedEventTest = async (testId, studentId) => 
   }
 
   return false;
+};
+
+const checkStudentAccessForPaidTest = async (testId, studentId) => {
+  let purchase = await orderRepository.findTestPurchase({
+    student: studentId,
+    test: testId,
+    paymentStatus: "completed",
+  });
+  if (purchase) {
+    return { hasAccess: true, accessType: "direct_test_purchase" };
+  }
+
+  const categoriesContainingTest = await competitionRepository.findCompetitionTestsByTestId(
+    testId
+  );
+  const categoryIds = categoriesContainingTest.map((c) => c.categoryId);
+  if (categoryIds.length > 0) {
+    purchase = await orderRepository.findTestPurchase({
+      student: studentId,
+      competitionCategory: { $in: categoryIds },
+      paymentStatus: "completed",
+    });
+    if (purchase) {
+      return { hasAccess: true, accessType: "competition_category_purchase" };
+    }
+  }
+
+  const bundleIdsContainingTest = await testRepository.findBundleIdsContainingTest(testId);
+  if (bundleIdsContainingTest.length > 0) {
+    purchase = await orderRepository.findTestPurchase({
+      student: studentId,
+      testBundle: { $in: bundleIdsContainingTest },
+      paymentStatus: "completed",
+    });
+    if (purchase) {
+      return { hasAccess: true, accessType: "test_bundle_purchase" };
+    }
+  }
+
+  const hasLinkedEventAccess = await hasCompletedRegistrationForLinkedEventTest(
+    testId,
+    studentId
+  );
+  if (hasLinkedEventAccess) {
+    return { hasAccess: true, accessType: "linked_event_registration" };
+  }
+
+  return { hasAccess: false, accessType: null };
+};
+
+const buildCategoryPath = (categoryId, categoryMap) => {
+  const node = categoryMap.get(categoryId);
+  if (!node) return [];
+
+  const path = [];
+  const visited = new Set();
+  let cursor = node;
+
+  while (cursor && !visited.has(cursor.id)) {
+    visited.add(cursor.id);
+    path.unshift(cursor.name);
+    cursor = cursor.parentId ? categoryMap.get(cursor.parentId) : null;
+  }
+
+  return path;
 };
 
 const allocateIntegerShares = (total, ratios) => {
@@ -160,16 +226,41 @@ const getAnswerRemainingTimeMs = (answer, now = new Date()) => {
   return Math.max(0, baseRemaining - elapsed);
 };
 
+const getNormalizedId = (value) => {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "object" && value._id != null) {
+    return value._id?.toString?.() || String(value._id);
+  }
+  return value?.toString?.() || String(value);
+};
+
+const findAnswerByQuestionId = (session, questionId) => {
+  const targetId = getNormalizedId(questionId);
+  if (!targetId || !Array.isArray(session?.answers)) return null;
+  return session.answers.find((a) => getNormalizedId(a.questionId) === targetId) || null;
+};
+
+const findRunningAnswer = (session) => {
+  if (!Array.isArray(session?.answers)) return null;
+  return (
+    session.answers.find(
+      (a) => a?.timerStartedAt && !a?.timeExpiredAt && getAnswerRemainingTimeMs(a) > 0
+    ) || null
+  );
+};
+
 const pauseActiveQuestionTimer = (session, now = new Date()) => {
   if (!session?.activeQuestionId) return false;
-  const activeId = session.activeQuestionId?.toString?.() || String(session.activeQuestionId);
-  const answer = session.answers.find(
-    (a) => (a.questionId?.toString?.() || String(a.questionId)) === activeId
-  );
+  let answer = findAnswerByQuestionId(session, session.activeQuestionId);
 
   if (!answer) {
-    session.activeQuestionId = null;
-    return true;
+    const runningAnswer = findRunningAnswer(session);
+    if (!runningAnswer) {
+      session.activeQuestionId = null;
+      return true;
+    }
+    answer = runningAnswer;
+    session.activeQuestionId = runningAnswer.questionId;
   }
 
   if (answer.timeExpiredAt) {
@@ -192,12 +283,15 @@ const pauseActiveQuestionTimer = (session, now = new Date()) => {
 
 const ensureActiveQuestionNotExpired = (session, now = new Date()) => {
   if (!session?.activeQuestionId) return false;
-  const activeId = session.activeQuestionId?.toString?.() || String(session.activeQuestionId);
-  const answer = session.answers.find(
-    (a) => (a.questionId?.toString?.() || String(a.questionId)) === activeId
-  );
+  let answer = findAnswerByQuestionId(session, session.activeQuestionId);
   if (!answer) {
-    session.activeQuestionId = null;
+    const runningAnswer = findRunningAnswer(session);
+    if (!runningAnswer) {
+      session.activeQuestionId = null;
+      return true;
+    }
+    answer = runningAnswer;
+    session.activeQuestionId = runningAnswer.questionId;
     return true;
   }
 
@@ -220,9 +314,7 @@ const ensureActiveQuestionNotExpired = (session, now = new Date()) => {
 };
 
 const startOrResumeQuestionTimer = (session, questionId, now = new Date()) => {
-  const answer = session.answers.find(
-    (a) => (a.questionId?.toString?.() || String(a.questionId)) === questionId.toString()
-  );
+  const answer = findAnswerByQuestionId(session, questionId);
   if (!answer) {
     throw new ApiError(404, "Question not found in this exam session");
   }
@@ -286,40 +378,9 @@ export const startExamSession = async (testId, studentId, options = {}) => {
     test.applicableFor !== "challenge_yourself" &&
     test.applicableFor !== "challenge_yourfriends"
   ) {
-    let purchase = await orderRepository.findTestPurchase({
-      student: studentId,
-      test: testId,
-      paymentStatus: "completed",
-    });
-    if (!purchase) {
-      const categoriesContainingTest = await competitionRepository.findCompetitionTestsByTestId(testId);
-      const categoryIds = categoriesContainingTest.map(c => c.categoryId);
-      
-      if (categoryIds.length > 0) {
-        purchase = await orderRepository.findTestPurchase({
-          student: studentId,
-          competitionCategory: { $in: categoryIds },
-          paymentStatus: "completed"
-        });
-      }
-    }
-    if (!purchase) {
-      const bundleIdsContainingTest =
-        await testRepository.findBundleIdsContainingTest(testId);
-      if (bundleIdsContainingTest.length > 0) {
-        purchase = await orderRepository.findTestPurchase({
-          student: studentId,
-          testBundle: { $in: bundleIdsContainingTest },
-          paymentStatus: "completed",
-        });
-      }
-    }
-    if (!purchase) {
-      const hasLinkedEventAccess =
-        await hasCompletedRegistrationForLinkedEventTest(testId, studentId);
-      if (!hasLinkedEventAccess) {
-        throw new ApiError(403, "You need to purchase this test first");
-      }
+    const access = await checkStudentAccessForPaidTest(testId, studentId);
+    if (!access.hasAccess) {
+      throw new ApiError(403, "You need to purchase this test first");
     }
   }
 
@@ -452,6 +513,241 @@ export const startExamSession = async (testId, studentId, options = {}) => {
   });
 
   return await getExamSession(session._id, studentId);
+};
+
+/**
+ * Get exam instruction details before starting the exam
+ */
+export const getExamInstructions = async (testId, studentId, options = {}) => {
+  const { challengeId = null, categoryId = null } = options;
+
+  const test = await examSessionRepository.findTestById(testId, {
+    questionBank:
+      "name sections useSectionWiseQuestions useSectionWiseDifficulty overallDifficulty categories",
+  });
+  if (!test) {
+    throw new ApiError(404, "Test not found");
+  }
+
+  if (!test.isPublished) {
+    throw new ApiError(403, "Test is not published");
+  }
+
+  if (!test.questionBank) {
+    throw new ApiError(400, "Test has no question bank configured");
+  }
+
+  const questions = await questionBankRepository.getQuestionsByBankId(test.questionBank._id);
+  if (!questions || questions.length === 0) {
+    throw new ApiError(400, "Question bank has no questions");
+  }
+
+  const totalQuestions = questions.length;
+  const totalMarks = questions.reduce((sum, q) => sum + (q.marks || 0), 0);
+  const totalNegativeMarks = questions.reduce((sum, q) => sum + (q.negativeMarks || 0), 0);
+
+  let canStart = true;
+  let blockReason = null;
+  let accessType = test.price > 0 ? "requires_purchase_or_event" : "free_test";
+
+  if (test.applicableFor === "challenge_yourfriends" && !challengeId) {
+    canStart = false;
+    blockReason = "This challenge exam can only be started by the room creator";
+  }
+
+  if (
+    canStart &&
+    test.price > 0 &&
+    test.applicableFor !== "everyday_challenge" &&
+    test.applicableFor !== "challenge_yourself" &&
+    test.applicableFor !== "challenge_yourfriends"
+  ) {
+    const access = await checkStudentAccessForPaidTest(testId, studentId);
+    if (!access.hasAccess) {
+      canStart = false;
+      blockReason = "You need to purchase this test first";
+    } else {
+      accessType = access.accessType;
+    }
+  }
+
+  const sessionScopeFilter = {
+    challenge: challengeId || null,
+    competitionCategory: categoryId || null,
+  };
+
+  const [inProgressSession, pausedSession] = await Promise.all([
+    examSessionRepository.findOne({
+      student: studentId,
+      test: testId,
+      status: "in_progress",
+      ...sessionScopeFilter,
+    }),
+    examSessionRepository.findOne({
+      student: studentId,
+      test: testId,
+      status: "paused",
+      ...sessionScopeFilter,
+    }),
+  ]);
+
+  if (canStart) {
+    const challengeSlot = await challengeYourselfService.getSlotForTest(testId);
+    if (challengeSlot) {
+      const unlocked = await challengeYourselfService.isLevelUnlocked(
+        studentId,
+        challengeSlot.stage,
+        challengeSlot.level
+      );
+      if (!unlocked) {
+        canStart = false;
+        blockReason =
+          "This level is not unlocked yet. Score full marks on the previous level to unlock.";
+      }
+    } else if (test.applicableFor === "everyday_challenge") {
+      const today = everydayChallengeService.getStartOfDayUTC();
+      const alreadyCompletedToday = await everydayChallengeCompletionRepository.findOne({
+        student: studentId,
+        date: today,
+      });
+      if (alreadyCompletedToday) {
+        canStart = false;
+        blockReason = "You have already completed today's everyday challenge";
+      }
+    } else if (test.applicableFor !== "challenge_yourfriends") {
+      const completedSession = await examSessionRepository.findOne({
+        student: studentId,
+        test: testId,
+        status: "completed",
+        ...sessionScopeFilter,
+      });
+      if (completedSession) {
+        canStart = false;
+        blockReason = "You have already completed this test";
+      }
+    }
+  }
+
+  const categoryIds = (test?.questionBank?.categories || [])
+    .map((category) => {
+      if (!category) return null;
+      return category?._id?.toString?.() || category?.toString?.() || null;
+    })
+    .filter(Boolean);
+
+  const allActiveCategoriesResult = await categoryRepository.findAll(
+    { isActive: true },
+    { page: 1, limit: 1000 }
+  );
+  const allActiveCategories = allActiveCategoriesResult.items || [];
+
+  const categoryMap = new Map(
+    allActiveCategories.map((category) => [
+      category._id.toString(),
+      {
+        id: category._id.toString(),
+        name: category.name,
+        parentId:
+          category.parent?._id?.toString?.() ||
+          category.parent?.toString?.() ||
+          null,
+      },
+    ])
+  );
+
+  const categories = categoryIds
+    .map((categoryId) => {
+      const category = categoryMap.get(categoryId);
+      if (!category) return null;
+      const fullPath = buildCategoryPath(categoryId, categoryMap);
+      return {
+        id: category.id,
+        name: category.name,
+        fullPath,
+        fullPathText: fullPath.join(" > "),
+      };
+    })
+    .filter(Boolean);
+
+  const sectionWiseEnabled =
+    !!test?.questionBank?.useSectionWiseQuestions &&
+    Array.isArray(test?.questionBank?.sections) &&
+    test.questionBank.sections.length > 0;
+
+  const sections = sectionWiseEnabled
+    ? test.questionBank.sections.map((section, index) => ({
+        id: section.id ?? index + 1,
+        name: section.name || `Section ${index + 1}`,
+        count: section.count || 0,
+        difficulty: section.difficulty || null,
+      }))
+    : [];
+
+  const instructionPoints = [
+    `Total questions: ${totalQuestions}`,
+    `Total marks: ${totalMarks}`,
+    `Duration: ${test.durationMinutes} minutes`,
+    `Question bank: ${test.questionBank.name || "N/A"}`,
+    `Proctoring: ${test.proctoringInstructions}`,
+  ];
+
+  if (totalNegativeMarks > 0) {
+    instructionPoints.push(
+      `Negative marking: Yes (up to ${totalNegativeMarks} marks can be deducted)`
+    );
+  } else {
+    instructionPoints.push("Negative marking: No");
+  }
+
+  if (sectionWiseEnabled) {
+    instructionPoints.push(`Section-wise questions: Enabled (${sections.length} sections)`);
+  } else {
+    instructionPoints.push("Section-wise questions: Disabled");
+  }
+
+  return {
+    test: {
+      id: test._id,
+      title: test.title,
+      description: test.description || "",
+      imageUrl: test.imageUrl || null,
+      applicableFor: test.applicableFor,
+      isFree: test.price <= 0,
+      durationMinutes: test.durationMinutes,
+      proctoringInstructions: test.proctoringInstructions,
+      questionBankName: test.questionBank.name || null,
+      categories,
+    },
+    stats: {
+      totalQuestions,
+      totalMarks,
+      totalNegativeMarks,
+      averageTimePerQuestionSeconds:
+        totalQuestions > 0 ? Math.round((test.durationMinutes * 60) / totalQuestions) : 0,
+    },
+    sections: {
+      sectionWiseEnabled,
+      useSectionWiseDifficulty: !!test?.questionBank?.useSectionWiseDifficulty,
+      overallDifficulty: test?.questionBank?.overallDifficulty || null,
+      items: sections,
+    },
+    session: {
+      inProgressSessionId: inProgressSession?._id || null,
+      pausedSessionId: pausedSession?._id || null,
+      hasResumableSession: !!(inProgressSession || pausedSession),
+      nextAction: inProgressSession || pausedSession ? "resume" : "start",
+    },
+    eligibility: {
+      canStart,
+      blockReason,
+      accessType,
+    },
+    instructions: {
+      proctoringText: test.proctoringInstructions,
+      points: instructionPoints,
+    },
+    instructionPoints,
+  };
 };
 
 /**
@@ -700,7 +996,7 @@ export const getExamSession = async (sessionId, studentId) => {
       remainingTimeFormatted: formatTime(remainingTime),
       sectionWiseQuestionsEnabled: sectionConfig.length > 0,
       timeAllocationStrategy: strategy,
-      activeQuestionId: session.activeQuestionId || null,
+      activeQuestionId: getNormalizedId(session.activeQuestionId) || null,
     },
     questions: questionsWithTime,
     palette,
@@ -1412,6 +1708,7 @@ export const getInProgressSessions = async (studentId, page = 1, limit = 10) => 
 export default {
   startExamSession,
   pauseExamSession,
+  getExamInstructions,
   getExamSession,
   saveAnswer,
   visitQuestion,

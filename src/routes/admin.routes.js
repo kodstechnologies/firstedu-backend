@@ -9,7 +9,10 @@ import {
   changePassword,
   getAdminProfile,
 } from "../controllers/adminAuth.controller.js";
-import { getDashboardData } from "../controllers/adminDashboard.controller.js";
+import {
+  getDashboardData,
+  getRevenueHistory,
+} from "../controllers/adminDashboard.controller.js";
 import {
   createQuestion,
   getAllQuestions,
@@ -279,6 +282,7 @@ router.post("/login", adminLogin);
 router.post("/logout", verifyJWT, adminLogout);
 router.get("/profile", verifyJWT, getAdminProfile);
 router.get("/dashboard", verifyJWT, getDashboardData);
+router.get("/revenue-history", verifyJWT, getRevenueHistory);
 router.post("/forgot-password/request", requestForgotPasswordOTP);
 router.post("/forgot-password/verify", verifyForgotPasswordOTP);
 router.post("/forgot-password/reset", resetPassword);

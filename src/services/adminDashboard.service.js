@@ -3,6 +3,7 @@ import TestPurchase from "../models/TestPurchase.js";
 import CoursePurchase from "../models/CoursePurchase.js";
 import EventRegistration from "../models/EventRegistration.js";
 import SupportTicket from "../models/SupportTicket.js";
+import { ApiError } from "../utils/ApiError.js";
 
 /**
  * Get start and end of a month (in UTC)
@@ -308,6 +309,222 @@ export const getDashboardData = async () => {
   };
 };
 
+/**
+ * Admin revenue history (who purchased what, amount, and source).
+ * Supports filters: page, limit, type, from, to, search.
+ */
+export const getRevenueHistory = async ({
+  page = 1,
+  limit = 20,
+  type,
+  from,
+  to,
+  search,
+} = {}) => {
+  const pageNum = Math.max(1, parseInt(page, 10) || 1);
+  const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
+  const skip = (pageNum - 1) * limitNum;
+
+  const parseDate = (value, label) => {
+    if (!value) return null;
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) {
+      throw new ApiError(400, `Invalid '${label}' date`);
+    }
+    return d;
+  };
+
+  const fromDate = parseDate(from, "from");
+  const toDate = parseDate(to, "to");
+  if (toDate && typeof to === "string" && !to.includes("T")) {
+    toDate.setHours(23, 59, 59, 999);
+  }
+  if (fromDate && toDate && fromDate > toDate) {
+    throw new ApiError(400, "'from' date cannot be after 'to' date");
+  }
+
+  const buildRange = (dateField) => {
+    const query = {
+      paymentStatus: "completed",
+    };
+
+    if (fromDate || toDate) {
+      query[dateField] = {};
+      if (fromDate) query[dateField].$gte = fromDate;
+      if (toDate) query[dateField].$lte = toDate;
+    }
+
+    return query;
+  };
+
+  const normalizeType = (value) => {
+    const key = String(value || "").trim().toLowerCase();
+    const aliases = {
+      bundle: "test_bundle",
+      "test-bundle": "test_bundle",
+      testbundle: "test_bundle",
+      test_bundle: "test_bundle",
+      competition: "competition_category",
+      competitioncategory: "competition_category",
+      competition_category: "competition_category",
+      livecompetition: "live_competition",
+      live_competition: "live_competition",
+    };
+    return aliases[key] || key;
+  };
+
+  const requestedTypes = type
+    ? String(type)
+        .split(",")
+        .map((t) => normalizeType(t))
+        .filter(Boolean)
+    : [];
+
+  const [coursePurchases, testPurchases, eventRegistrations] = await Promise.all([
+    CoursePurchase.find(buildRange("purchaseDate"))
+      .populate("student", "name email phone")
+      .populate("course", "title")
+      .lean(),
+    TestPurchase.find(buildRange("purchaseDate"))
+      .populate("student", "name email phone")
+      .populate("test", "title")
+      .populate("testBundle", "name")
+      .populate("competitionCategory", "title")
+      .lean(),
+    EventRegistration.find({
+      ...buildRange("registeredAt"),
+      eventType: { $in: ["olympiad", "tournament", "workshop"] },
+    })
+      .populate("student", "name email phone")
+      .populate("eventId", "title")
+      .lean(),
+  ]);
+
+  const getStudentData = (student) => ({
+    id: student?._id || null,
+    name: student?.name || "Unknown User",
+    email: student?.email || null,
+    phone: student?.phone || null,
+  });
+
+  const transactions = [
+    ...coursePurchases.map((p) => ({
+      id: p._id,
+      sourceType: "course",
+      purchasedAt: p.purchaseDate || p.createdAt,
+      itemName: p.course?.title || "Course",
+      amount: Number(p.purchasePrice) || 0,
+      paymentId: p.paymentId || null,
+      paymentStatus: p.paymentStatus,
+      user: getStudentData(p.student),
+    })),
+    ...testPurchases.map((p) => {
+      const sourceType = p.test
+        ? "test"
+        : p.testBundle
+          ? "test_bundle"
+          : "competition_category";
+      const itemName =
+        p.test?.title ||
+        p.testBundle?.name ||
+        p.competitionCategory?.title ||
+        "Test Purchase";
+
+      return {
+        id: p._id,
+        sourceType,
+        purchasedAt: p.purchaseDate || p.createdAt,
+        itemName,
+        amount: Number(p.purchasePrice) || 0,
+        paymentId: p.paymentId || null,
+        paymentStatus: p.paymentStatus,
+        user: getStudentData(p.student),
+      };
+    }),
+    ...eventRegistrations.map((r) => ({
+      id: r._id,
+      sourceType: r.eventType,
+      purchasedAt: r.registeredAt || r.createdAt,
+      itemName: r.eventId?.title || r.eventType || "Event Registration",
+      amount: Number(r.amountPaid) || 0,
+      paymentId: r.paymentId || null,
+      paymentStatus: r.paymentStatus,
+      user: getStudentData(r.student),
+    })),
+  ]
+    .sort((a, b) => new Date(b.purchasedAt) - new Date(a.purchasedAt));
+
+  let filteredTransactions = transactions;
+
+  if (requestedTypes.length > 0) {
+    filteredTransactions = filteredTransactions.filter((t) =>
+      requestedTypes.includes(normalizeType(t.sourceType))
+    );
+  }
+
+  if (search && String(search).trim()) {
+    const q = String(search).trim().toLowerCase();
+    filteredTransactions = filteredTransactions.filter((t) => {
+      const haystack = [
+        t.itemName,
+        t.sourceType,
+        t.paymentId,
+        t.user?.name,
+        t.user?.email,
+        t.user?.phone,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(q);
+    });
+  }
+
+  const totalRevenue = filteredTransactions.reduce(
+    (sum, entry) => sum + (Number(entry.amount) || 0),
+    0
+  );
+
+  const breakdownMap = filteredTransactions.reduce((acc, entry) => {
+    const key = entry.sourceType;
+    if (!acc[key]) {
+      acc[key] = { sourceType: key, transactions: 0, revenue: 0 };
+    }
+    acc[key].transactions += 1;
+    acc[key].revenue += Number(entry.amount) || 0;
+    return acc;
+  }, {});
+
+  const sourceBreakdown = Object.values(breakdownMap).sort(
+    (a, b) => b.revenue - a.revenue
+  );
+
+  const total = filteredTransactions.length;
+  const paginatedTransactions = filteredTransactions.slice(skip, skip + limitNum);
+
+  return {
+    summary: {
+      totalTransactions: total,
+      totalRevenue: Math.round(totalRevenue),
+      sourceBreakdown: sourceBreakdown.map((entry) => ({
+        ...entry,
+        revenue: Math.round(entry.revenue),
+      })),
+    },
+    pagination: {
+      page: pageNum,
+      limit: limitNum,
+      total,
+      pages: Math.ceil(total / limitNum) || 1,
+    },
+    transactions: paginatedTransactions.map((entry) => ({
+      ...entry,
+      amount: Math.round(Number(entry.amount) || 0),
+    })),
+  };
+};
+
 export default {
   getDashboardData,
+  getRevenueHistory,
 };
