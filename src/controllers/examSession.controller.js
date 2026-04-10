@@ -19,6 +19,24 @@ export const startExam = asyncHandler(async (req, res) => {
 });
 
 /**
+ * Get exam instruction details before starting exam
+ */
+export const getExamInstructions = asyncHandler(async (req, res) => {
+  const { testId } = req.params;
+  const { challengeId, categoryId } = req.query;
+  const studentId = req.user._id;
+
+  const details = await examSessionService.getExamInstructions(testId, studentId, {
+    challengeId: challengeId || null,
+    categoryId: categoryId || null,
+  });
+
+  return res.status(200).json(
+    ApiResponse.success(details, "Exam instructions fetched successfully")
+  );
+});
+
+/**
  * Get exam session (with questions, timer, palette)
  */
 export const getExamSession = asyncHandler(async (req, res) => {
@@ -195,6 +213,7 @@ export const getInProgressExams = asyncHandler(async (req, res) => {
 
 export default {
   startExam,
+  getExamInstructions,
   pauseExam,
   getExamSession,
   saveAnswer,
