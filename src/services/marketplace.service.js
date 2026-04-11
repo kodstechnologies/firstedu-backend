@@ -19,8 +19,10 @@ import couponService from "./coupon.service.js";
 import studentRepository from "../repository/student.repository.js";
 import { sendCourseEnrollmentEmail, sendTestBundlePurchaseEmail } from "../utils/sendEmail.js";
 
-const isStandaloneMarketplaceTest = (test) =>
-  (test?.applicableFor ?? "test") === "test";
+const isDirectPurchasableTest = (test) => {
+  const applicableFor = test?.applicableFor ?? "test";
+  return applicableFor === "test" || applicableFor === "challenge_yourself";
+};
 
 /**
  * Get all published courses (marketplace listing)
@@ -607,7 +609,7 @@ export const initiateTestPayment = async (testId, studentId, paymentMethod, opti
   if (!test || !test.isPublished) {
     throw new ApiError(404, "Test not found");
   }
-  if (!isStandaloneMarketplaceTest(test)) {
+  if (!isDirectPurchasableTest(test)) {
     throw new ApiError(400, "This test is not available for direct purchase");
   }
 
@@ -622,7 +624,20 @@ export const initiateTestPayment = async (testId, studentId, paymentMethod, opti
 
   const price = Number(test.price) || 0;
 
-  const { amountToCharge, couponId, appliedOffer, appliedCoupon } = await getAmountToCharge("Test", price, couponCode);
+  const shouldApplyOfferAndCoupon = test.applicableFor !== "challenge_yourself";
+  const {
+    amountToCharge,
+    couponId,
+    appliedOffer,
+    appliedCoupon,
+  } = shouldApplyOfferAndCoupon
+    ? await getAmountToCharge("Test", price, couponCode)
+    : {
+        amountToCharge: price,
+        couponId: null,
+        appliedOffer: null,
+        appliedCoupon: null,
+      };
 
   if (paymentMethod === "free") {
     if (amountToCharge > 0) {
@@ -727,7 +742,7 @@ export const getTestById = async (testId) => {
 
   if (!test) throw new ApiError(404, "Test not found");
   if (!test.isPublished) throw new ApiError(404, "Test not found");
-  if (!isStandaloneMarketplaceTest(test)) {
+  if (!isDirectPurchasableTest(test)) {
     throw new ApiError(404, "Test not found");
   }
 
@@ -751,7 +766,7 @@ export const purchaseTest = async (
   if (!test || !test.isPublished) {
     throw new ApiError(404, "Test not found");
   }
-  if (!isStandaloneMarketplaceTest(test)) {
+  if (!isDirectPurchasableTest(test)) {
     throw new ApiError(400, "This test is not available for direct purchase");
   }
 

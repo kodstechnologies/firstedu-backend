@@ -101,6 +101,42 @@ const checkStudentAccessForPaidTest = async (testId, studentId) => {
   return { hasAccess: false, accessType: null };
 };
 
+const checkStudentAccessForPaidChallengeYourselfTest = async (testId, studentId) => {
+  const purchase = await orderRepository.findTestPurchase({
+    student: studentId,
+    test: testId,
+    paymentStatus: "completed",
+  });
+  if (purchase) {
+    return { hasAccess: true, accessType: "direct_test_purchase" };
+  }
+  return { hasAccess: false, accessType: null };
+};
+
+const awardCompletionPoints = async (studentId, session, test) => {
+  if (!test) return;
+  if (test.applicableFor === "everyday_challenge") {
+    await everydayChallengeService.recordCompletion(studentId, session);
+    return;
+  }
+
+  if (test.applicableFor === "challenge_yourself") {
+    await pointsService.awardChallengeYourselfCompletionPoints(
+      studentId,
+      session.test,
+      test.title || "Challenge Yourself Test",
+      test.price
+    );
+    return;
+  }
+
+  await pointsService.awardTestCompletionPoints(
+    studentId,
+    session.test,
+    test.title || "Test"
+  );
+};
+
 const buildCategoryPath = (categoryId, categoryMap) => {
   const node = categoryMap.get(categoryId);
   if (!node) return [];
@@ -370,17 +406,23 @@ export const startExamSession = async (testId, studentId, options = {}) => {
     throw new ApiError(400, "Question bank has no questions");
   }
 
-  // Check if student can access paid test:
-  // everyday challenge and challenge-yourself tests are always free; otherwise purchase or linked event.
+  // Check if student can access paid test.
   if (
     test.price > 0 &&
     test.applicableFor !== "everyday_challenge" &&
-    test.applicableFor !== "challenge_yourself" &&
     test.applicableFor !== "challenge_yourfriends"
   ) {
-    const access = await checkStudentAccessForPaidTest(testId, studentId);
+    const access =
+      test.applicableFor === "challenge_yourself"
+        ? await checkStudentAccessForPaidChallengeYourselfTest(testId, studentId)
+        : await checkStudentAccessForPaidTest(testId, studentId);
     if (!access.hasAccess) {
-      throw new ApiError(403, "You need to purchase this test first");
+      throw new ApiError(
+        403,
+        test.applicableFor === "challenge_yourself"
+          ? "You need to purchase this challenge level first"
+          : "You need to purchase this test first"
+      );
     }
   }
 
@@ -559,13 +601,18 @@ export const getExamInstructions = async (testId, studentId, options = {}) => {
     canStart &&
     test.price > 0 &&
     test.applicableFor !== "everyday_challenge" &&
-    test.applicableFor !== "challenge_yourself" &&
     test.applicableFor !== "challenge_yourfriends"
   ) {
-    const access = await checkStudentAccessForPaidTest(testId, studentId);
+    const access =
+      test.applicableFor === "challenge_yourself"
+        ? await checkStudentAccessForPaidChallengeYourselfTest(testId, studentId)
+        : await checkStudentAccessForPaidTest(testId, studentId);
     if (!access.hasAccess) {
       canStart = false;
-      blockReason = "You need to purchase this test first";
+      blockReason =
+        test.applicableFor === "challenge_yourself"
+          ? "You need to purchase this challenge level first"
+          : "You need to purchase this test first";
     } else {
       accessType = access.accessType;
     }
@@ -669,12 +716,17 @@ export const getExamInstructions = async (testId, studentId, options = {}) => {
     })
     .filter(Boolean);
 
-  const sectionWiseEnabled =
-    !!test?.questionBank?.useSectionWiseQuestions &&
+  const hasSectionsConfigured =
     Array.isArray(test?.questionBank?.sections) &&
     test.questionBank.sections.length > 0;
+  const sectionWiseEnabled =
+    hasSectionsConfigured &&
+    (
+      !!test?.questionBank?.useSectionWiseQuestions ||
+      !!test?.questionBank?.useSectionWiseDifficulty
+    );
 
-  const sections = sectionWiseEnabled
+  const sections = hasSectionsConfigured
     ? test.questionBank.sections.map((section, index) => ({
         id: section.id ?? index + 1,
         name: section.name || `Section ${index + 1}`,
@@ -1167,20 +1219,10 @@ const autoSubmitExam = async (sessionId, studentId, reason = "time_expired") => 
     // Don't fail submission if analysis fails
   }
 
-  // Award points: everyday challenge uses streak points; other tests use test completion points
+  // Award points based on test type.
   try {
     const test = await examSessionRepository.findTestById(session.test);
-    if (test) {
-      if (test.applicableFor === "everyday_challenge") {
-        await everydayChallengeService.recordCompletion(studentId, session);
-      } else {
-        await pointsService.awardTestCompletionPoints(
-          studentId,
-          session.test,
-          test.title || "Test"
-        );
-      }
-    }
+    await awardCompletionPoints(studentId, session, test);
   } catch (error) {
     console.error("Error awarding points for test completion:", error);
   }
@@ -1316,20 +1358,10 @@ export const submitExam = async (sessionId, studentId) => {
     // Don't fail submission if analysis fails
   }
 
-  // Award points: everyday challenge uses streak points; other tests use test completion points
+  // Award points based on test type.
   try {
     const test = await examSessionRepository.findTestById(session.test);
-    if (test) {
-      if (test.applicableFor === "everyday_challenge") {
-        await everydayChallengeService.recordCompletion(studentId, session);
-      } else {
-        await pointsService.awardTestCompletionPoints(
-          studentId,
-          session.test,
-          test.title || "Test"
-        );
-      }
-    }
+    await awardCompletionPoints(studentId, session, test);
   } catch (error) {
     console.error("Error awarding points for test completion:", error);
   }
@@ -1482,9 +1514,9 @@ const checkAnswerCorrectness = (question, studentAnswer) => {
  */
 export const getExamResults = async (sessionId, studentId) => {
   const populateOptions = {
-    test: "title description durationMinutes",
+    test: "title description durationMinutes questionBank",
     answers: {
-      select: "questionText questionType options correctAnswer explanation subject topic marks negativeMarks isParent passage parentQuestionId childQuestions",
+      select: "questionText questionType options correctAnswer explanation subject topic marks negativeMarks sectionIndex isParent passage parentQuestionId childQuestions",
       populate: {
         path: "childQuestions",
         select: "questionText questionType options correctAnswer explanation marks negativeMarks",
@@ -1567,6 +1599,99 @@ export const getExamResults = async (sessionId, studentId) => {
       answeredAt: answer.answeredAt,
     };
   }).filter((q) => q !== null);
+  const sectionNameByIndex = new Map();
+  const questionBankId = session?.test?.questionBank?._id || session?.test?.questionBank || null;
+  if (questionBankId) {
+    const questionBank = await questionBankRepository.findById(questionBankId, false);
+    if (Array.isArray(questionBank?.sections)) {
+      questionBank.sections.forEach((section, index) => {
+        const safeName = section?.name || `Section ${String.fromCharCode(65 + index)}`;
+        sectionNameByIndex.set(index, safeName);
+      });
+    }
+  }
+
+  const rankedByTest = await examSessionRepository.getRankedByTest(
+    session.test?._id || session.test,
+    null,
+    null
+  );
+  const top3 = rankedByTest.slice(0, 3).map((entry, index) => ({
+    rank: index + 1,
+    student: entry.student,
+    name: entry.name || null,
+    email: entry.email || null,
+    score: entry.score ?? 0,
+    maxScore: entry.maxScore ?? null,
+    completedAt: entry.completedAt || null,
+  }));
+  const myRankIndex = rankedByTest.findIndex(
+    (entry) =>
+      (entry.student?._id?.toString?.() || entry.student?.toString?.()) ===
+      studentId.toString()
+  );
+  const myRank = myRankIndex >= 0 ? myRankIndex + 1 : null;
+  const earnedMarks = questions.reduce(
+    (sum, q) => sum + (q.isCorrect ? Number(q.marks || 0) : 0),
+    0
+  );
+  const negativeMarksDeducted = questions.reduce(
+    (sum, q) => sum + (!q.isCorrect && q.status !== "skipped" ? Number(q.negativeMarks || 0) : 0),
+    0
+  );
+  const totalNegativeMarksPossible = questions.reduce(
+    (sum, q) => sum + Number(q.negativeMarks || 0),
+    0
+  );
+  const sectionStatsMap = new Map();
+  questions.forEach((q) => {
+    const sectionIndex = Number.isInteger(q?.question?.sectionIndex)
+      ? q.question.sectionIndex
+      : 0;
+    const sectionName =
+      sectionNameByIndex.get(sectionIndex) ||
+      `Section ${String.fromCharCode(65 + sectionIndex)}`;
+    if (!sectionStatsMap.has(sectionIndex)) {
+      sectionStatsMap.set(sectionIndex, {
+        sectionIndex,
+        sectionName,
+        score: 0,
+        maxScore: 0,
+        earnedMarks: 0,
+        negativeMarksDeducted: 0,
+        correctCount: 0,
+        wrongCount: 0,
+        skippedCount: 0,
+        totalQuestions: 0,
+      });
+    }
+    const section = sectionStatsMap.get(sectionIndex);
+    const marks = Number(q.marks || 0);
+    const negative = Number(q.negativeMarks || 0);
+    section.totalQuestions += 1;
+    section.maxScore += marks;
+    if (q.isCorrect) {
+      section.correctCount += 1;
+      section.earnedMarks += marks;
+      section.score += marks;
+    } else if (q.status === "skipped") {
+      section.skippedCount += 1;
+    } else {
+      section.wrongCount += 1;
+      section.negativeMarksDeducted += negative;
+      section.score -= negative;
+    }
+    section.score = Math.max(0, section.score);
+  });
+  const sectionWiseResults = [...sectionStatsMap.values()]
+    .sort((a, b) => a.sectionIndex - b.sectionIndex)
+    .map((section) => ({
+      ...section,
+      percentage:
+        section.maxScore > 0
+          ? Math.round((section.score / section.maxScore) * 100 * 100) / 100
+          : 0,
+    }));
 
   return {
     session: {
@@ -1580,6 +1705,9 @@ export const getExamResults = async (sessionId, studentId) => {
     results: {
       score: session.score,
       maxScore: session.maxScore,
+      earnedMarks,
+      negativeMarksDeducted,
+      totalNegativeMarksPossible,
       correctCount: session.correctCount,
       wrongCount: session.wrongCount,
       skippedCount: session.skippedCount,
@@ -1587,7 +1715,14 @@ export const getExamResults = async (sessionId, studentId) => {
       percentage: session.maxScore > 0 
         ? Math.round((session.score / session.maxScore) * 100 * 100) / 100 
         : 0,
+      rank: myRank,
     },
+    leaderboard: {
+      top3,
+      myRank,
+      totalParticipants: rankedByTest.length,
+    },
+    sectionWiseResults,
     questions,
   };
 };

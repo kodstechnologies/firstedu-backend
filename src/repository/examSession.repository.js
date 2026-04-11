@@ -236,7 +236,7 @@ const getRankedByTest = async (testId, studentIds = null, limit = 10) => {
         .map((id) => new mongoose.Types.ObjectId(id));
       match.student = { $in: ids };
     }
-    const ranked = await ExamSession.aggregate([
+    const pipeline = [
       { $match: match },
       { $sort: { score: -1, completedAt: 1 } },
       {
@@ -248,7 +248,6 @@ const getRankedByTest = async (testId, studentIds = null, limit = 10) => {
         },
       },
       { $sort: { score: -1, completedAt: 1 } },
-      { $limit: limit },
       {
         $lookup: {
           from: "users",
@@ -269,7 +268,11 @@ const getRankedByTest = async (testId, studentIds = null, limit = 10) => {
           email: "$studentDoc.email",
         },
       },
-    ]);
+    ];
+    if (Number.isInteger(limit) && limit > 0) {
+      pipeline.splice(5, 0, { $limit: limit });
+    }
+    const ranked = await ExamSession.aggregate(pipeline);
     return ranked;
   } catch (error) {
     throw new ApiError(500, "Failed to fetch rankings", error.message);

@@ -1,6 +1,7 @@
 import testRepository from "../repository/test.repository.js";
 import questionBankRepository from "../repository/questionBank.repository.js";
 import challengeYourselfProgressRepository from "../repository/challengeYourselfProgress.repository.js";
+import orderRepository from "../repository/order.repository.js";
 
 /**
  * 6 stages: Bronze (1), Silver (5), Gold (10), Platinum (15), Diamond (20), Heroic (25) levels.
@@ -188,6 +189,13 @@ export const getChallengeYourself = async (studentId) => {
     s.levels.map((l) => l.testId).filter(Boolean)
   );
   const uniqueIds = [...new Set(allTestIds.map((id) => id.toString()))];
+
+  const purchasedTestIdSet = new Set(
+    studentId && uniqueIds.length > 0
+      ? await orderRepository.findPurchasedTestIdsForStudent(studentId, uniqueIds)
+      : []
+  );
+
   if (uniqueIds.length === 0) {
     const withUnlock = stagesWithLevels.map((stage) => ({
       ...stage,
@@ -198,6 +206,7 @@ export const getChallengeYourself = async (studentId) => {
         test: null,
         unlocked: lev.level === 1 && stage.name === "Bronze",
         completedWithFullMarks: false,
+        isPurchased: false,
       })),
     }));
     return { stages: withUnlock };
@@ -223,12 +232,17 @@ export const getChallengeYourself = async (studentId) => {
             ? await isLevelUnlocked(studentId, stage.name, lev.level)
             : lev.level === 1 && stage.name === "Bronze";
           const progress = studentId ? progressMap.get(`${stage.name}:${lev.level}`) : null;
+          const testIdStr = lev.testId?.toString?.() ?? null;
+          const isPurchased = Boolean(
+            studentId && testIdStr && purchasedTestIdSet.has(testIdStr)
+          );
           return {
             level: lev.level,
             difficulty: lev.difficulty,
             test: testObj,
             unlocked,
             completedWithFullMarks: !!progress?.fullMarksAchieved,
+            isPurchased,
           };
         })
       ),

@@ -34,9 +34,35 @@ export const awardTestCompletionPoints = async (studentId, testId, testTitle) =>
   );
 };
 
+/**
+ * Award points for challenge-yourself completion.
+ * Rule: 500% of test price (5x price).
+ */
+export const awardChallengeYourselfCompletionPoints = async (
+  studentId,
+  testId,
+  testTitle,
+  testPrice
+) => {
+  const points = Math.round(Math.max(0, Number(testPrice) || 0) * 5);
+  if (points <= 0) {
+    return null;
+  }
+
+  return await walletService.addRewardPoints(
+    studentId,
+    points,
+    "challenge_yourself_completion",
+    `Points earned for completing challenge-yourself test: ${testTitle}`,
+    testId,
+    "Test"
+  );
+};
+
 export default {
   awardCoursePurchasePoints,
   awardTestCompletionPoints,
+  awardChallengeYourselfCompletionPoints,
   POINTS_CONFIG,
 };
 
