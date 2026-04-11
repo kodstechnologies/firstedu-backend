@@ -14,6 +14,7 @@ import everydayChallengeService from "./everydayChallenge.service.js";
 import everydayChallengeCompletionRepository from "../repository/everydayChallengeCompletion.repository.js";
 import challengeYourselfService from "./challengeYourself.service.js";
 import competitionRepository from "../repository/competition.repository.js";
+import tournamentService from "./tournament.service.js";
 
 const hasCompletedRegistrationForLinkedEventTest = async (testId, studentId) => {
   const [linkedOlympiads, linkedTournaments] = await Promise.all([
@@ -426,6 +427,10 @@ export const startExamSession = async (testId, studentId, options = {}) => {
     }
   }
 
+  if (test.applicableFor === "tournament") {
+    await tournamentService.assertStudentMayStartTournamentTest(testId, studentId);
+  }
+
   // Check if there's an existing in_progress session (resume without pause)
   const sessionScopeFilter = {
     challenge: challengeId || null,
@@ -615,6 +620,15 @@ export const getExamInstructions = async (testId, studentId, options = {}) => {
           : "You need to purchase this test first";
     } else {
       accessType = access.accessType;
+    }
+  }
+
+  if (canStart && test.applicableFor === "tournament") {
+    try {
+      await tournamentService.assertStudentMayStartTournamentTest(testId, studentId);
+    } catch (e) {
+      canStart = false;
+      blockReason = e?.message || "You cannot start this tournament test right now";
     }
   }
 

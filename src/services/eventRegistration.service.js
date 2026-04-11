@@ -11,6 +11,8 @@ import { getAmountToCharge } from "../utils/offerUtils.js";
 import couponService from "./coupon.service.js";
 import studentRepository from "../repository/student.repository.js";
 import { sendEventRegistrationEmail } from "../utils/sendEmail.js";
+import { getStageStatus } from "../utils/eventStatus.js";
+import { isStudentQualifiedAfterStage } from "./tournament.service.js";
 
 const EVENT_MODEL_MAP = {
   olympiad: "Olympiad",
@@ -292,34 +294,50 @@ export const getTournamentProgress = async (tournamentId, studentId) => {
     return { qualifiedStages: [], currentStage: null };
   }
 
-  const now = new Date();
-  let currentStage = null;
-  let qualifiedStages = [];
+  const ordered = [...(tournament.stages || [])].sort((a, b) => (a.order || 0) - (b.order || 0));
+  const qualifiedStages = [];
 
-  // Check which stages student has qualified for
-  for (const stage of tournament.stages || []) {
-    if (!stage?.test?._id) continue;
+  for (const stage of ordered) {
+    const testId = stage?.test?._id || stage?.test;
+    if (!testId) continue;
     const stageSession = await examSessionRepository.findOne({
       student: studentId,
-      test: stage.test._id,
+      test: testId,
       status: "completed",
     });
-
-    if (stageSession) {
-      const score = stageSession.score || 0;
-      if (score >= (stage.minimumMarksToQualify || 0)) {
-        qualifiedStages.push(stage._id.toString());
-      }
-    }
-
-    // Check if this is the current active stage
     if (
-      now >= new Date(stage.startTime) &&
-      now <= new Date(stage.endTime) &&
-      qualifiedStages.includes(stage._id.toString())
+      stageSession &&
+      (await isStudentQualifiedAfterStage(stage, studentId))
     ) {
-      currentStage = stage;
+      qualifiedStages.push(stage._id.toString());
     }
+  }
+
+  const paid = registration.paymentStatus === "completed";
+  let currentStage = null;
+
+  for (let i = 0; i < ordered.length; i++) {
+    const stage = ordered[i];
+    if (getStageStatus(stage) !== "live") continue;
+    if (!paid) break;
+
+    let eligible = true;
+    if (i > 0) {
+      const prev = ordered[i - 1];
+      eligible = await isStudentQualifiedAfterStage(prev, studentId);
+    }
+    if (!eligible) continue;
+
+    const testId = stage.test?._id || stage.test;
+    const completedThis = await examSessionRepository.findOne({
+      student: studentId,
+      test: testId,
+      status: "completed",
+    });
+    if (completedThis) continue;
+
+    currentStage = stage;
+    break;
   }
 
   return { qualifiedStages, currentStage };

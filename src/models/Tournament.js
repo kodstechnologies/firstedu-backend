@@ -13,10 +13,6 @@ const tournamentStageSchema = new mongoose.Schema(
       ref: "Test",
       required: true,
     },
-    subject: {
-      type: String,
-      trim: true, // For subject-specific rounds (Physics, Chemistry, Biology)
-    },
     startTime: {
       type: Date,
       required: true,
@@ -25,10 +21,12 @@ const tournamentStageSchema = new mongoose.Schema(
       type: Date,
       required: true,
     },
-    minimumMarksToQualify: {
+    // Minimum score as % of this stage's test max marks (score/maxScore×100) to qualify for the next stage.
+    minimumPercentageToQualify: {
       type: Number,
       default: 0,
       min: 0,
+      max: 100,
     },
     maxParticipants: {
       type: Number,

@@ -13,6 +13,8 @@ import {
   deleteFileFromCloudinary,
 } from "../utils/s3Upload.js";
 import { attachOfferToList, attachOfferToItem } from "../utils/offerUtils.js";
+import { getStageStatus, getGoesLiveAt } from "../utils/eventStatus.js";
+import { sendNotificationToStudent } from "./notification.service.js";
 
 const TOURNAMENTS_IMAGE_FOLDER = "tournaments";
 
@@ -51,6 +53,222 @@ const enrichTournamentStagesWithBankStats = async (tournaments) => {
   });
 };
 
+const clampQualifyPercent = (value) => {
+  if (value == null || value === "" || Number.isNaN(Number(value))) return 0;
+  return Math.min(100, Math.max(0, Number(value)));
+};
+
+/**
+ * True if the student completed `completedStage`'s test and their score is at least
+ * `minimumPercentageToQualify`% of that test's maximum marks (score / maxScore × 100).
+ */
+export const isStudentQualifiedAfterStage = async (completedStage, studentId) => {
+  const testId = completedStage.test?._id || completedStage.test;
+  if (!testId) return false;
+
+  const requiredPct = clampQualifyPercent(completedStage.minimumPercentageToQualify);
+
+  const session = await examSessionRepository.findOne({
+    student: studentId,
+    test: testId,
+    status: "completed",
+  });
+  if (!session) return false;
+
+  const score = session.score ?? 0;
+  const maxScore = session.maxScore;
+  if (maxScore == null || maxScore <= 0) return false;
+
+  const achievedPct = (score / maxScore) * 100;
+  return achievedPct >= requiredPct - 1e-9;
+};
+
+/**
+ * Build stage documents: endTime = startTime + linked test duration (minutes). Strips subject / client endTime.
+ */
+const normalizeTournamentStagesForPersist = async (stages) => {
+  if (!Array.isArray(stages) || stages.length === 0) {
+    throw new ApiError(400, "At least one stage is required");
+  }
+  const result = [];
+  for (let i = 0; i < stages.length; i++) {
+    const raw = stages[i];
+    const { name, test: testId, startTime } = raw;
+    if (!name || !testId || !startTime) {
+      throw new ApiError(400, `Stage ${i + 1} is missing required fields (name, test, startTime)`);
+    }
+    const test = await testRepository.findTestById(testId);
+    if (!test) {
+      throw new ApiError(404, `Test not found for stage ${i + 1}`);
+    }
+    if ((test.applicableFor ?? "test") !== "tournament") {
+      throw new ApiError(400, `Stage ${i + 1}: selected test is not configured for tournaments`);
+    }
+    const duration = test.durationMinutes ?? 0;
+    if (duration < 1) {
+      throw new ApiError(400, `Stage ${i + 1}: linked test must have a valid duration`);
+    }
+    const start = new Date(startTime);
+    const endTime = new Date(start.getTime() + duration * 60 * 1000);
+    const stageDoc = {
+      name,
+      test: testId,
+      startTime: start,
+      endTime,
+      minimumPercentageToQualify: clampQualifyPercent(raw.minimumPercentageToQualify),
+      maxParticipants: raw.maxParticipants ?? null,
+      order: i + 1,
+    };
+    if (raw._id) {
+      stageDoc._id = raw._id;
+    }
+    result.push(stageDoc);
+  }
+  for (let i = 0; i < result.length - 1; i++) {
+    if (new Date(result[i].endTime) > new Date(result[i + 1].startTime)) {
+      throw new ApiError(400, "Stages must be sequential (each stage must end before the next starts)");
+    }
+  }
+  return result;
+};
+
+export const assertStudentMayStartTournamentTest = async (testId, studentId) => {
+  const tournaments = await tournamentRepository.find(
+    { "stages.test": testId, isPublished: true },
+    { limit: 5 }
+  );
+  if (!tournaments?.length) {
+    throw new ApiError(403, "This test is not part of an active published tournament");
+  }
+  const tournament = tournaments[0];
+  const ordered = [...(tournament.stages || [])].sort((a, b) => (a.order || 0) - (b.order || 0));
+  const tid = testId?.toString?.() ?? String(testId);
+  const idx = ordered.findIndex((s) => (s.test?._id || s.test)?.toString?.() === tid);
+  if (idx === -1) {
+    throw new ApiError(403, "Tournament stage not found for this test");
+  }
+  const reg = await eventRegistrationRepository.findOne({
+    student: studentId,
+    eventType: "tournament",
+    eventId: tournament._id,
+  });
+  if (!reg || reg.paymentStatus !== "completed") {
+    throw new ApiError(403, "Register and complete payment for this tournament to take this test");
+  }
+  const stage = ordered[idx];
+  const now = new Date();
+  if (now < new Date(stage.startTime) || now > new Date(stage.endTime)) {
+    throw new ApiError(403, "This tournament round is not open at the moment");
+  }
+  if (idx > 0) {
+    const prev = ordered[idx - 1];
+    const ok = await isStudentQualifiedAfterStage(tournament._id, prev, studentId);
+    if (!ok) {
+      throw new ApiError(
+        403,
+        "You are not eligible for this round. Meet the minimum score percentage on the previous stage's test."
+      );
+    }
+  }
+};
+
+const stageJoinBlockReason = ({ paid, hasRegistration, stageStatus, eligible, sessionStatus }) => {
+  if (!hasRegistration) return "Register for this tournament to participate";
+  if (!paid) return "Complete payment to join tournament rounds";
+  if (stageStatus === "upcoming") return "This round has not started yet";
+  if (stageStatus === "completed") return "This round has ended";
+  if (stageStatus === "unknown") return "This round is not available";
+  if (!eligible)
+    return "You are not eligible for this round (did not reach the minimum score % on the previous stage's test)";
+  if (sessionStatus === "completed") return "You have already completed this test";
+  return null;
+};
+
+/**
+ * Stages with per-student canJoin / joinBlockReason for student tournament APIs.
+ */
+export const buildTournamentStagesWithStudentAccess = async (tournament, studentId) => {
+  const reg = await eventRegistrationRepository.findOne({
+    student: studentId,
+    eventType: "tournament",
+    eventId: tournament._id,
+  });
+  const hasRegistration = !!reg;
+  const paid = reg?.paymentStatus === "completed";
+
+  const stages = tournament.stages || [];
+  const ordered = [...stages].sort((a, b) => (a.order || 0) - (b.order || 0));
+  const testIds = ordered.map((s) => s.test?._id || s.test).filter(Boolean);
+
+  const sessionMap = await examSessionRepository.getSessionStatusMapByStudent(studentId, testIds);
+
+  const out = [];
+  for (let i = 0; i < ordered.length; i++) {
+    const stage = ordered[i];
+    const plain = stage.toObject ? stage.toObject() : { ...stage };
+    const stageStatus = getStageStatus(stage);
+    const testIdStr = (stage.test?._id || stage.test)?.toString?.();
+
+    let eligible = paid;
+    if (eligible && i > 0) {
+      const prev = ordered[i - 1];
+      eligible = await isStudentQualifiedAfterStage(prev, studentId);
+    }
+
+    const sessionInfo = testIdStr ? sessionMap[testIdStr] : null;
+    const sessionStatus = sessionInfo?.status || "not_started";
+
+    const joinBlockReason = stageJoinBlockReason({
+      paid,
+      hasRegistration,
+      stageStatus,
+      eligible,
+      sessionStatus,
+    });
+    const canJoin =
+      paid &&
+      stageStatus === "live" &&
+      eligible &&
+      sessionStatus !== "completed";
+
+    const stageGoesLiveAt =
+      stageStatus === "upcoming"
+        ? getGoesLiveAt(
+            { startTime: stage.startTime, endTime: stage.endTime },
+            { onlyWithin24Hours: true }
+          )
+        : null;
+
+    if (plain.test && typeof plain.test === "object") {
+      out.push({
+        ...plain,
+        status: stageStatus,
+        isEventLive: stageStatus === "live",
+        canJoin,
+        joinBlockReason,
+        eligibleForStage: eligible,
+        goesLiveAt: stageGoesLiveAt,
+        test: {
+          ...plain.test,
+          sessionId: sessionInfo?.sessionId || null,
+          testStatus: sessionStatus,
+        },
+      });
+    } else {
+      out.push({
+        ...plain,
+        status: stageStatus,
+        isEventLive: stageStatus === "live",
+        canJoin,
+        joinBlockReason,
+        eligibleForStage: eligible,
+        goesLiveAt: stageGoesLiveAt,
+      });
+    }
+  }
+  return out;
+};
+
 export const createTournament = async (data, adminId, file) => {
   const {
     title,
@@ -82,33 +300,10 @@ export const createTournament = async (data, adminId, file) => {
     throw new ApiError(400, "Registration times are required");
   }
 
-  // Validate stages
-  for (let i = 0; i < stages.length; i++) {
-    const stage = stages[i];
-    if (!stage.name || !stage.test || !stage.startTime || !stage.endTime) {
-      throw new ApiError(400, `Stage ${i + 1} is missing required fields`);
-    }
-
-    // Validate test exists
-    const test = await testRepository.findTestById(stage.test);
-    if (!test) {
-      throw new ApiError(404, `Test not found for stage ${i + 1}`);
-    }
-    if ((test.applicableFor ?? "test") !== "tournament") {
-      throw new ApiError(400, `Stage ${i + 1}: selected test is not configured for tournaments`);
-    }
-
-    // Validate time ranges
-    if (new Date(stage.startTime) >= new Date(stage.endTime)) {
-      throw new ApiError(400, `Stage ${i + 1}: End time must be after start time`);
-    }
-
-    // Set order
-    stage.order = i + 1;
-  }
+  const normalizedStages = await normalizeTournamentStagesForPersist(stages);
 
   // Prevent reusing the same test across olympiads or tournaments
-  const stageTestIds = stages.map((s) => s.test).filter(Boolean);
+  const stageTestIds = normalizedStages.map((s) => s.test).filter(Boolean);
   if (stageTestIds.length > 0) {
     // Any olympiad already using one of these tests?
     const olympiadUsingTest = await olympiadRepository.findOne({
@@ -133,18 +328,11 @@ export const createTournament = async (data, adminId, file) => {
     }
   }
 
-  // Validate stage sequence
-  for (let i = 0; i < stages.length - 1; i++) {
-    if (new Date(stages[i].endTime) > new Date(stages[i + 1].startTime)) {
-      throw new ApiError(400, "Stages must be sequential");
-    }
-  }
-
   return await tournamentRepository.create({
     title,
     description,
     imageUrl,
-    stages,
+    stages: normalizedStages,
     registrationStartTime,
     registrationEndTime,
     price: price ?? 0,
@@ -293,19 +481,7 @@ export const updateTournament = async (id, updateData, file) => {
 
   // Validate stages if provided
   if (updateData.stages && Array.isArray(updateData.stages)) {
-    for (let i = 0; i < updateData.stages.length; i++) {
-      const stage = updateData.stages[i];
-      if (stage.test) {
-        const test = await testRepository.findTestById(stage.test);
-        if (!test) {
-          throw new ApiError(404, `Test not found for stage ${i + 1}`);
-        }
-        if ((test.applicableFor ?? "test") !== "tournament") {
-          throw new ApiError(400, `Stage ${i + 1}: selected test is not configured for tournaments`);
-        }
-      }
-      stage.order = i + 1;
-    }
+    updateData.stages = await normalizeTournamentStagesForPersist(updateData.stages);
 
     // Prevent reusing the same test across olympiads or tournaments (excluding this tournament)
     const stageTestIds = updateData.stages.map((s) => s.test).filter(Boolean);
@@ -421,6 +597,7 @@ export const declareTournamentWinners = async (tournamentId, winners) => {
   }
 
   const results = [];
+  const placeLabels = { firstPlace: "1st", secondPlace: "2nd", thirdPlace: "3rd" };
   const places = [
     { key: "firstPlace", points: tournament.firstPlacePoints || 0, studentId: firstPlace },
     { key: "secondPlace", points: tournament.secondPlacePoints || 0, studentId: secondPlace },
@@ -440,6 +617,23 @@ export const declareTournamentWinners = async (tournamentId, winners) => {
         "Tournament"
       );
       results.push({ place: place.key, studentId, points: place.points });
+      try {
+        await sendNotificationToStudent(
+          studentId,
+          `You placed ${placeLabels[place.key]} — ${tournament.title}`,
+          `You earned ${place.points} reward points. They are added to your wallet and transaction history.`,
+          {
+            type: "event",
+            tournamentId: tournamentId.toString(),
+            notificationKind: "tournament_prize",
+            place: place.key,
+            points: String(place.points),
+          },
+          null
+        );
+      } catch (notifyErr) {
+        console.error("Tournament winner push notification failed:", notifyErr);
+      }
     } catch (e) {
       throw new ApiError(400, `Failed to credit ${place.key}: ${e.message}`);
     }
@@ -456,5 +650,8 @@ export default {
   deleteTournament,
   getTournamentLeaderboard,
   declareTournamentWinners,
+  assertStudentMayStartTournamentTest,
+  buildTournamentStagesWithStudentAccess,
+  isStudentQualifiedAfterStage,
 };
 
