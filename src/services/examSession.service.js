@@ -513,8 +513,21 @@ export const startExamSession = async (testId, studentId, options = {}) => {
 
   // Create new exam session
   const now = new Date();
-  const durationMs = test.durationMinutes * 60 * 1000;
-  const endTime = new Date(now.getTime() + durationMs);
+  let endTime;
+  let durationMinutesForPlan = test.durationMinutes;
+
+  if (test.applicableFor === "tournament") {
+    const ctx = await tournamentService.getTournamentStageContextForPublishedTest(testId);
+    if (!ctx) {
+      throw new ApiError(400, "Tournament is not available for this test");
+    }
+    const timing = tournamentService.computeTournamentAttemptTiming(test, ctx.stage, now);
+    endTime = timing.endTime;
+    // Per-question limits follow the full published test length; overall session still ends at endTime (late join / round cap).
+  } else {
+    const durationMs = test.durationMinutes * 60 * 1000;
+    endTime = new Date(now.getTime() + durationMs);
+  }
 
   const sectionConfigForTiming =
     test?.questionBank?.useSectionWiseQuestions &&
@@ -528,7 +541,7 @@ export const startExamSession = async (testId, studentId, options = {}) => {
   const { questionTimesMs } = buildPerQuestionTimePlan(
     questions,
     sectionConfigForTiming,
-    test.durationMinutes
+    durationMinutesForPlan
   );
 
   // Initialize answers array for all questions from the bank
@@ -749,6 +762,34 @@ export const getExamInstructions = async (testId, studentId, options = {}) => {
       }))
     : [];
 
+  let tournamentExam = null;
+  if (test.applicableFor === "tournament" && canStart) {
+    try {
+      const ctx = await tournamentService.getTournamentStageContextForPublishedTest(testId);
+      if (ctx) {
+        const previewNow = new Date();
+        const timing = tournamentService.computeTournamentAttemptTiming(test, ctx.stage, previewNow);
+        tournamentExam = {
+          tournamentId: ctx.tournament._id,
+          tournamentTitle: ctx.tournament.title,
+          stageName: ctx.stage.name,
+          stageStartTime: ctx.stage.startTime,
+          stageEndTime: ctx.stage.endTime,
+          fullTestDurationMinutes: test.durationMinutes,
+          yourEffectiveDurationMinutes: Math.round(timing.durationMinutesForQuestionPlan * 100) / 100,
+          lateJoinMs: timing.lateJoinMs,
+          lateJoinMinutes: Math.round((timing.lateJoinMs / 60000) * 100) / 100,
+          personalExamWouldEndAt: timing.endTime,
+        };
+      }
+    } catch (e) {
+      if (e instanceof ApiError) {
+        canStart = false;
+        blockReason = e.message;
+      }
+    }
+  }
+
   const instructionPoints = [
     `Total questions: ${totalQuestions}`,
     `Total marks: ${totalMarks}`,
@@ -769,6 +810,12 @@ export const getExamInstructions = async (testId, studentId, options = {}) => {
     instructionPoints.push(`Section-wise questions: Enabled (${sections.length} sections)`);
   } else {
     instructionPoints.push("Section-wise questions: Disabled");
+  }
+
+  if (tournamentExam) {
+    instructionPoints.push(
+      `Tournament round: your exam clock is ${tournamentExam.yourEffectiveDurationMinutes} minutes (shorter if you joined after the round started or the round is almost over). Suggested time per question still matches the full ${tournamentExam.fullTestDurationMinutes}-minute test; submit before your clock runs out.`
+    );
   }
 
   return {
@@ -813,6 +860,7 @@ export const getExamInstructions = async (testId, studentId, options = {}) => {
       points: instructionPoints,
     },
     instructionPoints,
+    ...(tournamentExam ? { tournamentExam } : {}),
   };
 };
 
@@ -826,7 +874,7 @@ export const getExamSession = async (sessionId, studentId) => {
       student: studentId,
     },
     {
-      test: "title description durationMinutes proctoringInstructions questionBank",
+      test: "title description durationMinutes applicableFor proctoringInstructions questionBank",
       answers: {
         select:
           "questionText questionType options subject topic marks negativeMarks difficulty isParent passage parentQuestionId childQuestions sectionIndex orderInBank",
@@ -855,7 +903,7 @@ export const getExamSession = async (sessionId, studentId) => {
           student: studentId,
         },
         {
-          test: "title description durationMinutes proctoringInstructions questionBank",
+          test: "title description durationMinutes applicableFor proctoringInstructions questionBank",
           answers: {
             select:
               "questionText questionType options subject topic marks negativeMarks difficulty isParent passage parentQuestionId childQuestions sectionIndex orderInBank",
@@ -1050,6 +1098,21 @@ export const getExamSession = async (sessionId, studentId) => {
         })
       : [];
 
+  let tournamentExam = null;
+  if (session.test?.applicableFor === "tournament") {
+    const tid = session.test._id || session.test;
+    const ctx = await tournamentService.getTournamentStageContextForPublishedTest(tid);
+    if (ctx) {
+      tournamentExam = {
+        tournamentId: ctx.tournament._id,
+        tournamentTitle: ctx.tournament.title,
+        stageName: ctx.stage.name,
+        stageStartTime: ctx.stage.startTime,
+        stageEndTime: ctx.stage.endTime,
+      };
+    }
+  }
+
   return {
     session: {
       id: session._id,
@@ -1068,6 +1131,7 @@ export const getExamSession = async (sessionId, studentId) => {
     palette,
     sectionConfig,
     sectionedQuestions: sectionedQuestionsWithTime,
+    ...(tournamentExam ? { tournamentExam } : {}),
   };
 };
 
@@ -1317,6 +1381,11 @@ export const pauseExamSession = async (sessionId, studentId) => {
     throw new ApiError(400, "You can't pause challenge exams");
   }
 
+  const testForPause = await examSessionRepository.findTestById(session.test);
+  if (testForPause?.applicableFor === "tournament") {
+    throw new ApiError(400, "You can't pause tournament exams");
+  }
+
   const now = new Date();
   const remainingMs = Math.max(0, new Date(session.endTime).getTime() - now.getTime());
   pauseActiveQuestionTimer(session, now);
@@ -1358,6 +1427,8 @@ export const submitExam = async (sessionId, studentId) => {
   pauseActiveQuestionTimer(session, new Date());
   session.status = "completed";
   session.completedAt = new Date();
+  session.autoSubmitted = false;
+  session.autoSubmitReason = null;
 
   // Calculate score
   await calculateScore(session);
@@ -1528,7 +1599,7 @@ const checkAnswerCorrectness = (question, studentAnswer) => {
  */
 export const getExamResults = async (sessionId, studentId) => {
   const populateOptions = {
-    test: "title description durationMinutes questionBank",
+    test: "title description durationMinutes applicableFor questionBank",
     answers: {
       select: "questionText questionType options correctAnswer explanation subject topic marks negativeMarks sectionIndex isParent passage parentQuestionId childQuestions",
       populate: {
@@ -1570,6 +1641,73 @@ export const getExamResults = async (sessionId, studentId) => {
 
   if (!session || session.status !== "completed") {
     throw new ApiError(404, "Exam session not found or not completed");
+  }
+
+  const testDoc = await examSessionRepository.findTestById(session.test);
+  const tournamentLb =
+    testDoc?.applicableFor === "tournament"
+      ? await tournamentService.getTournamentStageLeaderboardForStudent(
+          session.test?._id || session.test,
+          studentId
+        )
+      : null;
+
+  const stageEndDate = tournamentLb?.stageEndTime ? new Date(tournamentLb.stageEndTime) : null;
+  const resultsReleased = !tournamentLb || now >= stageEndDate;
+
+  const redirectSuggestion =
+    tournamentLb && !resultsReleased
+      ? session.autoSubmitted
+        ? "results"
+        : "tournament"
+      : tournamentLb && resultsReleased
+        ? "results"
+        : null;
+
+  if (tournamentLb && !resultsReleased) {
+    const pct =
+      session.maxScore > 0
+        ? Math.round((session.score / session.maxScore) * 100 * 100) / 100
+        : 0;
+    return {
+      session: {
+        id: session._id,
+        test: session.test,
+        startTime: session.startTime,
+        endTime: session.endTime,
+        completedAt: session.completedAt,
+        status: session.status,
+      },
+      results: {
+        score: session.score,
+        maxScore: session.maxScore,
+        correctCount: session.correctCount,
+        wrongCount: session.wrongCount,
+        skippedCount: session.skippedCount,
+        percentile: session.percentile,
+        percentage: pct,
+        resultsHiddenUntilStageEnd: true,
+      },
+      leaderboard: {
+        resultsHeldUntilStageEnd: true,
+        stageEndTime: tournamentLb.stageEndTime,
+        top3: [],
+        myRank: null,
+        totalParticipants: tournamentLb.totalParticipants,
+      },
+      tournament: {
+        tournamentId: tournamentLb.tournamentId,
+        tournamentTitle: tournamentLb.tournamentTitle,
+        stageName: tournamentLb.stageName,
+        stageEndTime: tournamentLb.stageEndTime,
+        resultsReleased: false,
+        redirectSuggestion,
+      },
+      sectionWiseResults: [],
+      questions: [],
+      message:
+        "Leaderboard, rank, and question-by-question review unlock after this round ends. Use redirectSuggestion for navigation (tournament vs results).",
+    };
   }
 
   // Build results with correct answers and explanations
@@ -1625,26 +1763,37 @@ export const getExamResults = async (sessionId, studentId) => {
     }
   }
 
-  const rankedByTest = await examSessionRepository.getRankedByTest(
-    session.test?._id || session.test,
-    null,
-    null
-  );
-  const top3 = rankedByTest.slice(0, 3).map((entry, index) => ({
-    rank: index + 1,
-    student: entry.student,
-    name: entry.name || null,
-    email: entry.email || null,
-    score: entry.score ?? 0,
-    maxScore: entry.maxScore ?? null,
-    completedAt: entry.completedAt || null,
-  }));
-  const myRankIndex = rankedByTest.findIndex(
-    (entry) =>
-      (entry.student?._id?.toString?.() || entry.student?.toString?.()) ===
-      studentId.toString()
-  );
-  const myRank = myRankIndex >= 0 ? myRankIndex + 1 : null;
+  let top3;
+  let myRank;
+  let totalParticipants;
+
+  if (tournamentLb && resultsReleased) {
+    top3 = tournamentLb.top3;
+    myRank = tournamentLb.myRank;
+    totalParticipants = tournamentLb.totalParticipants;
+  } else {
+    const rankedByTest = await examSessionRepository.getRankedByTest(
+      session.test?._id || session.test,
+      null,
+      null
+    );
+    top3 = rankedByTest.slice(0, 3).map((entry, index) => ({
+      rank: index + 1,
+      student: entry.student,
+      name: entry.name || null,
+      email: entry.email || null,
+      score: entry.score ?? 0,
+      maxScore: entry.maxScore ?? null,
+      completedAt: entry.completedAt || null,
+    }));
+    const myRankIndex = rankedByTest.findIndex(
+      (entry) =>
+        (entry.student?._id?.toString?.() || entry.student?.toString?.()) ===
+        studentId.toString()
+    );
+    myRank = myRankIndex >= 0 ? myRankIndex + 1 : null;
+    totalParticipants = rankedByTest.length;
+  }
   const earnedMarks = questions.reduce(
     (sum, q) => sum + (q.isCorrect ? Number(q.marks || 0) : 0),
     0
@@ -1734,10 +1883,22 @@ export const getExamResults = async (sessionId, studentId) => {
     leaderboard: {
       top3,
       myRank,
-      totalParticipants: rankedByTest.length,
+      totalParticipants,
     },
     sectionWiseResults,
     questions,
+    ...(tournamentLb && resultsReleased
+      ? {
+          tournament: {
+            tournamentId: tournamentLb.tournamentId,
+            tournamentTitle: tournamentLb.tournamentTitle,
+            stageName: tournamentLb.stageName,
+            stageEndTime: tournamentLb.stageEndTime,
+            resultsReleased: true,
+            redirectSuggestion: redirectSuggestion || "results",
+          },
+        }
+      : {}),
   };
 };
 

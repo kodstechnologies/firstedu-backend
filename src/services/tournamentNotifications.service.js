@@ -10,8 +10,8 @@ const RESULTS_WINDOW_MS = 12 * 60 * 1000;
 const sortStages = (stages) =>
   [...(stages || [])].sort((a, b) => (a.order || 0) - (b.order || 0));
 
-const hasQualifiedStage = async (studentId, stage) =>
-  isStudentQualifiedAfterStage(stage, studentId);
+const hasQualifiedStage = async (tournamentId, studentId, stage) =>
+  isStudentQualifiedAfterStage(stage, studentId, tournamentId);
 
 const tryLogNotification = async (tournamentId, stageId, kind) => {
   try {
@@ -84,7 +84,7 @@ const notifyStageResults = async (tournament, stageIndex, stage, orderedStages) 
   const qualified = [];
   const notQualified = [];
   for (const sid of studentIds) {
-    if (await hasQualifiedStage(sid, stage)) qualified.push(sid);
+    if (await hasQualifiedStage(tournament._id, sid, stage)) qualified.push(sid);
     else notQualified.push(sid);
   }
 

@@ -21,7 +21,8 @@ const tournamentStageSchema = new mongoose.Schema(
       type: Date,
       required: true,
     },
-    // Minimum score as % of this stage's test max marks (score/maxScore×100) to qualify for the next stage.
+    // Among registered participants who complete this stage's test: min score as % of max marks (score/maxScore×100).
+    // Advancing to the next stage is allowed only after this stage's endTime, if this threshold is met.
     minimumPercentageToQualify: {
       type: Number,
       default: 0,

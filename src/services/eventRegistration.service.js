@@ -12,7 +12,10 @@ import couponService from "./coupon.service.js";
 import studentRepository from "../repository/student.repository.js";
 import { sendEventRegistrationEmail } from "../utils/sendEmail.js";
 import { getStageStatus } from "../utils/eventStatus.js";
-import { isStudentQualifiedAfterStage } from "./tournament.service.js";
+import {
+  isStudentQualifiedAfterStage,
+  studentMeetsStageScoreThreshold,
+} from "./tournament.service.js";
 
 const EVENT_MODEL_MAP = {
   olympiad: "Olympiad",
@@ -295,25 +298,19 @@ export const getTournamentProgress = async (tournamentId, studentId) => {
   }
 
   const ordered = [...(tournament.stages || [])].sort((a, b) => (a.order || 0) - (b.order || 0));
+  const paid = registration.paymentStatus === "completed";
   const qualifiedStages = [];
 
-  for (const stage of ordered) {
-    const testId = stage?.test?._id || stage?.test;
-    if (!testId) continue;
-    const stageSession = await examSessionRepository.findOne({
-      student: studentId,
-      test: testId,
-      status: "completed",
-    });
-    if (
-      stageSession &&
-      (await isStudentQualifiedAfterStage(stage, studentId))
-    ) {
-      qualifiedStages.push(stage._id.toString());
+  if (paid) {
+    for (const stage of ordered) {
+      if (new Date() < new Date(stage.endTime)) continue;
+      const testId = stage?.test?._id || stage?.test;
+      if (!testId) continue;
+      if (await studentMeetsStageScoreThreshold(stage, studentId)) {
+        qualifiedStages.push(stage._id.toString());
+      }
     }
   }
-
-  const paid = registration.paymentStatus === "completed";
   let currentStage = null;
 
   for (let i = 0; i < ordered.length; i++) {
@@ -324,16 +321,15 @@ export const getTournamentProgress = async (tournamentId, studentId) => {
     let eligible = true;
     if (i > 0) {
       const prev = ordered[i - 1];
-      eligible = await isStudentQualifiedAfterStage(prev, studentId);
+      eligible = await isStudentQualifiedAfterStage(prev, studentId, tournamentId);
     }
     if (!eligible) continue;
 
     const testId = stage.test?._id || stage.test;
-    const completedThis = await examSessionRepository.findOne({
-      student: studentId,
-      test: testId,
-      status: "completed",
-    });
+    const completedThis = await examSessionRepository.findLatestDefaultContextCompletedSession(
+      studentId,
+      testId
+    );
     if (completedThis) continue;
 
     currentStage = stage;

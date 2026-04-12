@@ -59,28 +59,148 @@ const clampQualifyPercent = (value) => {
 };
 
 /**
- * True if the student completed `completedStage`'s test and their score is at least
- * `minimumPercentageToQualify`% of that test's maximum marks (score / maxScore × 100).
+ * Student completed this stage's test (default exam context) and met the score % bar.
+ * Only considers people who actually submitted the test; uses latest such attempt.
  */
-export const isStudentQualifiedAfterStage = async (completedStage, studentId) => {
+export const studentMeetsStageScoreThreshold = async (completedStage, studentId) => {
   const testId = completedStage.test?._id || completedStage.test;
   if (!testId) return false;
 
   const requiredPct = clampQualifyPercent(completedStage.minimumPercentageToQualify);
 
-  const session = await examSessionRepository.findOne({
-    student: studentId,
-    test: testId,
-    status: "completed",
-  });
+  const session = await examSessionRepository.findLatestDefaultContextCompletedSession(
+    studentId,
+    testId
+  );
   if (!session) return false;
 
-  const score = session.score ?? 0;
-  const maxScore = session.maxScore;
-  if (maxScore == null || maxScore <= 0) return false;
+  const score = Number(session.score ?? 0);
+  const maxScore = Number(session.maxScore);
+  if (!Number.isFinite(maxScore) || maxScore <= 0) {
+    return false;
+  }
 
   const achievedPct = (score / maxScore) * 100;
   return achievedPct >= requiredPct - 1e-9;
+};
+
+const isPaidTournamentRegistrant = async (tournamentId, studentId) => {
+  const reg = await eventRegistrationRepository.findOne({
+    student: studentId,
+    eventType: "tournament",
+    eventId: tournamentId,
+    paymentStatus: "completed",
+  });
+  return !!reg;
+};
+
+/**
+ * After `completedStage` has ended: paid registrant who completed that stage's test and met minimumPercentageToQualify.
+ */
+export const isStudentQualifiedAfterStage = async (completedStage, studentId, tournamentId) => {
+  if (!tournamentId) return false;
+  if (!(await isPaidTournamentRegistrant(tournamentId, studentId))) return false;
+  if (new Date() < new Date(completedStage.endTime)) return false;
+  return studentMeetsStageScoreThreshold(completedStage, studentId);
+};
+
+/**
+ * Published tournament + stage that uses this test (for exam timing / results).
+ */
+export const getTournamentStageContextForPublishedTest = async (testId) => {
+  const tournaments = await tournamentRepository.find(
+    { "stages.test": testId, isPublished: true },
+    { limit: 1 }
+  );
+  if (!tournaments?.length) return null;
+  const tournament = tournaments[0];
+  const ordered = [...(tournament.stages || [])].sort((a, b) => (a.order || 0) - (b.order || 0));
+  const tid = testId?.toString?.() ?? String(testId);
+  const idx = ordered.findIndex((s) => (s.test?._id || s.test)?.toString?.() === tid);
+  if (idx === -1) return null;
+  return { tournament, stage: ordered[idx], stageIndex: idx, orderedStages: ordered };
+};
+
+/**
+ * Personal exam window: full test duration minus late join after stage start, capped by stage endTime.
+ * `durationMinutesForQuestionPlan` names legacy shape: it is the effective session length in minutes.
+ * Per-question allocation in examSession uses the test's full `durationMinutes`, not this value.
+ */
+export const computeTournamentAttemptTiming = (test, stage, now = new Date()) => {
+  const fullMs = Math.max(0, Number(test.durationMinutes) || 0) * 60 * 1000;
+  const stageStart = new Date(stage.startTime).getTime();
+  const stageEnd = new Date(stage.endTime).getTime();
+  const nowMs = now.getTime();
+  const lateMs = Math.max(0, nowMs - stageStart);
+  const remainingFromFull = Math.max(0, fullMs - lateMs);
+  const remainingToStageEnd = Math.max(0, stageEnd - nowMs);
+  const effectiveMs = Math.min(remainingFromFull, remainingToStageEnd);
+  const MIN_MS = 60 * 1000;
+  if (effectiveMs < MIN_MS) {
+    throw new ApiError(
+      400,
+      "Not enough time remaining in this tournament round to start the test. Join when the round opens."
+    );
+  }
+  return {
+    endTime: new Date(nowMs + effectiveMs),
+    durationMinutesForQuestionPlan: effectiveMs / (60 * 1000),
+    lateJoinMs: lateMs,
+  };
+};
+
+/**
+ * Leaderboard for a tournament stage test: paid registrants only, ranked by score.
+ */
+export const getTournamentStageLeaderboardForStudent = async (testId, studentId) => {
+  const ctx = await getTournamentStageContextForPublishedTest(testId);
+  if (!ctx) return null;
+
+  const registrations = await eventRegistrationRepository.find(
+    {
+      eventType: "tournament",
+      eventId: ctx.tournament._id,
+      paymentStatus: "completed",
+    },
+    { limit: 5000 }
+  );
+  const registeredStudentIds = [
+    ...new Set(
+      registrations
+        .map((r) => (r.student?._id ?? r.student)?.toString?.())
+        .filter(Boolean)
+    ),
+  ];
+
+  const ranked = await examSessionRepository.getRankedByTest(
+    testId,
+    registeredStudentIds,
+    20000
+  );
+  const top3 = ranked.slice(0, 3).map((entry, index) => ({
+    rank: index + 1,
+    student: entry.student,
+    name: entry.name || null,
+    email: entry.email || null,
+    score: entry.score ?? 0,
+    maxScore: entry.maxScore ?? null,
+    completedAt: entry.completedAt || null,
+  }));
+  const sid = studentId?.toString?.() ?? String(studentId);
+  const myIdx = ranked.findIndex(
+    (entry) => (entry.student?._id?.toString?.() || entry.student?.toString?.()) === sid
+  );
+  const myRank = myIdx >= 0 ? myIdx + 1 : null;
+
+  return {
+    tournamentId: ctx.tournament._id,
+    tournamentTitle: ctx.tournament.title,
+    stageName: ctx.stage.name,
+    stageEndTime: ctx.stage.endTime,
+    top3,
+    myRank,
+    totalParticipants: ranked.length,
+  };
 };
 
 /**
@@ -162,7 +282,7 @@ export const assertStudentMayStartTournamentTest = async (testId, studentId) => 
   }
   if (idx > 0) {
     const prev = ordered[idx - 1];
-    const ok = await isStudentQualifiedAfterStage(tournament._id, prev, studentId);
+    const ok = await isStudentQualifiedAfterStage(prev, studentId, tournament._id);
     if (!ok) {
       throw new ApiError(
         403,
@@ -172,20 +292,38 @@ export const assertStudentMayStartTournamentTest = async (testId, studentId) => 
   }
 };
 
-const stageJoinBlockReason = ({ paid, hasRegistration, stageStatus, eligible, sessionStatus }) => {
+const stageJoinBlockReason = ({
+  paid,
+  hasRegistration,
+  stageStatus,
+  eligible,
+  sessionStatus,
+  meetsPreviousStageScore,
+  previousStageEnded,
+  hasPreviousStage,
+}) => {
   if (!hasRegistration) return "Register for this tournament to participate";
   if (!paid) return "Complete payment to join tournament rounds";
   if (stageStatus === "upcoming") return "This round has not started yet";
   if (stageStatus === "completed") return "This round has ended";
   if (stageStatus === "unknown") return "This round is not available";
-  if (!eligible)
-    return "You are not eligible for this round (did not reach the minimum score % on the previous stage's test)";
+  if (!eligible && hasPreviousStage && paid) {
+    if (!meetsPreviousStageScore) {
+      return "You did not reach the minimum score % on the previous stage (among participants who completed that test).";
+    }
+    if (!previousStageEnded) {
+      return "The previous round is still open. Qualification for this stage is finalized after that round ends.";
+    }
+  }
+  if (!eligible) return "You are not eligible for this round.";
   if (sessionStatus === "completed") return "You have already completed this test";
   return null;
 };
 
 /**
  * Stages with per-student canJoin / joinBlockReason for student tournament APIs.
+ * Each item includes `previousStageQualification` (null on first stage): score bar vs previous round,
+ * whether that round ended, and whether the student may enter this stage (paid + rules).
  */
 export const buildTournamentStagesWithStudentAccess = async (tournament, studentId) => {
   const reg = await eventRegistrationRepository.findOne({
@@ -210,9 +348,18 @@ export const buildTournamentStagesWithStudentAccess = async (tournament, student
     const testIdStr = (stage.test?._id || stage.test)?.toString?.();
 
     let eligible = paid;
-    if (eligible && i > 0) {
+    let meetsPreviousStageScore = true;
+    let previousStageEnded = true;
+    const hasPreviousStage = i > 0;
+    if (hasPreviousStage) {
       const prev = ordered[i - 1];
-      eligible = await isStudentQualifiedAfterStage(prev, studentId);
+      meetsPreviousStageScore = await studentMeetsStageScoreThreshold(prev, studentId);
+      previousStageEnded = new Date() >= new Date(prev.endTime);
+      if (paid) {
+        eligible = await isStudentQualifiedAfterStage(prev, studentId, tournament._id);
+      } else {
+        eligible = false;
+      }
     }
 
     const sessionInfo = testIdStr ? sessionMap[testIdStr] : null;
@@ -224,6 +371,9 @@ export const buildTournamentStagesWithStudentAccess = async (tournament, student
       stageStatus,
       eligible,
       sessionStatus,
+      meetsPreviousStageScore,
+      previousStageEnded,
+      hasPreviousStage,
     });
     const canJoin =
       paid &&
@@ -239,6 +389,14 @@ export const buildTournamentStagesWithStudentAccess = async (tournament, student
           )
         : null;
 
+    const previousStageQualification = hasPreviousStage
+      ? {
+          meetsScoreThreshold: meetsPreviousStageScore,
+          previousRoundEnded: previousStageEnded,
+          canAdvanceToThisStage: eligible,
+        }
+      : null;
+
     if (plain.test && typeof plain.test === "object") {
       out.push({
         ...plain,
@@ -247,6 +405,7 @@ export const buildTournamentStagesWithStudentAccess = async (tournament, student
         canJoin,
         joinBlockReason,
         eligibleForStage: eligible,
+        previousStageQualification,
         goesLiveAt: stageGoesLiveAt,
         test: {
           ...plain.test,
@@ -262,6 +421,7 @@ export const buildTournamentStagesWithStudentAccess = async (tournament, student
         canJoin,
         joinBlockReason,
         eligibleForStage: eligible,
+        previousStageQualification,
         goesLiveAt: stageGoesLiveAt,
       });
     }
@@ -653,5 +813,9 @@ export default {
   assertStudentMayStartTournamentTest,
   buildTournamentStagesWithStudentAccess,
   isStudentQualifiedAfterStage,
+  studentMeetsStageScoreThreshold,
+  getTournamentStageContextForPublishedTest,
+  computeTournamentAttemptTiming,
+  getTournamentStageLeaderboardForStudent,
 };
 
