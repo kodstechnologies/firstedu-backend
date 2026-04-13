@@ -24,6 +24,12 @@ const olympiadSchema = new mongoose.Schema(
       type: Date,
       required: true,
     },
+    categoryId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Category",
+      default: null,
+      index: true,
+    },
     endTime: {
       type: Date,
       required: true,
@@ -32,6 +38,12 @@ const olympiadSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    about: { type: String, trim: true, default: null },
+    syllabus: { type: String, trim: true, default: null },
+    markingScheme: { type: String, trim: true, default: null },
+    rankingCriteria: { type: String, trim: true, default: null },
+    examDatesAndDetails: { type: String, trim: true, default: null },
+    awards: { type: String, trim: true, default: null },
     test: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Test",

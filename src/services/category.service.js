@@ -1,14 +1,19 @@
 import { ApiError } from "../utils/ApiError.js";
+import Category from "../models/Category.js";
 import categoryRepository from "../repository/category.repository.js";
 import QuestionBank from "../models/QuestionBank.js";
 import Test from "../models/Test.js";
 import TestBundle from "../models/TestBundle.js";
 import Olympiad from "../models/Olympiad.js";
 import Tournament from "../models/Tournament.js";
+import CategoryPurchase from "../models/CategoryPurchase.js";
 import orderRepository from "../repository/order.repository.js";
 import eventRegistrationRepository from "../repository/eventRegistration.repository.js";
 import olympiadRepository from "../repository/olympiad.repository.js";
 import tournamentRepository from "../repository/tournament.repository.js";
+import { getApplicableOfferDetails } from "../utils/offerUtils.js";
+
+import { assertSubtreeNotPurchased } from "../utils/purchaseGuard.js";
 
 /**
  * Recursively create children under a parent category.
@@ -55,6 +60,8 @@ export const createCategory = async (data, createdBy) => {
     parent: data.parent || null,
     order: data.order ?? 0,
     createdBy,
+    ...(data.rootType   && { rootType:     data.rootType }),
+    ...(data.isPredefined !== undefined && { isPredefined: data.isPredefined }),
   };
   const created = await categoryRepository.create(payload);
 
@@ -76,6 +83,33 @@ export const getCategories = async (options = {}) => {
 };
 
 export const getCategoryTree = async () => {
+  // Ensure the 4 predefined pillar roots are always marked correctly.
+  // This is a lightweight idempotent upsert that runs on every tree fetch.
+  const PILLAR_ROOTS = [
+    { name: "School Management",    rootType: "School Management" },
+    { name: "Competitive Management", rootType: "Competitive Management" },
+    { name: "Olympiads",             rootType: "Olympiads" },
+    { name: "Skill Development",     rootType: "Skill Development" },
+  ];
+
+  for (const pillar of PILLAR_ROOTS) {
+    // Find a root node matching this rootType (top-level: parent null)
+    const existing = await Category.findOne({ rootType: pillar.rootType, parent: null });
+    if (existing) {
+      // Always ensure predefined flag is set; sync name if different
+      const updates = { isPredefined: true };
+      if (existing.name !== pillar.name) updates.name = pillar.name;
+      await Category.updateOne({ _id: existing._id }, updates);
+    }
+    // Also mark any that have the correct name but not rootType
+    else {
+      const byName = await Category.findOne({ name: pillar.name, parent: null });
+      if (byName) {
+        await Category.updateOne({ _id: byName._id }, { rootType: pillar.rootType, isPredefined: true });
+      }
+    }
+  }
+
   return await categoryRepository.findTree({});
 };
 
@@ -344,6 +378,7 @@ export const getCategoriesForStudent = async (options = {}) => {
 export const updateCategory = async (id, updateData) => {
   const existing = await categoryRepository.findById(id);
   if (!existing) throw new ApiError(404, "Category not found");
+  await assertSubtreeNotPurchased(id, "rename");
   if (updateData.parent) {
     if (updateData.parent === id) {
       throw new ApiError(400, "Category cannot be its own parent");
@@ -354,9 +389,60 @@ export const updateCategory = async (id, updateData) => {
   return await categoryRepository.updateById(id, updateData);
 };
 
+export const updateCategoryPricing = async (id, updateData) => {
+  const existing = await categoryRepository.findById(id);
+  if (!existing) throw new ApiError(404, "Category not found");
+  await assertSubtreeNotPurchased(id, "update pricing");
+  return await categoryRepository.updateById(id, updateData);
+};
+
+export const getNodeWithEffectivePrice = async (id) => {
+  const node = await categoryRepository.findById(id);
+  if (!node) throw new ApiError(404, "Category not found");
+  
+  const obj = typeof node.toObject === "function" ? node.toObject() : { ...node };
+  
+  if (obj.isFree) {
+    obj.effectivePrice = 0;
+    return obj;
+  }
+  
+  if (obj.discountedPrice !== null && obj.discountedPrice !== undefined) {
+    // Admin set a specific node-level discount. It overrides global offer completely.
+    obj.effectivePrice = obj.discountedPrice;
+    return obj;
+  }
+
+  // Fallback to global offer
+  const rootTypeMap = {
+    "School Management": "School Management",
+    "Competitive Management": "Competitive Management",
+    "Skill Development": "Skill Development",
+    "Olympiads": "Olympiads"
+  };
+  const moduleName = rootTypeMap[obj.rootType] || "Category";
+  
+  const offerDetails = await getApplicableOfferDetails(moduleName, obj.price || 0);
+  
+  obj.appliedOffer = offerDetails.appliedOffer;
+  obj.originalPrice = offerDetails.originalPrice;
+  obj.discountedPrice = offerDetails.discountedPrice;
+  obj.discountAmount = offerDetails.discountAmount;
+  obj.effectivePrice = offerDetails.discountedPrice;
+  
+  if (!offerDetails.appliedOffer) {
+    delete obj.appliedOffer;
+    delete obj.discountAmount;
+    obj.effectivePrice = obj.originalPrice;
+  }
+  
+  return obj;
+};
+
 export const deleteCategory = async (id, cascade = true) => {
   const existing = await categoryRepository.findById(id);
   if (!existing) throw new ApiError(404, "Category not found");
+  await assertSubtreeNotPurchased(id, "delete");
   if (cascade) {
     return await categoryRepository.deleteByIdCascade(id);
   }
@@ -378,5 +464,7 @@ export default {
   getChildren,
   getCategoriesForStudent,
   updateCategory,
+  updateCategoryPricing,
+  getNodeWithEffectivePrice,
   deleteCategory,
 };

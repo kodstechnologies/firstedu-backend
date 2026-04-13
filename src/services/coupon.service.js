@@ -122,6 +122,7 @@ export const validateCoupon = async (
   code,
   purchaseAmount,
   itemType = "all",
+  itemId = null
 ) => {
   const coupon = await couponRepository.findCouponByCode(code);
 
@@ -131,6 +132,13 @@ export const validateCoupon = async (
 
   if (!coupon.isActive) {
     throw new ApiError(404, "Invalid or inactive coupon code");
+  }
+
+  // Check custom category specificity
+  if (coupon.applicableCategoryId) {
+    if (String(coupon.applicableCategoryId) !== String(itemId)) {
+      throw new ApiError(400, "This coupon is not valid for this category");
+    }
   }
 
   // Check validity dates
