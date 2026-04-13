@@ -4,11 +4,16 @@ import eventRegistrationRepository from "../repository/eventRegistration.reposit
 import { sendNotificationToMultipleStudents } from "./notification.service.js";
 import { isStudentQualifiedAfterStage } from "./tournament.service.js";
 
-const START_WINDOW_MS = 5 * 60 * 1000;
-const RESULTS_WINDOW_MS = 12 * 60 * 1000;
+// Cron runs every minute; keep a small grace window so messages are near real-time
+// but still sent if one tick is slightly late.
+const START_WINDOW_MS = 70 * 1000;
+const RESULTS_WINDOW_MS = 70 * 1000;
 
 const sortStages = (stages) =>
   [...(stages || [])].sort((a, b) => (a.order || 0) - (b.order || 0));
+
+const formatDateTime = (dateLike) =>
+  new Date(dateLike).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
 
 const hasQualifiedStage = async (tournamentId, studentId, stage) =>
   isStudentQualifiedAfterStage(stage, studentId, tournamentId);
@@ -47,8 +52,8 @@ const notifyStageStart = async (tournament, stage) => {
   ];
   if (studentIds.length === 0) return;
 
-  const title = `${tournament.title}: ${stage.name} is live`;
-  const body = `Your round "${stage.name}" has started. Open the app to take the test before it ends.`;
+  const title = `${tournament.title} - ${stage.name} is now live`;
+  const body = `Round "${stage.name}" has started. Start your test now before the round closes.`;
   await sendNotificationToMultipleStudents(studentIds, title, body, {
     type: "event",
     tournamentId: tournament._id.toString(),
@@ -91,8 +96,8 @@ const notifyStageResults = async (tournament, stageIndex, stage, orderedStages) 
   if (qualified.length > 0) {
     await sendNotificationToMultipleStudents(
       qualified,
-      `Qualified: ${tournament.title}`,
-      `Congratulations! You qualified for "${nextStage.name}". The next round starts at ${new Date(nextStage.startTime).toISOString()}.`,
+      `${tournament.title} - You qualified for next round`,
+      `You have qualified for "${nextStage.name}". Next round starts on ${formatDateTime(nextStage.startTime)}. Join on time.`,
       {
         type: "event",
         tournamentId: tournament._id.toString(),
@@ -107,8 +112,8 @@ const notifyStageResults = async (tournament, stageIndex, stage, orderedStages) 
   if (notQualified.length > 0) {
     await sendNotificationToMultipleStudents(
       notQualified,
-      `Update: ${tournament.title}`,
-      `You did not qualify for the next round (${nextStage.name}). You can still view upcoming stages, but you will not be able to join them.`,
+      `${tournament.title} - Round result update`,
+      `You did not qualify for "${nextStage.name}". You can still view tournament updates in the app.`,
       {
         type: "event",
         tournamentId: tournament._id.toString(),
