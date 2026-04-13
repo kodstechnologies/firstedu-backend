@@ -5,7 +5,10 @@ const MODULE_TO_ITEM_TYPE = {
   Test: "test",
   TestSeries: "testBundle",
   Course: "course",
-  Olympiad: "olympiad",
+  Olympiads: "Olympiads",
+  "School Management": "School Management",
+  "Competitive Management": "Competitive Management",
+  "Skill Development": "Skill Development",
   Tournament: "tournament",
   Workshop: "workshop",
   Ecommerce: "ecommerce",
@@ -20,7 +23,7 @@ const MODULE_TO_ITEM_TYPE = {
  * UsedCount is NOT incremented here - only when payment completes.
  * @returns {{ amountToCharge: number, couponId: ObjectId|null, appliedOffer: object|null, appliedCoupon: object|null, originalPrice: number, discountAmount: number }}
  */
-export const getAmountToCharge = async (moduleType, originalPrice, couponCode = null) => {
+export const getAmountToCharge = async (moduleType, originalPrice, couponCode = null, itemId = null) => {
   const price = Number(originalPrice) || 0;
   if (price <= 0) {
     return { amountToCharge: 0, couponId: null, appliedOffer: null, appliedCoupon: null, originalPrice: price, discountAmount: 0 };
@@ -34,7 +37,7 @@ export const getAmountToCharge = async (moduleType, originalPrice, couponCode = 
   // Step 2: If coupon provided, apply coupon on top of offer-discounted price
   const itemType = MODULE_TO_ITEM_TYPE[moduleType] || "all";
   if (couponCode && String(couponCode).trim()) {
-    const result = await couponService.validateCoupon(couponCode.trim(), priceAfterOffer, itemType);
+    const result = await couponService.validateCoupon(couponCode.trim(), priceAfterOffer, itemType, itemId);
     const couponDiscount = result.discount;
     const amountToCharge = Math.max(0, priceAfterOffer - couponDiscount);
     const appliedCoupon = {

@@ -156,6 +156,12 @@ import {
   getStoryDetailStudent,
 } from "../controllers/successStory.controller.js";
 import { getCategoriesForStudent } from "../controllers/category.controller.js";
+import {
+  initiateCategoryPurchase,
+  confirmCategoryPurchase,
+  getMyCategoryPurchases,
+  checkCategoryAccess,
+} from "../controllers/categoryPurchase.controller.js";
 import { applyCoupon } from "../controllers/studentCoupon.controller.js";
 import {
   getMyCertificates,
@@ -264,6 +270,10 @@ router.post("/test-bundles/:id/purchase", verifyJWT, purchaseTestBundle);
 
 // Categories (taxonomy for filtering tests/question banks)
 router.get("/categories", verifyJWT, getCategoriesForStudent);
+router.post("/categories/:categoryId/initiate-payment", verifyJWT, initiateCategoryPurchase);
+router.post("/categories/:categoryId/confirm-payment", verifyJWT, confirmCategoryPurchase);
+router.get("/categories/:categoryId/access", verifyJWT, checkCategoryAccess);
+router.get("/my-category-purchases", verifyJWT, getMyCategoryPurchases);
 
 // Coupons - Apply discount code (test, testBundle, course, olympiad, tournament, workshop, ecommerce, all)
 router.post("/coupons/apply", verifyJWT, applyCoupon);

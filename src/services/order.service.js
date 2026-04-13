@@ -107,12 +107,13 @@ export const getAggregatedOrderHistory = async (
   };
 
   // Get all purchases, registrations and claims
-  const [coursePurchases, testPurchases, merchandiseClaims, eventRegistrations, liveCompRegistrations] = await Promise.all([
+  const [coursePurchases, testPurchases, merchandiseClaims, eventRegistrations, liveCompRegistrations, categoryPurchases] = await Promise.all([
     orderRepository.findCoursePurchases(studentId),
     orderRepository.findTestPurchases(studentId),
     orderRepository.findMerchandiseClaims(studentId),
     orderRepository.findEventRegistrations(studentId),
     orderRepository.findLiveCompetitionRegistrations(studentId),
+    orderRepository.findCategoryPurchases(studentId),
   ]);
 
   // Combine and format into one normalized response
@@ -190,6 +191,17 @@ export const getAggregatedOrderHistory = async (
       status: c.status,
       amountUnit: "points",
       data: c,
+    })),
+    ...categoryPurchases.map((p) => ({
+      id: p._id,
+      type: p.pillarType,
+      date: p.createdAt,
+      title: p.categoryId?.name || "Category",
+      itemName: p.categoryId?.name || "Category",
+      amount: toNumber(p.purchasePrice),
+      paymentMethod: normalizePaymentMethod(p.paymentId, p.purchasePrice),
+      status: p.paymentStatus,
+      data: p,
     })),
   ].sort((a, b) => new Date(b.date) - new Date(a.date));
 

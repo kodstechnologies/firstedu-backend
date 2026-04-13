@@ -4,6 +4,7 @@ import TestPurchase from "../models/TestPurchase.js";
 import MerchandiseClaim from "../models/MerchandiseClaim.js";
 import EventRegistration from "../models/EventRegistration.js";
 import LiveCompetitionSubmission from "../models/LiveCompetitionSubmission.js";
+import CategoryPurchase from "../models/CategoryPurchase.js";
 import { ApiError } from "../utils/ApiError.js";
 
 const findOrderById = async (id) => {
@@ -71,6 +72,8 @@ const findTestPurchases = async (studentId) => {
       .populate("test", "title description price")
       .populate("testBundle", "name description price")
       .populate("competitionCategory", "title description price")
+      .populate("schoolCategory", "name description price")
+      .populate("skillCategory", "name description price")
       .sort({ purchaseDate: -1 });
   } catch (error) {
     throw new ApiError(500, "Failed to fetch test purchases", error.message);
@@ -107,6 +110,8 @@ const findTestPurchasesForExamHall = async (studentId) => {
           },
         },
       })
+      .populate("schoolCategory", "name description")
+      .populate("skillCategory", "name description")
       .sort({ purchaseDate: -1 });
   } catch (error) {
     throw new ApiError(500, "Failed to fetch exam hall purchases", error.message);
@@ -150,6 +155,17 @@ const findLiveCompetitionRegistrations = async (studentId) => {
   }
 };
 
+const findCategoryPurchases = async (studentId) => {
+  try {
+    return await CategoryPurchase.find({ student: studentId, paymentStatus: "completed" })
+      .populate("categoryId", "name rootType price")
+      .populate("unlockedCategoryIds", "name rootType")
+      .sort({ createdAt: -1 });
+  } catch (error) {
+    throw new ApiError(500, "Failed to fetch category purchases", error.message);
+  }
+};
+
 const findCoursePurchase = async (filter) => {
   try {
     return await CoursePurchase.findOne(filter);
@@ -184,6 +200,8 @@ const createTestPurchase = async (purchaseData) => {
       .populate("test", "title description durationMinutes questionBank")
       .populate("testBundle", "name description tests price")
       .populate("competitionCategory", "title description price tests")
+      .populate("schoolCategory", "name description")
+      .populate("skillCategory", "name description")
       .populate("student", "name email");
   } catch (error) {
     throw new ApiError(500, "Failed to create test purchase", error.message);
@@ -200,6 +218,7 @@ export default {
   findMerchandiseClaims,
   findEventRegistrations,
   findLiveCompetitionRegistrations,
+  findCategoryPurchases,
   findCoursePurchase,
   createCoursePurchase,
   findTestPurchase,

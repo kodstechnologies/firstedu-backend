@@ -4,6 +4,7 @@ import walletService from "./wallet.service.js";
 const POINTS_CONFIG = {
   COURSE_PURCHASE: 50, // Points for purchasing a course
   TEST_COMPLETION: 50, // Points for completing a test
+  CATEGORY_PURCHASE: 50, // Points for purchasing a category
 };
 
 /**
@@ -34,9 +35,24 @@ export const awardTestCompletionPoints = async (studentId, testId, testTitle) =>
   );
 };
 
+/**
+ * Award points for category purchase
+ */
+export const awardCategoryPurchasePoints = async (studentId, categoryId, categoryTitle) => {
+  return await walletService.addRewardPoints(
+    studentId,
+    POINTS_CONFIG.CATEGORY_PURCHASE,
+    "category_purchase",
+    `Points earned for purchasing category: ${categoryTitle}`,
+    categoryId,
+    "Category"
+  );
+};
+
 export default {
   awardCoursePurchasePoints,
   awardTestCompletionPoints,
+  awardCategoryPurchasePoints,
   POINTS_CONFIG,
 };
 
