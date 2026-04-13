@@ -23,6 +23,24 @@ const validateQuestionOptions = (questionType, options) => {
   }
 };
 
+const validateConnectedQuestions = (connectedQuestions = []) => {
+  if (!Array.isArray(connectedQuestions) || connectedQuestions.length === 0) {
+    throw new ApiError(
+      400,
+      "Connected questions must include at least one sub-question"
+    );
+  }
+  connectedQuestions.forEach((sub, index) => {
+    validateQuestionOptions(sub.questionType, sub.options);
+    if (sub.questionType === "true_false" && sub.correctAnswer === undefined) {
+      throw new ApiError(
+        400,
+        `connectedQuestions[${index}] correctAnswer is required for true_false`
+      );
+    }
+  });
+};
+
 // Create Question Service
 export const createQuestion = async (questionData, createdBy) => {
   // Add createdBy from authenticated admin
@@ -30,6 +48,11 @@ export const createQuestion = async (questionData, createdBy) => {
 
   // Validate correct answer matches options for single/multiple choice
   validateQuestionOptions(questionData.questionType, questionData.options);
+  if (questionData.questionType === "connected") {
+    const subsEarly =
+      questionData.subQuestions ?? questionData.connectedQuestions ?? [];
+    validateConnectedQuestions(subsEarly);
+  }
 
   let sectionAwareBank = null;
   if (questionData.questionBank) {
@@ -73,6 +96,71 @@ export const createQuestion = async (questionData, createdBy) => {
 
       questionData.sectionIndex = sectionIndex;
     }
+  }
+
+  if (questionData.questionType === "connected") {
+    const subs =
+      questionData.subQuestions ?? questionData.connectedQuestions ?? [];
+    const passageText =
+      (questionData.paragraph && String(questionData.paragraph).trim()) ||
+      (questionData.passage && String(questionData.passage).trim()) ||
+      (questionData.questionText && String(questionData.questionText).trim()) ||
+      "";
+    const parentLabel =
+      (questionData.title && String(questionData.title).trim()) ||
+      (questionData.questionText && String(questionData.questionText).trim()) ||
+      passageText.slice(0, 200);
+    const parentPayload = {
+      ...questionData,
+      questionText: parentLabel,
+      isParent: true,
+      passage: passageText,
+      marks: 0,
+      negativeMarks: 0,
+      correctAnswer: undefined,
+      options: [],
+      connectedQuestions: [],
+    };
+    const parentQuestion = await questionRepository.create(parentPayload);
+    const childIds = [];
+
+    for (const sub of subs) {
+      const child = await questionRepository.create({
+        questionText: sub.questionText,
+        questionType: sub.questionType,
+        options: sub.options,
+        correctAnswer: sub.correctAnswer,
+        explanation: sub.explanation,
+        subject: questionData.subject,
+        topic: questionData.topic,
+        difficulty: questionData.difficulty,
+        marks: sub.marks ?? 1,
+        negativeMarks: sub.negativeMarks ?? 0,
+        tags: questionData.tags,
+        imageUrl: questionData.imageUrl,
+        questionBank: questionData.questionBank,
+        sectionIndex: questionData.sectionIndex,
+        orderInBank: questionData.orderInBank,
+        createdBy,
+        parentQuestionId: parentQuestion._id,
+      });
+      childIds.push(child._id);
+    }
+
+    const question = await questionRepository.updateById(parentQuestion._id, {
+      childQuestions: childIds,
+    });
+
+    if (sectionAwareBank?.useSectionWiseQuestions) {
+      const sections = (sectionAwareBank.sections || []).map((section) => ({
+        ...section,
+        questions: [...(section.questions || [])],
+      }));
+      sections[questionData.sectionIndex].questions.push(question._id);
+      childIds.forEach((id) => sections[questionData.sectionIndex].questions.push(id));
+      await questionBankRepository.updateById(sectionAwareBank._id, { sections });
+    }
+    return question;
   }
 
   const question = await questionRepository.create(questionData);

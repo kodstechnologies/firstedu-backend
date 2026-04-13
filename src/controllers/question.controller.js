@@ -3,10 +3,57 @@ import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import questionValidator from "../validation/question.validator.js";
 import questionService from "../services/question.service.js";
+import { uploadImageToCloudinary } from "../utils/s3Upload.js";
+
+const parseMaybeJSON = (value) => {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  if (!trimmed) return value;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return value;
+  }
+};
+
+const normalizeQuestionPayload = (body = {}) => {
+  const payload = { ...body };
+  ["options", "connectedQuestions", "subQuestions", "tags", "correctAnswer"].forEach((key) => {
+    if (Object.prototype.hasOwnProperty.call(payload, key)) {
+      payload[key] = parseMaybeJSON(payload[key]);
+    }
+  });
+
+  ["marks", "negativeMarks", "sectionIndex", "orderInBank"].forEach((key) => {
+    if (payload[key] !== undefined && payload[key] !== null && payload[key] !== "") {
+      const n = Number(payload[key]);
+      payload[key] = Number.isNaN(n) ? payload[key] : n;
+    }
+  });
+
+  ["isParent"].forEach((key) => {
+    if (typeof payload[key] === "string") {
+      payload[key] = payload[key].toLowerCase() === "true";
+    }
+  });
+
+  return payload;
+};
 
 // Create Question
 export const createQuestion = asyncHandler(async (req, res) => {
-  const { error, value } = questionValidator.createQuestion.validate(req.body);
+  const normalizedPayload = normalizeQuestionPayload(req.body);
+
+  if (req.file) {
+    normalizedPayload.imageUrl = await uploadImageToCloudinary(
+      req.file.buffer,
+      req.file.originalname,
+      "question-images",
+      req.file.mimetype
+    );
+  }
+
+  const { error, value } = questionValidator.createQuestion.validate(normalizedPayload);
 
   if (error) {
     throw new ApiError(
@@ -88,7 +135,18 @@ export const getQuestionById = asyncHandler(async (req, res) => {
 // Update Question
 export const updateQuestion = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { error, value } = questionValidator.updateQuestion.validate(req.body);
+  const normalizedPayload = normalizeQuestionPayload(req.body);
+
+  if (req.file) {
+    normalizedPayload.imageUrl = await uploadImageToCloudinary(
+      req.file.buffer,
+      req.file.originalname,
+      "question-images",
+      req.file.mimetype
+    );
+  }
+
+  const { error, value } = questionValidator.updateQuestion.validate(normalizedPayload);
 
   if (error) {
     throw new ApiError(
@@ -216,4 +274,5 @@ export const getBulkAnalytics = asyncHandler(async (req, res) => {
       ApiResponse.success(analytics, "Bulk analytics fetched successfully")
     );
 });
+
 

@@ -5,11 +5,40 @@ const optionSchema = Joi.object({
   isCorrect: Joi.boolean().default(false),
 });
 
-const createQuestion = Joi.object({
+const connectedSubQuestionSchema = Joi.object({
   questionText: Joi.string().required().trim(),
+  questionType: Joi.string().valid("single", "multiple", "true_false").required(),
+  options: Joi.when("questionType", {
+    is: Joi.string().valid("single", "multiple"),
+    then: Joi.array().items(optionSchema).min(2).required(),
+    otherwise: Joi.array().items(optionSchema).length(2).optional(),
+  }),
+  correctAnswer: Joi.when("questionType", {
+    is: "single",
+    then: Joi.alternatives().try(Joi.string(), Joi.number()).required(),
+    otherwise: Joi.when("questionType", {
+      is: "multiple",
+      then: Joi.array().items(Joi.alternatives().try(Joi.string(), Joi.number())).min(1).required(),
+      otherwise: Joi.boolean().required(),
+    }),
+  }),
+  explanation: Joi.string().trim().optional(),
+  marks: Joi.number().min(0).default(1),
+  negativeMarks: Joi.number().min(0).default(0),
+});
+
+const createQuestion = Joi.object({
+  questionText: Joi.string().when("questionType", {
+    is: "connected",
+    then: Joi.string().trim().allow("").optional(),
+    otherwise: Joi.string().required().trim(),
+  }),
   questionType: Joi.string()
     .valid("single", "multiple", "true_false", "connected")
     .default("single"),
+  paragraph: Joi.string().trim().allow("").optional(),
+  title: Joi.string().trim().allow("").optional(),
+  imageUrl: Joi.string().trim().uri().optional(),
   options: Joi.when("questionType", {
     is: Joi.string().valid("single", "multiple"),
     then: Joi.array().items(optionSchema).min(2).required(),
@@ -44,11 +73,30 @@ const createQuestion = Joi.object({
   tags: Joi.array().items(Joi.string().trim()).optional(),
   isParent: Joi.boolean().default(false),
   parentQuestionId: Joi.string().optional().allow(null),
-  passage: Joi.when("isParent", {
-    is: true,
-    then: Joi.string().required().trim(),
-    otherwise: Joi.string().optional().allow(null, ""),
-  }),
+  passage: Joi.string().trim().optional().allow(null, ""),
+  subQuestions: Joi.array().items(connectedSubQuestionSchema).optional(),
+  connectedQuestions: Joi.array().items(connectedSubQuestionSchema).optional(),
+}).custom((value, helpers) => {
+  if (value.questionType !== "connected") return value;
+
+  const reading =
+    (value.paragraph && String(value.paragraph).trim()) ||
+    (value.passage && String(value.passage).trim()) ||
+    "";
+  if (!reading) {
+    return helpers.message(
+      'For questionType "connected", send paragraph or passage (reading text).'
+    );
+  }
+
+  const subs = value.subQuestions ?? value.connectedQuestions;
+  if (!Array.isArray(subs) || subs.length < 1) {
+    return helpers.message(
+      'For questionType "connected", send subQuestions or connectedQuestions (each: questionText and questionType single, multiple, or true_false).'
+    );
+  }
+
+  return value;
 });
 
 const updateQuestion = Joi.object({
@@ -56,6 +104,7 @@ const updateQuestion = Joi.object({
   questionType: Joi.string()
     .valid("single", "multiple", "true_false", "connected")
     .optional(),
+  imageUrl: Joi.string().trim().uri().optional().allow(null, ""),
   options: Joi.array().items(optionSchema).optional(),
   correctAnswer: Joi.alternatives()
     .try(Joi.string(), Joi.number(), Joi.boolean(), Joi.array())
@@ -73,6 +122,10 @@ const updateQuestion = Joi.object({
   isParent: Joi.boolean().optional(),
   parentQuestionId: Joi.string().optional().allow(null),
   passage: Joi.string().trim().optional().allow(null, ""),
+  paragraph: Joi.string().trim().optional().allow(null, ""),
+  title: Joi.string().trim().optional().allow(null, ""),
+  subQuestions: Joi.array().items(connectedSubQuestionSchema).optional(),
+  connectedQuestions: Joi.array().items(connectedSubQuestionSchema).optional(),
   isActive: Joi.boolean().optional(),
 });
 

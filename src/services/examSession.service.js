@@ -271,6 +271,8 @@ const getNormalizedId = (value) => {
   return value?.toString?.() || String(value);
 };
 
+const isChildQuestion = (question) => Boolean(getNormalizedId(question?.parentQuestionId));
+
 const findAnswerByQuestionId = (session, questionId) => {
   const targetId = getNormalizedId(questionId);
   if (!targetId || !Array.isArray(session?.answers)) return null;
@@ -877,10 +879,10 @@ export const getExamSession = async (sessionId, studentId) => {
       test: "title description durationMinutes applicableFor proctoringInstructions questionBank",
       answers: {
         select:
-          "questionText questionType options subject topic marks negativeMarks difficulty isParent passage parentQuestionId childQuestions sectionIndex orderInBank",
+          "questionText questionType options subject topic marks negativeMarks difficulty isParent passage parentQuestionId childQuestions connectedQuestions imageUrl sectionIndex orderInBank",
         populate: {
           path: "childQuestions",
-          select: "questionText questionType options marks negativeMarks difficulty",
+              select: "questionText questionType options marks negativeMarks difficulty imageUrl",
         },
       },
     }
@@ -906,10 +908,10 @@ export const getExamSession = async (sessionId, studentId) => {
           test: "title description durationMinutes applicableFor proctoringInstructions questionBank",
           answers: {
             select:
-              "questionText questionType options subject topic marks negativeMarks difficulty isParent passage parentQuestionId childQuestions sectionIndex orderInBank",
+              "questionText questionType options subject topic marks negativeMarks difficulty isParent passage parentQuestionId childQuestions connectedQuestions imageUrl sectionIndex orderInBank",
             populate: {
               path: "childQuestions",
-              select: "questionText questionType options marks negativeMarks difficulty",
+              select: "questionText questionType options marks negativeMarks difficulty imageUrl",
             },
           },
         }
@@ -948,6 +950,7 @@ export const getExamSession = async (sessionId, studentId) => {
   const questions = session.answers.map((answer) => {
     const question = answer.questionId;
     if (!question) return null;
+    if (isChildQuestion(question)) return null;
 
     // For connected questions, also remove correct answers from child questions
     if (question.isParent && question.childQuestions) {
@@ -1601,10 +1604,10 @@ export const getExamResults = async (sessionId, studentId) => {
   const populateOptions = {
     test: "title description durationMinutes applicableFor questionBank",
     answers: {
-      select: "questionText questionType options correctAnswer explanation subject topic marks negativeMarks sectionIndex isParent passage parentQuestionId childQuestions",
+      select: "questionText questionType options correctAnswer explanation subject topic marks negativeMarks sectionIndex isParent passage parentQuestionId childQuestions connectedQuestions imageUrl",
       populate: {
         path: "childQuestions",
-        select: "questionText questionType options correctAnswer explanation marks negativeMarks",
+        select: "questionText questionType options correctAnswer explanation marks negativeMarks imageUrl",
       },
     },
   };
@@ -1711,7 +1714,7 @@ export const getExamResults = async (sessionId, studentId) => {
   }
 
   // Build results with correct answers and explanations
-  const questions = session.answers.map((answer) => {
+  const allQuestions = session.answers.map((answer) => {
     const question = answer.questionId;
     if (!question) return null;
 
@@ -1751,6 +1754,32 @@ export const getExamResults = async (sessionId, studentId) => {
       answeredAt: answer.answeredAt,
     };
   }).filter((q) => q !== null);
+  const questionResultById = new Map(
+    allQuestions.map((q) => [getNormalizedId(q.questionId), q])
+  );
+  const questions = allQuestions
+    .filter((q) => !isChildQuestion(q.question))
+    .map((q) => {
+      if (q.question?.isParent && Array.isArray(q.question.childQuestions)) {
+        return {
+          ...q,
+          question: {
+            ...q.question,
+            childQuestions: q.question.childQuestions.map((child) => {
+              const childResult = questionResultById.get(getNormalizedId(child?._id));
+              return {
+                ...child,
+                studentAnswer: childResult?.studentAnswer ?? null,
+                isCorrect: childResult?.isCorrect ?? false,
+                status: childResult?.status ?? "not_visited",
+                answeredAt: childResult?.answeredAt ?? null,
+              };
+            }),
+          },
+        };
+      }
+      return q;
+    });
   const sectionNameByIndex = new Map();
   const questionBankId = session?.test?.questionBank?._id || session?.test?.questionBank || null;
   if (questionBankId) {
@@ -1794,20 +1823,20 @@ export const getExamResults = async (sessionId, studentId) => {
     myRank = myRankIndex >= 0 ? myRankIndex + 1 : null;
     totalParticipants = rankedByTest.length;
   }
-  const earnedMarks = questions.reduce(
+  const earnedMarks = allQuestions.reduce(
     (sum, q) => sum + (q.isCorrect ? Number(q.marks || 0) : 0),
     0
   );
-  const negativeMarksDeducted = questions.reduce(
+  const negativeMarksDeducted = allQuestions.reduce(
     (sum, q) => sum + (!q.isCorrect && q.status !== "skipped" ? Number(q.negativeMarks || 0) : 0),
     0
   );
-  const totalNegativeMarksPossible = questions.reduce(
+  const totalNegativeMarksPossible = allQuestions.reduce(
     (sum, q) => sum + Number(q.negativeMarks || 0),
     0
   );
   const sectionStatsMap = new Map();
-  questions.forEach((q) => {
+  allQuestions.forEach((q) => {
     const sectionIndex = Number.isInteger(q?.question?.sectionIndex)
       ? q.question.sectionIndex
       : 0;

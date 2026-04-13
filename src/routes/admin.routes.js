@@ -272,7 +272,7 @@ import {
   postAdminApproveWithdrawal,
   postAdminRejectWithdrawal,
 } from "../controllers/teacherWithdrawal.controller.js";
-import { uploadCourseMaterial, uploadImage, uploadPDF, uploadSuccessStory } from '../utils/multerConfig.js';
+import { uploadCourseMaterial, uploadImage, uploadAnyImages, uploadPDF, uploadSuccessStory } from '../utils/multerConfig.js';
 import {
   createEvent as createLiveCompetition,
   getEvents as getLiveCompetitions,
@@ -334,7 +334,12 @@ router.delete("/skill-tests/:id", verifyJWT, deleteSkillTest);
 
 // Question Banks (create bank, create bank with questions, list, update name, delete)
 router.post("/question-banks", verifyJWT, createQuestionBank);
-router.post("/question-banks/with-questions", verifyJWT, createQuestionBankWithQuestions);
+router.post(
+  "/question-banks/with-questions",
+  verifyJWT,
+  uploadAnyImages,
+  createQuestionBankWithQuestions
+);
 router.get("/question-banks", verifyJWT, getQuestionBanks);
 router.get("/question-banks/:id", verifyJWT, getQuestionBankById);
 router.get("/question-banks/:id/questions", verifyJWT, getQuestionsByBankId);
@@ -347,10 +352,10 @@ router.patch(
 router.delete("/question-banks/:id", verifyJWT, deleteQuestionBank);
 
 // Question Bank Management Routes (individual questions - create, list all, get, update, delete)
-router.post("/questions", verifyJWT, createQuestion);
+router.post("/questions", verifyJWT, uploadImage.single("image"), createQuestion);
 router.get("/questions", verifyJWT, getAllQuestions);
 router.get("/questions/:id", verifyJWT, getQuestionById);
-router.put("/questions/:id", verifyJWT, updateQuestion);
+router.put("/questions/:id", verifyJWT, uploadImage.single("image"), updateQuestion);
 router.delete("/questions/:id", verifyJWT, deleteQuestion);
 
 // Connected Questions Routes
