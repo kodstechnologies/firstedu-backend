@@ -5,11 +5,8 @@ const create = async (data) => {
 };
 
 const findAllPaginated = async (filters = {}, options = {}) => {
-  const { page = 1, limit = 10, hiringFor, search } = options;
+  const { page = 1, limit = 10, search } = options;
   const matchQuery = {};
-  if (filters.hiringFor) matchQuery.hiringFor = filters.hiringFor;
-  if (hiringFor) matchQuery.hiringFor = hiringFor;
-
   if (search) {
     const regex = { $regex: search, $options: "i" };
     matchQuery.$or = [
