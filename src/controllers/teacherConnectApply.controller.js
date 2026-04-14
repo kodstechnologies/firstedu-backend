@@ -186,10 +186,10 @@ export const rejectApplication = asyncHandler(async (req, res) => {
  * GET /teacher-connect/jobs?page=1&limit=10&hiringFor=fulltime
  */
 export const getAllApplyJobsUser = asyncHandler(async (req, res) => {
-  const { hiringFor, page, limit } = req.query;
+ 
+  const { search, page, limit } = req.query;
   const filters = {};
-  if (hiringFor) filters.hiringFor = hiringFor;
-  const result = await applyJobService.getAllJobsPaginated(filters, { page, limit, hiringFor });
+  const result = await applyJobService.getAllJobsPaginated(filters, {search, page, limit });
   return res.status(200).json(
     ApiResponse.success(result.list, "Jobs fetched successfully", result.pagination)
   );

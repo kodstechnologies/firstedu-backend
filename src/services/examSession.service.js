@@ -952,7 +952,7 @@ export const getExamSession = async (sessionId, studentId) => {
     if (!question) return null;
     if (isChildQuestion(question)) return null;
 
-    // For connected questions, also remove correct answers from child questions
+    // For connected questions, remove child correct answers first.
     if (question.isParent && question.childQuestions) {
       question.childQuestions = question.childQuestions.map((child) => {
         const childObj = child.toObject ? child.toObject() : child;
@@ -963,6 +963,23 @@ export const getExamSession = async (sessionId, studentId) => {
 
     const questionObj = question.toObject ? question.toObject() : question;
     delete questionObj.correctAnswer;
+    if (questionObj.isParent && questionObj.questionType === "connected") {
+      const subQuestions = Array.isArray(questionObj.childQuestions)
+        ? questionObj.childQuestions.map((child) => ({
+            _id: child._id,
+            questionText: child.questionText,
+            questionType: child.questionType,
+            options: child.options || [],
+            explanation: child.explanation,
+            marks: child.marks ?? 1,
+            negativeMarks: child.negativeMarks ?? 0,
+            imageUrl: child.imageUrl || null,
+          }))
+        : [];
+      questionObj.title = questionObj.questionText || "";
+      questionObj.paragraph = questionObj.passage || "";
+      questionObj.subQuestions = subQuestions;
+    }
 
     const remainingQuestionTimeMs = getAnswerRemainingTimeMs(answer, now);
     return {
@@ -1731,6 +1748,8 @@ export const getExamResults = async (sessionId, studentId) => {
           correctAnswer: childObj.correctAnswer,
           explanation: childObj.explanation,
           marks: childObj.marks,
+          negativeMarks: childObj.negativeMarks,
+          imageUrl: childObj.imageUrl || null,
         };
       });
     }
@@ -1761,20 +1780,25 @@ export const getExamResults = async (sessionId, studentId) => {
     .filter((q) => !isChildQuestion(q.question))
     .map((q) => {
       if (q.question?.isParent && Array.isArray(q.question.childQuestions)) {
+        const enrichedSubQuestions = q.question.childQuestions.map((child) => {
+          const childResult = questionResultById.get(getNormalizedId(child?._id));
+          return {
+            ...child,
+            studentAnswer: childResult?.studentAnswer ?? null,
+            isCorrect: childResult?.isCorrect ?? false,
+            status: childResult?.status ?? "not_visited",
+            answeredAt: childResult?.answeredAt ?? null,
+          };
+        });
         return {
           ...q,
           question: {
             ...q.question,
-            childQuestions: q.question.childQuestions.map((child) => {
-              const childResult = questionResultById.get(getNormalizedId(child?._id));
-              return {
-                ...child,
-                studentAnswer: childResult?.studentAnswer ?? null,
-                isCorrect: childResult?.isCorrect ?? false,
-                status: childResult?.status ?? "not_visited",
-                answeredAt: childResult?.answeredAt ?? null,
-              };
-            }),
+            title: q.question.questionText || "",
+            paragraph: q.question.passage || "",
+            subQuestions: enrichedSubQuestions,
+            // Keep legacy field for backward compatibility.
+            childQuestions: enrichedSubQuestions,
           },
         };
       }
