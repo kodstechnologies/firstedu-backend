@@ -46,7 +46,9 @@ export const getCategories = asyncHandler(async (req, res) => {
 });
 
 export const getCategoryTree = asyncHandler(async (req, res) => {
-  const tree = await categoryService.getCategoryTree();
+  const { rootType } = req.query;
+  const filter = rootType ? { rootType } : {};
+  const tree = await categoryService.getCategoryTree(filter);
   return res
     .status(200)
     .json(ApiResponse.success(tree, "Category tree fetched successfully"));
@@ -206,7 +208,8 @@ export const createCategoryOffer = asyncHandler(async (req, res) => {
   };
 
   const offer = await offerRepository.createOffer(offerData);
-  await categoryRepository.updateById(id, { offerOverrideId: offer._id, offerPolicy: "inherit" }); // They chose custom, inherently not global but custom active
+  // 'custom' policy means this category has its own override; global pillar offer is blocked
+  await categoryRepository.updateById(id, { offerOverrideId: offer._id, offerPolicy: "custom" });
   
   return res.status(201).json(ApiResponse.success(offer, "Subcategory offer created"));
 });
@@ -219,7 +222,8 @@ export const removeCategoryOffer = asyncHandler(async (req, res) => {
 
   if (category.offerOverrideId) {
     await offerRepository.deleteOffer(category.offerOverrideId);
-    await categoryRepository.updateById(id, { offerOverrideId: null });
+    // Reset back to inherit so global pillar offer applies again
+    await categoryRepository.updateById(id, { offerOverrideId: null, offerPolicy: "inherit" });
   }
 
   return res.status(200).json(ApiResponse.success(null, "Offer removed successfully"));

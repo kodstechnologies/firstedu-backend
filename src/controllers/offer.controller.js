@@ -12,7 +12,7 @@ export const createOffer = asyncHandler(async (req, res) => {
     }
 
     // Basic Validation
-    const VALID_APPLICABLE_ON = ["Test", "TestSeries", "Course", "Olympiad", "Tournament", "Workshop", "Ecommerce", "CompetitionCategory","LiveCompetition"];
+    const VALID_APPLICABLE_ON = ["all", "Test", "TestSeries", "Course", "Olympiads", "Tournament", "Workshop", "Ecommerce", "CompetitionCategory", "LiveCompetition", "School", "Competitive", "Skill Development"];
     if (!VALID_APPLICABLE_ON.includes(applicableOn)) {
         throw new ApiError(400, `applicableOn must be one of: ${VALID_APPLICABLE_ON.join(", ")}`);
     }

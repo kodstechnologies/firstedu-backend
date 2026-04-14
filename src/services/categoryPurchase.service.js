@@ -35,7 +35,7 @@ export const initiatePurchase = async (categoryId, studentId, paymentMethod, opt
   const price = category.discountedPrice !== null && category.discountedPrice !== undefined ? category.discountedPrice : category.price;
   
   const rootTypeMap = {
-    "School Management": "School Management", "Competitive Management": "Competitive Management", "Skill Development": "Skill Development", "Olympiads": "Olympiads"
+    "School": "School", "Competitive": "Competitive", "Skill Development": "Skill Development", "Olympiads": "Olympiads"
   };
   const moduleName = rootTypeMap[category.rootType] || "Category";
   
@@ -214,9 +214,39 @@ export const getMyPurchases = async (studentId, pillarType = null) => {
   return await categoryPurchaseRepository.findByStudent(studentId, pillarType);
 };
 
+export const reconcileWebhookPurchase = async (categoryId, studentId, intent) => {
+  const category = await Category.findById(categoryId);
+  if (!category) throw new ApiError(404, "Category not found");
+
+  const existingAccess = await categoryPurchaseRepository.checkAccess(studentId, categoryId);
+  if (existingAccess) return { reconciled: true, reason: "already_purchased" };
+
+  const purchasePrice = intent.amountPaise / 100;
+  const unlockedIds = await fetchDescendantIds(categoryId);
+
+  const purchase = await categoryPurchaseRepository.createPurchase({
+    student: studentId,
+    categoryId,
+    pillarType: category.rootType,
+    unlockedCategoryIds: unlockedIds,
+    purchasePrice,
+    paymentId: intent.paymentId, // Will be passed as populated parameter if needed or assumed
+    paymentMethod: "razorpay",
+    paymentStatus: "completed"
+  });
+
+  if (intent.couponId) await couponService.incrementCouponUsedCount(intent.couponId);
+  
+  await Category.updateMany({ _id: { $in: [categoryId, ...unlockedIds] } }, { $inc: { purchaseCount: 1 } });
+  try { await pointsService.awardCategoryPurchasePoints(studentId, category._id, category.name); } catch (e) { console.error("Points Error:", e); }
+
+  return { reconciled: true, reason: "created" };
+};
+
 export default {
   initiatePurchase,
   confirmPurchase,
   checkAccess,
   getMyPurchases,
+  reconcileWebhookPurchase,
 };

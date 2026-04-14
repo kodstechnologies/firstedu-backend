@@ -12,24 +12,28 @@ import eventRegistrationRepository from "../repository/eventRegistration.reposit
 import olympiadRepository from "../repository/olympiad.repository.js";
 import tournamentRepository from "../repository/tournament.repository.js";
 import { getApplicableOfferDetails } from "../utils/offerUtils.js";
-
+import Offer from "../models/Offer.js";
 import { assertSubtreeNotPurchased } from "../utils/purchaseGuard.js";
 
 /**
  * Recursively create children under a parent category.
  * Supports unlimited nesting: School -> Classes -> Class 1 -> Subjects -> Math -> Geometry, etc.
  */
-const createChildrenRecursive = async (children, parentId, createdBy, orderStart = 0) => {
+const createChildrenRecursive = async (children, parentId, createdBy, rootType, orderStart = 0) => {
   const created = [];
   let order = orderStart;
   for (const child of children) {
     const { name, children: nestedChildren } = child;
-    const category = await categoryRepository.create({
+    const payload = {
       name,
       parent: parentId,
       order: order++,
       createdBy,
-    });
+    };
+    if (rootType && rootType !== "custom") {
+      payload.rootType = rootType;
+    }
+    const category = await categoryRepository.create(payload);
     created.push(category);
 
     if (nestedChildren && nestedChildren.length > 0) {
@@ -37,6 +41,7 @@ const createChildrenRecursive = async (children, parentId, createdBy, orderStart
         nestedChildren,
         category._id,
         createdBy,
+        rootType,
         0
       );
     }
@@ -50,9 +55,15 @@ const createChildrenRecursive = async (children, parentId, createdBy, orderStart
  * - Nested: { name: "School", children: [{ name: "Classes", children: [{ name: "Class 1", children: [...] }] }] }
  */
 export const createCategory = async (data, createdBy) => {
+  let parentNode = null;
   if (data.parent) {
-    const parent = await categoryRepository.findById(data.parent);
-    if (!parent) throw new ApiError(404, "Parent category not found");
+    parentNode = await categoryRepository.findById(data.parent);
+    if (!parentNode) throw new ApiError(404, "Parent category not found");
+  }
+
+  let resolvedRootType = data.rootType || "custom";
+  if (!data.rootType && parentNode && parentNode.rootType && parentNode.rootType !== "custom") {
+    resolvedRootType = parentNode.rootType;
   }
 
   const payload = {
@@ -60,7 +71,7 @@ export const createCategory = async (data, createdBy) => {
     parent: data.parent || null,
     order: data.order ?? 0,
     createdBy,
-    ...(data.rootType   && { rootType:     data.rootType }),
+    rootType: resolvedRootType,
     ...(data.isPredefined !== undefined && { isPredefined: data.isPredefined }),
   };
   const created = await categoryRepository.create(payload);
@@ -70,6 +81,7 @@ export const createCategory = async (data, createdBy) => {
       data.children,
       created._id,
       createdBy,
+      resolvedRootType,
       0
     );
     return { category: created, children };
@@ -82,12 +94,12 @@ export const getCategories = async (options = {}) => {
   return await categoryRepository.findAll({}, options);
 };
 
-export const getCategoryTree = async () => {
+export const getCategoryTree = async (filter = {}) => {
   // Ensure the 4 predefined pillar roots are always marked correctly.
   // This is a lightweight idempotent upsert that runs on every tree fetch.
   const PILLAR_ROOTS = [
-    { name: "School Management",    rootType: "School Management" },
-    { name: "Competitive Management", rootType: "Competitive Management" },
+    { name: "School",    rootType: "School" },
+    { name: "Competitive", rootType: "Competitive" },
     { name: "Olympiads",             rootType: "Olympiads" },
     { name: "Skill Development",     rootType: "Skill Development" },
   ];
@@ -110,13 +122,63 @@ export const getCategoryTree = async () => {
     }
   }
 
-  return await categoryRepository.findTree({});
+  const fullTree = await categoryRepository.findTree({});
+  
+  if (filter && filter.rootType) {
+    const requestedRoot = fullTree.find(n => n.rootType === filter.rootType);
+    return requestedRoot ? [requestedRoot] : [];
+  }
+  
+  return fullTree;
 };
 
 export const getCategoryById = async (id) => {
   const item = await categoryRepository.findById(id);
   if (!item) throw new ApiError(404, "Category not found");
-  return item;
+
+  const obj = typeof item.toObject === "function" ? item.toObject() : { ...item };
+
+  // ── Enrich: Node-type metadata (isLeaf / isSecondSubcategory / linkedSubjects) ──
+  const children = await categoryRepository.findChildren(id);
+
+  const childMeta = await Promise.all(
+    children.map(async (child) => ({
+      name:        child.name,
+      hasChildren: await categoryRepository.hasChildren(child._id),
+    }))
+  );
+
+  const isLeaf              = children.length === 0;
+  const isSecondSubcategory = children.length > 0 && childMeta.every((c) => !c.hasChildren);
+
+  const SUBJECT_PILLARS = ["School", "Competitive", "Olympiads"];
+  const linkedSubcategories = isSecondSubcategory && SUBJECT_PILLARS.includes(obj.rootType)
+    ? childMeta.map((c) => c.name)
+    : [];
+
+  obj.isLeaf              = isLeaf;
+  obj.isSecondSubcategory = isSecondSubcategory;
+  obj.linkedSubcategories = linkedSubcategories;
+
+  // ── Enrich: Global pillar-level offer (for Mode A display in UI) ────────────────
+  const PILLAR_TO_APPLICABLE_ON = {
+    "School":            "School",
+    "Competitive":       "Competitive",
+    "Olympiads":         "Olympiads",
+    "Skill Development": "Skill Development",
+  };
+  const applicableOn = PILLAR_TO_APPLICABLE_ON[obj.rootType];
+  obj.globalOffer = applicableOn
+    ? (await Offer.findOne({ applicableOn, status: "active" }).lean()) ?? null
+    : null;
+
+  // ── Enrich: Category-specific override offer (for Mode B display in UI) ─────────
+  obj.overrideOffer = obj.offerOverrideId
+    ? (await Offer.findById(obj.offerOverrideId).lean()) ?? null
+    : null;
+  // ─────────────────────────────────────────────────────────────────────────────────
+
+  return obj;
 };
 
 export const getChildren = async (parentId) => {
@@ -379,12 +441,17 @@ export const updateCategory = async (id, updateData) => {
   const existing = await categoryRepository.findById(id);
   if (!existing) throw new ApiError(404, "Category not found");
   await assertSubtreeNotPurchased(id, "rename");
-  if (updateData.parent) {
+  if (updateData.parent !== undefined) {
     if (updateData.parent === id) {
       throw new ApiError(400, "Category cannot be its own parent");
     }
-    const parent = await categoryRepository.findById(updateData.parent);
-    if (!parent) throw new ApiError(404, "Parent category not found");
+    if (updateData.parent) {
+      const parent = await categoryRepository.findById(updateData.parent);
+      if (!parent) throw new ApiError(404, "Parent category not found");
+      if (parent.rootType && parent.rootType !== "custom") {
+        updateData.rootType = parent.rootType;
+      }
+    }
   }
   return await categoryRepository.updateById(id, updateData);
 };
@@ -415,8 +482,8 @@ export const getNodeWithEffectivePrice = async (id) => {
 
   // Fallback to global offer
   const rootTypeMap = {
-    "School Management": "School Management",
-    "Competitive Management": "Competitive Management",
+    "School": "School",
+    "Competitive": "Competitive",
     "Skill Development": "Skill Development",
     "Olympiads": "Olympiads"
   };

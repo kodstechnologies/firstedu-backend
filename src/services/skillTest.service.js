@@ -30,7 +30,7 @@ export const getSkillTests = async (options = {}) => {
 
   const [tests, total] = await Promise.all([
     SkillTest.find(query)
-      .populate("testId", "title description durationMinutes price")
+      .populate("testId", "title description durationMinutes price discountType discountValue")
       .skip(skip)
       .limit(limitNum)
       .sort({ createdAt: -1 }),

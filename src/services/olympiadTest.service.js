@@ -1,14 +1,14 @@
-import SchoolTest from "../models/SchoolTest.js";
+import OlympiadTest from "../models/OlympiadTest.js";
 import Category from "../models/Category.js";
 import { ApiError } from "../utils/ApiError.js";
 import { assertSubtreeNotPurchased } from "../utils/purchaseGuard.js";
 
-export const createSchoolTest = async (data) => {
+export const createOlympiadTest = async (data) => {
   const category = await Category.findById(data.categoryId);
   if (!category) throw new ApiError(404, "Category not found");
   await assertSubtreeNotPurchased(data.categoryId, "add tests to");
 
-  const existing = await SchoolTest.findOne({
+  const existing = await OlympiadTest.findOne({
     categoryId: data.categoryId,
     $or: [{ testId: data.testId }, { title: data.title }],
   });
@@ -16,10 +16,10 @@ export const createSchoolTest = async (data) => {
     throw new ApiError(400, "Test is already added or a test with this title already exists in this category");
   }
 
-  return await SchoolTest.create(data);
+  return await OlympiadTest.create(data);
 };
 
-export const getSchoolTests = async (options = {}) => {
+export const getOlympiadTests = async (options = {}) => {
   const { categoryId, page = 1, limit = 10 } = options;
   const pageNum = parseInt(page);
   const limitNum = parseInt(limit);
@@ -29,12 +29,12 @@ export const getSchoolTests = async (options = {}) => {
   if (categoryId) query.categoryId = categoryId;
 
   const [tests, total] = await Promise.all([
-    SchoolTest.find(query)
+    OlympiadTest.find(query)
       .populate("testId", "title description durationMinutes price discountType discountValue")
       .skip(skip)
       .limit(limitNum)
       .sort({ createdAt: -1 }),
-    SchoolTest.countDocuments(query),
+    OlympiadTest.countDocuments(query),
   ]);
 
   return {
@@ -48,13 +48,13 @@ export const getSchoolTests = async (options = {}) => {
   };
 };
 
-export const updateSchoolTest = async (id, updateData) => {
-  const existing = await SchoolTest.findById(id);
-  if (!existing) throw new ApiError(404, "SchoolTest not found");
+export const updateOlympiadTest = async (id, updateData) => {
+  const existing = await OlympiadTest.findById(id);
+  if (!existing) throw new ApiError(404, "Olympiad Test not found");
   await assertSubtreeNotPurchased(existing.categoryId, "edit tests in");
 
   if (updateData.title) {
-    const titleCheck = await SchoolTest.findOne({
+    const titleCheck = await OlympiadTest.findOne({
       categoryId: existing.categoryId,
       title: updateData.title,
       _id: { $ne: id },
@@ -64,20 +64,20 @@ export const updateSchoolTest = async (id, updateData) => {
     }
   }
 
-  return await SchoolTest.findByIdAndUpdate(id, updateData, { new: true });
+  return await OlympiadTest.findByIdAndUpdate(id, updateData, { new: true });
 };
 
-export const deleteSchoolTest = async (id) => {
-  const existing = await SchoolTest.findById(id);
-  if (!existing) throw new ApiError(404, "SchoolTest not found");
+export const deleteOlympiadTest = async (id) => {
+  const existing = await OlympiadTest.findById(id);
+  if (!existing) throw new ApiError(404, "Olympiad Test not found");
   await assertSubtreeNotPurchased(existing.categoryId, "delete tests from");
 
-  return await SchoolTest.findByIdAndDelete(id);
+  return await OlympiadTest.findByIdAndDelete(id);
 };
 
 export default {
-  createSchoolTest,
-  getSchoolTests,
-  updateSchoolTest,
-  deleteSchoolTest,
+  createOlympiadTest,
+  getOlympiadTests,
+  updateOlympiadTest,
+  deleteOlympiadTest,
 };

@@ -173,6 +173,18 @@ import {
   deleteSkillTest,
 } from "../controllers/skillTest.controller.js";
 import {
+  createCompetitiveTest,
+  getCompetitiveTests,
+  updateCompetitiveTest,
+  deleteCompetitiveTest,
+} from "../controllers/competitiveTest.controller.js";
+import {
+  createOlympiadTest,
+  getOlympiadTests,
+  updateOlympiadTest,
+  deleteOlympiadTest,
+} from "../controllers/olympiadTest.controller.js";
+import {
   createQuestionBank,
   createQuestionBankWithQuestions,
   getQuestionBanks,
@@ -323,10 +335,23 @@ router.get("/school-tests", verifyJWT, getSchoolTests);
 router.put("/school-tests/:id", verifyJWT, updateSchoolTest);
 router.delete("/school-tests/:id", verifyJWT, deleteSchoolTest);
 
+// ─── Skill Tests ───
 router.post("/skill-tests", verifyJWT, createSkillTest);
 router.get("/skill-tests", verifyJWT, getSkillTests);
 router.put("/skill-tests/:id", verifyJWT, updateSkillTest);
 router.delete("/skill-tests/:id", verifyJWT, deleteSkillTest);
+
+// ─── Competitive Tests ───
+router.post("/competitive-tests", verifyJWT, createCompetitiveTest);
+router.get("/competitive-tests", verifyJWT, getCompetitiveTests);
+router.put("/competitive-tests/:id", verifyJWT, updateCompetitiveTest);
+router.delete("/competitive-tests/:id", verifyJWT, deleteCompetitiveTest);
+
+// ─── Olympiad Tests ───
+router.post("/olympiad-tests", verifyJWT, createOlympiadTest);
+router.get("/olympiad-tests", verifyJWT, getOlympiadTests);
+router.put("/olympiad-tests/:id", verifyJWT, updateOlympiadTest);
+router.delete("/olympiad-tests/:id", verifyJWT, deleteOlympiadTest);
 
 // Question Banks (create bank, create bank with questions, list, update name, delete)
 router.post("/question-banks", verifyJWT, createQuestionBank);

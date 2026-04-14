@@ -7,6 +7,7 @@ import testRepository from "../repository/test.repository.js";
 import pointsService from "./points.service.js";
 import eventRegistrationRepository from "../repository/eventRegistration.repository.js";
 import walletService from "./wallet.service.js";
+import categoryPurchaseService from "./categoryPurchase.service.js";
 
 const LOG_PREFIX = "[Razorpay Webhook]";
 
@@ -161,6 +162,21 @@ async function reconcilePaymentCaptured(orderId, paymentId, amountPaise) {
   } else if (type === "wallet") {
     const amountRupees = Math.round(amountPaise / 100);
     await walletService.addMonetaryBalance(studentId, amountRupees, paymentId, "User");
+  } else if (type === "categoryNode" || ["Olympiads", "School", "Competitive", "Skill Development"].includes(type)) {
+    try {
+      const purchaseResult = await categoryPurchaseService.reconcileWebhookPurchase(entityId, studentId, {
+        amountPaise,
+        paymentId,
+        couponId: intent.couponId
+      });
+      if (purchaseResult.reconciled) {
+        await razorpayOrderIntentRepository.markReconciled(orderId, paymentId);
+        return { reconciled: true, reason: purchaseResult.reason };
+      }
+    } catch (e) {
+      console.error(`${LOG_PREFIX} categoryPurchase error:`, e.message);
+      return { reconciled: false, reason: "category_purchase_failed" };
+    }
   } else {
     return { reconciled: false, reason: "unknown_type" };
   }

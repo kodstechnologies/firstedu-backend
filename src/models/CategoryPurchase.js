@@ -16,7 +16,7 @@ const categoryPurchaseSchema = new mongoose.Schema(
     },
     pillarType: {
       type: String,
-      enum: ["school", "competitive", "olympiad", "skill"],
+      enum: ["School", "Competitive", "Olympiads", "Skill Development"],
       required: true,
       index: true,
     },
