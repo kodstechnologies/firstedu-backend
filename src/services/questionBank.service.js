@@ -21,6 +21,123 @@ const validateQuestionOptions = (questionType, options) => {
   }
 };
 
+const toQuestionPlain = (doc) => {
+  if (!doc) return null;
+  return doc.toObject ? doc.toObject({ virtuals: true }) : { ...doc };
+};
+
+/**
+ * Passage-style blocks for admin UI: one reading + sub-questions (single / multiple / true_false).
+ */
+const buildPassageQuestionSets = (flatDocs) => {
+  if (!Array.isArray(flatDocs) || flatDocs.length === 0) return [];
+  const byId = new Map(
+    flatDocs.map((d) => {
+      const p = toQuestionPlain(d);
+      return [p._id.toString(), p];
+    })
+  );
+  return flatDocs
+    .map((d) => toQuestionPlain(d))
+    .filter((q) => q.isParent && q.questionType === "connected")
+    .map((parent) => {
+      const refs = parent.childQuestions || [];
+      const subQuestions = refs
+        .map((ref) => {
+          const id = ref?._id?.toString?.() || ref?.toString?.();
+          if (!id) return null;
+          const fromPopulate = ref && typeof ref === "object" && ref.questionText != null
+            ? toQuestionPlain(ref)
+            : null;
+          return fromPopulate || byId.get(id) || null;
+        })
+        .filter(Boolean);
+      return {
+        paragraph: parent.passage || parent.questionText,
+        passage: parent.passage || parent.questionText,
+        title: parent.questionText,
+        parentQuestionId: parent._id,
+        imageUrl: parent.imageUrl || null,
+        subQuestions,
+      };
+    });
+};
+
+const buildQuestionBankQuestionsResponse = (flatDocs) => {
+  if (!Array.isArray(flatDocs) || flatDocs.length === 0) return [];
+
+  const byId = new Map(
+    flatDocs.map((doc) => {
+      const plain = toQuestionPlain(doc);
+      return [plain._id.toString(), plain];
+    })
+  );
+
+  return flatDocs
+    .map((doc) => toQuestionPlain(doc))
+    .filter((q) => !q.parentQuestionId)
+    .map((q) => {
+      if (!(q.isParent && q.questionType === "connected")) {
+        return q;
+      }
+
+      const refs = q.childQuestions || [];
+      const subQuestions = refs
+        .map((ref) => {
+          const id = ref?._id?.toString?.() || ref?.toString?.();
+          if (!id) return null;
+          const fromPopulate =
+            ref && typeof ref === "object" && ref.questionText != null
+              ? toQuestionPlain(ref)
+              : null;
+          return fromPopulate || byId.get(id) || null;
+        })
+        .filter(Boolean)
+        .map((child) => ({
+          _id: child._id,
+          questionText: child.questionText,
+          questionType: child.questionType,
+          options: child.options || [],
+          correctAnswer: child.correctAnswer,
+          explanation: child.explanation,
+          marks: child.marks ?? 1,
+          negativeMarks: child.negativeMarks ?? 0,
+          imageUrl: child.imageUrl || null,
+        }));
+
+      return {
+        ...q,
+        title: q.questionText || "",
+        paragraph: q.passage || "",
+        subQuestions,
+      };
+    });
+};
+
+const validateConnectedQuestions = (connectedQuestions = []) => {
+  if (!Array.isArray(connectedQuestions) || connectedQuestions.length === 0) {
+    throw new ApiError(
+      400,
+      "Connected questions must include at least one sub-question"
+    );
+  }
+  connectedQuestions.forEach((sub, index) => {
+    validateQuestionOptions(sub.questionType, sub.options);
+    if (!String(sub.explanation ?? "").trim()) {
+      throw new ApiError(
+        400,
+        `connectedQuestions[${index}] explanation is required`
+      );
+    }
+    if (sub.questionType === "true_false" && sub.correctAnswer === undefined) {
+      throw new ApiError(
+        400,
+        `connectedQuestions[${index}] correctAnswer is required for true_false`
+      );
+    }
+  });
+};
+
 const getSectionIndexByCount = (sectionConfigs = [], questionIndex = 0) => {
   let cursor = 0;
   for (let i = 0; i < sectionConfigs.length; i++) {
@@ -152,12 +269,79 @@ export const createQuestionBankWithQuestions = async (data, createdBy) => {
       marks: q.marks ?? 1,
       negativeMarks: q.negativeMarks ?? 0,
       tags: q.tags,
+      imageUrl: q.imageUrl || null,
       subject: q.subject || undefined,
       questionBank: bank._id,
       sectionIndex,
       orderInBank,
       createdBy,
     };
+    if (questionData.questionType === "connected") {
+      const subs = q.subQuestions ?? q.connectedQuestions ?? [];
+      validateConnectedQuestions(subs);
+      const passageText =
+        (q.paragraph && String(q.paragraph).trim()) ||
+        (q.passage && String(q.passage).trim()) ||
+        (q.questionText && String(q.questionText).trim()) ||
+        "";
+      const parentLabel =
+        (q.title && String(q.title).trim()) ||
+        (q.questionText && String(q.questionText).trim()) ||
+        passageText.slice(0, 200);
+      const parent = await questionRepository.create({
+        ...questionData,
+        questionText: parentLabel,
+        isParent: true,
+        passage: passageText,
+        marks: 0,
+        negativeMarks: 0,
+        correctAnswer: undefined,
+        options: [],
+        connectedQuestions: [],
+      });
+
+      const childIds = [];
+      const childrenCreated = [];
+      const globalChildMarks = q.marks ?? 1;
+      const globalChildNegativeMarks = q.negativeMarks ?? 0;
+      for (const sub of subs) {
+        const child = await questionRepository.create({
+          questionText: sub.questionText,
+          questionType: sub.questionType,
+          options: sub.options,
+          correctAnswer: sub.correctAnswer,
+          explanation: sub.explanation,
+          subject: questionData.subject,
+          topic: questionData.topic,
+          difficulty: questionData.difficulty,
+          marks: globalChildMarks,
+          negativeMarks: globalChildNegativeMarks,
+          tags: questionData.tags,
+          imageUrl: null,
+          questionBank: bank._id,
+          sectionIndex,
+          orderInBank: orderInBank + childIds.length + 1,
+          createdBy,
+          parentQuestionId: parent._id,
+        });
+        childIds.push(child._id);
+        childrenCreated.push(child);
+      }
+
+      const updatedParent = await questionRepository.updateById(parent._id, {
+        childQuestions: childIds,
+      });
+      createdQuestions.push(updatedParent, ...childrenCreated);
+      if (
+        useSectionWiseQuestions &&
+        sectionIndex !== undefined &&
+        sectionsWithIds[sectionIndex]
+      ) {
+        sectionsWithIds[sectionIndex].questions.push(parent._id, ...childIds);
+      }
+      continue;
+    }
+
     const created = await questionRepository.create(questionData);
     createdQuestions.push(created);
 
@@ -180,6 +364,7 @@ export const createQuestionBankWithQuestions = async (data, createdBy) => {
   return {
     questionBank: bankWithPopulate,
     questions: createdQuestions,
+    passageQuestionSets: buildPassageQuestionSets(createdQuestions),
   };
 };
 
@@ -196,7 +381,8 @@ export const getQuestionBankById = async (id) => {
 export const getQuestionsByBankId = async (bankId) => {
   const bank = await questionBankRepository.findById(bankId);
   if (!bank) throw new ApiError(404, "Question bank not found");
-  return await questionBankRepository.getQuestionsByBankId(bankId);
+  const flatQuestions = await questionBankRepository.getQuestionsByBankId(bankId);
+  return buildQuestionBankQuestionsResponse(flatQuestions);
 };
 
 export const updateQuestionBank = async (id, updateData) => {

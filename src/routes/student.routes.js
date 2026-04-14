@@ -89,6 +89,7 @@ import { contactUs } from "../controllers/contact.controller.js";
 import { getLeaderboardsForStudent } from "../controllers/leaderboard.controller.js";
 import {
   startExam,
+  getExamInstructions,
   pauseExam,
   getExamSession,
   saveAnswer,
@@ -408,6 +409,9 @@ router.get("/challenge-yourself", verifyJWT, getChallengeYourself);
 
 // Exam Hall - all purchased tests and test series
 router.get("/examhall", verifyJWT, getExamHall);
+
+// Exam Instructions (dynamic details before start)
+router.get("/tests/:testId/exam-instructions", verifyJWT, getExamInstructions);
 
 // Start Exam Session
 router.post("/tests/:testId/start-exam", verifyJWT, startExam);

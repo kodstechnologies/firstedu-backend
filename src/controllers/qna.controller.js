@@ -43,6 +43,25 @@ export const getAllQnAs = asyncHandler(async (req, res) => {
     );
 });
 
+// Landing page QnAs
+export const getAllQnAsLandingPage = asyncHandler(async (req, res) => {
+  const { type } = req.query;
+  const result = await qnaService.getAllQnAs({
+    ...req.query,
+    status: "approved",
+    type: type === "all" ? "" : type,
+  });
+  return res
+    .status(200)
+    .json(
+      ApiResponse.success(
+        result.data,
+        "QnAs fetched successfully",
+        result.pagination,
+      ),
+    );
+});
+
 export const selfQnAs = asyncHandler(async (req, res) => {
   const { _id } = req.user;
 

@@ -9,7 +9,10 @@ import {
   changePassword,
   getAdminProfile,
 } from "../controllers/adminAuth.controller.js";
-import { getDashboardData } from "../controllers/adminDashboard.controller.js";
+import {
+  getDashboardData,
+  getRevenueHistory,
+} from "../controllers/adminDashboard.controller.js";
 import {
   createQuestion,
   getAllQuestions,
@@ -281,7 +284,7 @@ import {
   postAdminApproveWithdrawal,
   postAdminRejectWithdrawal,
 } from "../controllers/teacherWithdrawal.controller.js";
-import { uploadCourseMaterial, uploadImage, uploadPDF, uploadSuccessStory } from '../utils/multerConfig.js';
+import { uploadCourseMaterial, uploadImage, uploadAnyImages, uploadPDF, uploadSuccessStory } from '../utils/multerConfig.js';
 import {
   createEvent as createLiveCompetition,
   getEvents as getLiveCompetitions,
@@ -302,6 +305,23 @@ import {
   deleteCategory as deleteLiveCategory,
 } from "../controllers/liveCompetitionCategory.controller.js";
 
+import {
+  createCarearJob,
+  getCarearJobs,
+  getCarearJobById,
+  updateCarearJob,
+  deleteCarearJob,
+} from "../controllers/carear.controller.js";
+
+import {
+  getApplicantsForJob,
+  getApplicantDetails,
+  updateApplicantStatus,
+} from "../controllers/jobApplicant.controller.js";
+
+
+
+
 const router = Router();
 
 // Admin Authentication Routes
@@ -309,6 +329,7 @@ router.post("/login", adminLogin);
 router.post("/logout", verifyJWT, adminLogout);
 router.get("/profile", verifyJWT, getAdminProfile);
 router.get("/dashboard", verifyJWT, getDashboardData);
+router.get("/revenue-history", verifyJWT, getRevenueHistory);
 router.post("/forgot-password/request", requestForgotPasswordOTP);
 router.post("/forgot-password/verify", verifyForgotPasswordOTP);
 router.post("/forgot-password/reset", resetPassword);
@@ -355,7 +376,12 @@ router.delete("/olympiad-tests/:id", verifyJWT, deleteOlympiadTest);
 
 // Question Banks (create bank, create bank with questions, list, update name, delete)
 router.post("/question-banks", verifyJWT, createQuestionBank);
-router.post("/question-banks/with-questions", verifyJWT, createQuestionBankWithQuestions);
+router.post(
+  "/question-banks/with-questions",
+  verifyJWT,
+  uploadAnyImages,
+  createQuestionBankWithQuestions
+);
 router.get("/question-banks", verifyJWT, getQuestionBanks);
 router.get("/question-banks/:id", verifyJWT, getQuestionBankById);
 router.get("/question-banks/:id/questions", verifyJWT, getQuestionsByBankId);
@@ -368,10 +394,10 @@ router.patch(
 router.delete("/question-banks/:id", verifyJWT, deleteQuestionBank);
 
 // Question Bank Management Routes (individual questions - create, list all, get, update, delete)
-router.post("/questions", verifyJWT, createQuestion);
+router.post("/questions", verifyJWT, uploadImage.single("image"), createQuestion);
 router.get("/questions", verifyJWT, getAllQuestions);
 router.get("/questions/:id", verifyJWT, getQuestionById);
-router.put("/questions/:id", verifyJWT, updateQuestion);
+router.put("/questions/:id", verifyJWT, uploadImage.single("image"), updateQuestion);
 router.delete("/questions/:id", verifyJWT, deleteQuestion);
 
 // Connected Questions Routes
@@ -683,4 +709,19 @@ router.get("/live-competition-categories", verifyJWT, getLiveCategories);
 router.put("/live-competition-categories/:id", verifyJWT, updateLiveCategory);
 router.delete("/live-competition-categories/:id", verifyJWT, deleteLiveCategory);
 
+// ==================== CAREARS (JOBS) ====================
+router.post("/carears", verifyJWT, createCarearJob);
+
+router.get("/carears", verifyJWT, getCarearJobs);
+router.get("/carears/:id", verifyJWT, getCarearJobById);
+router.put("/carears/:id", verifyJWT, updateCarearJob);
+router.delete("/carears/:id", verifyJWT, deleteCarearJob);
+router.get("/carears/:jobId/applicants", verifyJWT, getApplicantsForJob);
+
+// ==================== JOB APPLICANTS ====================
+router.get("/applicants/:id", verifyJWT, getApplicantDetails);
+router.put("/applicants/:id/status", verifyJWT, updateApplicantStatus);
+
 export default router;
+
+

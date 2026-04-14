@@ -15,6 +15,35 @@ export const getDashboardData = asyncHandler(async (req, res) => {
   );
 });
 
+/**
+ * GET /admin/revenue-history
+ * Returns paginated revenue history with source-level breakdown.
+ */
+export const getRevenueHistory = asyncHandler(async (req, res) => {
+  const {
+    page = 1,
+    limit = 20,
+    type,
+    from,
+    to,
+    search,
+  } = req.query;
+
+  const data = await adminDashboardService.getRevenueHistory({
+    page,
+    limit,
+    type,
+    from,
+    to,
+    search,
+  });
+
+  return res.status(200).json(
+    ApiResponse.success(data, "Revenue history fetched successfully")
+  );
+});
+
 export default {
   getDashboardData,
+  getRevenueHistory,
 };

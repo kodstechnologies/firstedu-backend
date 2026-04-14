@@ -1,10 +1,9 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
-import { getEventStatus, getGoesLiveAt, getStageStatus, withEventStatus } from "../utils/eventStatus.js";
+import { getEventStatus, getGoesLiveAt, withEventStatus } from "../utils/eventStatus.js";
 import tournamentService from "../services/tournament.service.js";
 import eventRegistrationService from "../services/eventRegistration.service.js";
-import examSessionRepository from "../repository/examSession.repository.js";
 import tournamentValidator from "../validation/tournament.validator.js";
 
 // ==================== ADMIN CONTROLLERS ====================
@@ -125,14 +124,6 @@ export const getPublishedTournaments = asyncHandler(async (req, res) => {
     category: category || undefined,
   });
 
-  const testIds = (result.tournaments || [])
-    .flatMap((tournament) => (tournament?.stages || []).map((stage) => stage?.test?._id || stage?.test))
-    .filter(Boolean);
-  const sessionMap = await examSessionRepository.getSessionStatusMapByStudent(
-    req.user._id,
-    testIds
-  );
-
   let tournamentsWithStatus = await Promise.all(
     result.tournaments.map(async (tournament) => {
       const registration = await eventRegistrationService.getRegistrationByEvent(
@@ -141,35 +132,10 @@ export const getPublishedTournaments = asyncHandler(async (req, res) => {
         req.user._id
       );
       const obj = withEventStatus(tournament, !!registration);
-      const stagesWithSession = (obj.stages || []).map((stage) => {
-        const stageStatus = getStageStatus(stage);
-        const stageGoesLiveAt = stageStatus === "upcoming"
-          ? getGoesLiveAt({ startTime: stage.startTime, endTime: stage.endTime }, { onlyWithin24Hours: true })
-          : null;
-        const testId = (stage?.test?._id || stage?.test)?.toString?.();
-        const sessionInfo = testId ? sessionMap[testId] : null;
-        if (stage?.test && typeof stage.test === "object") {
-          return {
-            ...stage,
-            status: stageStatus,
-            isEventLive: stageStatus === "live",
-            canJoin: !!registration && stageStatus === "live",
-            goesLiveAt: stageGoesLiveAt,
-            test: {
-              ...stage.test,
-              sessionId: sessionInfo?.sessionId || null,
-              testStatus: sessionInfo?.status || "not_started",
-            },
-          };
-        }
-        return {
-          ...stage,
-          status: stageStatus,
-          isEventLive: stageStatus === "live",
-          canJoin: !!registration && stageStatus === "live",
-          goesLiveAt: stageGoesLiveAt,
-        };
-      });
+      const stagesWithSession = await tournamentService.buildTournamentStagesWithStudentAccess(
+        tournament,
+        req.user._id
+      );
 
       return {
         ...obj,
@@ -206,42 +172,10 @@ export const getTournamentDetails = asyncHandler(async (req, res) => {
     req.user._id
   );
   const obj = withEventStatus(tournament, !!registration);
-  const testIds = (obj.stages || [])
-    .map((stage) => stage?.test?._id || stage?.test)
-    .filter(Boolean);
-  const sessionMap = await examSessionRepository.getSessionStatusMapByStudent(
-    req.user._id,
-    testIds
+  const stagesWithSession = await tournamentService.buildTournamentStagesWithStudentAccess(
+    tournament,
+    req.user._id
   );
-  const stagesWithSession = (obj.stages || []).map((stage) => {
-    const stageStatus = getStageStatus(stage);
-    const stageGoesLiveAt = stageStatus === "upcoming"
-      ? getGoesLiveAt({ startTime: stage.startTime, endTime: stage.endTime }, { onlyWithin24Hours: true })
-      : null;
-    const testId = (stage?.test?._id || stage?.test)?.toString?.();
-    const sessionInfo = testId ? sessionMap[testId] : null;
-    if (stage?.test && typeof stage.test === "object") {
-      return {
-        ...stage,
-        status: stageStatus,
-        isEventLive: stageStatus === "live",
-        canJoin: !!registration && stageStatus === "live",
-        goesLiveAt: stageGoesLiveAt,
-        test: {
-          ...stage.test,
-          sessionId: sessionInfo?.sessionId || null,
-          testStatus: sessionInfo?.status || "not_started",
-        },
-      };
-    }
-    return {
-      ...stage,
-      status: stageStatus,
-      isEventLive: stageStatus === "live",
-      canJoin: !!registration && stageStatus === "live",
-      goesLiveAt: stageGoesLiveAt,
-    };
-  });
 
   return res.status(200).json(
     ApiResponse.success(

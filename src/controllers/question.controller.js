@@ -3,10 +3,183 @@ import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import questionValidator from "../validation/question.validator.js";
 import questionService from "../services/question.service.js";
+import { uploadImageToCloudinary } from "../utils/s3Upload.js";
+
+const DATA_IMAGE_REGEX = /^data:(image\/[a-zA-Z0-9.+-]+);base64,([\s\S]+)$/i;
+
+const parseMaybeJSON = (value) => {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  if (!trimmed) return value;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return value;
+  }
+};
+
+const extFromMime = (mime = "") => {
+  if (mime.includes("png")) return ".png";
+  if (mime.includes("jpg") || mime.includes("jpeg")) return ".jpg";
+  if (mime.includes("webp")) return ".webp";
+  return ".jpg";
+};
+
+const uploadBase64ImageIfPresent = async (value) => {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const match = trimmed.match(DATA_IMAGE_REGEX);
+  if (!match) return null;
+
+  const mimeType = String(match[1] || "").toLowerCase();
+  if (!["image/jpeg", "image/jpg", "image/png", "image/webp"].includes(mimeType)) {
+    throw new ApiError(400, "Only JPEG, PNG, and WEBP base64 images are supported");
+  }
+
+  const rawBase64 = String(match[2] || "").replace(/\s+/g, "");
+  const fileBuffer = Buffer.from(rawBase64, "base64");
+  if (!fileBuffer?.length) {
+    throw new ApiError(400, "Invalid base64 image data");
+  }
+
+  const originalName = `question-upload${extFromMime(mimeType)}`;
+  return uploadImageToCloudinary(
+    fileBuffer,
+    originalName,
+    "question-images",
+    mimeType
+  );
+};
+
+const parsePathTokens = (key = "") => {
+  const bracketRegex = /([^[\]]+)|\[(.*?)\]/g;
+  const tokens = [];
+  let match;
+  while ((match = bracketRegex.exec(key)) !== null) {
+    const raw = match[1] ?? match[2];
+    if (raw === undefined || raw === "") continue;
+    tokens.push(/^\d+$/.test(raw) ? Number(raw) : raw);
+  }
+  return tokens;
+};
+
+const assignNestedValue = (target, tokens, value) => {
+  if (!tokens.length) return;
+  let cursor = target;
+  for (let i = 0; i < tokens.length - 1; i++) {
+    const current = tokens[i];
+    const next = tokens[i + 1];
+    if (cursor[current] === undefined) {
+      cursor[current] = typeof next === "number" ? [] : {};
+    }
+    cursor = cursor[current];
+  }
+  cursor[tokens[tokens.length - 1]] = value;
+};
+
+const unflattenFormFields = (body = {}) => {
+  const entries = Object.entries(body || {});
+  const hasNestedFieldKeys = entries.some(([key]) => key.includes("["));
+  if (!hasNestedFieldKeys) return { ...body };
+
+  const result = {};
+  for (const [key, value] of entries) {
+    const tokens = parsePathTokens(key);
+    if (!tokens.length) {
+      result[key] = value;
+      continue;
+    }
+    assignNestedValue(result, tokens, value);
+  }
+  return result;
+};
+
+const buildQuestionPayload = (req) => {
+  if (typeof req.body?.data === "string") {
+    try {
+      return JSON.parse(req.body.data);
+    } catch {
+      throw new ApiError(400, "Invalid JSON in multipart field `data`");
+    }
+  }
+  return unflattenFormFields(req.body);
+};
+
+const toNumberIfPossible = (value) => {
+  if (value === undefined || value === null || value === "") return value;
+  const parsed = Number(value);
+  return Number.isNaN(parsed) ? value : parsed;
+};
+
+const normalizeConnectedSubQuestion = (sub = {}) => {
+  const normalized = { ...sub };
+  ["options", "correctAnswer"].forEach((key) => {
+    if (Object.prototype.hasOwnProperty.call(normalized, key)) {
+      normalized[key] = parseMaybeJSON(normalized[key]);
+    }
+  });
+  normalized.marks = toNumberIfPossible(normalized.marks);
+  normalized.negativeMarks = toNumberIfPossible(normalized.negativeMarks);
+  return normalized;
+};
+
+const normalizeQuestionPayload = (body = {}) => {
+  const payload = { ...body };
+  // File comes via multer as req.file; ignore any body "image" placeholder/object.
+  delete payload.image;
+
+  ["options", "connectedQuestions", "subQuestions", "tags", "correctAnswer"].forEach((key) => {
+    if (Object.prototype.hasOwnProperty.call(payload, key)) {
+      payload[key] = parseMaybeJSON(payload[key]);
+    }
+  });
+
+  ["marks", "negativeMarks", "sectionIndex", "orderInBank"].forEach((key) => {
+    if (payload[key] !== undefined && payload[key] !== null && payload[key] !== "") {
+      const n = Number(payload[key]);
+      payload[key] = Number.isNaN(n) ? payload[key] : n;
+    }
+  });
+
+  if (Array.isArray(payload.connectedQuestions)) {
+    payload.connectedQuestions = payload.connectedQuestions.map(
+      normalizeConnectedSubQuestion
+    );
+  }
+  if (Array.isArray(payload.subQuestions)) {
+    payload.subQuestions = payload.subQuestions.map(normalizeConnectedSubQuestion);
+  }
+
+  ["isParent"].forEach((key) => {
+    if (typeof payload[key] === "string") {
+      payload[key] = payload[key].toLowerCase() === "true";
+    }
+  });
+
+  return payload;
+};
 
 // Create Question
 export const createQuestion = asyncHandler(async (req, res) => {
-  const { error, value } = questionValidator.createQuestion.validate(req.body);
+  const rawPayload = buildQuestionPayload(req);
+  const normalizedPayload = normalizeQuestionPayload(rawPayload);
+
+  if (req.file) {
+    normalizedPayload.imageUrl = await uploadImageToCloudinary(
+      req.file.buffer,
+      req.file.originalname,
+      "question-images",
+      req.file.mimetype
+    );
+  } else {
+    const fallbackBase64Source =
+      typeof rawPayload?.image === "string" ? rawPayload.image : normalizedPayload.imageUrl;
+    const uploadedUrl = await uploadBase64ImageIfPresent(fallbackBase64Source);
+    if (uploadedUrl) normalizedPayload.imageUrl = uploadedUrl;
+  }
+
+  const { error, value } = questionValidator.createQuestion.validate(normalizedPayload);
 
   if (error) {
     throw new ApiError(
@@ -88,7 +261,24 @@ export const getQuestionById = asyncHandler(async (req, res) => {
 // Update Question
 export const updateQuestion = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { error, value } = questionValidator.updateQuestion.validate(req.body);
+  const rawPayload = buildQuestionPayload(req);
+  const normalizedPayload = normalizeQuestionPayload(rawPayload);
+
+  if (req.file) {
+    normalizedPayload.imageUrl = await uploadImageToCloudinary(
+      req.file.buffer,
+      req.file.originalname,
+      "question-images",
+      req.file.mimetype
+    );
+  } else {
+    const fallbackBase64Source =
+      typeof rawPayload?.image === "string" ? rawPayload.image : normalizedPayload.imageUrl;
+    const uploadedUrl = await uploadBase64ImageIfPresent(fallbackBase64Source);
+    if (uploadedUrl) normalizedPayload.imageUrl = uploadedUrl;
+  }
+
+  const { error, value } = questionValidator.updateQuestion.validate(normalizedPayload);
 
   if (error) {
     throw new ApiError(
@@ -216,4 +406,5 @@ export const getBulkAnalytics = asyncHandler(async (req, res) => {
       ApiResponse.success(analytics, "Bulk analytics fetched successfully")
     );
 });
+
 

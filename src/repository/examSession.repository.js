@@ -236,7 +236,7 @@ const getRankedByTest = async (testId, studentIds = null, limit = 10) => {
         .map((id) => new mongoose.Types.ObjectId(id));
       match.student = { $in: ids };
     }
-    const ranked = await ExamSession.aggregate([
+    const pipeline = [
       { $match: match },
       { $sort: { score: -1, completedAt: 1 } },
       {
@@ -248,7 +248,6 @@ const getRankedByTest = async (testId, studentIds = null, limit = 10) => {
         },
       },
       { $sort: { score: -1, completedAt: 1 } },
-      { $limit: limit },
       {
         $lookup: {
           from: "users",
@@ -269,7 +268,11 @@ const getRankedByTest = async (testId, studentIds = null, limit = 10) => {
           email: "$studentDoc.email",
         },
       },
-    ]);
+    ];
+    if (Number.isInteger(limit) && limit > 0) {
+      pipeline.splice(5, 0, { $limit: limit });
+    }
+    const ranked = await ExamSession.aggregate(pipeline);
     return ranked;
   } catch (error) {
     throw new ApiError(500, "Failed to fetch rankings", error.message);
@@ -338,6 +341,50 @@ const countDocuments = async (filter = {}) => {
   }
 };
 
+/**
+ * Latest completed session for this test in default context (no challenge / competition category).
+ * Tournament and standard exam-hall attempts use this; avoids matching another completed attempt
+ * for the same test (e.g. competition sector) when evaluating tournament qualification.
+ */
+const findLatestDefaultContextCompletedSession = async (studentId, testId) => {
+  try {
+    const sid =
+      studentId instanceof mongoose.Types.ObjectId
+        ? studentId
+        : new mongoose.Types.ObjectId(String(studentId));
+    const tid =
+      testId instanceof mongoose.Types.ObjectId
+        ? testId
+        : new mongoose.Types.ObjectId(String(testId));
+
+    let session = await ExamSession.findOne({
+      student: sid,
+      test: tid,
+      status: "completed",
+      challenge: null,
+      competitionCategory: null,
+    })
+      .sort({ completedAt: -1, updatedAt: -1 })
+      .select("score maxScore completedAt")
+      .lean();
+
+    if (!session) {
+      session = await ExamSession.findOne({
+        student: sid,
+        test: tid,
+        status: "completed",
+      })
+        .sort({ completedAt: -1, updatedAt: -1 })
+        .select("score maxScore completedAt")
+        .lean();
+    }
+
+    return session;
+  } catch (error) {
+    throw new ApiError(500, "Failed to fetch exam session", error.message);
+  }
+};
+
 export default {
   create,
   findById,
@@ -354,5 +401,6 @@ export default {
   getRankedByTest,
   getRankedByChallenge,
   countDocuments,
+  findLatestDefaultContextCompletedSession,
 };
 

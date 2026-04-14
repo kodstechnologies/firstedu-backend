@@ -23,6 +23,7 @@ function normalizeBlogRequestBody(body) {
  * POST /user/blog-request
  */
 export const submitBlogRequest = asyncHandler(async (req, res) => {
+  console.log("Received blog request with body:",req.user)
   const body = normalizeBlogRequestBody(req.body);
   const { error, value } =
     blogRequestValidator.submitBlogRequest.validate(body);

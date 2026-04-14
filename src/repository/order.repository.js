@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import Order from "../models/Order.js";
 import CoursePurchase from "../models/CoursePurchase.js";
 import TestPurchase from "../models/TestPurchase.js";
@@ -193,6 +194,31 @@ const findTestPurchase = async (filter) => {
   }
 };
 
+/** Completed direct test purchases for this student, restricted to given test ids (e.g. challenge-yourself layout). */
+const findPurchasedTestIdsForStudent = async (studentId, testIds) => {
+  try {
+    if (!studentId || !testIds?.length) return [];
+    const objectIds = testIds
+      .map((id) => {
+        if (id == null) return null;
+        const s = id?.toString?.() ?? String(id);
+        return mongoose.Types.ObjectId.isValid(s) ? new mongoose.Types.ObjectId(s) : null;
+      })
+      .filter(Boolean);
+    if (objectIds.length === 0) return [];
+    const docs = await TestPurchase.find({
+      student: studentId,
+      test: { $in: objectIds },
+      paymentStatus: "completed",
+    })
+      .select("test")
+      .lean();
+    return [...new Set(docs.map((d) => d.test?.toString?.()).filter(Boolean))];
+  } catch (error) {
+    throw new ApiError(500, "Failed to fetch test purchases by tests", error.message);
+  }
+};
+
 const createTestPurchase = async (purchaseData) => {
   try {
     const purchase = await TestPurchase.create(purchaseData);
@@ -222,6 +248,7 @@ export default {
   findCoursePurchase,
   createCoursePurchase,
   findTestPurchase,
+  findPurchasedTestIdsForStudent,
   createTestPurchase,
 };
 

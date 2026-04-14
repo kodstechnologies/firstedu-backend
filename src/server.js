@@ -12,6 +12,7 @@ import { setupTeacherChatSocket } from './socket/teacherChatSocket.js';
 import { setupTeacherCallSocket } from './socket/teacherCallSocket.js';
 import { setIO } from './socket/socketGateway.js';
 import examSessionService from './services/examSession.service.js';
+import tournamentNotificationsService from './services/tournamentNotifications.service.js';
 
 dotenv.config();
 
@@ -67,8 +68,7 @@ const startServer = async () => {
         const result = await examSessionService.autoSubmitExpiredSessions();
         if (result.processed > 0) {
           console.log(`⏰ Auto-submission cron: ${result.message}`);
-          
-          // Emit WebSocket notifications for auto-submitted sessions
+
           if (result.autoSubmittedSessions && result.autoSubmittedSessions.length > 0) {
             const examNamespace = io.of("/exam");
             result.autoSubmittedSessions.forEach(({ sessionId, studentId }) => {
@@ -85,8 +85,13 @@ const startServer = async () => {
       } catch (error) {
         console.error('❌ Error in auto-submit cron job:', error);
       }
+      try {
+        await tournamentNotificationsService.runTournamentNotificationTick();
+      } catch (error) {
+        console.error('❌ Error in tournament notifications cron:', error);
+      }
     });
-    console.log('⏰ Auto-submit cron job scheduled (runs every minute)');
+    console.log('⏰ Minute cron: auto-submit + tournament notifications');
 
     const port = process.env.PORT || 8000;
     server.listen(port, '0.0.0.0', () => {
