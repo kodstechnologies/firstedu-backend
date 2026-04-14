@@ -275,6 +275,23 @@ import {
   deleteCategory as deleteLiveCategory,
 } from "../controllers/liveCompetitionCategory.controller.js";
 
+import {
+  createCarearJob,
+  getCarearJobs,
+  getCarearJobById,
+  updateCarearJob,
+  deleteCarearJob,
+} from "../controllers/carear.controller.js";
+
+import {
+  getApplicantsForJob,
+  getApplicantDetails,
+  updateApplicantStatus,
+} from "../controllers/jobApplicant.controller.js";
+
+
+
+
 const router = Router();
 
 // Admin Authentication Routes
@@ -627,4 +644,19 @@ router.get("/live-competition-categories", verifyJWT, getLiveCategories);
 router.put("/live-competition-categories/:id", verifyJWT, updateLiveCategory);
 router.delete("/live-competition-categories/:id", verifyJWT, deleteLiveCategory);
 
+// ==================== CAREARS (JOBS) ====================
+router.post("/carears", verifyJWT, createCarearJob);
+
+router.get("/carears", verifyJWT, getCarearJobs);
+router.get("/carears/:id", verifyJWT, getCarearJobById);
+router.put("/carears/:id", verifyJWT, updateCarearJob);
+router.delete("/carears/:id", verifyJWT, deleteCarearJob);
+router.get("/carears/:jobId/applicants", verifyJWT, getApplicantsForJob);
+
+// ==================== JOB APPLICANTS ====================
+router.get("/applicants/:id", verifyJWT, getApplicantDetails);
+router.put("/applicants/:id/status", verifyJWT, updateApplicantStatus);
+
 export default router;
+
+
