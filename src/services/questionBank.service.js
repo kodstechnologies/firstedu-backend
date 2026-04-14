@@ -63,6 +63,57 @@ const buildPassageQuestionSets = (flatDocs) => {
     });
 };
 
+const buildQuestionBankQuestionsResponse = (flatDocs) => {
+  if (!Array.isArray(flatDocs) || flatDocs.length === 0) return [];
+
+  const byId = new Map(
+    flatDocs.map((doc) => {
+      const plain = toQuestionPlain(doc);
+      return [plain._id.toString(), plain];
+    })
+  );
+
+  return flatDocs
+    .map((doc) => toQuestionPlain(doc))
+    .filter((q) => !q.parentQuestionId)
+    .map((q) => {
+      if (!(q.isParent && q.questionType === "connected")) {
+        return q;
+      }
+
+      const refs = q.childQuestions || [];
+      const subQuestions = refs
+        .map((ref) => {
+          const id = ref?._id?.toString?.() || ref?.toString?.();
+          if (!id) return null;
+          const fromPopulate =
+            ref && typeof ref === "object" && ref.questionText != null
+              ? toQuestionPlain(ref)
+              : null;
+          return fromPopulate || byId.get(id) || null;
+        })
+        .filter(Boolean)
+        .map((child) => ({
+          _id: child._id,
+          questionText: child.questionText,
+          questionType: child.questionType,
+          options: child.options || [],
+          correctAnswer: child.correctAnswer,
+          explanation: child.explanation,
+          marks: child.marks ?? 1,
+          negativeMarks: child.negativeMarks ?? 0,
+          imageUrl: child.imageUrl || null,
+        }));
+
+      return {
+        ...q,
+        title: q.questionText || "",
+        paragraph: q.passage || "",
+        subQuestions,
+      };
+    });
+};
+
 const validateConnectedQuestions = (connectedQuestions = []) => {
   if (!Array.isArray(connectedQuestions) || connectedQuestions.length === 0) {
     throw new ApiError(
@@ -72,6 +123,12 @@ const validateConnectedQuestions = (connectedQuestions = []) => {
   }
   connectedQuestions.forEach((sub, index) => {
     validateQuestionOptions(sub.questionType, sub.options);
+    if (!String(sub.explanation ?? "").trim()) {
+      throw new ApiError(
+        400,
+        `connectedQuestions[${index}] explanation is required`
+      );
+    }
     if (sub.questionType === "true_false" && sub.correctAnswer === undefined) {
       throw new ApiError(
         400,
@@ -212,7 +269,7 @@ export const createQuestionBankWithQuestions = async (data, createdBy) => {
       marks: q.marks ?? 1,
       negativeMarks: q.negativeMarks ?? 0,
       tags: q.tags,
-      imageUrl: q.imageUrl,
+      imageUrl: q.imageUrl || null,
       subject: q.subject || undefined,
       questionBank: bank._id,
       sectionIndex,
@@ -245,6 +302,8 @@ export const createQuestionBankWithQuestions = async (data, createdBy) => {
 
       const childIds = [];
       const childrenCreated = [];
+      const globalChildMarks = q.marks ?? 1;
+      const globalChildNegativeMarks = q.negativeMarks ?? 0;
       for (const sub of subs) {
         const child = await questionRepository.create({
           questionText: sub.questionText,
@@ -255,10 +314,10 @@ export const createQuestionBankWithQuestions = async (data, createdBy) => {
           subject: questionData.subject,
           topic: questionData.topic,
           difficulty: questionData.difficulty,
-          marks: sub.marks ?? 1,
-          negativeMarks: sub.negativeMarks ?? 0,
+          marks: globalChildMarks,
+          negativeMarks: globalChildNegativeMarks,
           tags: questionData.tags,
-          imageUrl: questionData.imageUrl,
+          imageUrl: null,
           questionBank: bank._id,
           sectionIndex,
           orderInBank: orderInBank + childIds.length + 1,
@@ -322,7 +381,8 @@ export const getQuestionBankById = async (id) => {
 export const getQuestionsByBankId = async (bankId) => {
   const bank = await questionBankRepository.findById(bankId);
   if (!bank) throw new ApiError(404, "Question bank not found");
-  return await questionBankRepository.getQuestionsByBankId(bankId);
+  const flatQuestions = await questionBankRepository.getQuestionsByBankId(bankId);
+  return buildQuestionBankQuestionsResponse(flatQuestions);
 };
 
 export const updateQuestionBank = async (id, updateData) => {

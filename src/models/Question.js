@@ -30,7 +30,7 @@ const questionSchema = new mongoose.Schema(
     // Basic question fields
     questionText: { type: String, required: true, trim: true },
     answer: { type: String },
-    imageUrl: { type: String, trim: true },
+    imageUrl: { type: String, trim: true, default: null },
     questionType: {
       type: String,
       enum: ["single", "multiple", "true_false", "connected"],

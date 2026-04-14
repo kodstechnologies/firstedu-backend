@@ -25,9 +25,9 @@ const connectedSubQuestionSchema = Joi.object({
       otherwise: Joi.boolean().required(),
     }),
   }),
-  explanation: Joi.string().trim().optional(),
-  marks: Joi.number().min(0).default(1),
-  negativeMarks: Joi.number().min(0).default(0),
+  explanation: Joi.string().trim().required(),
+  marks: Joi.number().min(0).optional(),
+  negativeMarks: Joi.number().min(0).optional(),
 });
 
 const sectionSchema = Joi.object({
@@ -75,7 +75,7 @@ const questionItemSchema = Joi.object({
         .required(),
       is: "true_false",
       then: Joi.boolean().required(),
-      otherwise: Joi.optional(),
+      otherwise: Joi.optional().allow(null),
     }),
   }),
   explanation: Joi.string().trim().optional(),

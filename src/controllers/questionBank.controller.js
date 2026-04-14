@@ -6,6 +6,167 @@ import questionBankValidator from "../validation/questionBank.validator.js";
 import questionBankService from "../services/questionBank.service.js";
 import { uploadImageToCloudinary } from "../utils/s3Upload.js";
 
+const parseMaybeJSON = (value) => {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  if (!trimmed) return value;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return value;
+  }
+};
+
+const parsePathTokens = (key = "") => {
+  const bracketRegex = /([^[\]]+)|\[(.*?)\]/g;
+  const tokens = [];
+  let match;
+  while ((match = bracketRegex.exec(key)) !== null) {
+    const raw = match[1] ?? match[2];
+    if (raw === undefined || raw === "") continue;
+    tokens.push(/^\d+$/.test(raw) ? Number(raw) : raw);
+  }
+  return tokens;
+};
+
+const assignNestedValue = (target, tokens, value) => {
+  if (!tokens.length) return;
+  let cursor = target;
+  for (let i = 0; i < tokens.length - 1; i++) {
+    const current = tokens[i];
+    const next = tokens[i + 1];
+    if (cursor[current] === undefined) {
+      cursor[current] = typeof next === "number" ? [] : {};
+    }
+    cursor = cursor[current];
+  }
+  cursor[tokens[tokens.length - 1]] = value;
+};
+
+const unflattenFormFields = (body = {}) => {
+  const entries = Object.entries(body || {});
+  const hasNestedFieldKeys = entries.some(([key]) => key.includes("["));
+  if (!hasNestedFieldKeys) return { ...body };
+
+  const result = {};
+  for (const [key, value] of entries) {
+    const tokens = parsePathTokens(key);
+    if (!tokens.length) {
+      result[key] = value;
+      continue;
+    }
+    assignNestedValue(result, tokens, value);
+  }
+  return result;
+};
+
+const toNumberIfPossible = (value) => {
+  if (value === undefined || value === null || value === "") return value;
+  const parsed = Number(value);
+  return Number.isNaN(parsed) ? value : parsed;
+};
+
+const normalizeConnectedSubQuestion = (sub = {}) => {
+  const normalized = { ...sub };
+  ["options", "correctAnswer"].forEach((key) => {
+    if (Object.prototype.hasOwnProperty.call(normalized, key)) {
+      normalized[key] = parseMaybeJSON(normalized[key]);
+    }
+  });
+  normalized.marks = toNumberIfPossible(normalized.marks);
+  normalized.negativeMarks = toNumberIfPossible(normalized.negativeMarks);
+  return normalized;
+};
+
+const normalizeQuestionItem = (question = {}) => {
+  const normalized = { ...question };
+  // Ignore UI file placeholders. Actual files are handled via req.files.
+  delete normalized.image;
+  ["options", "connectedQuestions", "subQuestions", "tags", "correctAnswer"].forEach(
+    (key) => {
+      if (Object.prototype.hasOwnProperty.call(normalized, key)) {
+        normalized[key] = parseMaybeJSON(normalized[key]);
+      }
+    }
+  );
+
+  normalized.marks = toNumberIfPossible(normalized.marks);
+  normalized.negativeMarks = toNumberIfPossible(normalized.negativeMarks);
+
+  if (Array.isArray(normalized.connectedQuestions)) {
+    normalized.connectedQuestions = normalized.connectedQuestions.map(
+      normalizeConnectedSubQuestion
+    );
+  }
+  if (Array.isArray(normalized.subQuestions)) {
+    normalized.subQuestions = normalized.subQuestions.map(
+      normalizeConnectedSubQuestion
+    );
+  }
+
+  // Joi expects URI string; sanitize invalid payload values early.
+  if (
+    Object.prototype.hasOwnProperty.call(normalized, "imageUrl") &&
+    normalized.imageUrl !== null &&
+    normalized.imageUrl !== undefined &&
+    typeof normalized.imageUrl !== "string"
+  ) {
+    delete normalized.imageUrl;
+  }
+  if (typeof normalized.imageUrl === "string" && !normalized.imageUrl.trim()) {
+    delete normalized.imageUrl;
+  }
+
+  return normalized;
+};
+
+const normalizeQuestionBankPayload = (input = {}) => {
+  const payload = { ...input };
+  // Ignore top-level image placeholders; real files come from multer req.files.
+  delete payload.image;
+  delete payload.questionImages;
+  delete payload.questionImage;
+  Object.keys(payload).forEach((key) => {
+    if (
+      /^image_\d+$/.test(key) ||
+      /^questionImage_\d+$/.test(key) ||
+      /^image\[\d+\]$/.test(key) ||
+      /^questionImage\[\d+\]$/.test(key)
+    ) {
+      delete payload[key];
+    }
+  });
+
+  ["categories", "sections", "questions"].forEach((key) => {
+    if (Object.prototype.hasOwnProperty.call(payload, key)) {
+      payload[key] = parseMaybeJSON(payload[key]);
+    }
+  });
+
+  if (typeof payload.useSectionWiseDifficulty === "string") {
+    payload.useSectionWiseDifficulty =
+      payload.useSectionWiseDifficulty.toLowerCase() === "true";
+  }
+  if (typeof payload.useSectionWiseQuestions === "string") {
+    payload.useSectionWiseQuestions =
+      payload.useSectionWiseQuestions.toLowerCase() === "true";
+  }
+
+  if (Array.isArray(payload.sections)) {
+    payload.sections = payload.sections.map((section) => ({
+      ...section,
+      count: toNumberIfPossible(section?.count),
+      id: toNumberIfPossible(section?.id),
+    }));
+  }
+
+  if (Array.isArray(payload.questions)) {
+    payload.questions = payload.questions.map(normalizeQuestionItem);
+  }
+
+  return payload;
+};
+
 /**
  * JSON body (application/json) as today, or multipart/form-data with:
  * - field `data`: stringified JSON (same shape as JSON body)
@@ -22,12 +183,19 @@ const buildQuestionBankWithQuestionsPayload = async (req) => {
       throw new ApiError(400, "Invalid JSON in multipart field `data`");
     }
   } else {
-    payload = { ...req.body };
+    payload = unflattenFormFields(req.body);
   }
+  payload = normalizeQuestionBankPayload(payload);
 
   const allFiles = Array.isArray(req.files) ? req.files : [];
   const files = allFiles.filter(
-    (f) => f.fieldname === "questionImages" || /^questionImage_\d+$/.test(f.fieldname)
+    (f) =>
+      f.fieldname === "questionImages" ||
+      f.fieldname === "image" ||
+      /^questionImage_\d+$/.test(f.fieldname) ||
+      /^image_\d+$/.test(f.fieldname) ||
+      /^questionImage\[\d+\]$/.test(f.fieldname) ||
+      /^image\[\d+\]$/.test(f.fieldname)
   );
   if (files.length > 500) {
     throw new ApiError(400, "Too many question image files (max 500)");
@@ -36,10 +204,22 @@ const buildQuestionBankWithQuestionsPayload = async (req) => {
     const named = [];
     const sequential = [];
     for (const f of files) {
-      if (/^questionImage_\d+$/.test(f.fieldname)) {
-        const index = Number(f.fieldname.replace(/^questionImage_/, ""));
+      if (
+        /^questionImage_\d+$/.test(f.fieldname) ||
+        /^image_\d+$/.test(f.fieldname) ||
+        /^questionImage\[\d+\]$/.test(f.fieldname) ||
+        /^image\[\d+\]$/.test(f.fieldname)
+      ) {
+        const index = Number(
+          f.fieldname
+            .replace(/^questionImage_/, "")
+            .replace(/^image_/, "")
+            .replace(/^questionImage\[/, "")
+            .replace(/^image\[/, "")
+            .replace(/\]$/, "")
+        );
         if (!Number.isNaN(index)) named.push({ index, file: f });
-      } else if (f.fieldname === "questionImages") {
+      } else if (f.fieldname === "questionImages" || f.fieldname === "image") {
         sequential.push(f);
       }
     }
@@ -77,6 +257,16 @@ const buildQuestionBankWithQuestionsPayload = async (req) => {
     for (const { i, url } of results) {
       payload.questions[i].imageUrl = url;
     }
+  }
+
+  if (Array.isArray(payload.questions)) {
+    payload.questions = payload.questions.map((q) => {
+      const normalizedQuestion = { ...q };
+      if (!normalizedQuestion.imageUrl) {
+        delete normalizedQuestion.imageUrl;
+      }
+      return normalizedQuestion;
+    });
   }
 
   return payload;

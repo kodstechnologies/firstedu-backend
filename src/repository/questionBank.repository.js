@@ -140,6 +140,10 @@ const getQuestionsByBankId = async (bankId, options = {}) => {
     const sort = { [sortBy]: sortOrder === "desc" ? -1 : 1 };
     return await Question.find({ questionBank: bankId })
       .populate("createdBy", "name email")
+      .populate(
+        "childQuestions",
+        "questionText questionType options correctAnswer explanation marks negativeMarks imageUrl"
+      )
       .sort(sort)
       .lean();
   } catch (error) {
