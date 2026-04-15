@@ -5,7 +5,7 @@ import challengeYourselfService from "../services/challengeYourself.service.js";
 /**
  * GET /challenge-yourself
  * Returns 6 stages (Bronze, Silver, Gold, Platinum, Diamond, Heroic) with levels and tests.
- * Tests are free and only shown here. All stages use challenge_yourself tests only, by difficulty mix.
+ * Each level includes isPurchased (direct test purchase completed). Stages use challenge_yourself tests by difficulty mix.
  */
 export const getChallengeYourself = asyncHandler(async (req, res) => {
   const result = await challengeYourselfService.getChallengeYourself(req.user._id);

@@ -1,9 +1,13 @@
-import Category from "../models/Category.js";
+import Category, { Subcategory } from "../models/Category.js";
 import { ApiError } from "../utils/ApiError.js";
 
 const create = async (data) => {
   try {
-    return await Category.create(data);
+    // Structural pillars are base Categories. Anything else is a Subcategory discriminator.
+    if (data.isPredefined) {
+      return await Category.create(data);
+    }
+    return await Subcategory.create(data);
   } catch (error) {
     if (error instanceof ApiError) throw error;
     throw new ApiError(500, "Failed to create category", error.message);
@@ -124,7 +128,7 @@ const updateById = async (id, updateData) => {
     return await Category.findByIdAndUpdate(
       id,
       { $set: updateData },
-      { new: true, runValidators: true }
+      { new: true, runValidators: true, strict: false }
     ).populate("parent", "name order");
   } catch (error) {
     if (error instanceof ApiError) throw error;

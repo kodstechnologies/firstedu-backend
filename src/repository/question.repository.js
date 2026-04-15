@@ -23,7 +23,10 @@ const findById = async (id) => {
   try {
     return await Question.findById(id)
       .populate("parentQuestionId", "questionText passage")
-      .populate("childQuestions", "questionText options correctAnswer")
+      .populate(
+        "childQuestions",
+        "questionText questionType options correctAnswer explanation marks negativeMarks imageUrl"
+      )
       .populate("createdBy", "name email")
       .populate("questionBank", "name");
   } catch (error) {
@@ -92,7 +95,10 @@ const findAll = async (filter = {}, options = {}) => {
 
     const questions = await Question.find(query)
       .populate("parentQuestionId", "questionText passage")
-      .populate("childQuestions", "questionText options correctAnswer")
+      .populate(
+        "childQuestions",
+        "questionText questionType options correctAnswer explanation marks negativeMarks imageUrl"
+      )
       .populate("createdBy", "name email")
       .populate("questionBank", "name")
       .sort(sort)
@@ -124,7 +130,10 @@ const updateById = async (id, updateData) => {
       { new: true, runValidators: true }
     )
       .populate("parentQuestionId", "questionText passage")
-      .populate("childQuestions", "questionText options correctAnswer")
+      .populate(
+        "childQuestions",
+        "questionText questionType options correctAnswer explanation marks negativeMarks imageUrl"
+      )
       .populate("createdBy", "name email")
       .populate("questionBank", "name");
   } catch (error) {
@@ -185,7 +194,7 @@ const addChildQuestion = async (parentId, childId) => {
 
     return await Question.findById(parentId).populate(
       "childQuestions",
-      "questionText options correctAnswer"
+      "questionText questionType options correctAnswer explanation marks negativeMarks imageUrl"
     );
   } catch (error) {
     if (error instanceof ApiError) throw error;

@@ -1,9 +1,11 @@
+import mongoose from "mongoose";
 import Order from "../models/Order.js";
 import CoursePurchase from "../models/CoursePurchase.js";
 import TestPurchase from "../models/TestPurchase.js";
 import MerchandiseClaim from "../models/MerchandiseClaim.js";
 import EventRegistration from "../models/EventRegistration.js";
 import LiveCompetitionSubmission from "../models/LiveCompetitionSubmission.js";
+import CategoryPurchase from "../models/CategoryPurchase.js";
 import { ApiError } from "../utils/ApiError.js";
 
 const findOrderById = async (id) => {
@@ -71,6 +73,8 @@ const findTestPurchases = async (studentId) => {
       .populate("test", "title description price")
       .populate("testBundle", "name description price")
       .populate("competitionCategory", "title description price")
+      .populate("schoolCategory", "name description price")
+      .populate("skillCategory", "name description price")
       .sort({ purchaseDate: -1 });
   } catch (error) {
     throw new ApiError(500, "Failed to fetch test purchases", error.message);
@@ -107,6 +111,8 @@ const findTestPurchasesForExamHall = async (studentId) => {
           },
         },
       })
+      .populate("schoolCategory", "name description")
+      .populate("skillCategory", "name description")
       .sort({ purchaseDate: -1 });
   } catch (error) {
     throw new ApiError(500, "Failed to fetch exam hall purchases", error.message);
@@ -150,6 +156,17 @@ const findLiveCompetitionRegistrations = async (studentId) => {
   }
 };
 
+const findCategoryPurchases = async (studentId) => {
+  try {
+    return await CategoryPurchase.find({ student: studentId, paymentStatus: "completed" })
+      .populate("categoryId", "name rootType price")
+      .populate("unlockedCategoryIds", "name rootType")
+      .sort({ createdAt: -1 });
+  } catch (error) {
+    throw new ApiError(500, "Failed to fetch category purchases", error.message);
+  }
+};
+
 const findCoursePurchase = async (filter) => {
   try {
     return await CoursePurchase.findOne(filter);
@@ -177,6 +194,31 @@ const findTestPurchase = async (filter) => {
   }
 };
 
+/** Completed direct test purchases for this student, restricted to given test ids (e.g. challenge-yourself layout). */
+const findPurchasedTestIdsForStudent = async (studentId, testIds) => {
+  try {
+    if (!studentId || !testIds?.length) return [];
+    const objectIds = testIds
+      .map((id) => {
+        if (id == null) return null;
+        const s = id?.toString?.() ?? String(id);
+        return mongoose.Types.ObjectId.isValid(s) ? new mongoose.Types.ObjectId(s) : null;
+      })
+      .filter(Boolean);
+    if (objectIds.length === 0) return [];
+    const docs = await TestPurchase.find({
+      student: studentId,
+      test: { $in: objectIds },
+      paymentStatus: "completed",
+    })
+      .select("test")
+      .lean();
+    return [...new Set(docs.map((d) => d.test?.toString?.()).filter(Boolean))];
+  } catch (error) {
+    throw new ApiError(500, "Failed to fetch test purchases by tests", error.message);
+  }
+};
+
 const createTestPurchase = async (purchaseData) => {
   try {
     const purchase = await TestPurchase.create(purchaseData);
@@ -184,6 +226,8 @@ const createTestPurchase = async (purchaseData) => {
       .populate("test", "title description durationMinutes questionBank")
       .populate("testBundle", "name description tests price")
       .populate("competitionCategory", "title description price tests")
+      .populate("schoolCategory", "name description")
+      .populate("skillCategory", "name description")
       .populate("student", "name email");
   } catch (error) {
     throw new ApiError(500, "Failed to create test purchase", error.message);
@@ -200,9 +244,11 @@ export default {
   findMerchandiseClaims,
   findEventRegistrations,
   findLiveCompetitionRegistrations,
+  findCategoryPurchases,
   findCoursePurchase,
   createCoursePurchase,
   findTestPurchase,
+  findPurchasedTestIdsForStudent,
   createTestPurchase,
 };
 

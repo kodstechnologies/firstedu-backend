@@ -155,8 +155,26 @@ import {
   getCategoryById as getTaxonomyCategoryById,
   getCategoryChildren as getTaxonomyCategoryChildren,
   updateCategory as updateTaxonomyCategory,
+  updateCategoryPricing as updateTaxonomyCategoryPricing,
   deleteCategory as deleteTaxonomyCategory,
+  createCategoryOffer,
+  removeCategoryOffer,
+  createCategoryCoupon,
+  getCategoryCoupons,
+  deleteCategoryCoupon
 } from "../controllers/category.controller.js";
+import {
+  createSchoolTest,
+  getSchoolTests,
+  updateSchoolTest,
+  deleteSchoolTest,
+} from "../controllers/schoolTest.controller.js";
+import {
+  createSkillTest,
+  getSkillTests,
+  updateSkillTest,
+  deleteSkillTest,
+} from "../controllers/skillTest.controller.js";
 import {
   createQuestionBank,
   createQuestionBankWithQuestions,
@@ -254,7 +272,7 @@ import {
   postAdminApproveWithdrawal,
   postAdminRejectWithdrawal,
 } from "../controllers/teacherWithdrawal.controller.js";
-import { uploadCourseMaterial, uploadImage, uploadPDF, uploadSuccessStory } from '../utils/multerConfig.js';
+import { uploadCourseMaterial, uploadImage, uploadAnyImages, uploadPDF, uploadSuccessStory } from '../utils/multerConfig.js';
 import {
   createEvent as createLiveCompetition,
   getEvents as getLiveCompetitions,
@@ -312,11 +330,33 @@ router.get("/categories/tree", verifyJWT, getTaxonomyCategoryTree);
 router.get("/categories/:id", verifyJWT, getTaxonomyCategoryById);
 router.get("/categories/:id/children", verifyJWT, getTaxonomyCategoryChildren);
 router.put("/categories/:id", verifyJWT, updateTaxonomyCategory);
+router.patch("/categories/:id/pricing", verifyJWT, uploadImage.single("bannerImg"), updateTaxonomyCategoryPricing);
 router.delete("/categories/:id", verifyJWT, deleteTaxonomyCategory);
+router.post("/categories/:id/offer", verifyJWT, createCategoryOffer);
+router.delete("/categories/:id/offer", verifyJWT, removeCategoryOffer);
+router.post("/categories/:id/coupons", verifyJWT, createCategoryCoupon);
+router.get("/categories/:id/coupons", verifyJWT, getCategoryCoupons);
+router.delete("/categories/:id/coupons/:couponId", verifyJWT, deleteCategoryCoupon);
+
+// School & Skill Tests Management
+router.post("/school-tests", verifyJWT, createSchoolTest);
+router.get("/school-tests", verifyJWT, getSchoolTests);
+router.put("/school-tests/:id", verifyJWT, updateSchoolTest);
+router.delete("/school-tests/:id", verifyJWT, deleteSchoolTest);
+
+router.post("/skill-tests", verifyJWT, createSkillTest);
+router.get("/skill-tests", verifyJWT, getSkillTests);
+router.put("/skill-tests/:id", verifyJWT, updateSkillTest);
+router.delete("/skill-tests/:id", verifyJWT, deleteSkillTest);
 
 // Question Banks (create bank, create bank with questions, list, update name, delete)
 router.post("/question-banks", verifyJWT, createQuestionBank);
-router.post("/question-banks/with-questions", verifyJWT, createQuestionBankWithQuestions);
+router.post(
+  "/question-banks/with-questions",
+  verifyJWT,
+  uploadAnyImages,
+  createQuestionBankWithQuestions
+);
 router.get("/question-banks", verifyJWT, getQuestionBanks);
 router.get("/question-banks/:id", verifyJWT, getQuestionBankById);
 router.get("/question-banks/:id/questions", verifyJWT, getQuestionsByBankId);
@@ -329,10 +369,10 @@ router.patch(
 router.delete("/question-banks/:id", verifyJWT, deleteQuestionBank);
 
 // Question Bank Management Routes (individual questions - create, list all, get, update, delete)
-router.post("/questions", verifyJWT, createQuestion);
+router.post("/questions", verifyJWT, uploadImage.single("image"), createQuestion);
 router.get("/questions", verifyJWT, getAllQuestions);
 router.get("/questions/:id", verifyJWT, getQuestionById);
-router.put("/questions/:id", verifyJWT, updateQuestion);
+router.put("/questions/:id", verifyJWT, uploadImage.single("image"), updateQuestion);
 router.delete("/questions/:id", verifyJWT, deleteQuestion);
 
 // Connected Questions Routes

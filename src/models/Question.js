@@ -5,11 +5,32 @@ const optionSchema = new mongoose.Schema({
   isCorrect: { type: Boolean, default: false },
 });
 
+const connectedSubQuestionSchema = new mongoose.Schema(
+  {
+    questionText: { type: String, required: true, trim: true },
+    questionType: {
+      type: String,
+      enum: ["single", "multiple", "true_false"],
+      required: true,
+    },
+    options: { type: [optionSchema], default: [] },
+    correctAnswer: {
+      type: mongoose.Schema.Types.Mixed,
+      required: true,
+    },
+    explanation: { type: String, trim: true },
+    marks: { type: Number, default: 1 },
+    negativeMarks: { type: Number, default: 0 },
+  },
+  { _id: false }
+);
+
 const questionSchema = new mongoose.Schema(
   {
     // Basic question fields
     questionText: { type: String, required: true, trim: true },
-     answer: { type: String},
+    answer: { type: String },
+    imageUrl: { type: String, trim: true, default: null },
     questionType: {
       type: String,
       enum: ["single", "multiple", "true_false", "connected"],
@@ -54,6 +75,7 @@ const questionSchema = new mongoose.Schema(
         return this.isParent === true;
       },
     },
+    connectedQuestions: { type: [connectedSubQuestionSchema], default: [] },
     childQuestions: [
       {
         type: mongoose.Schema.Types.ObjectId,

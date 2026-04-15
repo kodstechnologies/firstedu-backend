@@ -2,7 +2,12 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import categoryValidator from "../validation/category.validator.js";
+import offerRepository from "../repository/offer.repository.js";
+import couponRepository from "../repository/coupon.repository.js";
+import categoryRepository from "../repository/category.repository.js";
 import categoryService from "../services/category.service.js";
+import { uploadImageToCloudinary } from "../utils/s3Upload.js";
+import Coupon from "../models/Coupon.js";
 
 export const createCategory = asyncHandler(async (req, res) => {
   const { error, value } = categoryValidator.createCategory.validate(req.body);
@@ -102,6 +107,10 @@ export const getCategoryChildren = asyncHandler(async (req, res) => {
 
 export const updateCategory = asyncHandler(async (req, res) => {
   const { id } = req.params;
+  const existing = await categoryService.getCategoryById(id);
+  if (existing.isPredefined) {
+    throw new ApiError(403, "Cannot modify name of predefined category. Use pricing endpoint for prices.");
+  }
   const { error, value } = categoryValidator.updateCategory.validate(req.body);
   if (error) {
     throw new ApiError(
@@ -118,8 +127,131 @@ export const updateCategory = asyncHandler(async (req, res) => {
 
 export const deleteCategory = asyncHandler(async (req, res) => {
   const { id } = req.params;
+  const existing = await categoryService.getCategoryById(id);
+  if (existing.isPredefined) {
+    throw new ApiError(403, "Cannot delete predefined categories.");
+  }
   await categoryService.deleteCategory(id);
   return res
     .status(200)
     .json(ApiResponse.success(null, "Category deleted successfully"));
+});
+
+export const updateCategoryPricing = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  
+  const existing = await categoryService.getCategoryById(id);
+  if (existing.isPredefined) {
+    throw new ApiError(403, "Cannot modify pricing or discounts for top-level pillar categories.");
+  }
+  
+  // Handle file upload if present
+  if (req.file) {
+    const imageUrl = await uploadImageToCloudinary(
+      req.file.buffer,
+      req.file.originalname,
+      "categories/banners",
+      req.file.mimetype
+    );
+    req.body.bannerImg = imageUrl;
+  }
+
+  // Parse types from multipart/form-data
+  if (req.body.isFree === "true") req.body.isFree = true;
+  if (req.body.isFree === "false") req.body.isFree = false;
+  if (req.body.price) req.body.price = Number(req.body.price);
+  if (req.body.capacity) req.body.capacity = Number(req.body.capacity);
+  if (req.body.discountedPrice) req.body.discountedPrice = Number(req.body.discountedPrice);
+  if (req.body.subjects) {
+    if (typeof req.body.subjects === 'string') {
+      try { req.body.subjects = JSON.parse(req.body.subjects); } catch (e) { req.body.subjects = [req.body.subjects]; }
+    }
+  }
+  if (req.body.tags) {
+    if (typeof req.body.tags === 'string') {
+      try { req.body.tags = JSON.parse(req.body.tags); } catch (e) { req.body.tags = [req.body.tags]; }
+    }
+  }
+
+  const { error, value } = categoryValidator.updateCategoryPricing.validate(req.body);
+  if (error) {
+    throw new ApiError(
+      400,
+      "Validation Error",
+      error.details.map((x) => x.message)
+    );
+  }
+  const updated = await categoryService.updateCategoryPricing(id, value);
+  return res
+    .status(200)
+    .json(ApiResponse.success(updated, "Category pricing updated successfully"));
+});
+
+// Category Specific Offers
+export const createCategoryOffer = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { offerName, discountType, discountValue, validTill, description } = req.body;
+
+  const category = await categoryService.getCategoryById(id);
+  if (!category) throw new ApiError(404, "Category not found");
+
+  const offerData = {
+    offerName,
+    applicableOn: category.rootType || "CompetitionCategory", // dummy, validation requirement
+    discountType,
+    discountValue,
+    validTill: validTill || null,
+    status: "active",
+    description
+  };
+
+  const offer = await offerRepository.createOffer(offerData);
+  await categoryRepository.updateById(id, { offerOverrideId: offer._id, offerPolicy: "inherit" }); // They chose custom, inherently not global but custom active
+  
+  return res.status(201).json(ApiResponse.success(offer, "Subcategory offer created"));
+});
+
+export const removeCategoryOffer = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  
+  const category = await categoryService.getCategoryById(id);
+  if (!category) throw new ApiError(404, "Category not found");
+
+  if (category.offerOverrideId) {
+    await offerRepository.deleteOffer(category.offerOverrideId);
+    await categoryRepository.updateById(id, { offerOverrideId: null });
+  }
+
+  return res.status(200).json(ApiResponse.success(null, "Offer removed successfully"));
+});
+
+// Category Specific Coupons
+export const createCategoryCoupon = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { code, description, discountType, discountValue, validFrom, validUntil, usageLimit, isActive } = req.body;
+
+  const category = await categoryService.getCategoryById(id);
+  if (!category) throw new ApiError(404, "Category not found");
+
+  const couponData = {
+    code, description, discountType, discountValue, validFrom, validUntil, usageLimit, isActive,
+    applicableTo: "all",
+    applicableCategoryId: id
+  };
+
+  const coupon = await couponRepository.createCoupon(couponData);
+
+  return res.status(201).json(ApiResponse.success(coupon, "Subcategory coupon created"));
+});
+
+export const getCategoryCoupons = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const coupons = await Coupon.find({ applicableCategoryId: id }).sort({ createdAt: -1 });
+  return res.status(200).json(ApiResponse.success(coupons, "Coupons fetched"));
+});
+
+export const deleteCategoryCoupon = asyncHandler(async (req, res) => {
+  const { couponId } = req.params;
+  await couponRepository.deleteCoupon(couponId);
+  return res.status(200).json(ApiResponse.success(null, "Coupon removed"));
 });

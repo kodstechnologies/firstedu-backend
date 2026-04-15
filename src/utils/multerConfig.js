@@ -48,6 +48,13 @@ export const uploadImage = multer({
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit for images
 });
 
+/** Any image fields (e.g. questionImage_0, questionImage_1, or repeated questionImages) */
+export const uploadAnyImages = multer({
+  storage,
+  fileFilter: imageFileFilter,
+  limits: { fileSize: 10 * 1024 * 1024 },
+}).any();
+
 // Combined file filter for PDF and images (for teacher signup with resume and profileImage)
 const pdfAndImageFileFilter = (req, file, cb) => {
   const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'];

@@ -2,6 +2,11 @@ import { ApiError } from "../utils/ApiError.js";
 import questionRepository from "../repository/question.repository.js";
 import questionBankRepository from "../repository/questionBank.repository.js";
 
+const toQuestionPlain = (doc) => {
+  if (!doc) return null;
+  return doc.toObject ? doc.toObject({ virtuals: true }) : { ...doc };
+};
+
 // Validate question options and correct answer
 const validateQuestionOptions = (questionType, options) => {
   if (
@@ -23,6 +28,54 @@ const validateQuestionOptions = (questionType, options) => {
   }
 };
 
+const validateConnectedQuestions = (connectedQuestions = []) => {
+  if (!Array.isArray(connectedQuestions) || connectedQuestions.length === 0) {
+    throw new ApiError(
+      400,
+      "Connected questions must include at least one sub-question"
+    );
+  }
+  connectedQuestions.forEach((sub, index) => {
+    validateQuestionOptions(sub.questionType, sub.options);
+    if (!String(sub.explanation ?? "").trim()) {
+      throw new ApiError(
+        400,
+        `connectedQuestions[${index}] explanation is required`
+      );
+    }
+    if (sub.questionType === "true_false" && sub.correctAnswer === undefined) {
+      throw new ApiError(
+        400,
+        `connectedQuestions[${index}] correctAnswer is required for true_false`
+      );
+    }
+  });
+};
+
+const formatConnectedQuestionForEdit = (parentDoc, childDocs = []) => {
+  const parent = toQuestionPlain(parentDoc);
+  const children = (childDocs || []).map((child) => toQuestionPlain(child));
+
+  return {
+    ...parent,
+    questionText: parent.questionText || "",
+    title: parent.questionText || "",
+    paragraph: parent.passage || "",
+    passage: parent.passage || "",
+    subQuestions: children.map((child) => ({
+      _id: child._id,
+      questionText: child.questionText,
+      questionType: child.questionType,
+      options: child.options || [],
+      correctAnswer: child.correctAnswer,
+      explanation: child.explanation,
+      marks: child.marks ?? 1,
+      negativeMarks: child.negativeMarks ?? 0,
+      imageUrl: child.imageUrl || null,
+    })),
+  };
+};
+
 // Create Question Service
 export const createQuestion = async (questionData, createdBy) => {
   // Add createdBy from authenticated admin
@@ -30,6 +83,11 @@ export const createQuestion = async (questionData, createdBy) => {
 
   // Validate correct answer matches options for single/multiple choice
   validateQuestionOptions(questionData.questionType, questionData.options);
+  if (questionData.questionType === "connected") {
+    const subsEarly =
+      questionData.subQuestions ?? questionData.connectedQuestions ?? [];
+    validateConnectedQuestions(subsEarly);
+  }
 
   let sectionAwareBank = null;
   if (questionData.questionBank) {
@@ -75,6 +133,77 @@ export const createQuestion = async (questionData, createdBy) => {
     }
   }
 
+  if (questionData.questionType === "connected") {
+    const subs =
+      questionData.subQuestions ?? questionData.connectedQuestions ?? [];
+    const globalChildMarks = questionData.marks ?? 1;
+    const globalChildNegativeMarks = questionData.negativeMarks ?? 0;
+    const passageText =
+      (questionData.paragraph && String(questionData.paragraph).trim()) ||
+      (questionData.passage && String(questionData.passage).trim()) ||
+      (questionData.questionText && String(questionData.questionText).trim()) ||
+      "";
+    const parentLabel =
+      (questionData.title && String(questionData.title).trim()) ||
+      (questionData.questionText && String(questionData.questionText).trim()) ||
+      passageText.slice(0, 200);
+    const parentPayload = {
+      ...questionData,
+      questionText: parentLabel,
+      isParent: true,
+      passage: passageText,
+      imageUrl: questionData.imageUrl || null,
+      marks: 0,
+      negativeMarks: 0,
+      correctAnswer: undefined,
+      options: [],
+      connectedQuestions: [],
+    };
+    const parentQuestion = await questionRepository.create(parentPayload);
+    const childIds = [];
+
+    for (const sub of subs) {
+      const child = await questionRepository.create({
+        questionText: sub.questionText,
+        questionType: sub.questionType,
+        options: sub.options,
+        correctAnswer: sub.correctAnswer,
+        explanation: sub.explanation,
+        subject: questionData.subject,
+        topic: questionData.topic,
+        difficulty: questionData.difficulty,
+        marks: globalChildMarks,
+        negativeMarks: globalChildNegativeMarks,
+        tags: questionData.tags,
+        imageUrl: null,
+        questionBank: questionData.questionBank,
+        sectionIndex: questionData.sectionIndex,
+        orderInBank: questionData.orderInBank,
+        createdBy,
+        parentQuestionId: parentQuestion._id,
+      });
+      childIds.push(child._id);
+    }
+
+    const question = await questionRepository.updateById(parentQuestion._id, {
+      childQuestions: childIds,
+    });
+
+    if (sectionAwareBank?.useSectionWiseQuestions) {
+      const sections = (sectionAwareBank.sections || []).map((section) => ({
+        ...section,
+        questions: [...(section.questions || [])],
+      }));
+      sections[questionData.sectionIndex].questions.push(question._id);
+      childIds.forEach((id) => sections[questionData.sectionIndex].questions.push(id));
+      await questionBankRepository.updateById(sectionAwareBank._id, { sections });
+    }
+    return question;
+  }
+
+  if (!Object.prototype.hasOwnProperty.call(questionData, "imageUrl")) {
+    questionData.imageUrl = null;
+  }
   const question = await questionRepository.create(questionData);
 
   if (sectionAwareBank?.useSectionWiseQuestions) {
@@ -135,6 +264,16 @@ export const getQuestionById = async (id) => {
     throw new ApiError(404, "Question not found");
   }
 
+  if (question.questionType === "connected" && question.isParent) {
+    const childIds = (question.childQuestions || []).map((child) =>
+      child?._id?.toString?.() || child?.toString?.()
+    );
+    const children = childIds.length
+      ? await questionRepository.findByIds(childIds)
+      : [];
+    return formatConnectedQuestionForEdit(question, children);
+  }
+
   return question;
 };
 
@@ -152,6 +291,175 @@ export const updateQuestion = async (id, updateData) => {
       updateData.questionType || existingQuestion.questionType,
       updateData.options
     );
+  }
+
+  const effectiveType = updateData.questionType || existingQuestion.questionType;
+  const hasSubQuestionsUpdate =
+    Array.isArray(updateData.subQuestions) ||
+    Array.isArray(updateData.connectedQuestions);
+  const isConnectedEdit =
+    effectiveType === "connected" ||
+    hasSubQuestionsUpdate;
+
+  if (isConnectedEdit) {
+    if (existingQuestion.questionType !== "connected" || !existingQuestion.isParent) {
+      throw new ApiError(
+        400,
+        "Connected question editing is only supported for connected parent questions"
+      );
+    }
+
+    if (!hasSubQuestionsUpdate) {
+      const partialParentUpdate = {};
+      if (
+        Object.prototype.hasOwnProperty.call(updateData, "title") ||
+        Object.prototype.hasOwnProperty.call(updateData, "questionText")
+      ) {
+        partialParentUpdate.questionText =
+          (updateData.title && String(updateData.title).trim()) ||
+          (updateData.questionText && String(updateData.questionText).trim()) ||
+          existingQuestion.questionText;
+      }
+      if (
+        Object.prototype.hasOwnProperty.call(updateData, "paragraph") ||
+        Object.prototype.hasOwnProperty.call(updateData, "passage")
+      ) {
+        partialParentUpdate.passage =
+          (updateData.paragraph && String(updateData.paragraph).trim()) ||
+          (updateData.passage && String(updateData.passage).trim()) ||
+          existingQuestion.passage;
+      }
+      ["subject", "topic", "difficulty", "tags", "imageUrl"].forEach((key) => {
+        if (Object.prototype.hasOwnProperty.call(updateData, key)) {
+          partialParentUpdate[key] = updateData[key];
+        }
+      });
+
+      const updatedParent = await questionRepository.updateById(
+        id,
+        partialParentUpdate
+      );
+
+      // Keep parent/child image consistent for connected blocks.
+      if (Object.prototype.hasOwnProperty.call(updateData, "imageUrl")) {
+        const existingChildIds = (existingQuestion.childQuestions || []).map((child) =>
+          child?._id?.toString?.() || child?.toString?.()
+        );
+        await Promise.all(
+          existingChildIds.map((childId) =>
+            questionRepository.updateById(childId, { imageUrl: updateData.imageUrl })
+          )
+        );
+      }
+      if (
+        Object.prototype.hasOwnProperty.call(updateData, "marks") ||
+        Object.prototype.hasOwnProperty.call(updateData, "negativeMarks")
+      ) {
+        const existingChildIds = (existingQuestion.childQuestions || []).map((child) =>
+          child?._id?.toString?.() || child?.toString?.()
+        );
+        const marksPatch = {};
+        if (Object.prototype.hasOwnProperty.call(updateData, "marks")) {
+          marksPatch.marks = updateData.marks;
+        }
+        if (Object.prototype.hasOwnProperty.call(updateData, "negativeMarks")) {
+          marksPatch.negativeMarks = updateData.negativeMarks;
+        }
+        await Promise.all(
+          existingChildIds.map((childId) =>
+            questionRepository.updateById(childId, marksPatch)
+          )
+        );
+      }
+
+      const childIds = (updatedParent.childQuestions || []).map((child) =>
+        child?._id?.toString?.() || child?.toString?.()
+      );
+      const children = childIds.length
+        ? await questionRepository.findByIds(childIds)
+        : [];
+      return formatConnectedQuestionForEdit(updatedParent, children);
+    }
+
+    const subs = updateData.subQuestions ?? updateData.connectedQuestions ?? [];
+    validateConnectedQuestions(subs);
+
+    const passageText =
+      (updateData.paragraph && String(updateData.paragraph).trim()) ||
+      (updateData.passage && String(updateData.passage).trim()) ||
+      (updateData.questionText && String(updateData.questionText).trim()) ||
+      (existingQuestion.passage && String(existingQuestion.passage).trim()) ||
+      "";
+    if (!passageText) {
+      throw new ApiError(400, "Connected question passage/paragraph is required");
+    }
+
+    const parentLabel =
+      (updateData.title && String(updateData.title).trim()) ||
+      (updateData.questionText && String(updateData.questionText).trim()) ||
+      (existingQuestion.questionText && String(existingQuestion.questionText).trim()) ||
+      passageText.slice(0, 200);
+
+    const parentUpdate = {
+      questionText: parentLabel,
+      passage: passageText,
+      subject: updateData.subject ?? existingQuestion.subject,
+      topic: updateData.topic ?? existingQuestion.topic,
+      difficulty: updateData.difficulty ?? existingQuestion.difficulty,
+      tags: updateData.tags ?? existingQuestion.tags,
+    };
+    if (Object.prototype.hasOwnProperty.call(updateData, "imageUrl")) {
+      parentUpdate.imageUrl = updateData.imageUrl;
+    }
+
+    const existingChildIds = (existingQuestion.childQuestions || []).map((child) =>
+      child?._id?.toString?.() || child?.toString?.()
+    );
+    const existingChildren = existingChildIds.length
+      ? await questionRepository.findByIds(existingChildIds)
+      : [];
+    const globalChildMarks = updateData.marks ?? existingChildren[0]?.marks ?? 1;
+    const globalChildNegativeMarks =
+      updateData.negativeMarks ?? existingChildren[0]?.negativeMarks ?? 0;
+    await Promise.all(existingChildIds.map((childId) => questionRepository.deleteById(childId)));
+
+    const newChildIds = [];
+    for (const sub of subs) {
+      const child = await questionRepository.create({
+        questionText: sub.questionText,
+        questionType: sub.questionType,
+        options: sub.options,
+        correctAnswer: sub.correctAnswer,
+        explanation: sub.explanation,
+        subject: parentUpdate.subject,
+        topic: parentUpdate.topic,
+        difficulty: parentUpdate.difficulty,
+        marks: globalChildMarks,
+        negativeMarks: globalChildNegativeMarks,
+        tags: parentUpdate.tags,
+        imageUrl: null,
+        questionBank: existingQuestion.questionBank?._id || existingQuestion.questionBank,
+        sectionIndex: existingQuestion.sectionIndex,
+        orderInBank: existingQuestion.orderInBank,
+        createdBy: existingQuestion.createdBy?._id || existingQuestion.createdBy,
+        parentQuestionId: existingQuestion._id,
+      });
+      newChildIds.push(child._id);
+    }
+
+    const updatedParent = await questionRepository.updateById(id, {
+      ...parentUpdate,
+      childQuestions: newChildIds,
+      connectedQuestions: [],
+      options: [],
+      correctAnswer: undefined,
+      isParent: true,
+    });
+
+    const children = newChildIds.length
+      ? await questionRepository.findByIds(newChildIds)
+      : [];
+    return formatConnectedQuestionForEdit(updatedParent, children);
   }
 
   const updatedQuestion = await questionRepository.updateById(id, updateData);

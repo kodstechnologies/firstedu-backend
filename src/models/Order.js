@@ -16,7 +16,7 @@ const orderSchema = new mongoose.Schema(
       {
         itemType: {
           type: String,
-          enum: ["course", "test", "testBundle", "merchandise", "competitionCategory"],
+          enum: ["course","Olympiads", "test", "testBundle", "merchandise",  "School Management","Competitive Management","Skill Development",],
           required: true,
         },
         itemId: {

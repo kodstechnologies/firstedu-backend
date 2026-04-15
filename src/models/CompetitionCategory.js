@@ -14,10 +14,10 @@ import mongoose from "mongoose";
 
 const competitionCategorySchema = new mongoose.Schema(
   {
-    // ── Parent sector ──────────────────────────────────────────────────────
-    sectorId: {
+    // ── Parent sector/category ──────────────────────────────────────────────────────
+    categoryId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "CompetitionSector",
+      ref: "Category",
       required: true,
       index: true,
     },
@@ -95,8 +95,8 @@ const competitionCategorySchema = new mongoose.Schema(
 );
 
 // ── Indexes ──────────────────────────────────────────────────────────────────
-competitionCategorySchema.index({ sectorId: 1, status: 1 });
-competitionCategorySchema.index({ sectorId: 1, createdAt: -1 });
+competitionCategorySchema.index({ categoryId: 1, status: 1 });
+competitionCategorySchema.index({ categoryId: 1, createdAt: -1 });
 
 // ── Virtual: effectivePrice ───────────────────────────────────────────────────
 competitionCategorySchema.virtual("effectivePrice").get(function () {

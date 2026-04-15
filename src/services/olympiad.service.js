@@ -60,6 +60,12 @@ export const createOlympiad = async (data, adminId, file) => {
     secondPlacePoints,
     thirdPlacePoints,
     maxParticipants,
+    about,
+    syllabus,
+    markingScheme,
+    rankingCriteria,
+    examDatesAndDetails,
+    awards,
   } = data;
 
   if (!title || !startTime || !endTime || !testId || !registrationStartTime || !registrationEndTime) {
@@ -125,6 +131,12 @@ export const createOlympiad = async (data, adminId, file) => {
     secondPlacePoints: secondPlacePoints ?? 0,
     thirdPlacePoints: thirdPlacePoints ?? 0,
     maxParticipants: maxParticipants || null,
+    about: about || null,
+    syllabus: syllabus || null,
+    markingScheme: markingScheme || null,
+    rankingCriteria: rankingCriteria || null,
+    examDatesAndDetails: examDatesAndDetails || null,
+    awards: awards || null,
     isPublished: data.isPublished === true || data.isPublished === "true",
     createdBy: adminId,
   });

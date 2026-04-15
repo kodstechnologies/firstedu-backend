@@ -6,16 +6,13 @@ const priceSchema = Joi.number().min(0).precision(2);
 const tournamentStageSchema = Joi.object({
   name: Joi.string().valid("Qualifier", "Semi-Final", "Final").required(),
   test: objectId.required(),
-  subject: Joi.string().trim().optional(),
   startTime: Joi.date().required().messages({
     "date.base": "Start time must be a valid date",
     "any.required": "Start time is required"
   }),
-  endTime: Joi.date().required().messages({
-    "date.base": "End time must be a valid date",
-    "any.required": "End time is required"
-  }),
-  minimumMarksToQualify: Joi.number().min(0).default(0).optional(),
+  // End time is derived server-side from the linked test's duration (start + durationMinutes).
+  endTime: Joi.date().optional().strip(),
+  minimumPercentageToQualify: Joi.number().min(0).max(100).default(0).optional(),
   maxParticipants: Joi.number().integer().min(1).optional().allow(null),
 });
 

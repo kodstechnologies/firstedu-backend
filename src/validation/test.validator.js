@@ -21,9 +21,12 @@ const createTest = Joi.object({
       "competition_sector",
       "everyday_challenge",
       "challenge_yourfriends",
+      "school",
+      "skill"
     )
     .default("test"),
   isPublished: Joi.boolean().optional(),
+  categoryId: objectId.optional().allow(null),
 });
 
 const updateTest = Joi.object({
@@ -43,9 +46,12 @@ const updateTest = Joi.object({
       "competition_sector",
       "everyday_challenge",
       "challenge_yourfriends",
+      "school",
+      "skill"
     )
     .optional(),
   isPublished: Joi.boolean().optional(),
+  categoryId: objectId.optional().allow(null),
 });
 
 // Test Bundle

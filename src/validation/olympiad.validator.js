@@ -6,6 +6,12 @@ const priceSchema = Joi.number().min(0).precision(2);
 const createOlympiad = Joi.object({
   title: Joi.string().trim().required(),
   description: Joi.string().trim().allow("", null).optional(),
+  about: Joi.string().trim().allow("", null).optional(),
+  syllabus: Joi.string().trim().allow("", null).optional(),
+  markingScheme: Joi.string().trim().allow("", null).optional(),
+  rankingCriteria: Joi.string().trim().allow("", null).optional(),
+  examDatesAndDetails: Joi.string().trim().allow("", null).optional(),
+  awards: Joi.string().trim().allow("", null).optional(),
   subject: Joi.string().trim().optional(),
   startTime: Joi.date().required().messages({
     "date.base": "Start time must be a valid date",
@@ -31,11 +37,18 @@ const createOlympiad = Joi.object({
   thirdPlacePoints: Joi.number().min(0).default(0).optional(),
   maxParticipants: Joi.number().integer().min(1).optional().allow(null),
   isPublished: Joi.boolean().optional(),
+  categoryId: objectId.optional().allow(null),
 });
 
 const updateOlympiad = Joi.object({
   title: Joi.string().trim().optional(),
   description: Joi.string().trim().allow("", null).optional(),
+  about: Joi.string().trim().allow("", null).optional(),
+  syllabus: Joi.string().trim().allow("", null).optional(),
+  markingScheme: Joi.string().trim().allow("", null).optional(),
+  rankingCriteria: Joi.string().trim().allow("", null).optional(),
+  examDatesAndDetails: Joi.string().trim().allow("", null).optional(),
+  awards: Joi.string().trim().allow("", null).optional(),
   subject: Joi.string().trim().optional(),
   startTime: Joi.date().optional(),
   endTime: Joi.date().optional(),
@@ -49,6 +62,7 @@ const updateOlympiad = Joi.object({
   thirdPlacePoints: Joi.number().min(0).optional(),
   maxParticipants: Joi.number().integer().min(1).optional().allow(null),
   isPublished: Joi.boolean().optional(),
+  categoryId: objectId.optional().allow(null),
 });
 
 const initiateOlympiadPayment = Joi.object({
