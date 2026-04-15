@@ -102,7 +102,6 @@ const buildQuestionBankQuestionsResponse = (flatDocs) => {
           explanation: child.explanation,
           marks: child.marks ?? 1,
           negativeMarks: child.negativeMarks ?? 0,
-          imageUrl: child.imageUrl || null,
         }));
 
       return {
@@ -137,6 +136,23 @@ const validateConnectedQuestions = (connectedQuestions = []) => {
     }
   });
 };
+
+const normalizeSubQuestionScoring = (sub = {}) => ({
+  marks: sub.marks ?? 1,
+  negativeMarks: sub.negativeMarks ?? 0,
+});
+
+const getConnectedTotals = (subs = []) =>
+  subs.reduce(
+    (acc, sub) => {
+      const { marks, negativeMarks } = normalizeSubQuestionScoring(sub);
+      return {
+        marks: acc.marks + marks,
+        negativeMarks: acc.negativeMarks + negativeMarks,
+      };
+    },
+    { marks: 0, negativeMarks: 0 }
+  );
 
 const getSectionIndexByCount = (sectionConfigs = [], questionIndex = 0) => {
   let cursor = 0;
@@ -279,6 +295,7 @@ export const createQuestionBankWithQuestions = async (data, createdBy) => {
     if (questionData.questionType === "connected") {
       const subs = q.subQuestions ?? q.connectedQuestions ?? [];
       validateConnectedQuestions(subs);
+      const connectedTotals = getConnectedTotals(subs);
       const passageText =
         (q.paragraph && String(q.paragraph).trim()) ||
         (q.passage && String(q.passage).trim()) ||
@@ -293,8 +310,8 @@ export const createQuestionBankWithQuestions = async (data, createdBy) => {
         questionText: parentLabel,
         isParent: true,
         passage: passageText,
-        marks: 0,
-        negativeMarks: 0,
+        marks: connectedTotals.marks,
+        negativeMarks: connectedTotals.negativeMarks,
         correctAnswer: undefined,
         options: [],
         connectedQuestions: [],
@@ -302,9 +319,8 @@ export const createQuestionBankWithQuestions = async (data, createdBy) => {
 
       const childIds = [];
       const childrenCreated = [];
-      const globalChildMarks = q.marks ?? 1;
-      const globalChildNegativeMarks = q.negativeMarks ?? 0;
       for (const sub of subs) {
+        const { marks, negativeMarks } = normalizeSubQuestionScoring(sub);
         const child = await questionRepository.create({
           questionText: sub.questionText,
           questionType: sub.questionType,
@@ -314,8 +330,8 @@ export const createQuestionBankWithQuestions = async (data, createdBy) => {
           subject: questionData.subject,
           topic: questionData.topic,
           difficulty: questionData.difficulty,
-          marks: globalChildMarks,
-          negativeMarks: globalChildNegativeMarks,
+          marks,
+          negativeMarks,
           tags: questionData.tags,
           imageUrl: null,
           questionBank: bank._id,

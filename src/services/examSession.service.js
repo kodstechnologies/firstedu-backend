@@ -283,6 +283,20 @@ const resolveContainerStatusFromChildren = (children = []) => {
   return statuses[0] || "not_visited";
 };
 
+const sanitizeConnectedQuestionForResponse = (questionObj = {}, subQuestions = []) => ({
+  id: questionObj._id,
+  questionType: "connected",
+  title: questionObj.questionText || "",
+  paragraph: questionObj.passage || "",
+  imageUrl: questionObj.imageUrl || null,
+  marks: questionObj.marks ?? 0,
+  negativeMarks: questionObj.negativeMarks ?? 0,
+  difficulty: questionObj.difficulty || null,
+  orderInBank:
+    questionObj.orderInBank === undefined ? null : questionObj.orderInBank,
+  subQuestions,
+});
+
 const findAnswerByQuestionId = (session, questionId) => {
   const targetId = getNormalizedId(questionId);
   if (!targetId || !Array.isArray(session?.answers)) return null;
@@ -985,7 +999,7 @@ export const getExamSession = async (sessionId, studentId) => {
       });
     }
 
-    const questionObj = question.toObject ? question.toObject() : question;
+    let questionObj = question.toObject ? question.toObject() : question;
     delete questionObj.correctAnswer;
     if (questionObj.isParent && questionObj.questionType === "connected") {
       const subQuestions = Array.isArray(questionObj.childQuestions)
@@ -1008,7 +1022,6 @@ export const getExamSession = async (sessionId, studentId) => {
                 explanation: childObj.explanation,
                 marks: childObj.marks ?? 1,
                 negativeMarks: childObj.negativeMarks ?? 0,
-                imageUrl: childObj.imageUrl || null,
                 studentAnswer: childAnswer?.answer ?? null,
                 status: childAnswer?.status ?? "not_visited",
                 answeredAt: childAnswer?.answeredAt ?? null,
@@ -1016,14 +1029,12 @@ export const getExamSession = async (sessionId, studentId) => {
             })
             .filter(Boolean)
         : [];
-      questionObj.title = questionObj.questionText || "";
-      questionObj.paragraph = questionObj.passage || "";
-      questionObj.subQuestions = subQuestions;
+      questionObj = sanitizeConnectedQuestionForResponse(questionObj, subQuestions);
     }
 
     const remainingQuestionTimeMs = getAnswerRemainingTimeMs(answer, now);
     const basePayload = {
-      questionId: questionObj._id,
+      questionId: questionObj._id || questionObj.id,
       question: questionObj,
       answer: answer.answer,
       status: answer.status,
@@ -1036,7 +1047,7 @@ export const getExamSession = async (sessionId, studentId) => {
       remainingQuestionTimeFormatted: formatTime(remainingQuestionTimeMs),
       questionTimeExpired: Boolean(answer.timeExpiredAt) || remainingQuestionTimeMs <= 0,
     };
-    if (questionObj.isParent && questionObj.questionType === "connected") {
+    if (questionObj.questionType === "connected") {
       const containerStatus = resolveContainerStatusFromChildren(questionObj.subQuestions || []);
       basePayload.status = containerStatus;
       basePayload.answer = null;
@@ -1814,7 +1825,6 @@ export const getExamResults = async (sessionId, studentId) => {
           explanation: childObj.explanation,
           marks: childObj.marks,
           negativeMarks: childObj.negativeMarks,
-          imageUrl: childObj.imageUrl || null,
         };
       })
       .filter(Boolean);
@@ -1861,12 +1871,7 @@ export const getExamResults = async (sessionId, studentId) => {
         return {
           ...q,
           question: {
-            ...q.question,
-            title: q.question.questionText || "",
-            paragraph: q.question.passage || "",
-            subQuestions: enrichedSubQuestions,
-            // Keep legacy field for backward compatibility.
-            childQuestions: enrichedSubQuestions,
+            ...sanitizeConnectedQuestionForResponse(q.question, enrichedSubQuestions),
           },
         };
       }
