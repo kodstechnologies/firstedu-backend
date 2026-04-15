@@ -273,6 +273,16 @@ const getNormalizedId = (value) => {
 
 const isChildQuestion = (question) => Boolean(getNormalizedId(question?.parentQuestionId));
 
+const resolveContainerStatusFromChildren = (children = []) => {
+  const statuses = children.map((child) => child?.status).filter(Boolean);
+  if (statuses.length === 0) return "not_visited";
+  if (statuses.includes("marked_for_review")) return "marked_for_review";
+  if (statuses.includes("answered")) return "answered";
+  if (statuses.every((s) => s === "not_visited")) return "not_visited";
+  if (statuses.includes("skipped")) return "skipped";
+  return statuses[0] || "not_visited";
+};
+
 const findAnswerByQuestionId = (session, questionId) => {
   const targetId = getNormalizedId(questionId);
   if (!targetId || !Array.isArray(session?.answers)) return null;
@@ -604,7 +614,7 @@ export const getExamInstructions = async (testId, studentId, options = {}) => {
     throw new ApiError(400, "Question bank has no questions");
   }
 
-  const totalQuestions = questions.length;
+  const totalQuestions = questions.filter((q) => !getNormalizedId(q?.parentQuestionId)).length;
   const totalMarks = questions.reduce((sum, q) => sum + (q.marks || 0), 0);
   const totalNegativeMarks = questions.reduce((sum, q) => sum + (q.negativeMarks || 0), 0);
 
@@ -946,6 +956,20 @@ export const getExamSession = async (sessionId, studentId) => {
       ? session.remainingTimeAtPause
       : Math.max(0, new Date(session.endTime).getTime() - now.getTime());
 
+  const answerMetaByQuestionId = new Map(
+    session.answers.map((entry) => [getNormalizedId(entry.questionId), entry])
+  );
+  const answerQuestionById = new Map(
+    session.answers
+      .map((entry) => {
+        const q = entry.questionId;
+        if (!q) return null;
+        const plain = q.toObject ? q.toObject() : q;
+        return [getNormalizedId(plain._id || q), plain];
+      })
+      .filter(Boolean)
+  );
+
   // Remove correct answers from questions (for security)
   const questions = session.answers.map((answer) => {
     const question = answer.questionId;
@@ -965,16 +989,32 @@ export const getExamSession = async (sessionId, studentId) => {
     delete questionObj.correctAnswer;
     if (questionObj.isParent && questionObj.questionType === "connected") {
       const subQuestions = Array.isArray(questionObj.childQuestions)
-        ? questionObj.childQuestions.map((child) => ({
-            _id: child._id,
-            questionText: child.questionText,
-            questionType: child.questionType,
-            options: child.options || [],
-            explanation: child.explanation,
-            marks: child.marks ?? 1,
-            negativeMarks: child.negativeMarks ?? 0,
-            imageUrl: child.imageUrl || null,
-          }))
+        ? questionObj.childQuestions
+            .map((childRef) => {
+              const childId = getNormalizedId(childRef);
+              if (!childId) return null;
+              const populatedChild =
+                childRef && typeof childRef === "object" && childRef.questionText != null
+                  ? childRef
+                  : null;
+              const childObj = populatedChild || answerQuestionById.get(childId) || { _id: childId };
+              delete childObj.correctAnswer;
+              const childAnswer = answerMetaByQuestionId.get(childId);
+              return {
+                _id: childObj._id,
+                questionText: childObj.questionText || "",
+                questionType: childObj.questionType || "single",
+                options: childObj.options || [],
+                explanation: childObj.explanation,
+                marks: childObj.marks ?? 1,
+                negativeMarks: childObj.negativeMarks ?? 0,
+                imageUrl: childObj.imageUrl || null,
+                studentAnswer: childAnswer?.answer ?? null,
+                status: childAnswer?.status ?? "not_visited",
+                answeredAt: childAnswer?.answeredAt ?? null,
+              };
+            })
+            .filter(Boolean)
         : [];
       questionObj.title = questionObj.questionText || "";
       questionObj.paragraph = questionObj.passage || "";
@@ -982,7 +1022,7 @@ export const getExamSession = async (sessionId, studentId) => {
     }
 
     const remainingQuestionTimeMs = getAnswerRemainingTimeMs(answer, now);
-    return {
+    const basePayload = {
       questionId: questionObj._id,
       question: questionObj,
       answer: answer.answer,
@@ -996,15 +1036,22 @@ export const getExamSession = async (sessionId, studentId) => {
       remainingQuestionTimeFormatted: formatTime(remainingQuestionTimeMs),
       questionTimeExpired: Boolean(answer.timeExpiredAt) || remainingQuestionTimeMs <= 0,
     };
+    if (questionObj.isParent && questionObj.questionType === "connected") {
+      const containerStatus = resolveContainerStatusFromChildren(questionObj.subQuestions || []);
+      basePayload.status = containerStatus;
+      basePayload.answer = null;
+      basePayload.answeredAt = null;
+    }
+    return basePayload;
   }).filter((q) => q !== null);
 
   // Build palette (navigation grid)
   const palette = {
-    answered: session.answers.filter((a) => a.status === "answered").length,
-    skipped: session.answers.filter((a) => a.status === "skipped").length,
-    markedForReview: session.answers.filter((a) => a.status === "marked_for_review").length,
-    notVisited: session.answers.filter((a) => a.status === "not_visited").length,
-    total: session.answers.length,
+    answered: questions.filter((q) => q.status === "answered").length,
+    skipped: questions.filter((q) => q.status === "skipped").length,
+    markedForReview: questions.filter((q) => q.status === "marked_for_review").length,
+    notVisited: questions.filter((q) => q.status === "not_visited").length,
+    total: questions.length,
   };
 
   // Add section metadata for section-wise exam UI (single API response).
@@ -1730,6 +1777,17 @@ export const getExamResults = async (sessionId, studentId) => {
     };
   }
 
+  const answerQuestionById = new Map(
+    session.answers
+      .map((entry) => {
+        const q = entry.questionId;
+        if (!q) return null;
+        const plain = q.toObject ? q.toObject() : q;
+        return [getNormalizedId(plain._id || q), plain];
+      })
+      .filter(Boolean)
+  );
+
   // Build results with correct answers and explanations
   const allQuestions = session.answers.map((answer) => {
     const question = answer.questionId;
@@ -1738,20 +1796,28 @@ export const getExamResults = async (sessionId, studentId) => {
     // For connected questions, include child questions with answers
     let childQuestions = null;
     if (question.isParent && question.childQuestions) {
-      childQuestions = question.childQuestions.map((child) => {
-        const childObj = child.toObject ? child.toObject() : child;
+      childQuestions = question.childQuestions
+        .map((child) => {
+        const childId = getNormalizedId(child);
+        if (!childId) return null;
+        const populatedChild =
+          child && typeof child === "object" && child.questionText != null
+            ? child
+            : null;
+        const childObj = populatedChild || answerQuestionById.get(childId) || { _id: childId };
         return {
           _id: childObj._id,
-          questionText: childObj.questionText,
-          questionType: childObj.questionType,
-          options: childObj.options,
+          questionText: childObj.questionText || "",
+          questionType: childObj.questionType || "single",
+          options: childObj.options || [],
           correctAnswer: childObj.correctAnswer,
           explanation: childObj.explanation,
           marks: childObj.marks,
           negativeMarks: childObj.negativeMarks,
           imageUrl: childObj.imageUrl || null,
         };
-      });
+      })
+      .filter(Boolean);
     }
 
     const questionObj = question.toObject ? question.toObject() : question;
@@ -1782,7 +1848,9 @@ export const getExamResults = async (sessionId, studentId) => {
       if (q.question?.isParent && Array.isArray(q.question.childQuestions)) {
         const enrichedSubQuestions = q.question.childQuestions.map((child) => {
           const childResult = questionResultById.get(getNormalizedId(child?._id));
+          const childQuestion = childResult?.question || {};
           return {
+            ...childQuestion,
             ...child,
             studentAnswer: childResult?.studentAnswer ?? null,
             isCorrect: childResult?.isCorrect ?? false,
@@ -1804,6 +1872,13 @@ export const getExamResults = async (sessionId, studentId) => {
       }
       return q;
     });
+  const logicalSummary = {
+    answered: questions.filter((q) => q.status === "answered").length,
+    skipped: questions.filter((q) => q.status === "skipped").length,
+    markedForReview: questions.filter((q) => q.status === "marked_for_review").length,
+    notVisited: questions.filter((q) => q.status === "not_visited").length,
+    total: questions.length,
+  };
   const sectionNameByIndex = new Map();
   const questionBankId = session?.test?.questionBank?._id || session?.test?.questionBank || null;
   if (questionBankId) {
@@ -1927,12 +2002,14 @@ export const getExamResults = async (sessionId, studentId) => {
       correctCount: session.correctCount,
       wrongCount: session.wrongCount,
       skippedCount: session.skippedCount,
+      totalQuestions: logicalSummary.total,
       percentile: session.percentile,
       percentage: session.maxScore > 0 
         ? Math.round((session.score / session.maxScore) * 100 * 100) / 100 
         : 0,
       rank: myRank,
     },
+    palette: logicalSummary,
     leaderboard: {
       top3,
       myRank,

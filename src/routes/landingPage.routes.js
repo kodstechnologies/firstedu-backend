@@ -31,11 +31,34 @@ import { contactUs } from "../controllers/contact.controller.js";
 import { submitBlogRequest } from "../controllers/blogRequest.controller.js";
 import { uploadImage, uploadPDF } from "../utils/multerConfig.js";
 import { applyJob } from "../controllers/jobApplicant.controller.js";
-import { getCarearJobById, getCarearJobs } from "../controllers/carear.controller.js";
+import {
+  getCarearJobById,
+  getCarearJobs,
+} from "../controllers/carear.controller.js";
+import {
+  signup,
+  login,
+  logout,
+  getProfile,
+} from "../controllers/studentAuth.controller.js";
+import {
+  createTicket,
+  getMyTickets,
+  getTicketById,
+  getTicketMessages,
+  sendMessage,
+  getTicketCategories,
+} from "../controllers/studentSupport.controller.js";
+import { verifyJWT } from "../middleware/auth.middleware.js";
 
 const router = express.Router();
 
 //start Landing Page routes
+router.post("/signup", uploadImage.single("profileImage"), signup);
+router.post("/login", login);
+router.post("/logout", verifyJWT, logout);
+router.get("/profile", verifyJWT, getProfile);
+
 router.post("/contact-us", contactUs);
 router.get("/success-stories", getAllStoriesAdmin);
 router.get("/press-announcements", getAllPressAnnouncementsAdmin);
@@ -52,7 +75,7 @@ router.get("/teacher-connect/jobs", getAllApplyJobsUser);
 router.get("/teacher-connect/jobs/:id", getApplyJobByIdUser);
 router.get("/blogs", getAllBlogs);
 router.get("/blogs/:id", getBlogById);
-router.post("/blog-request",uploadImage.single("image"), submitBlogRequest);
+router.post("/blog-request", uploadImage.single("image"), submitBlogRequest);
 router.get("/courses", getCourses);
 router.get("/courses/:id", getCourseById);
 router.get("/events", getAllEvents);
@@ -67,5 +90,15 @@ router.get("/carears/:id", getCarearJobById);
 
 // teacher-connect carear
 router.post("/teacher-connect/apply", uploadPDF.single("resume"), applyForJob);
+
+// Ticket Management
+router.post("/support/tickets", verifyJWT, createTicket);
+router.get("/support/tickets", verifyJWT, getMyTickets);
+
+// Specific routes like '/categories' must come before parameterized routes like '/:ticketId'
+router.get("/support/tickets/categories", verifyJWT, getTicketCategories);
+router.get("/support/tickets/:ticketId", verifyJWT, getTicketById);
+router.get("/support/tickets/:ticketId/messages", verifyJWT, getTicketMessages);
+router.post("/support/tickets/:ticketId/messages", verifyJWT, sendMessage);
 
 export default router;
