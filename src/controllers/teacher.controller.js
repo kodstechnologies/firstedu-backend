@@ -57,7 +57,6 @@ export const createTeacher = asyncHandler(async (req, res) => {
     about: value.about || null,
     experience: value.experience || null,
     language: value.language || null,
-    hiringFor: value.hiringFor || null,
     perMinuteRate: value.salaryPerMinute != null ? Number(value.salaryPerMinute) : 0,
     skills: parseSkills(value.skills || []),
     profileImage: profileImageUrl,
@@ -235,7 +234,6 @@ export const updateTeacher = asyncHandler(async (req, res) => {
   if (value.about !== undefined) updateData.about = value.about;
   if (value.experience !== undefined) updateData.experience = value.experience;
   if (value.language !== undefined) updateData.language = value.language;
-  if (value.hiringFor !== undefined) updateData.hiringFor = value.hiringFor;
   if (value.salaryPerMinute !== undefined) updateData.perMinuteRate = Number(value.salaryPerMinute);
   if (value.skills !== undefined) updateData.skills = parseSkills(value.skills);
   if (value.password !== undefined) {

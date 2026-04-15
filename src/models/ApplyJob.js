@@ -24,15 +24,7 @@ const applyJobSchema = new mongoose.Schema(
       required: [true, "Experience is required"],
       trim: true,
     },
-    hiringFor: {
-      type: String,
-      enum: {
-        values: HIRING_FOR_OPTIONS,
-        message: `hiringFor must be one of: ${HIRING_FOR_OPTIONS.join(", ")}`,
-      },
-      required: [true, "Hiring for (role) is required"],
-      trim: true,
-    },
+   
     perMinuteRate: {
       type: Number,
       required: [true, "Per minute rate is required"],
