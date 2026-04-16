@@ -885,7 +885,6 @@ export const getExamInstructions = async (testId, studentId, options = {}) => {
       proctoringText: test.proctoringInstructions,
       points: instructionPoints,
     },
-    instructionPoints,
     ...(tournamentExam ? { tournamentExam } : {}),
   };
 };
