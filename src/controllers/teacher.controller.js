@@ -20,7 +20,7 @@ function parseSkills(skills) {
   return [];
 }
 
-// Create Teacher (Admin only) – name, about, experience, salaryPerMinute, language, profileImage, skills, hiringFor, email, gender, password
+// Create Teacher (Admin only) – name, about, experience, salaryPerMinute, language, profileImage, skills, email, gender, password
 export const createTeacher = asyncHandler(async (req, res) => {
   const body = { ...req.body };
   if (typeof body.skills === "string") {
@@ -210,7 +210,7 @@ export const updatePerMinuteRate = asyncHandler(async (req, res) => {
     );
 });
 
-// Update Teacher (Admin: name, about, experience, salaryPerMinute, language, profileImage, skills, hiringFor, email, gender, password)
+// Update Teacher (Admin: name, about, experience, salaryPerMinute, language, profileImage, skills,, email, gender, password)
 export const updateTeacher = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const body = { ...req.body };

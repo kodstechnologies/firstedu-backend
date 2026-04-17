@@ -36,14 +36,12 @@ export const createApplyJob = asyncHandler(async (req, res) => {
 });
 
 /**
- * Get all jobs (admin) – pagination, optional filter by hiringFor, search
- * GET /admin/teacher-connect/jobs?page=1&limit=10&hiringFor=fulltime&search=math
+ * Get all jobs (admin) – pagination, optional filter by, search
  */
 export const getAllApplyJobsAdmin = asyncHandler(async (req, res) => {
-  const { hiringFor, search, page, limit } = req.query;
+  const { search, page, limit } = req.query;
   const filters = {};
-  if (hiringFor) filters.hiringFor = hiringFor;
-  const result = await applyJobService.getAllJobsPaginated(filters, { page, limit, hiringFor, search });
+  const result = await applyJobService.getAllJobsPaginated(filters, { page, limit, search });
   return res.status(200).json(
     ApiResponse.success(result.list, "Jobs fetched successfully", result.pagination)
   );

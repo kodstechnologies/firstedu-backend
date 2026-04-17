@@ -16,12 +16,7 @@ const teacherSchema = new mongoose.Schema(
     about: { type: String, default: null, trim: true },
     experience: { type: String, default: null, trim: true },
     language: { type: String, default: null, trim: true },
-    hiringFor: {
-      type: String,
-      enum: ["fulltime", "internship", "freelancing"],
-      default: null,
-      trim: true,
-    },
+   
     skills: [
       {
         type: String,
