@@ -8,6 +8,7 @@ import eventRegistrationRepository from "../repository/eventRegistration.reposit
 import olympiadRepository from "../repository/olympiad.repository.js";
 import tournamentRepository from "../repository/tournament.repository.js";
 import razorpayOrderIntentRepository from "../repository/razorpayOrderIntent.repository.js";
+import categoryRepository from "../repository/category.repository.js";
 import pointsService from "./points.service.js";
 import walletService from "./wallet.service.js";
 import {
@@ -21,7 +22,37 @@ import { sendCourseEnrollmentEmail, sendTestBundlePurchaseEmail } from "../utils
 
 const isDirectPurchasableTest = (test) => {
   const applicableFor = test?.applicableFor ?? "test";
-  return applicableFor === "test" || applicableFor === "challenge_yourself";
+  return (
+    applicableFor === "test" ||
+    applicableFor === "challenge_yourself" ||
+    applicableFor === "challenge_yourfriends"
+  );
+};
+
+const attachPurchasedFlagToTests = async (tests = [], studentId, purchasedField = "isPurchased") => {
+  if (!studentId) return tests;
+
+  return await Promise.all(
+    tests.map(async (test) => {
+      const testObj = test?.toObject ? test.toObject() : { ...test };
+      const purchase = await orderRepository.findTestPurchase({
+        student: studentId,
+        test: testObj._id,
+        paymentStatus: "completed",
+      });
+      const purchased = !!purchase;
+      const price = Number(testObj.price) || 0;
+      const requiresPurchase = price > 0 && !purchased;
+      return {
+        ...testObj,
+        [purchasedField]: purchased,
+        requiresPurchase,
+        purchaseMessage: requiresPurchase
+          ? "Please purchase this test from the Resource Store, then you can create/start a challenge room."
+          : null,
+      };
+    })
+  );
 };
 
 /**
@@ -39,10 +70,14 @@ export const getCourses = async (options = {}) => {
     sortOrder = "desc",
     type,
     access,
+    isCertification,
   } = options;
 
   const query = { isPublished: true };
   if (category) query.category = category;
+  if (typeof isCertification === "boolean") {
+    query.isCertification = isCertification;
+  }
   if (search) {
     const regex = { $regex: search, $options: "i" };
     query.$or = [{ title: regex }, { description: regex }];
@@ -336,7 +371,7 @@ export const purchaseCourse = async (
  * Filters: search (title/description), contentType (pdf | video | audio)
  */
 export const getMyCourses = async (studentId, page = 1, limit = 10, options = {}) => {
-  const { search, contentType } = options;
+  const { search, contentType, isCertification } = options;
   const pageNum = parseInt(page);
   const limitNum = parseInt(limit);
   const skip = (pageNum - 1) * limitNum;
@@ -351,6 +386,13 @@ export const getMyCourses = async (studentId, page = 1, limit = 10, options = {}
         (p) => p.course && String(p.course.contentType || "").toLowerCase() === type
       );
     }
+  }
+
+  // Filter by certification flag
+  if (typeof isCertification === "boolean") {
+    purchases = purchases.filter(
+      (p) => p.course && !!p.course.isCertification === isCertification
+    );
   }
 
   // Filter by search (title, description)
@@ -444,10 +486,13 @@ export const getTestsAndBundles = async (options = {}) => {
     sortBy = "createdAt",
     sortOrder = "desc",
     questionBank,
+    studentId,
   } = options;
 
   const pageNum = parseInt(page);
   const limitNum = parseInt(limit);
+  const shouldLoadCategory = type === "test" || type === "challenges" || type === "both";
+  const categoryMap = shouldLoadCategory ? await loadActiveCategoryMap() : null;
 
   if (type === "test") {
     const result = await getTests({
@@ -460,7 +505,30 @@ export const getTestsAndBundles = async (options = {}) => {
       sortOrder,
     });
     return {
-      items: result.tests.map((t) => ({ ...toTestItem(t), itemType: "test" })),
+      items: attachFullCategoryPaths(
+        result.tests.map((t) => ({ ...toTestItem(t), itemType: "test" })),
+        categoryMap
+      ),
+      pagination: result.pagination,
+    };
+  }
+
+  if (type === "challenges") {
+    const result = await getChallengeMarketplaceTests({
+      page: pageNum,
+      limit: limitNum,
+      search,
+      category,
+      questionBank,
+      sortBy,
+      sortOrder,
+      studentId,
+    });
+    return {
+      items: attachFullCategoryPaths(
+        result.tests.map((t) => ({ ...toTestItem(t), itemType: "challenge" })),
+        categoryMap
+      ),
       pagination: result.pagination,
     };
   }
@@ -475,14 +543,17 @@ export const getTestsAndBundles = async (options = {}) => {
       sortOrder,
     });
     return {
-      items: result.bundles.map((b) => ({ ...toBundleItem(b), itemType: "testBundle" })),
+      items: result.bundles.map((b) => {
+        const bundleItem = { ...toBundleItem(b), itemType: "testBundle" };
+        return attachBundleTestsFullCategoryPaths(bundleItem, categoryMap);
+      }),
       pagination: result.pagination,
     };
   }
 
   // type === "both" — single merged list + one pagination
   const fetchSize = pageNum * limitNum;
-  const [testsResult, bundlesResult] = await Promise.all([
+  const [testsResult, challengesResult, bundlesResult] = await Promise.all([
     getTests({
       page: 1,
       limit: fetchSize,
@@ -491,6 +562,16 @@ export const getTestsAndBundles = async (options = {}) => {
       questionBank,
       sortBy,
       sortOrder,
+    }),
+    getChallengeMarketplaceTests({
+      page: 1,
+      limit: fetchSize,
+      search,
+      category,
+      questionBank,
+      sortBy,
+      sortOrder,
+      studentId,
     }),
     getTestBundles({
       page: 1,
@@ -503,13 +584,18 @@ export const getTestsAndBundles = async (options = {}) => {
   ]);
 
   const testsTotal = testsResult.pagination.total;
+  const challengesTotal = challengesResult.pagination.total;
   const bundlesTotal = bundlesResult.pagination.total;
-  const total = testsTotal + bundlesTotal;
+  const total = testsTotal + challengesTotal + bundlesTotal;
   const sortDesc = sortOrder === "desc";
 
   const testItems = testsResult.tests.map((t) => ({ ...toTestItem(t), itemType: "test" }));
+  const challengeItems = challengesResult.tests.map((t) => ({
+    ...toTestItem(t),
+    itemType: "challenge",
+  }));
   const bundleItems = bundlesResult.bundles.map((b) => ({ ...toBundleItem(b), itemType: "testBundle" }));
-  const merged = [...testItems, ...bundleItems].sort((a, b) => {
+  const merged = [...testItems, ...challengeItems, ...bundleItems].sort((a, b) => {
     const dateA = new Date(a.createdAt || 0).getTime();
     const dateB = new Date(b.createdAt || 0).getTime();
     return sortDesc ? dateB - dateA : dateA - dateB;
@@ -519,7 +605,12 @@ export const getTestsAndBundles = async (options = {}) => {
   const items = merged.slice(start, start + limitNum);
 
   return {
-    items,
+    items: items.map((it) => {
+      if (it?.itemType === "testBundle") {
+        return attachBundleTestsFullCategoryPaths(it, categoryMap);
+      }
+      return attachFullCategoryPaths([it], categoryMap)?.[0] ?? it;
+    }),
     pagination: {
       page: pageNum,
       limit: limitNum,
@@ -533,7 +624,94 @@ const toTestItem = (test) => {
   const obj = test?.toObject ? test.toObject() : { ...test };
   delete obj.questions;
   delete obj.randomConfig;
+
+  // Frontend card expects a single category label.
+  // We use the first populated questionBank category as a temporary fallback.
+  const firstCat = Array.isArray(obj?.questionBank?.categories)
+    ? obj.questionBank.categories[0]
+    : null;
+  obj.category = firstCat?.name ?? null;
+  obj.categoryId = firstCat?._id?.toString?.() ?? firstCat?._id?.toString?.() ?? null;
+
   return obj;
+};
+
+const buildCategoryPath = (categoryId, categoryMap) => {
+  const node = categoryMap?.get(categoryId);
+  if (!node) return [];
+
+  const path = [];
+  const visited = new Set();
+  let cursor = node;
+
+  while (cursor && !visited.has(cursor.id)) {
+    visited.add(cursor.id);
+    path.unshift(cursor.name);
+    cursor = cursor.parentId ? categoryMap.get(cursor.parentId) : null;
+  }
+
+  return path;
+};
+
+const loadActiveCategoryMap = async () => {
+  const { items } = await categoryRepository.findAll({}, { page: 1, limit: 1000, isActive: true });
+  const map = new Map();
+  items.forEach((c) => {
+    const id = c?._id?.toString?.() ?? c?._id;
+    if (!id) return;
+    const parentId = c?.parent?._id?.toString?.() ?? c?.parent?._id ?? null;
+    map.set(id, { id, name: c?.name ?? "", parentId });
+  });
+  return map;
+};
+
+const attachFullCategoryPaths = (items, categoryMap) => {
+  if (!Array.isArray(items) || !categoryMap) return items;
+
+  return items.map((it) => {
+    const categoryId = it?.categoryId?.toString?.() ?? it?.categoryId ?? null;
+    if (!categoryId) return it;
+
+    const path = buildCategoryPath(categoryId, categoryMap);
+    const pathText = path.join(" / ");
+
+    return {
+      ...it,
+      categoryPath: pathText || it.category,
+      category: pathText || it.category,
+    };
+  });
+};
+
+const attachBundleTestsFullCategoryPaths = (bundle, categoryMap) => {
+  if (!bundle || !Array.isArray(bundle.tests) || !categoryMap) return bundle;
+
+  const updatedTests = bundle.tests.map((t) => {
+    const tObj = t?.toObject ? t.toObject() : { ...t };
+    const firstCat =
+      Array.isArray(tObj?.questionBank?.categories) && tObj.questionBank.categories.length
+        ? tObj.questionBank.categories[0]
+        : null;
+
+    // Set categoryId so attachFullCategoryPaths can build the breadcrumb.
+    tObj.categoryId =
+      firstCat?._id?.toString?.() ?? firstCat?._id ?? tObj.categoryId ?? null;
+    tObj.category = firstCat?.name ?? tObj.category ?? null;
+    return tObj;
+  });
+
+  const testsWithCategories = attachFullCategoryPaths(updatedTests, categoryMap);
+  const primaryTestCategory =
+    testsWithCategories.find((test) => test?.categoryPath || test?.category)?.categoryPath ||
+    testsWithCategories.find((test) => test?.categoryPath || test?.category)?.category ||
+    null;
+
+  return {
+    ...bundle,
+    category: primaryTestCategory,
+    categoryPath: primaryTestCategory,
+    tests: testsWithCategories,
+  };
 };
 
 const toBundleItem = (bundle) => {
@@ -592,6 +770,58 @@ export const getTests = async (options = {}) => {
       total,
       pages: Math.ceil(total / limitNum) || 1,
     },
+  };
+};
+
+export const getChallengeMarketplaceTests = async (options = {}) => {
+  const {
+    page = 1,
+    limit = 10,
+    search,
+    questionBank,
+    category,
+    sortBy = "createdAt",
+    sortOrder = "desc",
+    studentId,
+  } = options;
+
+  const query = { isPublished: true, applicableFor: "challenge_yourfriends" };
+  if (questionBank) query.questionBank = questionBank;
+  if (search) {
+    const regex = { $regex: search, $options: "i" };
+    query.$or = [{ title: regex }, { description: regex }];
+  }
+
+  const pageNum = parseInt(page);
+  const limitNum = parseInt(limit);
+
+  const result = await testRepository.findAllTests(query, {
+    page: pageNum,
+    limit: limitNum,
+    sortBy,
+    sortOrder,
+    search,
+    questionBank,
+    category,
+    isPublished: true,
+  });
+
+  const testsRaw = result.tests.map((test) => {
+    const testObj = test.toObject();
+    delete testObj.questions;
+    delete testObj.randomConfig;
+    return testObj;
+  });
+  const challengeTestsWithOffers = await attachOfferToList(testsRaw, "Test", "price");
+  const tests = await attachPurchasedFlagToTests(
+    challengeTestsWithOffers,
+    studentId,
+    "purchased"
+  );
+
+  return {
+    tests,
+    pagination: result.pagination,
   };
 };
 

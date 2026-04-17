@@ -2,7 +2,8 @@ import { ApiError } from "../utils/ApiError.js";
 import challengeRepository from "../repository/challenge.repository.js";
 import testRepository from "../repository/test.repository.js";
 import examSessionRepository from "../repository/examSession.repository.js";
-import examSessionService from "./examSession.service.js";
+import examSessionService, { checkStudentAccessForPaidTest } from "./examSession.service.js";
+import orderRepository from "../repository/order.repository.js";
 import { getIO } from "../socket/socketGateway.js";
 import User from "../models/Student.js";
 
@@ -131,6 +132,14 @@ export const createChallenge = async (data, userId) => {
   }
   if (test.applicableFor !== "challenge_yourfriends") {
     throw new ApiError(400, "Selected test is not applicable for challenge-yourfriends");
+  }
+
+  // Paid `challenge_yourfriends` tests: only allow room creation if the creator purchased.
+  if (test.price > 0) {
+    const access = await checkStudentAccessForPaidTest(testId, userId);
+    if (!access.hasAccess) {
+      throw new ApiError(403, "Please purchase this test from the Resource Store, then you can create/start a challenge room.");
+    }
   }
 
   const challenge = await challengeRepository.create({
@@ -283,6 +292,19 @@ export const startChallenge = async (id, userId) => {
   }
 
   const participantIds = challenge.participants.map((p) => p.student);
+
+  // Paid `challenge_yourfriends`: prevent partial starts by ensuring all participants purchased.
+  const test = await testRepository.findTestById(challenge.test);
+  if (test?.applicableFor === "challenge_yourfriends" && test.price > 0) {
+    const accessResults = await Promise.all(
+      participantIds.map((pid) => checkStudentAccessForPaidTest(challenge.test, pid))
+    );
+    const missingPurchase = accessResults.some((r) => !r.hasAccess);
+    if (missingPurchase) {
+      throw new ApiError(403, "All participants must purchase this test first");
+    }
+  }
+
   const sessions = [];
   for (const participantId of participantIds) {
     const examPayload = await examSessionService.startExamSession(
@@ -368,7 +390,7 @@ export const deleteChallenge = async (id, userId) => {
   return { challengeId: id, deleted: true };
 };
 
-export const getChallengeYourFriendsTests = async () => {
+export const getChallengeYourFriendsTests = async (userId = null) => {
   const result = await testRepository.findAllTests(
     {},
     {
@@ -380,7 +402,35 @@ export const getChallengeYourFriendsTests = async () => {
       sortOrder: "desc",
     }
   );
-  return result.tests;
+  const tests = result.tests.map((test) => (test?.toObject ? test.toObject() : { ...test }));
+
+  const addPurchaseMeta = (test, purchased) => {
+    const price = Number(test?.price) || 0;
+    const requiresPurchase = price > 0 && !purchased;
+    return {
+      ...test,
+      purchased: !!purchased,
+      requiresPurchase,
+      purchaseMessage: requiresPurchase
+        ? "Please purchase this test from the Resource Store, then you can create/start a challenge room."
+        : null,
+    };
+  };
+
+  if (!userId) {
+    return tests.map((test) => addPurchaseMeta(test, false));
+  }
+
+  return await Promise.all(
+    tests.map(async (test) => {
+      const purchase = await orderRepository.findTestPurchase({
+        student: userId,
+        test: test._id,
+        paymentStatus: "completed",
+      });
+      return addPurchaseMeta(test, !!purchase);
+    })
+  );
 };
 
 export const getCompletedChallenges = async (userId, options = {}) => {

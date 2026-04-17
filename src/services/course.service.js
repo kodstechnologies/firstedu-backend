@@ -1,5 +1,7 @@
 import { ApiError } from "../utils/ApiError.js";
 import courseRepository from "../repository/course.repository.js";
+import courseTestLinkRepository from "../repository/courseTestLink.repository.js";
+import testRepository from "../repository/test.repository.js";
 import {
   uploadPDFToCloudinary,
   uploadImageToCloudinary,
@@ -54,9 +56,23 @@ export const createCourse = async (data, adminId, files) => {
     contentType: contentType || "pdf",
     price: data.price || 0,
     isPublished: data.isPublished === true || data.isPublished === "true",
+    isCertification:
+      data.isCertification === true || data.isCertification === "true",
     categoryIds: data.categoryIds || [],
     createdBy: adminId,
   });
+  // Handle optional certification test links
+  if (
+    course.isCertification &&
+    Array.isArray(data.certificationTestIds) &&
+    data.certificationTestIds.length > 0
+  ) {
+    await syncCertificationTestsForCourse(
+      course._id,
+      data.certificationTestIds,
+      adminId
+    );
+  }
   return course;
 };
 
@@ -117,8 +133,92 @@ export const updateCourse = async (id, data, files) => {
   if (data.categoryIds !== undefined) {
     updateData.categoryIds = data.categoryIds;
   }
+  if (data.isCertification !== undefined) {
+    updateData.isCertification =
+      data.isCertification === true || data.isCertification === "true";
+  }
 
-  return await courseRepository.updateById(id, updateData);
+  const updatedCourse = await courseRepository.updateById(id, updateData);
+
+  // If certification flag or test list provided, sync links
+  if (
+    updatedCourse.isCertification &&
+    Array.isArray(data.certificationTestIds)
+  ) {
+    await syncCertificationTestsForCourse(
+      updatedCourse._id,
+      data.certificationTestIds,
+      existingCourse.createdBy || null
+    );
+  } else if (!updatedCourse.isCertification) {
+    // If course is no longer certification, remove all links
+    await courseTestLinkRepository.deleteMany?.({ course: updatedCourse._id });
+  }
+
+  return updatedCourse;
+};
+
+/**
+ * Ensure CourseTestLink rows match the provided certificationTestIds.
+ * Validates that each test exists, is published, and applicableFor === "certificate".
+ */
+const syncCertificationTestsForCourse = async (courseId, testIds, adminId) => {
+  const uniqueIds = [...new Set(testIds.map((id) => id.toString()))];
+
+  const tests = await Promise.all(
+    uniqueIds.map((id) => testRepository.findTestById(id))
+  );
+
+  for (let i = 0; i < uniqueIds.length; i++) {
+    const test = tests[i];
+    const id = uniqueIds[i];
+    if (!test) {
+      throw new ApiError(404, `Certification test not found: ${id}`);
+    }
+    if (test.applicableFor !== "certificate") {
+      throw new ApiError(
+        400,
+        `Test ${test.title} is not marked as applicableFor=\"certificate\"`
+      );
+    }
+    if (!test.isPublished) {
+      throw new ApiError(
+        400,
+        `Test ${test.title} must be published before linking as certification test`
+      );
+    }
+  }
+
+  // Remove existing links not in the new list, and create missing ones
+  const existingLinks = await courseTestLinkRepository.findAll({
+    course: courseId,
+  });
+
+  const existingTestIdSet = new Set(
+    existingLinks.map((l) => l.test.toString())
+  );
+
+  const toRemove = existingLinks.filter(
+    (l) => !uniqueIds.includes(l.test.toString())
+  );
+  const toAdd = uniqueIds.filter((id) => !existingTestIdSet.has(id));
+
+  for (const link of toRemove) {
+    await courseTestLinkRepository.deleteById(link._id);
+  }
+
+  let order = 0;
+  for (const testId of uniqueIds) {
+    if (!toAdd.includes(testId)) continue;
+    await courseTestLinkRepository.create({
+      course: courseId,
+      test: testId,
+      order,
+      isRequired: true,
+      createdBy: adminId,
+    });
+    order += 1;
+  }
 };
 
 export const deleteCourse = async (id) => {

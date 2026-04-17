@@ -7,7 +7,7 @@ import marketplaceService, {
 } from "../services/marketplace.service.js";
 
 // Get All Published Courses (Marketplace)
-// Query: type (pdf | video | audio), access (free | paid | both)
+// Query: type (pdf | video | audio), access (free | paid | both), isCertification (true | false)
 export const getCourses = asyncHandler(async (req, res) => {
   const {
     page = 1,
@@ -18,6 +18,7 @@ export const getCourses = asyncHandler(async (req, res) => {
     sortOrder = "desc",
     type,
     access,
+    isCertification,
   } = req.query;
 
   const { courses, pagination } = await marketplaceService.getCourses({
@@ -29,6 +30,10 @@ export const getCourses = asyncHandler(async (req, res) => {
     sortOrder,
     type,
     access,
+    isCertification:
+      typeof isCertification === "string"
+        ? isCertification === "true"
+        : undefined,
   });
 
   return res
@@ -111,16 +116,24 @@ export const purchaseCourse = asyncHandler(async (req, res) => {
 });
 
 // Get Student's Purchased Courses
-// Query: page, limit, search (title/description), contentType (pdf | video | audio)
+// Query: page, limit, search (title/description), contentType (pdf | video | audio), isCertification (true | false)
 export const getMyCourses = asyncHandler(async (req, res) => {
   const studentId = req.user._id;
-  const { page = 1, limit = 10, search, contentType } = req.query;
+  const { page = 1, limit = 10, search, contentType, isCertification } =
+    req.query;
 
   const { purchases, pagination } = await marketplaceService.getMyCourses(
     studentId,
     page,
     limit,
-    { search, contentType },
+    {
+      search,
+      contentType,
+      isCertification:
+        typeof isCertification === "string"
+          ? isCertification === "true"
+          : undefined,
+    },
   );
 
   return res
@@ -204,9 +217,10 @@ export const getTestsAndBundles = asyncHandler(async (req, res) => {
     sortBy = "createdAt",
     sortOrder = "desc",
   } = req.query;
+  const studentId = req.user?._id;
 
   const result = await marketplaceService.getTestsAndBundles({
-    type: ["test", "testBundle", "both"].includes(type) ? type : "both",
+    type: ["test", "testBundle", "both", "challenges"].includes(type) ? type : "both",
     page,
     limit,
     search,
@@ -214,6 +228,7 @@ export const getTestsAndBundles = asyncHandler(async (req, res) => {
     questionBank,
     sortBy,
     sortOrder,
+    studentId,
   });
 
   return res

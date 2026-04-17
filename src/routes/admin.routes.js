@@ -143,6 +143,10 @@ import {
   getCertificateById,
 } from "../controllers/certificate.controller.js";
 import {
+  uploadCertificateTemplate,
+  getCertificateTemplate,
+} from "../controllers/certificateTemplate.controller.js";
+import {
   sendNotificationToStudent,
   sendNotificationToMultipleStudents,
   sendNotificationToAllStudents,
@@ -545,6 +549,15 @@ router.post("/certificates/upload", verifyJWT, uploadPDF.single("pdf"), uploadCe
 // List and view issued certificates
 router.get("/certificates", verifyJWT, getCertificates);
 router.get("/certificates/:certificateId", verifyJWT, getCertificateById);
+
+// Global certificate template for auto-generated certificates
+router.post(
+  "/certificate-template",
+  verifyJWT,
+  uploadPDF.single("pdf"),
+  uploadCertificateTemplate
+);
+router.get("/certificate-template", verifyJWT, getCertificateTemplate);
 
 // ==================== NOTIFICATIONS ====================
 

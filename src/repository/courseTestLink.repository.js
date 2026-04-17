@@ -84,6 +84,14 @@ const deleteById = async (id) => {
   }
 };
 
+const deleteMany = async (filter = {}) => {
+  try {
+    return await CourseTestLink.deleteMany(filter);
+  } catch (error) {
+    throw new ApiError(500, "Failed to delete course test links", error.message);
+  }
+};
+
 // ========== Course Repository Methods ==========
 const findCourseById = async (id) => {
   try {
@@ -111,5 +119,6 @@ export default {
   deleteById,
   findCourseById,
   findTestById,
+  deleteMany,
 };
 
