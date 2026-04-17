@@ -1,6 +1,5 @@
 import { ApiError } from "../utils/ApiError.js";
 import hallOfFameRepository from "../repository/hallOfFame.repository.js";
-import olympiadRepository from "../repository/olympiad.repository.js";
 import tournamentRepository from "../repository/tournament.repository.js";
 import examSessionRepository from "../repository/examSession.repository.js";
 
@@ -14,14 +13,13 @@ const getPrizeForPosition = (position) => {
   return prizes[position] || `Position ${position}`;
 };
 
-// Automatically generate Hall of Fame entry for completed Olympiads and Tournaments
+// Automatically generate Hall of Fame entry for completed Tournaments
 export const autoGenerateHallOfFame = async (eventType, eventId, topN = 3) => {
-  if (!["olympiad", "tournament"].includes(eventType)) {
-    throw new ApiError(400, "Hall of Fame only supports Olympiads and Tournaments");
+  if (eventType !== "tournament") {
+    throw new ApiError(400, "Hall of Fame only supports Tournaments");
   }
 
   const eventModelMap = {
-    olympiad: "Olympiad",
     tournament: "Tournament",
   };
 
@@ -40,39 +38,7 @@ export const autoGenerateHallOfFame = async (eventType, eventId, topN = 3) => {
   let winners = [];
   let eventDate;
 
-  if (eventType === "olympiad") {
-    event = await olympiadRepository.findById(eventId);
-    if (!event) {
-      throw new ApiError(404, "Olympiad not found");
-    }
-
-    // Get all completed exam sessions for this olympiad's test
-    const sessionsResult = await examSessionRepository.findAll({
-      test: event.test,
-      status: "completed",
-      score: { $ne: null },
-    }, {
-      page: 1,
-      limit: topN,
-      sortBy: "score",
-      sortOrder: "desc",
-    });
-
-    // Sort by score desc, then by completion time (earlier is better)
-    const sessions = sessionsResult.sessions.sort((a, b) => {
-      if (b.score !== a.score) return b.score - a.score;
-      return new Date(a.completedAt) - new Date(b.completedAt);
-    }).slice(0, topN);
-
-    winners = sessions.map((session, index) => ({
-      position: index + 1,
-      student: session.student._id,
-      score: session.score || 0,
-      prize: getPrizeForPosition(index + 1),
-    }));
-
-    eventDate = event.endTime;
-  } else if (eventType === "tournament") {
+  if (eventType === "tournament") {
     event = await tournamentRepository.findById(eventId);
     if (!event) {
       throw new ApiError(404, "Tournament not found");
@@ -143,11 +109,7 @@ const updateExistingHallOfFame = async (eventType, eventId, topN = 3) => {
 
   let testId;
 
-  if (eventType === "olympiad") {
-    const olympiad = await olympiadRepository.findById(eventId);
-    if (!olympiad) return entry;
-    testId = olympiad.test;
-  } else if (eventType === "tournament") {
+  if (eventType === "tournament") {
     const tournament = await tournamentRepository.findById(eventId);
     if (!tournament || tournament.stages.length === 0) return entry;
     const finalStage = tournament.stages[tournament.stages.length - 1];
@@ -199,21 +161,6 @@ const updateExistingHallOfFame = async (eventType, eventId, topN = 3) => {
 const ensureHallOfFameGeneratedForCompletedEvents = async (eventType) => {
   const now = new Date();
 
-  if (!eventType || eventType === "olympiad") {
-    const completedOlympiads = await olympiadRepository.find(
-      { isPublished: true, endTime: { $lte: now } },
-      { sort: { endTime: -1 }, limit: 200 }
-    );
-
-    for (const olympiad of completedOlympiads) {
-      try {
-        await autoGenerateHallOfFame("olympiad", olympiad._id, 3);
-      } catch (_) {
-        // Ignore generation errors here to keep listing endpoint resilient
-      }
-    }
-  }
-
   if (!eventType || eventType === "tournament") {
     const tournaments = await tournamentRepository.find(
       { isPublished: true, "stages.endTime": { $lte: now } },
@@ -239,10 +186,14 @@ export const getHallOfFameEntries = async (options = {}) => {
 
   const query = {};
   if (eventType) {
-    if (!["olympiad", "tournament"].includes(eventType)) {
-      throw new ApiError(400, "Invalid event type. Only olympiad and tournament are supported.");
+    if (eventType !== "tournament") {
+      throw new ApiError(400, "Invalid event type. Only tournament is supported.");
     }
     query.eventType = eventType;
+  } else {
+    // If no specific eventType is provided, explicitly enforce "tournament" only
+    // to bypass any legacy "olympiad" docs that would crash mongoose on populate.
+    query.eventType = "tournament";
   }
 
   await ensureHallOfFameGeneratedForCompletedEvents(eventType);

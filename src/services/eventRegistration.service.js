@@ -1,6 +1,5 @@
 import { ApiError } from "../utils/ApiError.js";
 import eventRegistrationRepository from "../repository/eventRegistration.repository.js";
-import olympiadRepository from "../repository/olympiad.repository.js";
 import tournamentRepository from "../repository/tournament.repository.js";
 import workshopRepository from "../repository/workshop.repository.js";
 import examSessionRepository from "../repository/examSession.repository.js";
@@ -18,14 +17,12 @@ import {
 } from "./tournament.service.js";
 
 const EVENT_MODEL_MAP = {
-  olympiad: "Olympiad",
   tournament: "Tournament",
   workshop: "Workshop",
   challenge: "Challenge",
 };
 
 const EVENT_TYPE_TO_OFFER_MODULE = {
-  olympiad: "Olympiad",
   tournament: "Tournament",
   workshop: "Workshop",
 };
@@ -59,9 +56,7 @@ export const registerForEvent = async (
 
   // Validate event exists and get event details
   let event;
-  if (eventType === "olympiad") {
-    event = await olympiadRepository.findById(eventId);
-  } else if (eventType === "tournament") {
+  if (eventType === "tournament") {
     event = await tournamentRepository.findById(eventId);
   } else if (eventType === "workshop") {
     event = await workshopRepository.findById(eventId);
@@ -349,7 +344,7 @@ export const updateRegistration = async (id, updateData) => {
 };
 
 const EVENT_TYPE_TO_MODEL = {
-  olympiad: "Olympiad",
+
   tournament: "Tournament",
   workshop: "Workshop",
 };
@@ -378,9 +373,7 @@ export const initiateEventRegistration = async (
   }
 
   let event;
-  if (eventType === "olympiad") {
-    event = await olympiadRepository.findById(eventId);
-  } else if (eventType === "tournament") {
+  if (eventType === "tournament") {
     event = await tournamentRepository.findById(eventId);
   } else if (eventType === "workshop") {
     event = await workshopRepository.findById(eventId);

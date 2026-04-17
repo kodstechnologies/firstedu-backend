@@ -28,6 +28,18 @@ const olympiadTestSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+
+    // ── Schedule & Timeline ────────────────────────────────────
+    registrationStartTime: { type: Date, default: null },
+    registrationEndTime:   { type: Date, default: null },
+    startTime:             { type: Date, default: null },
+    endTime:               { type: Date, default: null }, // auto-computed by service
+    resultDeclarationDate: { type: Date, default: null },
+
+    // ── Prize Points ───────────────────────────────────────────
+    firstPlacePoints:  { type: Number, default: 0, min: 0 },
+    secondPlacePoints: { type: Number, default: 0, min: 0 },
+    thirdPlacePoints:  { type: Number, default: 0, min: 0 },
   },
   {
     timestamps: true,

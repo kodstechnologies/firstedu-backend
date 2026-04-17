@@ -66,7 +66,7 @@ export const getCategoryTree = asyncHandler(async (req, res) => {
  * - tournament: categories used by published tournaments (via stage tests' question banks)
  */
 export const getCategoriesForStudent = asyncHandler(async (req, res) => {
-  const { linkedTo, format = "tree" } = req.query;
+  const { linkedTo, format = "tree", rootType } = req.query;
   const studentId = req.user?._id;
 
   const validLinkedTo = ["all", "questionBank", "test", "testBundle", "both", "olympiad", "tournament", "examhall"].includes(linkedTo)
@@ -77,6 +77,7 @@ export const getCategoriesForStudent = asyncHandler(async (req, res) => {
   const result = await categoryService.getCategoriesForStudent({
     linkedTo: validLinkedTo,
     format: validFormat,
+    rootType,
     studentId,
   });
 
@@ -96,6 +97,14 @@ export const getCategoryById = asyncHandler(async (req, res) => {
   return res
     .status(200)
     .json(ApiResponse.success(item, "Category fetched successfully"));
+});
+
+export const getCategoryDetailForStudent = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const item = await categoryService.getCategoryById(id);
+  return res
+    .status(200)
+    .json(ApiResponse.success(item, "Category details fetched successfully"));
 });
 
 export const getCategoryChildren = asyncHandler(async (req, res) => {
@@ -147,6 +156,10 @@ export const updateCategoryPricing = asyncHandler(async (req, res) => {
     throw new ApiError(403, "Cannot modify pricing or discounts for top-level pillar categories.");
   }
   
+  if (existing.rootType === 'Olympiads') {
+    throw new ApiError(403, "Pricing and purchases are not supported for Olympiad subcategories.");
+  }
+  
   // Handle file upload if present
   if (req.file) {
     const imageUrl = await uploadImageToCloudinary(
@@ -196,6 +209,9 @@ export const createCategoryOffer = asyncHandler(async (req, res) => {
 
   const category = await categoryService.getCategoryById(id);
   if (!category) throw new ApiError(404, "Category not found");
+  if (category.rootType === 'Olympiads') {
+    throw new ApiError(403, "Offers are not supported for Olympiad subcategories.");
+  }
 
   const offerData = {
     offerName,
@@ -219,6 +235,9 @@ export const removeCategoryOffer = asyncHandler(async (req, res) => {
   
   const category = await categoryService.getCategoryById(id);
   if (!category) throw new ApiError(404, "Category not found");
+  if (category.rootType === 'Olympiads') {
+    throw new ApiError(403, "Offers are not supported for Olympiad subcategories.");
+  }
 
   if (category.offerOverrideId) {
     await offerRepository.deleteOffer(category.offerOverrideId);
@@ -236,6 +255,9 @@ export const createCategoryCoupon = asyncHandler(async (req, res) => {
 
   const category = await categoryService.getCategoryById(id);
   if (!category) throw new ApiError(404, "Category not found");
+  if (category.rootType === 'Olympiads') {
+    throw new ApiError(403, "Coupons are not supported for Olympiad subcategories.");
+  }
 
   const couponData = {
     code, description, discountType, discountValue, validFrom, validUntil, usageLimit, isActive,

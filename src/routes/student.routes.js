@@ -38,13 +38,6 @@ import {
   calculateAnalysis,
 } from "../controllers/examAnalysis.controller.js";
 import {
-  getPublishedOlympiads,
-  getOlympiadDetails,
-  registerForOlympiad,
-  initiateOlympiadPayment,
-  getOlympiadLobby,
-} from "../controllers/olympiad.controller.js";
-import {
   getPublishedTournaments,
   getTournamentDetails,
   registerForTournament,
@@ -156,7 +149,10 @@ import {
   getAllStoriesStudent,
   getStoryDetailStudent,
 } from "../controllers/successStory.controller.js";
-import { getCategoriesForStudent } from "../controllers/category.controller.js";
+import {
+  getCategoriesForStudent,
+  getCategoryDetailForStudent
+} from "../controllers/category.controller.js";
 import {
   initiateCategoryPurchase,
   confirmCategoryPurchase,
@@ -168,15 +164,17 @@ import {
   getMyCertificates,
   getMyCertificateById,
 } from "../controllers/certificate.controller.js";
+import { getUpgradeCost, processUpgrade, confirmUpgrade } from "../controllers/upgrade.controller.js";
 import {
-  getStudentCompetitionSectors,
-  getCompetitions,
-  getSingleCompetition,
-  // initiateTestPayment as initiateCompetitionTestPayment,
-  // purchaseTest as purchaseCompetitionTest,
-  initiateCategoryPayment,
-  purchaseCategory,
-} from "../controllers/studentCompetition.controller.js";
+  listOlympiads,
+  getOlympiadDetails,
+  initiateRegistration,
+  completeRegistration,
+  getMyRegistrations
+} from "../controllers/studentOlympiad.controller.js";
+
+import { getCompetitiveTestsForStudent } from "../controllers/competitiveTest.controller.js";
+
 import {
   getNeedToImprove,
   refreshNeedToImprove,
@@ -271,10 +269,17 @@ router.post("/test-bundles/:id/purchase", verifyJWT, purchaseTestBundle);
 
 // Categories (taxonomy for filtering tests/question banks)
 router.get("/categories", verifyJWT, getCategoriesForStudent);
+router.get("/categories/:id/detail", verifyJWT, getCategoryDetailForStudent);
 router.post("/categories/:categoryId/initiate-payment", verifyJWT, initiateCategoryPurchase);
 router.post("/categories/:categoryId/confirm-payment", verifyJWT, confirmCategoryPurchase);
 router.get("/categories/:categoryId/access", verifyJWT, checkCategoryAccess);
 router.get("/my-category-purchases", verifyJWT, getMyCategoryPurchases);
+router.get("/competitive-tests", verifyJWT, getCompetitiveTestsForStudent);
+
+// Upgrade logic
+router.get("/categories/:categoryId/upgrade-cost", verifyJWT, getUpgradeCost);
+router.post("/categories/:categoryId/checkout-upgrade", verifyJWT, processUpgrade);
+router.post("/categories/:categoryId/confirm-upgrade", verifyJWT, confirmUpgrade);
 
 // Coupons - Apply discount code (test, testBundle, course, olympiad, tournament, workshop, ecommerce, all)
 router.post("/coupons/apply", verifyJWT, applyCoupon);
@@ -293,17 +298,6 @@ router.post(
   verifyJWT,
   calculateAnalysis,
 );
-
-// Community & Competitions - Olympiads
-router.get("/olympiads", verifyJWT, getPublishedOlympiads);
-router.get("/olympiads/:id", verifyJWT, getOlympiadDetails);
-router.post(
-  "/olympiads/:id/initiate-payment",
-  verifyJWT,
-  initiateOlympiadPayment,
-);
-router.post("/olympiads/:id/register", verifyJWT, registerForOlympiad);
-router.get("/olympiads/:id/lobby", verifyJWT, getOlympiadLobby);
 
 // Community & Competitions - Tournaments
 router.get("/tournaments", verifyJWT, getPublishedTournaments);
@@ -324,6 +318,14 @@ router.post(
   initiateWorkshopPayment,
 );
 router.post("/workshops/:id/register", verifyJWT, registerForWorkshop);
+
+// Community & Competitions - Olympiads
+router.get("/olympiads", verifyJWT, listOlympiads);
+router.get("/my-olympiads", verifyJWT, getMyRegistrations);
+router.get("/olympiads/:id", verifyJWT, getOlympiadDetails);
+router.post("/olympiads/:id/initiate-payment", verifyJWT, initiateRegistration);
+router.post("/olympiads/:id/register", verifyJWT, completeRegistration);
+
 
 // Community & Competitions - Challenges
 router.post("/challenges", verifyJWT, createChallenge);
@@ -578,35 +580,7 @@ router.get("/success-stories/featured", verifyJWT, getFeaturedStories);
 router.get("/success-stories", verifyJWT, getAllStoriesStudent);
 router.get("/success-stories/:id", verifyJWT, getStoryDetailStudent);
 
-// ==================== COMPETITION MANAGEMENT ====================
 
-router.get("/competitions", getStudentCompetitionSectors);
-router.get("/competitions/single/:id", verifyJWT, getSingleCompetition);
-router.get("/competitions/:id", verifyJWT, getCompetitions);
-
-// Competition (Category Bundle) Purchases
-router.post(
-  "/competitions/category/:categoryId/initiate-payment",
-  verifyJWT,
-  initiateCategoryPayment,
-);
-router.post(
-  "/competitions/category/:categoryId/purchase",
-  verifyJWT,
-  purchaseCategory,
-);
-
-// Individual Competition Test Purchases (Backward compatibility)
-// router.post(
-//   "/competitions/tests/:testId/initiate-payment",
-//   verifyJWT,
-//   initiateCompetitionTestPayment,
-// );
-// router.post(
-//   "/competitions/tests/:testId/purchase",
-//   verifyJWT,
-//   purchaseCompetitionTest,
-// );
 
 // ==================== NEED TO IMPROVE ====================
 router.get("/need-to-improve", verifyJWT, getNeedToImprove);

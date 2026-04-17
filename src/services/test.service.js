@@ -2,7 +2,6 @@ import { ApiError } from "../utils/ApiError.js";
 import testRepository from "../repository/test.repository.js";
 import questionBankRepository from "../repository/questionBank.repository.js";
 import orderRepository from "../repository/order.repository.js";
-import olympiadRepository from "../repository/olympiad.repository.js";
 import TestPurchase from "../models/TestPurchase.js";
 import {
   uploadImageToCloudinary,
@@ -64,16 +63,7 @@ export const getTests = async (options = {}) => {
   }
 
   if (options.excludeAssigned === 'true' || options.excludeAssigned === true) {
-    if (options.applicableFor === 'olympiad') {
-      const olympiads = await olympiadRepository.find({}, { limit: 10000 });
-      let usedIds = olympiads.map((o) => o.test?._id?.toString() || o.test?.toString()).filter(Boolean);
-      if (options.includeTestId) {
-        usedIds = usedIds.filter((id) => id !== options.includeTestId.toString());
-      }
-      if (usedIds.length > 0) {
-        query._id = { $nin: usedIds };
-      }
-    } else if (options.applicableFor === 'testBundle') {
+    if (options.applicableFor === 'testBundle') {
       const usedIds = await testRepository.findAllUsedBundleTestIds(options.includeBundleId);
       if (usedIds.length > 0) {
         query._id = { $nin: usedIds };

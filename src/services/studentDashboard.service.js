@@ -1,5 +1,4 @@
 import ExamSession from "../models/ExamSession.js";
-import Olympiad from "../models/Olympiad.js";
 import Tournament from "../models/Tournament.js";
 import Workshop from "../models/Workshop.js";
 import marketplaceService from "./marketplace.service.js";
@@ -128,7 +127,7 @@ export const getStudentDashboardStats = async (studentId) => {
       count: t.monthly[month].count, // number of tests of this type done in that month
     }));
     return {
-      type,                                                      // e.g. "olympiad", "test", "tournament"
+      type,                                                      // e.g. "test", "tournament"
       totalTests: t.count,                                       // how many tests of this type attended
       totalDurationMinutes: t.totalDurationMinutes,              // total duration of all those tests
       avgScore,                                                  // average score % across all attempts
@@ -139,8 +138,7 @@ export const getStudentDashboardStats = async (studentId) => {
 
   // --- Fetch Upcoming Events ---
   const now = new Date();
-  const [upcomingOlympiad, upcomingTournament, upcomingWorkshop] = await Promise.all([
-    Olympiad.findOne({ isPublished: true, startTime: { $gt: now }, registrationEndTime: { $gte: now } }).sort({ startTime: 1 }).lean(),
+  const [upcomingTournament, upcomingWorkshop] = await Promise.all([
     Tournament.findOne({ isPublished: true, "stages.startTime": { $gt: now }, registrationEndTime: { $gte: now } }).sort({ "stages.startTime": 1 }).lean(),
     Workshop.findOne({ isPublished: true, startTime: { $gt: now }, registrationEndTime: { $gte: now } }).sort({ startTime: 1 }).lean(),
   ]);
@@ -173,14 +171,6 @@ export const getStudentDashboardStats = async (studentId) => {
   };
 
   const upcomingEvents = [
-    upcomingOlympiad
-      ? {
-          id: upcomingOlympiad._id.toString(),
-          title: upcomingOlympiad.title,
-          type: "Olympiad",
-          date: formatEventDate(upcomingOlympiad.startTime),
-        }
-      : null,
     upcomingTournament
       ? {
           id: upcomingTournament._id.toString(),

@@ -1,7 +1,37 @@
 import OlympiadTest from "../models/OlympiadTest.js";
 import Category from "../models/Category.js";
+import Test from "../models/Test.js";
 import { ApiError } from "../utils/ApiError.js";
 import { assertSubtreeNotPurchased } from "../utils/purchaseGuard.js";
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/** Returns a new Date = startTime + durationMinutes, or null if inputs are missing. */
+const computeEndTime = (startTime, durationMinutes) => {
+  if (!startTime || !durationMinutes) return null;
+  return new Date(new Date(startTime).getTime() + Number(durationMinutes) * 60_000);
+};
+
+const validateScheduleOrder = ({ registrationStartTime, registrationEndTime, startTime, endTime, resultDeclarationDate }) => {
+  if (registrationStartTime && registrationEndTime) {
+    if (new Date(registrationStartTime) >= new Date(registrationEndTime)) {
+      throw new ApiError(400, "Registration end time must be after registration start time");
+    }
+  }
+  if (registrationEndTime && startTime) {
+    if (new Date(registrationEndTime) > new Date(startTime)) {
+      throw new ApiError(400, "Registration must close before the exam start time");
+    }
+  }
+  if (resultDeclarationDate) {
+    const referenceTime = endTime || startTime;
+    if (referenceTime && new Date(resultDeclarationDate) <= new Date(referenceTime)) {
+      throw new ApiError(400, "Result declaration date must be after the exam schedule");
+    }
+  }
+};
+
+// ── CRUD ──────────────────────────────────────────────────────────────────────
 
 export const createOlympiadTest = async (data) => {
   const category = await Category.findById(data.categoryId);
@@ -15,6 +45,16 @@ export const createOlympiadTest = async (data) => {
   if (existing) {
     throw new ApiError(400, "Test is already added or a test with this title already exists in this category");
   }
+
+  // Auto-compute endTime from startTime + linked test's durationMinutes
+  if (data.startTime) {
+    const test = await Test.findById(data.testId).select("durationMinutes");
+    if (test?.durationMinutes) {
+      data.endTime = computeEndTime(data.startTime, test.durationMinutes);
+    }
+  }
+
+  validateScheduleOrder(data);
 
   return await OlympiadTest.create(data);
 };
@@ -48,6 +88,15 @@ export const getOlympiadTests = async (options = {}) => {
   };
 };
 
+export const getOlympiadTestById = async (id) => {
+  const item = await OlympiadTest.findById(id).populate(
+    "testId",
+    "title description durationMinutes price discountType discountValue isPublished questionBank proctoringInstructions applicableFor"
+  );
+  if (!item) throw new ApiError(404, "Olympiad Test not found");
+  return item;
+};
+
 export const updateOlympiadTest = async (id, updateData) => {
   const existing = await OlympiadTest.findById(id);
   if (!existing) throw new ApiError(404, "Olympiad Test not found");
@@ -64,6 +113,23 @@ export const updateOlympiadTest = async (id, updateData) => {
     }
   }
 
+  // Re-compute endTime whenever startTime is being updated
+  if (updateData.startTime) {
+    const test = await Test.findById(existing.testId).select("durationMinutes");
+    if (test?.durationMinutes) {
+      updateData.endTime = computeEndTime(updateData.startTime, test.durationMinutes);
+    }
+  }
+
+  // Merge existing + incoming values for schedule validation
+  validateScheduleOrder({
+    registrationStartTime: updateData.registrationStartTime ?? existing.registrationStartTime,
+    registrationEndTime:   updateData.registrationEndTime   ?? existing.registrationEndTime,
+    startTime:             updateData.startTime             ?? existing.startTime,
+    endTime:               updateData.endTime               ?? existing.endTime,
+    resultDeclarationDate: updateData.resultDeclarationDate ?? existing.resultDeclarationDate,
+  });
+
   return await OlympiadTest.findByIdAndUpdate(id, updateData, { new: true });
 };
 
@@ -78,6 +144,7 @@ export const deleteOlympiadTest = async (id) => {
 export default {
   createOlympiadTest,
   getOlympiadTests,
+  getOlympiadTestById,
   updateOlympiadTest,
   deleteOlympiadTest,
 };

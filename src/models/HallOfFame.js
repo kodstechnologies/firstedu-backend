@@ -4,7 +4,7 @@ const hallOfFameSchema = new mongoose.Schema(
   {
     eventType: {
       type: String,
-      enum: ["olympiad", "tournament"],
+      enum: ["tournament"],
       required: true,
     },
     eventId: {
@@ -14,7 +14,7 @@ const hallOfFameSchema = new mongoose.Schema(
     },
     eventModel: {
       type: String,
-      enum: ["Olympiad", "Tournament"],
+      enum: ["Tournament"],
       required: true,
     },
     winners: [

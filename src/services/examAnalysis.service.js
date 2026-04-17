@@ -1,6 +1,5 @@
 import { ApiError } from "../utils/ApiError.js";
 import examSessionRepository from "../repository/examSession.repository.js";
-import olympiadRepository from "../repository/olympiad.repository.js";
 import tournamentRepository from "../repository/tournament.repository.js";
 import hallOfFameRepository from "../repository/hallOfFame.repository.js";
 import hallOfFameService from "./hallOfFame.service.js";
@@ -211,22 +210,6 @@ export const calculateDetailedAnalysis = async (sessionId) => {
 const updateHallOfFameForTest = async (testId) => {
   const now = new Date();
 
-  // Check if test belongs to an Olympiad
-  const olympiad = await olympiadRepository.findOne({ test: testId, isPublished: true });
-  if (olympiad && new Date(olympiad.endTime) <= now) {
-    const existing = await hallOfFameRepository.findOne({
-      eventType: "olympiad",
-      eventId: olympiad._id,
-    });
-
-    try {
-      await hallOfFameService.autoGenerateHallOfFame("olympiad", olympiad._id, 3);
-    } catch (error) {
-      // If generation fails (e.g., no participants yet), ignore silently
-      // The autoGenerateHallOfFame function handles both create and update
-    }
-    return;
-  }
 
   // Check if test belongs to a Tournament stage
   const tournament = await tournamentRepository.findOne({
@@ -309,13 +292,28 @@ export const getDetailedAnalysis = async (sessionId, studentId) => {
       status: "completed",
     },
     {
-      test: { path: "test", select: "title description" },
+      test: { path: "test", select: "title description applicableFor" },
       student: { path: "student", select: "name email" },
     }
   );
 
   if (!session) {
     throw new ApiError(404, "Exam session not found or not completed");
+  }
+
+  const now = new Date();
+  if (session.test?.applicableFor === "tournament") {
+    const tournamentService = (await import("./tournament.service.js")).default;
+    const lb = await tournamentService.getTournamentStageLeaderboardForStudent(session.test._id, studentId);
+    if (lb && lb.stageEndTime && now < new Date(lb.stageEndTime)) {
+      throw new ApiError(403, "Detailed analysis is locked until the tournament stage ends.");
+    }
+  } else if (session.test?.applicableFor === "Olympiads") {
+    const OlympiadTest = (await import("../models/OlympiadTest.js")).default;
+    const olympiad = await OlympiadTest.findOne({ testId: session.test._id });
+    if (olympiad && olympiad.resultDeclarationDate && now < new Date(olympiad.resultDeclarationDate)) {
+      throw new ApiError(403, "Detailed analysis is locked until the Olympiad results are officially declared.");
+    }
   }
 
   // If analysis already exists, return it

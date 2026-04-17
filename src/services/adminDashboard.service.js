@@ -393,7 +393,7 @@ export const getRevenueHistory = async ({
       .lean(),
     EventRegistration.find({
       ...buildRange("registeredAt"),
-      eventType: { $in: ["olympiad", "tournament", "workshop"] },
+      eventType: { $in: ["tournament", "workshop"] },
     })
       .populate("student", "name email phone")
       .populate("eventId", "title")

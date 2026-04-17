@@ -4,12 +4,9 @@ import categoryRepository from "../repository/category.repository.js";
 import QuestionBank from "../models/QuestionBank.js";
 import Test from "../models/Test.js";
 import TestBundle from "../models/TestBundle.js";
-import Olympiad from "../models/Olympiad.js";
 import Tournament from "../models/Tournament.js";
-import CategoryPurchase from "../models/CategoryPurchase.js";
 import orderRepository from "../repository/order.repository.js";
 import eventRegistrationRepository from "../repository/eventRegistration.repository.js";
-import olympiadRepository from "../repository/olympiad.repository.js";
 import tournamentRepository from "../repository/tournament.repository.js";
 import { getApplicableOfferDetails } from "../utils/offerUtils.js";
 import Offer from "../models/Offer.js";
@@ -59,6 +56,16 @@ export const createCategory = async (data, createdBy) => {
   if (data.parent) {
     parentNode = await categoryRepository.findById(data.parent);
     if (!parentNode) throw new ApiError(404, "Parent category not found");
+
+    if (["School", "Competitive", "Skill Development"].includes(parentNode.rootType)) {
+      const qBanks = await QuestionBank.find({ categories: parentNode._id }).select('_id');
+      if (qBanks.length > 0) {
+        const tests = await Test.exists({ questionBank: { $in: qBanks.map(qb => qb._id) } });
+        if (tests) {
+          throw new ApiError(400, "Cannot add subcategories to a node that already contains tests.");
+        }
+      }
+    }
   }
 
   let resolvedRootType = data.rootType || "custom";
@@ -124,6 +131,28 @@ export const getCategoryTree = async (filter = {}) => {
 
   const fullTree = await categoryRepository.findTree({});
   
+  // Attach hasTests boolean to nodes
+  const allBankIds = await QuestionBank.find({}).select('categories _id');
+  const allTestBanks = await Test.find({}).select('questionBank').lean();
+  const bankIdsWithTests = new Set(allTestBanks.map(t => t.questionBank?.toString()));
+
+  const categoryIdsWithTests = new Set();
+  allBankIds.forEach(qb => {
+    if (bankIdsWithTests.has(qb._id.toString())) {
+        qb.categories.forEach(cid => categoryIdsWithTests.add(cid.toString()));
+    }
+  });
+
+  const attachHasTests = (nodes) => {
+    nodes.forEach(node => {
+      node.hasTests = categoryIdsWithTests.has(node._id.toString());
+      if (node.children?.length) {
+        attachHasTests(node.children);
+      }
+    });
+  };
+  attachHasTests(fullTree);
+
   if (filter && filter.rootType) {
     const requestedRoot = fullTree.find(n => n.rootType === filter.rootType);
     return requestedRoot ? [requestedRoot] : [];
@@ -164,7 +193,6 @@ export const getCategoryById = async (id) => {
   const PILLAR_TO_APPLICABLE_ON = {
     "School":            "School",
     "Competitive":       "Competitive",
-    "Olympiads":         "Olympiads",
     "Skill Development": "Skill Development",
   };
   const applicableOn = PILLAR_TO_APPLICABLE_ON[obj.rootType];
@@ -186,14 +214,13 @@ export const getChildren = async (parentId) => {
 };
 
 /**
- * Get category IDs connected to question banks, tests, test bundles, olympiads, and/or tournaments.
- * linkedTo: "all" | "questionBank" | "test" | "testBundle" | "both" | "olympiad" | "tournament" | "examhall" | null
- * - all: union of test + testBundle + olympiad + tournament (categories used in marketplace/events)
+ * Get category IDs connected to question banks, tests, test bundles, and/or tournaments.
+ * linkedTo: "all" | "questionBank" | "test" | "testBundle" | "both" | "tournament" | "examhall" | null
+ * - all: union of test + testBundle + tournament (categories used in marketplace/events)
  * - questionBank: categories on any question bank
  * - test: categories on question banks of published tests
  * - testBundle: categories on question banks of tests that are in at least one active bundle
  * - both: union of test + testBundle
- * - olympiad: categories on question banks of tests used by published olympiads
  * - tournament: categories on question banks of tests used in stages of published tournaments
  * - examhall: categories linked to items visible in the student's exam hall
  */
@@ -223,18 +250,6 @@ const getConnectedCategoryIds = async (linkedTo, studentId) => {
       if (bankIdsFromBundles.length > 0) {
         const fromBundles = await QuestionBank.find({ _id: { $in: bankIdsFromBundles } }).distinct("categories");
         fromBundles.forEach((id) => categoryIds.add(id?.toString?.() || id));
-      }
-    }
-  }
-
-  if (linkedTo === "olympiad") {
-    const publishedOlympiads = await Olympiad.find({ isPublished: true }).select("test").lean();
-    const testIds = publishedOlympiads.map((o) => o.test).filter(Boolean);
-    if (testIds.length > 0) {
-      const bankIds = await Test.find({ _id: { $in: testIds } }).distinct("questionBank");
-      if (bankIds.length > 0) {
-        const fromOlympiads = await QuestionBank.find({ _id: { $in: bankIds } }).distinct("categories");
-        fromOlympiads.forEach((id) => categoryIds.add(id?.toString?.() || id));
       }
     }
   }
@@ -275,45 +290,21 @@ const getConnectedCategoryIds = async (linkedTo, studentId) => {
       }
     });
 
-    // 2) Registered olympiads / tournaments (from event registrations)
+    // 2) Registered tournaments (from event registrations)
     const regs = await eventRegistrationRepository.find(
       {
         student: studentId,
-        eventType: { $in: ["olympiad", "tournament"] },
+        eventType: "tournament",
         paymentStatus: "completed",
       },
       { limit: 500 }
     );
 
-    const olympiadIds = [
-      ...new Set(regs.filter((r) => r.eventType === "olympiad").map((r) => r.eventId).filter(Boolean)),
-    ];
     const tournamentIds = [
       ...new Set(regs.filter((r) => r.eventType === "tournament").map((r) => r.eventId).filter(Boolean)),
     ];
 
     const eventBankIds = new Set();
-
-    if (olympiadIds.length > 0) {
-      const olympiads = await olympiadRepository.find(
-        { _id: { $in: olympiadIds } },
-        {
-          populate: [
-            {
-              path: "test",
-              select: "questionBank",
-              populate: { path: "questionBank", select: "categories" },
-            },
-          ],
-          limit: 500,
-        }
-      );
-      olympiads.forEach((o) => {
-        const qb = o.test?.questionBank;
-        const qbId = qb?._id?.toString?.() || qb?.toString?.();
-        if (qbId) eventBankIds.add(qbId);
-      });
-    }
 
     if (tournamentIds.length > 0) {
       const tournaments = await tournamentRepository.find(
@@ -404,9 +395,10 @@ const filterTreeByConnected = (nodes, allowedIds) => {
  * format: "tree" | "flat"
  */
 export const getCategoriesForStudent = async (options = {}) => {
-  const { linkedTo, format = "tree", studentId } = options;
+  const { linkedTo, format = "tree", rootType, studentId } = options;
 
-  let tree = await categoryRepository.findTree({});
+  const filter = rootType ? { rootType } : {};
+  let tree = await categoryRepository.findTree(filter);
 
   if (linkedTo) {
     const connectedIds = await getConnectedCategoryIds(linkedTo, studentId);
@@ -422,6 +414,31 @@ export const getCategoriesForStudent = async (options = {}) => {
       tree = [];
     }
   }
+
+  // ── Attach active global offer so the card grid can show discounted prices ──
+  const PILLAR_TO_APPLICABLE_ON = {
+    "School":            "School",
+    "Competitive":       "Competitive",
+    "Skill Development": "Skill Development",
+  };
+  const applicableOn = rootType ? PILLAR_TO_APPLICABLE_ON[rootType] : null;
+  const globalOffer = applicableOn
+    ? (await Offer.findOne({ applicableOn, status: "active" }).lean()) ?? null
+    : null;
+
+  if (globalOffer) {
+    const attachOffer = (nodes) => {
+      nodes.forEach((node) => {
+        // Only attach to Subcategory nodes (they have the price field)
+        if (node.price != null) {
+          node.globalOffer = globalOffer;
+        }
+        if (node.children?.length) attachOffer(node.children);
+      });
+    };
+    attachOffer(tree);
+  }
+  // ─────────────────────────────────────────────────────────────────────────────
 
   if (format === "flat") {
     const flatten = (nodes, acc = []) => {
@@ -459,7 +476,7 @@ export const updateCategory = async (id, updateData) => {
 export const updateCategoryPricing = async (id, updateData) => {
   const existing = await categoryRepository.findById(id);
   if (!existing) throw new ApiError(404, "Category not found");
-  await assertSubtreeNotPurchased(id, "update pricing");
+  // Permitting editing of price, offer, coupon even when purchased
   return await categoryRepository.updateById(id, updateData);
 };
 
@@ -484,8 +501,7 @@ export const getNodeWithEffectivePrice = async (id) => {
   const rootTypeMap = {
     "School": "School",
     "Competitive": "Competitive",
-    "Skill Development": "Skill Development",
-    "Olympiads": "Olympiads"
+    "Skill Development": "Skill Development"
   };
   const moduleName = rootTypeMap[obj.rootType] || "Category";
   

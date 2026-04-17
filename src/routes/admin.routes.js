@@ -69,15 +69,6 @@ import {
   deleteCourseTestLink,
 } from "../controllers/courseTestLink.controller.js";
 import {
-  createOlympiad,
-  getOlympiads,
-  getOlympiadById,
-  updateOlympiad,
-  deleteOlympiad,
-  getOlympiadLeaderboard,
-  declareOlympiadWinners,
-} from "../controllers/olympiad.controller.js";
-import {
   createTournament,
   getTournaments,
   getTournamentById,
@@ -184,6 +175,7 @@ import {
 import {
   createOlympiadTest,
   getOlympiadTests,
+  getOlympiadTestById,
   updateOlympiadTest,
   deleteOlympiadTest,
 } from "../controllers/olympiadTest.controller.js";
@@ -255,19 +247,7 @@ import {
   updateTemplate,
   deleteTemplate,
 } from "../controllers/emailTemplate.controller.js";
-import {
-  createCompetition,
-  getCompetitions,
-  updateCompetition,
-  deleteCompetition,
-  createCompetitionSector,
-  listCompetitionSectors,
-  updateCompetitionSector,
-  deleteCompetitionSector,
-  createTests,
-  updateTests,
-  deleteTests,
-} from "../controllers/competition.controller.js";
+
 import {
   createQnA,
   getAllQnAs,
@@ -371,6 +351,7 @@ router.delete("/competitive-tests/:id", verifyJWT, deleteCompetitiveTest);
 // ─── Olympiad Tests ───
 router.post("/olympiad-tests", verifyJWT, createOlympiadTest);
 router.get("/olympiad-tests", verifyJWT, getOlympiadTests);
+router.get("/olympiad-tests/:id", verifyJWT, getOlympiadTestById);
 router.put("/olympiad-tests/:id", verifyJWT, updateOlympiadTest);
 router.delete("/olympiad-tests/:id", verifyJWT, deleteOlympiadTest);
 
@@ -468,15 +449,6 @@ router.post("/course-test-links", verifyJWT, createCourseTestLink);
 router.get("/courses/:courseId/test-links", verifyJWT, getCourseTestLinks);
 router.put("/course-test-links/:id", verifyJWT, updateCourseTestLink);
 router.delete("/course-test-links/:id", verifyJWT, deleteCourseTestLink);
-
-// Live Events Management - Olympiads
-router.post("/olympiads", verifyJWT, uploadImage.single("image"), createOlympiad);
-router.get("/olympiads", verifyJWT, getOlympiads);
-router.get("/olympiads/:id", verifyJWT, getOlympiadById);
-router.put("/olympiads/:id", verifyJWT, uploadImage.single("image"), updateOlympiad);
-router.delete("/olympiads/:id", verifyJWT, deleteOlympiad);
-router.get("/olympiads/:id/leaderboard", verifyJWT, getOlympiadLeaderboard);
-router.post("/olympiads/:id/winners", verifyJWT, declareOlympiadWinners);
 
 // Live Events Management - Tournaments
 router.post("/tournaments", verifyJWT, createTournament);
@@ -660,20 +632,6 @@ router.post("/email-templates", verifyJWT, createTemplate);
 router.put("/email-templates/:id", verifyJWT, updateTemplate);
 router.delete("/email-templates/:id", verifyJWT, deleteTemplate);
 
-// ==================== COMPETITIONS ====================
-router.post("/competitions", verifyJWT,createCompetition);
-router.get("/competitions/:id", verifyJWT, getCompetitions);
-router.put("/competitions/:id", verifyJWT, updateCompetition);
-router.delete("/competitions/:id", verifyJWT, deleteCompetition);
-
-router.post("/competitions/test", verifyJWT, createTests);
-router.put("/competitions/test/:id", verifyJWT, updateTests);
-router.delete("/competitions/test/:id", verifyJWT, deleteTests);
-
-router.post("/competition-sectors", verifyJWT, createCompetitionSector);
-router.get("/competition-sectors", verifyJWT, listCompetitionSectors);
-router.put("/competition-sectors/:id", verifyJWT, updateCompetitionSector);
-router.delete("/competition-sectors/:id", verifyJWT, deleteCompetitionSector);
 
 // QnA Routes
 router.post("/qna", verifyJWT, createQnA);

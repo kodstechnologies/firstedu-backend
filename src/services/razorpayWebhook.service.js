@@ -139,7 +139,7 @@ async function reconcilePaymentCaptured(orderId, paymentId, amountPaise) {
       paymentId,
       paymentStatus: "completed",
     });
-  } else if (type === "olympiad" || type === "tournament" || type === "workshop") {
+  } else if (type === "tournament" || type === "workshop") {
     const existing = await eventRegistrationRepository.findOne({
       student: studentId,
       eventType: type,
@@ -149,7 +149,7 @@ async function reconcilePaymentCaptured(orderId, paymentId, amountPaise) {
       await razorpayOrderIntentRepository.markReconciled(orderId, paymentId);
       return { reconciled: true, reason: "already_registered" };
     }
-    const entityModel = type === "olympiad" ? "Olympiad" : type === "tournament" ? "Tournament" : "Workshop";
+    const entityModel = type === "tournament" ? "Tournament" : "Workshop";
     await eventRegistrationRepository.create({
       student: studentId,
       eventType: type,

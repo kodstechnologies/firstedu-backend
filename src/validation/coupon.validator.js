@@ -16,7 +16,7 @@ const createCoupon = Joi.object({
 
 /**
  * Student: Apply/validate coupon for discount preview.
- * itemType: test | testBundle | course | olympiad | tournament | workshop | ecommerce | all
+ * itemType: test | testBundle | course | tournament | workshop | ecommerce | all
  * - "all" = universal coupon, works wherever there's an amount (test, bundle, course, event, merchandise)
  */
 const applyCoupon = Joi.object({

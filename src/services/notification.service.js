@@ -10,7 +10,7 @@ import {
   sendNotificationToMultipleDevices,
 } from "./fcm.service.js";
 
-const PURCHASER_PRODUCT_TYPES = ["Course", "Test", "TestBundle", "Olympiad", "Tournament", "Workshop"];
+const PURCHASER_PRODUCT_TYPES = ["Course", "Test", "TestBundle", "Tournament", "Workshop"];
 
 /**
  * Send notification to a single student
@@ -315,12 +315,7 @@ export const sendNotificationToPurchasers = async (
         paymentStatus: "completed",
       }).distinct("student");
       break;
-    case "Olympiad":
-      studentIds = await EventRegistration.find({
-        eventType: "olympiad",
-        paymentStatus: "completed",
-      }).distinct("student");
-      break;
+
     case "Tournament":
       studentIds = await EventRegistration.find({
         eventType: "tournament",

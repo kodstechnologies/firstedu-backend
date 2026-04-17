@@ -3,7 +3,7 @@ import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import competitiveTestService from "../services/competitiveTest.service.js";
 import competitiveTestValidator from "../validation/competitiveTest.validator.js";
-
+import categoryPurchaseRepository from "../repository/categoryPurchase.repository.js";
 export const createCompetitiveTest = asyncHandler(async (req, res) => {
   const { error, value } = competitiveTestValidator.createCompetitiveTest.validate(req.body);
   if (error) throw new ApiError(400, "Validation Error", error.details.map(x => x.message));
@@ -31,4 +31,23 @@ export const deleteCompetitiveTest = asyncHandler(async (req, res) => {
   const { id } = req.params;
   await competitiveTestService.deleteCompetitiveTest(id);
   return res.status(200).json(ApiResponse.success(null, "Competitive test deleted successfully"));
+});
+
+export const getCompetitiveTestsForStudent = asyncHandler(async (req, res) => {
+  const { categoryId, page, limit } = req.query;
+  if (!categoryId) throw new ApiError(400, "categoryId is required");
+  
+  // We no longer throw 403 here. Users can see tests in locked subcategories.
+  const hasAccess = await categoryPurchaseRepository.checkAccess(req.user._id, categoryId);
+
+  const result = await competitiveTestService.getCompetitiveTests({ categoryId, page, limit });
+  
+  // Attach hasAccess flat to the response meta just in case frontend wants it
+  return res.status(200).json(
+    ApiResponse.success(
+      result.tests, 
+      "Competitive tests fetched successfully", 
+      { ...result.pagination, hasAccess }
+    )
+  );
 });

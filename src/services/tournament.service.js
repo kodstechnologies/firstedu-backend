@@ -1,6 +1,5 @@
 import { ApiError } from "../utils/ApiError.js";
 import tournamentRepository from "../repository/tournament.repository.js";
-import olympiadRepository from "../repository/olympiad.repository.js";
 import testRepository from "../repository/test.repository.js";
 import questionBankRepository from "../repository/questionBank.repository.js";
 import QuestionBank from "../models/QuestionBank.js";
@@ -462,19 +461,9 @@ export const createTournament = async (data, adminId, file) => {
 
   const normalizedStages = await normalizeTournamentStagesForPersist(stages);
 
-  // Prevent reusing the same test across olympiads or tournaments
+  // Prevent reusing the same test across tournaments
   const stageTestIds = normalizedStages.map((s) => s.test).filter(Boolean);
   if (stageTestIds.length > 0) {
-    // Any olympiad already using one of these tests?
-    const olympiadUsingTest = await olympiadRepository.findOne({
-      test: { $in: stageTestIds },
-    });
-    if (olympiadUsingTest) {
-      throw new ApiError(
-        400,
-        "One or more selected tests are already linked to an olympiad. Please create or clone new tests for this tournament."
-      );
-    }
 
     // Any other tournament using one of these tests?
     const tournamentUsingTest = await tournamentRepository.findOne({
@@ -643,18 +632,10 @@ export const updateTournament = async (id, updateData, file) => {
   if (updateData.stages && Array.isArray(updateData.stages)) {
     updateData.stages = await normalizeTournamentStagesForPersist(updateData.stages);
 
-    // Prevent reusing the same test across olympiads or tournaments (excluding this tournament)
+    // Prevent reusing the same test across tournaments (excluding this tournament)
     const stageTestIds = updateData.stages.map((s) => s.test).filter(Boolean);
     if (stageTestIds.length > 0) {
-      const olympiadUsingTest = await olympiadRepository.findOne({
-        test: { $in: stageTestIds },
-      });
-      if (olympiadUsingTest) {
-        throw new ApiError(
-          400,
-          "One or more selected tests are already linked to an olympiad. Please create or clone new tests for this tournament."
-        );
-      }
+
 
       const tournamentUsingTest = await tournamentRepository.findOne({
         _id: { $ne: id },

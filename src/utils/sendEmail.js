@@ -460,9 +460,8 @@ export const sendTestBundlePurchaseEmail = async (email, name, bundleName, amoun
  * Send Event Registration Email
  */
 export const sendEventRegistrationEmail = async (eventType, email, name, eventTitle, amount, date) => {
-  let slug = "olympiad_registration";
+  let slug = "workshop_registration";
   if (eventType === "tournament") slug = "tournament_registration";
-  if (eventType === "workshop") slug = "workshop_registration";
 
   try {
     const info = await sendEmailWithTemplate({

@@ -18,6 +18,12 @@ export const getOlympiadTests = asyncHandler(async (req, res) => {
   return res.status(200).json(ApiResponse.success(result.tests, "Olympiad tests fetched successfully", result.pagination));
 });
 
+export const getOlympiadTestById = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const result = await olympiadTestService.getOlympiadTestById(id);
+  return res.status(200).json(ApiResponse.success(result, "Olympiad test fetched successfully"));
+});
+
 export const updateOlympiadTest = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { error, value } = olympiadTestValidator.updateOlympiadTest.validate(req.body);

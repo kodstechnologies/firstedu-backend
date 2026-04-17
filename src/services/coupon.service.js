@@ -159,7 +159,7 @@ export const validateCoupon = async (
     bundle: "TestSeries",
     course: "Course",
     courses: "Course",
-    olympiad: "Olympiad",
+
     tournament: "Tournament",
     workshop: "Workshop",
     workshops: "Workshop",

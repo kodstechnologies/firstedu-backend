@@ -5,7 +5,6 @@ import courseTestLinkRepository from "../repository/courseTestLink.repository.js
 import orderRepository from "../repository/order.repository.js";
 import examSessionRepository from "../repository/examSession.repository.js";
 import eventRegistrationRepository from "../repository/eventRegistration.repository.js";
-import olympiadRepository from "../repository/olympiad.repository.js";
 import tournamentRepository from "../repository/tournament.repository.js";
 import razorpayOrderIntentRepository from "../repository/razorpayOrderIntent.repository.js";
 import pointsService from "./points.service.js";
@@ -596,7 +595,7 @@ export const getTests = async (options = {}) => {
 };
 
 /**
- * Initiate test purchase. Handles free, wallet, and razorpay (like olympiad/tournament/workshop).
+ * Initiate test purchase. Handles free, wallet, and razorpay (like tournament/workshop).
  * - free: completes purchase immediately if price is 0
  * - wallet: deducts balance and completes purchase immediately
  * - razorpay: creates order, returns order details; purchase completed via purchase API after payment
@@ -859,7 +858,7 @@ export const getTestBundles = async (options = {}) => {
 };
 
 /**
- * Initiate test bundle purchase. Handles free, wallet, and razorpay (like olympiad/tournament/workshop).
+ * Initiate test bundle purchase. Handles free, wallet, and razorpay (like tournament/workshop).
  * @param {Object} options - { couponCode?: string }
  */
 export const initiateTestBundlePayment = async (bundleId, studentId, paymentMethod, options = {}) => {
@@ -1098,9 +1097,7 @@ const hasCategory = (categories, categoryId) => {
   return categories.some((c) => (c?._id ?? c)?.toString?.() === idStr);
 };
 
-const olympiadPopulate = [
-  { path: "test", select: "title description durationMinutes questionBank price", populate: { path: "questionBank", select: "name categories" } },
-];
+
 const tournamentStagesPopulate = [
   {
     path: "stages.test",
@@ -1110,10 +1107,10 @@ const tournamentStagesPopulate = [
 ];
 
 /**
- * Get exam hall - purchased tests, test bundles, and (when live) olympiads & tournaments the student joined.
- * Olympiad/tournament tests appear only when event startTime <= now <= endTime (or stage window for tournaments).
- * @param {string} type - "test" | "testBundle" | "olympiad" | "tournament" | "both" (test+bundle) | "all" (default: all)
- * @param {string} category - Filter by category ID (questionBank categories for tests / olympiad / tournament)
+ * Get exam hall - purchased tests, test bundles, and (when live) tournaments the student joined.
+ * Tournament tests appear only when event startTime <= now <= endTime (or stage window for tournaments).
+ * @param {string} type - "test" | "testBundle" | "tournament" | "both" (test+bundle) | "all" (default: all)
+ * @param {string} category - Filter by category ID (questionBank categories for tests / tournament)
  */
 export const getExamHall = async (studentId, page = 1, limit = 20, type = "all", category = null) => {
   const pageNum = parseInt(page);
@@ -1168,35 +1165,12 @@ export const getExamHall = async (studentId, page = 1, limit = 20, type = "all",
     });
 
   const eventRegs = await eventRegistrationRepository.find(
-    { student: studentId, eventType: { $in: ["olympiad", "tournament"] }, paymentStatus: "completed" },
+    { student: studentId, eventType: "tournament", paymentStatus: "completed" },
     { limit: 500 }
   );
-  const olympiadIds = [...new Set(eventRegs.filter((r) => r.eventType === "olympiad").map((r) => r.eventId).filter(Boolean))];
   const tournamentIds = [...new Set(eventRegs.filter((r) => r.eventType === "tournament").map((r) => r.eventId).filter(Boolean))];
 
-  const olympiadItems = [];
   const eventTestIds = [];
-  if (olympiadIds.length > 0) {
-    const olympiads = await olympiadRepository.find(
-      { _id: { $in: olympiadIds }, isPublished: true },
-      { populate: olympiadPopulate, limit: 500 }
-    );
-    for (const o of olympiads) {
-      if (isWithinEventWindow(o.startTime, o.endTime) && o.test) {
-        eventTestIds.push(o.test._id);
-        olympiadItems.push({
-          _id: o._id,
-          type: "olympiad",
-          olympiadId: o._id,
-          olympiadTitle: o.title,
-          test: o.test,
-          testId: o.test._id,
-          startTime: o.startTime,
-          endTime: o.endTime,
-        });
-      }
-    }
-  }
   const tournamentItems = [];
   if (tournamentIds.length > 0) {
     const tournaments = await tournamentRepository.find(
@@ -1235,10 +1209,6 @@ export const getExamHall = async (studentId, page = 1, limit = 20, type = "all",
       : {};
   const getEventTestStatus = (id) => eventStatusMap[id?.toString?.() ?? ""]?.status ?? "not_started";
   const getEventSessionId = (id) => eventStatusMap[id?.toString?.() ?? ""]?.sessionId ?? null;
-  olympiadItems.forEach((item) => {
-    item.testStatus = getEventTestStatus(item.testId);
-    item.sessionId = getEventSessionId(item.testId);
-  });
   tournamentItems.forEach((item) => {
     (item.stages || []).forEach((st) => {
       st.testStatus = getEventTestStatus(st.testId);
@@ -1249,12 +1219,11 @@ export const getExamHall = async (studentId, page = 1, limit = 20, type = "all",
     });
   });
 
-  let combined = [...purchaseItems, ...olympiadItems, ...tournamentItems];
+  let combined = [...purchaseItems, ...tournamentItems];
 
   const typeFilter = (item) => {
     if (type === "test") return item.type === "test";
     if (type === "testBundle") return item.type === "testBundle";
-    if (type === "olympiad") return item.type === "olympiad";
     if (type === "tournament") return item.type === "tournament";
     if (type === "both") return item.type === "test" || item.type === "testBundle";
     return true;
@@ -1265,7 +1234,7 @@ export const getExamHall = async (studentId, page = 1, limit = 20, type = "all",
     if (item.type === "testBundle" && item.testBundle?.tests) {
       return item.testBundle.tests.some((t) => hasCategory(t?.questionBank?.categories, category));
     }
-    if (item.type === "olympiad" && item.test) return hasCategory(item.test?.questionBank?.categories, category);
+
     if (item.type === "tournament" && item.stages) {
       return item.stages.some((s) => hasCategory(s.test?.questionBank?.categories, category));
     }
