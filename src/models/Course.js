@@ -46,6 +46,11 @@ const courseSchema = new mongoose.Schema(
         ref: "Category",
       },
     ],
+    isCertification: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
   },
   {
     timestamps: true,

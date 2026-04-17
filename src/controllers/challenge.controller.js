@@ -67,7 +67,7 @@ export const deleteChallenge = asyncHandler(async (req, res) => {
 });
 
 export const getChallengeYourFriendsTests = asyncHandler(async (req, res) => {
-  const tests = await challengeService.getChallengeYourFriendsTests();
+  const tests = await challengeService.getChallengeYourFriendsTests(req.user?._id || null);
   return res.status(200).json(
     ApiResponse.success(tests, "Challenge-yourfriends tests fetched successfully")
   );

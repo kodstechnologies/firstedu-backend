@@ -164,6 +164,28 @@ const findAllCompletedSessions = async (testId) => {
   }
 };
 
+const findCompletedSessionsForStudentAndTests = async (studentId, testIds) => {
+  try {
+    if (!studentId || !testIds?.length) return [];
+    const ids = testIds
+      .map((id) => id?.toString?.() ?? id)
+      .filter(Boolean)
+      .map((id) => new mongoose.Types.ObjectId(id));
+    return await ExamSession.find({
+      student: new mongoose.Types.ObjectId(studentId),
+      test: { $in: ids },
+      status: "completed",
+      score: { $ne: null },
+    }).select("test student score completedAt");
+  } catch (error) {
+    throw new ApiError(
+      500,
+      "Failed to fetch completed sessions for student and tests",
+      error.message
+    );
+  }
+};
+
 const findExpiredInProgressSessions = async () => {
   try {
     const now = new Date();
@@ -402,5 +424,6 @@ export default {
   getRankedByChallenge,
   countDocuments,
   findLatestDefaultContextCompletedSession,
+  findCompletedSessionsForStudentAndTests,
 };
 

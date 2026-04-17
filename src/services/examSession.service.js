@@ -15,6 +15,7 @@ import everydayChallengeCompletionRepository from "../repository/everydayChallen
 import challengeYourselfService from "./challengeYourself.service.js";
 import competitionRepository from "../repository/competition.repository.js";
 import tournamentService from "./tournament.service.js";
+import { issueCourseCompletionCertificate } from "./certificate.service.js";
 
 const hasCompletedRegistrationForLinkedEventTest = async (testId, studentId) => {
   const [linkedOlympiads, linkedTournaments] = await Promise.all([
@@ -54,7 +55,7 @@ const hasCompletedRegistrationForLinkedEventTest = async (testId, studentId) => 
   return false;
 };
 
-const checkStudentAccessForPaidTest = async (testId, studentId) => {
+export const checkStudentAccessForPaidTest = async (testId, studentId) => {
   let purchase = await orderRepository.findTestPurchase({
     student: studentId,
     test: testId,
@@ -88,6 +89,24 @@ const checkStudentAccessForPaidTest = async (testId, studentId) => {
     });
     if (purchase) {
       return { hasAccess: true, accessType: "test_bundle_purchase" };
+    }
+  }
+
+  // Access via purchased certification course that links this test
+  const coursePurchases =
+    (await orderRepository.findCoursePurchases(studentId)) || [];
+  if (coursePurchases.length > 0) {
+    const courseIds = coursePurchases
+      .map((p) => p.course?._id || p.course)
+      .filter(Boolean);
+    if (courseIds.length > 0) {
+      const links = await courseTestLinkRepository.findAll(
+        { course: { $in: courseIds }, test: testId },
+        { sortBy: "order", sortOrder: "asc" }
+      );
+      if (links && links.length > 0) {
+        return { hasAccess: true, accessType: "certification_course_purchase" };
+      }
     }
   }
 
@@ -283,6 +302,30 @@ const resolveContainerStatusFromChildren = (children = []) => {
   return statuses[0] || "not_visited";
 };
 
+const sanitizeOptionsForExamResponse = (options = []) =>
+  Array.isArray(options)
+    ? options.map((option) => {
+        if (!option || typeof option !== "object") return option;
+        const plainOption = option.toObject ? option.toObject() : { ...option };
+        delete plainOption.isCorrect;
+        return plainOption;
+      })
+    : [];
+
+const sanitizeConnectedQuestionForResponse = (questionObj = {}, subQuestions = []) => ({
+  id: questionObj._id,
+  questionType: "connected",
+  title: questionObj.questionText || "",
+  paragraph: questionObj.passage || "",
+  imageUrl: questionObj.imageUrl || null,
+  marks: questionObj.marks ?? 0,
+  negativeMarks: questionObj.negativeMarks ?? 0,
+  difficulty: questionObj.difficulty || null,
+  orderInBank:
+    questionObj.orderInBank === undefined ? null : questionObj.orderInBank,
+  subQuestions,
+});
+
 const findAnswerByQuestionId = (session, questionId) => {
   const targetId = getNormalizedId(questionId);
   if (!targetId || !Array.isArray(session?.answers)) return null;
@@ -420,22 +463,26 @@ export const startExamSession = async (testId, studentId, options = {}) => {
   }
 
   // Check if student can access paid test.
-  if (
-    test.price > 0 &&
-    test.applicableFor !== "everyday_challenge" &&
-    test.applicableFor !== "challenge_yourfriends"
-  ) {
-    const access =
-      test.applicableFor === "challenge_yourself"
-        ? await checkStudentAccessForPaidChallengeYourselfTest(testId, studentId)
-        : await checkStudentAccessForPaidTest(testId, studentId);
-    if (!access.hasAccess) {
-      throw new ApiError(
-        403,
+  // For `challenge_yourfriends`, every participant must have purchased.
+  if (test.price > 0 && test.applicableFor !== "everyday_challenge") {
+    if (test.applicableFor === "challenge_yourfriends") {
+      const access = await checkStudentAccessForPaidTest(testId, studentId);
+      if (!access.hasAccess) {
+        throw new ApiError(403, "You need to purchase this test first");
+      }
+    } else {
+      const access =
         test.applicableFor === "challenge_yourself"
-          ? "You need to purchase this challenge level first"
-          : "You need to purchase this test first"
-      );
+          ? await checkStudentAccessForPaidChallengeYourselfTest(testId, studentId)
+          : await checkStudentAccessForPaidTest(testId, studentId);
+      if (!access.hasAccess) {
+        throw new ApiError(
+          403,
+          test.applicableFor === "challenge_yourself"
+            ? "You need to purchase this challenge level first"
+            : "You need to purchase this test first"
+        );
+      }
     }
   }
 
@@ -627,24 +674,29 @@ export const getExamInstructions = async (testId, studentId, options = {}) => {
     blockReason = "This challenge exam can only be started by the room creator";
   }
 
-  if (
-    canStart &&
-    test.price > 0 &&
-    test.applicableFor !== "everyday_challenge" &&
-    test.applicableFor !== "challenge_yourfriends"
-  ) {
-    const access =
-      test.applicableFor === "challenge_yourself"
-        ? await checkStudentAccessForPaidChallengeYourselfTest(testId, studentId)
-        : await checkStudentAccessForPaidTest(testId, studentId);
-    if (!access.hasAccess) {
-      canStart = false;
-      blockReason =
-        test.applicableFor === "challenge_yourself"
-          ? "You need to purchase this challenge level first"
-          : "You need to purchase this test first";
+  if (canStart && test.price > 0 && test.applicableFor !== "everyday_challenge") {
+    if (test.applicableFor === "challenge_yourfriends") {
+      const access = await checkStudentAccessForPaidTest(testId, studentId);
+      if (!access.hasAccess) {
+        canStart = false;
+        blockReason = "You need to purchase this test first";
+      } else {
+        accessType = access.accessType;
+      }
     } else {
-      accessType = access.accessType;
+      const access =
+        test.applicableFor === "challenge_yourself"
+          ? await checkStudentAccessForPaidChallengeYourselfTest(testId, studentId)
+          : await checkStudentAccessForPaidTest(testId, studentId);
+      if (!access.hasAccess) {
+        canStart = false;
+        blockReason =
+          test.applicableFor === "challenge_yourself"
+            ? "You need to purchase this challenge level first"
+            : "You need to purchase this test first";
+      } else {
+        accessType = access.accessType;
+      }
     }
   }
 
@@ -871,7 +923,6 @@ export const getExamInstructions = async (testId, studentId, options = {}) => {
       proctoringText: test.proctoringInstructions,
       points: instructionPoints,
     },
-    instructionPoints,
     ...(tournamentExam ? { tournamentExam } : {}),
   };
 };
@@ -981,12 +1032,14 @@ export const getExamSession = async (sessionId, studentId) => {
       question.childQuestions = question.childQuestions.map((child) => {
         const childObj = child.toObject ? child.toObject() : child;
         delete childObj.correctAnswer;
+        childObj.options = sanitizeOptionsForExamResponse(childObj.options);
         return childObj;
       });
     }
 
-    const questionObj = question.toObject ? question.toObject() : question;
+    let questionObj = question.toObject ? question.toObject() : question;
     delete questionObj.correctAnswer;
+    questionObj.options = sanitizeOptionsForExamResponse(questionObj.options);
     if (questionObj.isParent && questionObj.questionType === "connected") {
       const subQuestions = Array.isArray(questionObj.childQuestions)
         ? questionObj.childQuestions
@@ -999,16 +1052,16 @@ export const getExamSession = async (sessionId, studentId) => {
                   : null;
               const childObj = populatedChild || answerQuestionById.get(childId) || { _id: childId };
               delete childObj.correctAnswer;
+              childObj.options = sanitizeOptionsForExamResponse(childObj.options);
               const childAnswer = answerMetaByQuestionId.get(childId);
               return {
                 _id: childObj._id,
                 questionText: childObj.questionText || "",
                 questionType: childObj.questionType || "single",
-                options: childObj.options || [],
+                options: sanitizeOptionsForExamResponse(childObj.options),
                 explanation: childObj.explanation,
                 marks: childObj.marks ?? 1,
                 negativeMarks: childObj.negativeMarks ?? 0,
-                imageUrl: childObj.imageUrl || null,
                 studentAnswer: childAnswer?.answer ?? null,
                 status: childAnswer?.status ?? "not_visited",
                 answeredAt: childAnswer?.answeredAt ?? null,
@@ -1016,14 +1069,12 @@ export const getExamSession = async (sessionId, studentId) => {
             })
             .filter(Boolean)
         : [];
-      questionObj.title = questionObj.questionText || "";
-      questionObj.paragraph = questionObj.passage || "";
-      questionObj.subQuestions = subQuestions;
+      questionObj = sanitizeConnectedQuestionForResponse(questionObj, subQuestions);
     }
 
     const remainingQuestionTimeMs = getAnswerRemainingTimeMs(answer, now);
     const basePayload = {
-      questionId: questionObj._id,
+      questionId: questionObj._id || questionObj.id,
       question: questionObj,
       answer: answer.answer,
       status: answer.status,
@@ -1036,7 +1087,7 @@ export const getExamSession = async (sessionId, studentId) => {
       remainingQuestionTimeFormatted: formatTime(remainingQuestionTimeMs),
       questionTimeExpired: Boolean(answer.timeExpiredAt) || remainingQuestionTimeMs <= 0,
     };
-    if (questionObj.isParent && questionObj.questionType === "connected") {
+    if (questionObj.questionType === "connected") {
       const containerStatus = resolveContainerStatusFromChildren(questionObj.subQuestions || []);
       basePayload.status = containerStatus;
       basePayload.answer = null;
@@ -1368,6 +1419,9 @@ const autoSubmitExam = async (sessionId, studentId, reason = "time_expired") => 
   try {
     const test = await examSessionRepository.findTestById(session.test);
     await awardCompletionPoints(studentId, session, test);
+    if (test.applicableFor === "certificate") {
+      await issueCourseCompletionCertificate(studentId, session.test);
+    }
   } catch (error) {
     console.error("Error awarding points for test completion:", error);
   }
@@ -1814,7 +1868,6 @@ export const getExamResults = async (sessionId, studentId) => {
           explanation: childObj.explanation,
           marks: childObj.marks,
           negativeMarks: childObj.negativeMarks,
-          imageUrl: childObj.imageUrl || null,
         };
       })
       .filter(Boolean);
@@ -1861,12 +1914,7 @@ export const getExamResults = async (sessionId, studentId) => {
         return {
           ...q,
           question: {
-            ...q.question,
-            title: q.question.questionText || "",
-            paragraph: q.question.passage || "",
-            subQuestions: enrichedSubQuestions,
-            // Keep legacy field for backward compatibility.
-            childQuestions: enrichedSubQuestions,
+            ...sanitizeConnectedQuestionForResponse(q.question, enrichedSubQuestions),
           },
         };
       }

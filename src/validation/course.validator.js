@@ -11,6 +11,8 @@ const createCourse = Joi.object({
   description: Joi.string().trim().allow("", null),
   price: Joi.number().min(0).default(0),
   isPublished: Joi.boolean().optional(),
+  isCertification: Joi.boolean().optional(),
+  certificationTestIds: Joi.array().items(objectId).optional(),
   categoryIds: Joi.alternatives()
     .try(Joi.array().items(objectId), objectId)
     .required()
@@ -25,6 +27,8 @@ const updateCourse = Joi.object({
   description: Joi.string().trim().allow("", null).optional(),
   price: Joi.number().min(0).optional(),
   isPublished: Joi.boolean().optional(),
+  isCertification: Joi.boolean().optional(),
+  certificationTestIds: Joi.array().items(objectId).optional(),
   categoryIds: Joi.alternatives()
     .try(Joi.array().items(objectId), objectId)
      .required()

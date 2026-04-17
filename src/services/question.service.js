@@ -52,6 +52,23 @@ const validateConnectedQuestions = (connectedQuestions = []) => {
   });
 };
 
+const normalizeSubQuestionScoring = (sub = {}) => ({
+  marks: sub.marks ?? 1,
+  negativeMarks: sub.negativeMarks ?? 0,
+});
+
+const getConnectedTotals = (subs = []) =>
+  subs.reduce(
+    (acc, sub) => {
+      const { marks, negativeMarks } = normalizeSubQuestionScoring(sub);
+      return {
+        marks: acc.marks + marks,
+        negativeMarks: acc.negativeMarks + negativeMarks,
+      };
+    },
+    { marks: 0, negativeMarks: 0 }
+  );
+
 const formatConnectedQuestionForEdit = (parentDoc, childDocs = []) => {
   const parent = toQuestionPlain(parentDoc);
   const children = (childDocs || []).map((child) => toQuestionPlain(child));
@@ -71,7 +88,6 @@ const formatConnectedQuestionForEdit = (parentDoc, childDocs = []) => {
       explanation: child.explanation,
       marks: child.marks ?? 1,
       negativeMarks: child.negativeMarks ?? 0,
-      imageUrl: child.imageUrl || null,
     })),
   };
 };
@@ -136,8 +152,7 @@ export const createQuestion = async (questionData, createdBy) => {
   if (questionData.questionType === "connected") {
     const subs =
       questionData.subQuestions ?? questionData.connectedQuestions ?? [];
-    const globalChildMarks = questionData.marks ?? 1;
-    const globalChildNegativeMarks = questionData.negativeMarks ?? 0;
+    const connectedTotals = getConnectedTotals(subs);
     const passageText =
       (questionData.paragraph && String(questionData.paragraph).trim()) ||
       (questionData.passage && String(questionData.passage).trim()) ||
@@ -153,8 +168,8 @@ export const createQuestion = async (questionData, createdBy) => {
       isParent: true,
       passage: passageText,
       imageUrl: questionData.imageUrl || null,
-      marks: 0,
-      negativeMarks: 0,
+      marks: connectedTotals.marks,
+      negativeMarks: connectedTotals.negativeMarks,
       correctAnswer: undefined,
       options: [],
       connectedQuestions: [],
@@ -163,6 +178,7 @@ export const createQuestion = async (questionData, createdBy) => {
     const childIds = [];
 
     for (const sub of subs) {
+      const { marks, negativeMarks } = normalizeSubQuestionScoring(sub);
       const child = await questionRepository.create({
         questionText: sub.questionText,
         questionType: sub.questionType,
@@ -172,8 +188,8 @@ export const createQuestion = async (questionData, createdBy) => {
         subject: questionData.subject,
         topic: questionData.topic,
         difficulty: questionData.difficulty,
-        marks: globalChildMarks,
-        negativeMarks: globalChildNegativeMarks,
+        marks,
+        negativeMarks,
         tags: questionData.tags,
         imageUrl: null,
         questionBank: questionData.questionBank,
@@ -340,36 +356,19 @@ export const updateQuestion = async (id, updateData) => {
         partialParentUpdate
       );
 
-      // Keep parent/child image consistent for connected blocks.
-      if (Object.prototype.hasOwnProperty.call(updateData, "imageUrl")) {
-        const existingChildIds = (existingQuestion.childQuestions || []).map((child) =>
-          child?._id?.toString?.() || child?.toString?.()
-        );
-        await Promise.all(
-          existingChildIds.map((childId) =>
-            questionRepository.updateById(childId, { imageUrl: updateData.imageUrl })
-          )
-        );
-      }
       if (
         Object.prototype.hasOwnProperty.call(updateData, "marks") ||
         Object.prototype.hasOwnProperty.call(updateData, "negativeMarks")
       ) {
-        const existingChildIds = (existingQuestion.childQuestions || []).map((child) =>
-          child?._id?.toString?.() || child?.toString?.()
+        const existingChildIds = (existingQuestion.childQuestions || []).map(
+          (child) => child?._id?.toString?.() || child?.toString?.()
         );
-        const marksPatch = {};
-        if (Object.prototype.hasOwnProperty.call(updateData, "marks")) {
-          marksPatch.marks = updateData.marks;
-        }
-        if (Object.prototype.hasOwnProperty.call(updateData, "negativeMarks")) {
-          marksPatch.negativeMarks = updateData.negativeMarks;
-        }
-        await Promise.all(
-          existingChildIds.map((childId) =>
-            questionRepository.updateById(childId, marksPatch)
-          )
-        );
+        const existingChildren = existingChildIds.length
+          ? await questionRepository.findByIds(existingChildIds)
+          : [];
+        const connectedTotals = getConnectedTotals(existingChildren);
+        partialParentUpdate.marks = connectedTotals.marks;
+        partialParentUpdate.negativeMarks = connectedTotals.negativeMarks;
       }
 
       const childIds = (updatedParent.childQuestions || []).map((child) =>
@@ -383,6 +382,7 @@ export const updateQuestion = async (id, updateData) => {
 
     const subs = updateData.subQuestions ?? updateData.connectedQuestions ?? [];
     validateConnectedQuestions(subs);
+    const connectedTotals = getConnectedTotals(subs);
 
     const passageText =
       (updateData.paragraph && String(updateData.paragraph).trim()) ||
@@ -415,16 +415,11 @@ export const updateQuestion = async (id, updateData) => {
     const existingChildIds = (existingQuestion.childQuestions || []).map((child) =>
       child?._id?.toString?.() || child?.toString?.()
     );
-    const existingChildren = existingChildIds.length
-      ? await questionRepository.findByIds(existingChildIds)
-      : [];
-    const globalChildMarks = updateData.marks ?? existingChildren[0]?.marks ?? 1;
-    const globalChildNegativeMarks =
-      updateData.negativeMarks ?? existingChildren[0]?.negativeMarks ?? 0;
     await Promise.all(existingChildIds.map((childId) => questionRepository.deleteById(childId)));
 
     const newChildIds = [];
     for (const sub of subs) {
+      const { marks, negativeMarks } = normalizeSubQuestionScoring(sub);
       const child = await questionRepository.create({
         questionText: sub.questionText,
         questionType: sub.questionType,
@@ -434,8 +429,8 @@ export const updateQuestion = async (id, updateData) => {
         subject: parentUpdate.subject,
         topic: parentUpdate.topic,
         difficulty: parentUpdate.difficulty,
-        marks: globalChildMarks,
-        negativeMarks: globalChildNegativeMarks,
+        marks,
+        negativeMarks,
         tags: parentUpdate.tags,
         imageUrl: null,
         questionBank: existingQuestion.questionBank?._id || existingQuestion.questionBank,
@@ -449,6 +444,8 @@ export const updateQuestion = async (id, updateData) => {
 
     const updatedParent = await questionRepository.updateById(id, {
       ...parentUpdate,
+      marks: connectedTotals.marks,
+      negativeMarks: connectedTotals.negativeMarks,
       childQuestions: newChildIds,
       connectedQuestions: [],
       options: [],

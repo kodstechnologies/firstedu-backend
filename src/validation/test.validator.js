@@ -22,7 +22,8 @@ const createTest = Joi.object({
       "everyday_challenge",
       "challenge_yourfriends",
       "school",
-      "skill"
+      "skill",
+      "certificate"
     )
     .default("test"),
   isPublished: Joi.boolean().optional(),
@@ -47,7 +48,8 @@ const updateTest = Joi.object({
       "everyday_challenge",
       "challenge_yourfriends",
       "school",
-      "skill"
+      "skill",
+      "certificate"
     )
     .optional(),
   isPublished: Joi.boolean().optional(),
