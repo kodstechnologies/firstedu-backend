@@ -147,8 +147,8 @@ export const getMyCourses = asyncHandler(async (req, res) => {
     );
 });
 
-// Get course content for viewing/download (requires purchase; returns contentUrl for audio, video, pdf)
-// Query: redirect=true — redirects to contentUrl for direct download
+// Get course content for viewing/download (requires purchase; returns contents[] array)
+// Query: redirect=true — redirects to first content URL for direct download
 export const getCourseContent = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const studentId = req.user._id;
@@ -157,7 +157,11 @@ export const getCourseContent = asyncHandler(async (req, res) => {
   const content = await marketplaceService.getCourseContentForDownload(id, studentId);
 
   if (redirect === "true" || redirect === "1") {
-    return res.redirect(302, content.contentUrl);
+    const firstUrl = content.contents?.[0]?.url;
+    if (!firstUrl) {
+      return res.status(404).json(ApiResponse.error("No content URL available"));
+    }
+    return res.redirect(302, firstUrl);
   }
 
   return res
@@ -450,7 +454,7 @@ export const getExamHall = asyncHandler(async (req, res) => {
   const studentId = req.user._id;
   const { page = 1, limit = 20, type = "all", category } = req.query;
 
-  const filterType = ["test", "testBundle", "olympiad", "tournament", "both", "all"].includes(type)
+  const filterType = ["test", "testBundle", "olympiad", "tournament", "certificationTest", "both", "all"].includes(type)
     ? type
     : "all";
 

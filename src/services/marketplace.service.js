@@ -97,11 +97,21 @@ export const getCourses = async (options = {}) => {
     access,
   });
 
-  const coursesRaw = result.courses.map((course) => {
-    const courseObj = course.toObject();
-    delete courseObj.contentUrl;
-    return courseObj;
-  });
+  const categoryMap = await loadActiveCategoryMap();
+
+  const coursesRaw = await Promise.all(
+    result.courses.map(async (course) => {
+      const courseObj = course.toObject();
+      courseObj.contentsCount = Array.isArray(courseObj.contents) ? courseObj.contents.length : 0;
+      delete courseObj.contents;
+      courseObj.categoryPath = buildCourseCategoryPaths(courseObj.categoryIds, categoryMap);
+      if (courseObj.isCertification) {
+        const links = await courseTestLinkRepository.findAll({ course: courseObj._id });
+        courseObj.certificationTestCount = Array.isArray(links) ? links.length : 0;
+      }
+      return courseObj;
+    })
+  );
   const courses = await attachOfferToList(coursesRaw, "Course", "price");
   const total = result.pagination.total;
 
@@ -133,7 +143,30 @@ export const getCourseById = async (courseId, studentId) => {
 
   const courseData = await attachOfferToItem(course, "Course", "price");
   courseData.isPurchased = !!purchase;
-  if (!courseData.isPurchased) delete courseData.contentUrl;
+
+  // Build full category paths
+  const categoryMap = await loadActiveCategoryMap();
+  courseData.categoryPath = buildCourseCategoryPaths(courseData.categoryIds, categoryMap);
+
+  // Certification: always include test details so students see what's included
+  if (courseData.isCertification) {
+    const links = await courseTestLinkRepository.findAll({ course: courseData._id });
+    courseData.certificationTestCount = Array.isArray(links) ? links.length : 0;
+    if (Array.isArray(links) && links.length > 0) {
+      courseData.certificationTests = links.map((l) => {
+        const t = l.test?.toObject ? l.test.toObject() : l.test;
+        return { _id: t?._id, title: t?.title, description: t?.description, durationMinutes: t?.durationMinutes };
+      });
+    }
+  }
+
+  // For unpurchased: strip download URLs but keep metadata so students see what's included
+  if (!courseData.isPurchased && Array.isArray(courseData.contents)) {
+    courseData.contents = courseData.contents.map((c) => ({
+      type: c.type,
+      originalName: c.originalName,
+    }));
+  }
 
   return courseData;
 };
@@ -368,7 +401,7 @@ export const purchaseCourse = async (
 
 /**
  * Get student's purchased courses (paginated).
- * Filters: search (title/description), contentType (pdf | video | audio)
+ * Filters: search (title/description), contentType (pdf | video | audio) — filters via contents[].type
  */
 export const getMyCourses = async (studentId, page = 1, limit = 10, options = {}) => {
   const { search, contentType, isCertification } = options;
@@ -378,12 +411,12 @@ export const getMyCourses = async (studentId, page = 1, limit = 10, options = {}
 
   let purchases = await orderRepository.findCoursePurchases(studentId);
 
-  // Filter by contentType (pdf, video, audio)
+  // Filter by content type (pdf, video, audio) — check against contents[] array
   if (contentType) {
     const type = String(contentType).toLowerCase();
     if (["pdf", "video", "audio"].includes(type)) {
       purchases = purchases.filter(
-        (p) => p.course && String(p.course.contentType || "").toLowerCase() === type
+        (p) => p.course && Array.isArray(p.course.contents) && p.course.contents.some((c) => c.type === type)
       );
     }
   }
@@ -422,7 +455,7 @@ export const getMyCourses = async (studentId, page = 1, limit = 10, options = {}
 
 /**
  * Get course content for viewing/download (requires purchase).
- * Returns contentUrl and contentType for video, audio, or PDF.
+ * Returns contents[] array with all uploaded study materials.
  */
 export const getCourseContentForDownload = async (courseId, studentId) => {
   const purchase = await orderRepository.findCoursePurchase({
@@ -438,13 +471,12 @@ export const getCourseContentForDownload = async (courseId, studentId) => {
   if (!course || !course.isPublished) {
     throw new ApiError(404, "Course not found");
   }
-  if (!course.contentUrl) {
+  if (!course.contents || course.contents.length === 0) {
     throw new ApiError(404, "Course content is not available");
   }
 
   return {
-    contentUrl: course.contentUrl,
-    contentType: course.contentType || "pdf",
+    contents: course.contents,
     title: course.title,
   };
 };
@@ -663,6 +695,22 @@ const loadActiveCategoryMap = async () => {
     map.set(id, { id, name: c?.name ?? "", parentId });
   });
   return map;
+};
+
+/**
+ * Build full category path strings for a course's categoryIds.
+ * Returns array like ["School / Class 2 / English"].
+ */
+const buildCourseCategoryPaths = (categoryIds, categoryMap) => {
+  if (!Array.isArray(categoryIds) || !categoryMap) return [];
+  return categoryIds
+    .map((cat) => {
+      const catId = cat?._id?.toString?.() ?? cat?.toString?.() ?? null;
+      if (!catId) return null;
+      const path = buildCategoryPath(catId, categoryMap);
+      return path.length > 0 ? path.join(" / ") : (cat?.name ?? null);
+    })
+    .filter(Boolean);
 };
 
 const attachFullCategoryPaths = (items, categoryMap) => {
@@ -1479,13 +1527,55 @@ export const getExamHall = async (studentId, page = 1, limit = 20, type = "all",
     });
   });
 
-  let combined = [...purchaseItems, ...olympiadItems, ...tournamentItems];
+  // ===== Certification course tests =====
+  const certCourseItems = [];
+  const coursePurchases = await orderRepository.findCoursePurchases(studentId);
+  const certCoursePurchases = coursePurchases.filter(
+    (p) => p.course && p.course.isCertification
+  );
+  if (certCoursePurchases.length > 0) {
+    const certTestIds = [];
+    for (const cp of certCoursePurchases) {
+      const links = await courseTestLinkRepository.findAll({ course: cp.course._id });
+      if (!Array.isArray(links) || links.length === 0) continue;
+      for (const link of links) {
+        const t = link.test;
+        if (!t || !t._id) continue;
+        certTestIds.push(t._id);
+        const testObj = t?.toObject ? t.toObject() : { ...t };
+        certCourseItems.push({
+          _id: `cert_${cp.course._id}_${t._id}`,
+          type: "certificationTest",
+          isCertification: true,
+          courseId: cp.course._id,
+          courseTitle: cp.course.title,
+          test: testObj,
+          testId: t._id,
+          purchaseDate: cp.purchaseDate,
+        });
+      }
+    }
+    // Get exam session status for cert tests
+    if (certTestIds.length > 0) {
+      const certStatusMap = await examSessionRepository.getSessionStatusMapByStudent(
+        studentId,
+        [...new Set(certTestIds)]
+      );
+      certCourseItems.forEach((item) => {
+        item.testStatus = certStatusMap[item.testId?.toString?.() ?? ""]?.status ?? "not_started";
+        item.sessionId = certStatusMap[item.testId?.toString?.() ?? ""]?.sessionId ?? null;
+      });
+    }
+  }
+
+  let combined = [...purchaseItems, ...olympiadItems, ...tournamentItems, ...certCourseItems];
 
   const typeFilter = (item) => {
     if (type === "test") return item.type === "test";
     if (type === "testBundle") return item.type === "testBundle";
     if (type === "olympiad") return item.type === "olympiad";
     if (type === "tournament") return item.type === "tournament";
+    if (type === "certificationTest") return item.type === "certificationTest";
     if (type === "both") return item.type === "test" || item.type === "testBundle";
     return true;
   };
