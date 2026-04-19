@@ -67,7 +67,7 @@ export const getCategoriesForStudent = asyncHandler(async (req, res) => {
   const { linkedTo, format = "tree" } = req.query;
   const studentId = req.user?._id;
 
-  const validLinkedTo = ["all", "questionBank", "test", "testBundle", "both", "olympiad", "tournament", "examhall"].includes(linkedTo)
+  const validLinkedTo = ["all", "questionBank", "test", "testBundle", "both", "olympiad", "tournament", "examhall", "course"].includes(linkedTo)
     ? linkedTo
     : null;
   const validFormat = ["tree", "flat"].includes(format) ? format : "tree";

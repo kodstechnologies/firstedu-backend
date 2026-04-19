@@ -50,7 +50,11 @@ const findAll = async (filter = {}, options = {}) => {
     const sort = { [sortBy]: sortOrder === "asc" ? 1 : -1 };
 
     return await CourseTestLink.find(filter)
-      .populate("test", "title description durationMinutes questionBank")
+      .populate({
+        path: "test",
+        select: "title description durationMinutes questionBank",
+        populate: { path: "questionBank", select: "name categories" }
+      })
       .sort(sort);
   } catch (error) {
     throw new ApiError(500, "Failed to fetch course test links", error.message);

@@ -125,7 +125,7 @@ export const getChildren = async (parentId) => {
 
 /**
  * Get category IDs connected to question banks, tests, test bundles, olympiads, and/or tournaments.
- * linkedTo: "all" | "questionBank" | "test" | "testBundle" | "both" | "olympiad" | "tournament" | "examhall" | null
+ * linkedTo: "all" | "questionBank" | "test" | "testBundle" | "both" | "olympiad" | "tournament" | "examhall" | "course" | null
  * - all: union of test + testBundle + olympiad + tournament (categories used in marketplace/events)
  * - questionBank: categories on any question bank
  * - test: categories on question banks of published tests
@@ -134,11 +134,18 @@ export const getChildren = async (parentId) => {
  * - olympiad: categories on question banks of tests used by published olympiads
  * - tournament: categories on question banks of tests used in stages of published tournaments
  * - examhall: categories linked to items visible in the student's exam hall
+ * - course: categories linked to published courses
  */
 const getConnectedCategoryIds = async (linkedTo, studentId) => {
   if (!linkedTo) return null;
 
   let categoryIds = new Set();
+
+  if (linkedTo === "course") {
+    const Course = (await import("../models/Course.js")).default;
+    const fromCourses = await Course.find({ isPublished: true }).distinct("categoryIds");
+    fromCourses.forEach((id) => categoryIds.add(id?.toString?.() || id));
+  }
 
   if (linkedTo === "questionBank") {
     const fromBanks = await QuestionBank.distinct("categories");

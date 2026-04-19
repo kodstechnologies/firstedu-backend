@@ -34,7 +34,7 @@ const findAll = async (filter = {}, options = {}) => {
     const query = { ...filter };
 
     if (category) {
-      query.category = category;
+      query.categoryIds = category;
     }
 
     if (typeof isPublished !== "undefined") {

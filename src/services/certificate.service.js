@@ -160,7 +160,7 @@ export const issueCourseCompletionCertificate = async (studentId, testId) => {
     // Idempotency: skip if certificate already issued for this course & student
     const existing = await Certificate.findOne({
       student: studentId,
-      title: new RegExp(`^${sanitizeFileName(course.title || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} - Completion$`, "i"),
+      title: `${course.title} - Completion`,
     });
     if (existing) {
       continue;

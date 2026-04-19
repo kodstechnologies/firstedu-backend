@@ -74,7 +74,7 @@ export const getCourses = async (options = {}) => {
   } = options;
 
   const query = { isPublished: true };
-  if (category) query.category = category;
+  if (category) query.categoryIds = category;
   if (typeof isCertification === "boolean") {
     query.isCertification = isCertification;
   }
@@ -1393,7 +1393,7 @@ const tournamentStagesPopulate = [
  * @param {string} type - "test" | "testBundle" | "olympiad" | "tournament" | "both" (test+bundle) | "all" (default: all)
  * @param {string} category - Filter by category ID (questionBank categories for tests / olympiad / tournament)
  */
-export const getExamHall = async (studentId, page = 1, limit = 20, type = "all", category = null) => {
+export const getExamHall = async (studentId, page = 1, limit = 20, type = "all", category = null, search = null) => {
   const pageNum = parseInt(page);
   const limitNum = parseInt(limit);
   const skip = (pageNum - 1) * limitNum;
@@ -1589,10 +1589,34 @@ export const getExamHall = async (studentId, page = 1, limit = 20, type = "all",
     if (item.type === "tournament" && item.stages) {
       return item.stages.some((s) => hasCategory(s.test?.questionBank?.categories, category));
     }
+    if (item.type === "certificationTest" && item.test) return hasCategory(item.test?.questionBank?.categories, category);
     return false;
   };
 
-  combined = combined.filter((i) => typeFilter(i) && categoryFilter(i));
+  const searchFilter = (item) => {
+    if (!search) return true;
+    const q = search.toLowerCase();
+    
+    if ((item.test?.title || "").toLowerCase().includes(q)) return true;
+    if ((item.testBundle?.name || "").toLowerCase().includes(q)) return true;
+    if ((item.olympiadTitle || "").toLowerCase().includes(q)) return true;
+    if ((item.tournamentTitle || "").toLowerCase().includes(q)) return true;
+    if ((item.courseTitle || "").toLowerCase().includes(q)) return true;
+    
+    if (item.stages && item.stages.some(s => (s.name || "").toLowerCase().includes(q) || (s.test?.title || "").toLowerCase().includes(q))) return true;
+    if (item.testBundle?.tests && item.testBundle.tests.some(t => (t.title || "").toLowerCase().includes(q))) return true;
+
+    return false;
+  };
+
+  combined = combined.filter((i) => typeFilter(i) && categoryFilter(i) && searchFilter(i));
+
+  combined.sort((a, b) => {
+    const dateA = new Date(a.purchaseDate || a.startTime || a.createdAt || 0).getTime();
+    const dateB = new Date(b.purchaseDate || b.startTime || b.createdAt || 0).getTime();
+    return dateB - dateA;
+  });
+
   const total = combined.length;
   const paginated = combined.slice(skip, skip + limitNum);
 
