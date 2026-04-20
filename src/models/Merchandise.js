@@ -20,14 +20,9 @@ const merchandiseSchema = new mongoose.Schema(
       required: true,
       min: 0,
     },
-    category: {
-      type: String,
-      trim: true,
-      default: "general",
-    },
     isPhysical: {
       type: Boolean,
-      default: false, // true if requires delivery address
+      default: true, // true if requires delivery address
     },
     isActive: {
       type: Boolean,

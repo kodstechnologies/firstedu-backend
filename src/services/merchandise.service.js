@@ -7,13 +7,12 @@ import couponService from "./coupon.service.js";
 /**
  * Get all merchandise items (admin - includes inactive)
  */
-export const getAllMerchandiseForAdmin = async (page = 1, limit = 10, category = null, isActive = null, search = null) => {
+export const getAllMerchandiseForAdmin = async (page = 1, limit = 10,  isActive = null, search = null) => {
   const query = {};
-  if (category) query.category = category;
   if (isActive !== null) query.isActive = isActive === "true";
   if (search && search.trim()) {
     const regex = { $regex: search.trim(), $options: "i" };
-    query.$or = [{ name: regex }, { description: regex }, { category: regex }];
+    query.$or = [{ name: regex }, { description: regex }];
   }
 
   const result = await merchandiseRepository.findMerchandise(query, {
@@ -42,11 +41,8 @@ export const getMerchandiseByIdForAdmin = async (itemId) => {
 /**
  * Get all active merchandise items
  */
-export const getMerchandiseItems = async (page = 1, limit = 10, category = null) => {
+export const getMerchandiseItems = async (page = 1, limit = 10) => {
   const query = { isActive: true };
-  if (category) {
-    query.category = category;
-  }
 
   const result = await merchandiseRepository.findMerchandise(query, {
     page,

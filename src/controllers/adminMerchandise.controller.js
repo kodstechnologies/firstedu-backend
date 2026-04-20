@@ -10,12 +10,11 @@ import { uploadImageToCloudinary } from "../utils/s3Upload.js";
  * Get all merchandise items (admin)
  */
 export const getMerchandise = asyncHandler(async (req, res) => {
-  const { page = 1, limit = 10, category, isActive, search } = req.query;
+  const { page = 1, limit = 10, isActive, search } = req.query;
 
   const result = await merchandiseService.getAllMerchandiseForAdmin(
     page,
     limit,
-    category,
     isActive,
     search
   );

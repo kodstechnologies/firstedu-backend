@@ -72,7 +72,7 @@ export const getCourses = async (options = {}) => {
     access,
     isCertification,
   } = options;
-
+ 
   const query = { isPublished: true };
   if (category) query.category = category;
   if (typeof isCertification === "boolean") {
@@ -730,13 +730,14 @@ export const getTests = async (options = {}) => {
     category,
     sortBy = "createdAt",
     sortOrder = "desc",
+    applicableFor
   } = options;
 
-  const query = { isPublished: true, applicableFor: "test" };
+  const query = { isPublished: true, applicableFor:applicableFor|| "test" };
   if (questionBank) query.questionBank = questionBank;
   if (search) {
     const regex = { $regex: search, $options: "i" };
-    query.$or = [{ title: regex }, { description: regex }];
+    query.$or = [{ title: regex }, { description: regex },{applicableFor:regex}];
   }
 
   const pageNum = parseInt(page);

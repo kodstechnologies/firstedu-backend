@@ -9,10 +9,10 @@ import walletService from "../services/wallet.service.js";
  * Get all merchandise items
  */
 export const getMerchandiseItems = asyncHandler(async (req, res) => {
-  const { page = 1, limit = 10, category } = req.query;
+  const { page = 1, limit = 10 } = req.query;
   const studentId = req.user._id;
 
-  const result = await merchandiseService.getMerchandiseItems(page, limit, category);
+  const result = await merchandiseService.getMerchandiseItems(page, limit);
 
   const wallet = await walletService.getOrCreateWallet(studentId, "User");
   const meta = {

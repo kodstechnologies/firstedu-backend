@@ -179,10 +179,8 @@ export const rejectApplication = asyncHandler(async (req, res) => {
 
 // ==================== TEACHER / PUBLIC – Jobs (read) & Apply ====================
 
-/**
- * Get all jobs (teachers can see – pagination, optional hiringFor)
- * GET /teacher-connect/jobs?page=1&limit=10&hiringFor=fulltime
- */
+
+ 
 export const getAllApplyJobsUser = asyncHandler(async (req, res) => {
  
   const { search, page, limit } = req.query;

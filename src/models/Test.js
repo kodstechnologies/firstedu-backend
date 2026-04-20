@@ -54,6 +54,7 @@ const testSchema = new mongoose.Schema(
         "Competitive Management",
         "Skill Development",
         "certificate",
+        "trending_test"
       ],
       default: "test",
       index: true,
