@@ -18,8 +18,8 @@ export const createCourse = asyncHandler(async (req, res) => {
   }
 
   const files = req.files || {};
-  if (!files.pdf || !files.pdf[0]) {
-    throw new ApiError(400, "Study material file is required (PDF, video, or audio). Use field 'pdf'.");
+  if (!files.pdf || files.pdf.length === 0) {
+    throw new ApiError(400, "At least one study material file is required (PDF, video, or audio). Use field 'pdf'.");
   }
 
   const course = await courseService.createCourse(value, req.user._id, files);

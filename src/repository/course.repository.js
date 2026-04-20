@@ -11,7 +11,7 @@ const create = async (courseData) => {
 
 const findById = async (id) => {
   try {
-    return await Course.findById(id);
+    return await Course.findById(id).populate("categoryIds", "name parent");
   } catch (error) {
     throw new ApiError(500, "Failed to fetch course", error.message);
   }
@@ -34,7 +34,7 @@ const findAll = async (filter = {}, options = {}) => {
     const query = { ...filter };
 
     if (category) {
-      query.category = category;
+      query.categoryIds = category;
     }
 
     if (typeof isPublished !== "undefined") {
@@ -44,7 +44,7 @@ const findAll = async (filter = {}, options = {}) => {
     if (type) {
       const allowedTypes = ["pdf", "video", "audio"];
       if (allowedTypes.includes(type.toLowerCase())) {
-        query.contentType = type.toLowerCase();
+        query["contents.type"] = type.toLowerCase();
       }
     }
 
@@ -70,6 +70,7 @@ const findAll = async (filter = {}, options = {}) => {
 
     const [courses, total] = await Promise.all([
       Course.find(query)
+        .populate("categoryIds", "name parent")
         .sort(sort)
         .skip(skip)
         .limit(limitNum),

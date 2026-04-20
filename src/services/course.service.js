@@ -18,24 +18,58 @@ async function uploadStudyMaterialFile(file) {
   const { mimetype, buffer, originalname } = file;
   const folder = "courses";
   if (mimetype === "application/pdf") {
-    return { url: await uploadPDFToCloudinary(buffer, originalname, folder), contentType: "pdf" };
+    return { url: await uploadPDFToCloudinary(buffer, originalname, folder), contentType: "pdf", originalName: originalname };
   }
   if (isVideo(mimetype)) {
-    return { url: await uploadVideoToCloudinary(buffer, originalname, folder), contentType: "video" };
+    return { url: await uploadVideoToCloudinary(buffer, originalname, folder), contentType: "video", originalName: originalname };
   }
   if (isAudio(mimetype)) {
-    return { url: await uploadAudioToCloudinary(buffer, originalname, folder), contentType: "audio" };
+    return { url: await uploadAudioToCloudinary(buffer, originalname, folder), contentType: "audio", originalName: originalname };
   }
   throw new ApiError(400, "Study material must be PDF, video, or audio");
 }
 
+/**
+ * Parse syllabus from FormData. It comes as a JSON string via FormData,
+ * or as a direct array when sent as JSON body.
+ */
+function parseSyllabus(raw) {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw.filter((s) => typeof s === "string" && s.trim());
+  if (typeof raw === "string") {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed.filter((s) => typeof s === "string" && s.trim());
+    } catch {
+      // Not JSON — treat as single point
+      return raw.trim() ? [raw.trim()] : [];
+    }
+  }
+  return [];
+}
+
+/** Normalise certificationTestIds — multer may deliver a single string instead of an array */
+function normaliseCertTestIds(raw) {
+  if (!raw) return null;
+  return Array.isArray(raw) ? raw : [raw];
+}
+
 export const createCourse = async (data, adminId, files) => {
-  const studyFile = files?.pdf?.[0];
-  if (!studyFile) {
-    throw new ApiError(400, "Study material file is required (PDF, video, or audio)");
+  const studyFiles = files?.pdf || [];
+  if (studyFiles.length === 0) {
+    throw new ApiError(400, "At least one study material file is required (PDF, video, or audio)");
   }
 
-  const { url: contentUrl, contentType } = await uploadStudyMaterialFile(studyFile);
+  // Upload all study material files
+  const uploadedContents = [];
+  for (const file of studyFiles) {
+    const result = await uploadStudyMaterialFile(file);
+    uploadedContents.push({
+      url: result.url,
+      type: result.contentType,
+      originalName: result.originalName,
+    });
+  }
 
   let imageUrl = null;
   const imageFile = files?.image?.[0];
@@ -48,12 +82,14 @@ export const createCourse = async (data, adminId, files) => {
     );
   }
 
+  const syllabus = parseSyllabus(data.syllabus);
+
   const course = await courseRepository.create({
     title: data.title,
     description: data.description,
+    syllabus,
     imageUrl,
-    contentUrl,
-    contentType: contentType || "pdf",
+    contents: uploadedContents,
     price: data.price || 0,
     isPublished: data.isPublished === true || data.isPublished === "true",
     isCertification:
@@ -61,15 +97,17 @@ export const createCourse = async (data, adminId, files) => {
     categoryIds: data.categoryIds || [],
     createdBy: adminId,
   });
+
+  const certTestIds = normaliseCertTestIds(data.certificationTestIds);
   // Handle optional certification test links
   if (
     course.isCertification &&
-    Array.isArray(data.certificationTestIds) &&
-    data.certificationTestIds.length > 0
+    certTestIds &&
+    certTestIds.length > 0
   ) {
     await syncCertificationTestsForCourse(
       course._id,
-      data.certificationTestIds,
+      certTestIds,
       adminId
     );
   }
@@ -94,18 +132,31 @@ export const updateCourse = async (id, data, files) => {
     throw new ApiError(404, "Course not found");
   }
 
-  let contentUrl = data.contentUrl || existingCourse.contentUrl;
-  let contentType = existingCourse.contentType || "pdf";
   let imageUrl = existingCourse.imageUrl || null;
 
-  const studyFile = files?.pdf?.[0];
-  if (studyFile) {
-    if (existingCourse.contentUrl) {
-      await deleteFileFromCloudinary(existingCourse.contentUrl);
+  // Handle new study material files
+  const studyFiles = files?.pdf || [];
+  let contents = existingCourse.contents || [];
+
+  if (studyFiles.length > 0) {
+    // Delete all old content files
+    for (const c of existingCourse.contents || []) {
+      if (c.url) {
+        await deleteFileFromCloudinary(c.url);
+      }
     }
-    const result = await uploadStudyMaterialFile(studyFile);
-    contentUrl = result.url;
-    contentType = result.contentType;
+
+    // Upload all new files
+    const uploadedContents = [];
+    for (const file of studyFiles) {
+      const result = await uploadStudyMaterialFile(file);
+      uploadedContents.push({
+        url: result.url,
+        type: result.contentType,
+        originalName: result.originalName,
+      });
+    }
+    contents = uploadedContents;
   }
 
   const imageFile = files?.image?.[0];
@@ -123,10 +174,15 @@ export const updateCourse = async (id, data, files) => {
 
   const updateData = {
     ...data,
-    contentUrl,
-    contentType,
+    contents,
     imageUrl,
   };
+
+  // Parse syllabus if provided
+  if (data.syllabus !== undefined) {
+    updateData.syllabus = parseSyllabus(data.syllabus);
+  }
+
   if (data.price !== undefined) {
     updateData.price = data.price;
   }
@@ -140,14 +196,15 @@ export const updateCourse = async (id, data, files) => {
 
   const updatedCourse = await courseRepository.updateById(id, updateData);
 
+  const certTestIds = normaliseCertTestIds(data.certificationTestIds);
   // If certification flag or test list provided, sync links
   if (
     updatedCourse.isCertification &&
-    Array.isArray(data.certificationTestIds)
+    certTestIds
   ) {
     await syncCertificationTestsForCourse(
       updatedCourse._id,
-      data.certificationTestIds,
+      certTestIds,
       existingCourse.createdBy || null
     );
   } else if (!updatedCourse.isCertification) {
@@ -230,8 +287,11 @@ export const deleteCourse = async (id) => {
   if (course.imageUrl) {
     await deleteFileFromCloudinary(course.imageUrl);
   }
-  if (course.contentUrl) {
-    await deleteFileFromCloudinary(course.contentUrl);
+  // Delete all content files
+  for (const c of course.contents || []) {
+    if (c.url) {
+      await deleteFileFromCloudinary(c.url);
+    }
   }
 
   await courseRepository.deleteById(id);
@@ -245,5 +305,3 @@ export default {
   updateCourse,
   deleteCourse,
 };
-
-

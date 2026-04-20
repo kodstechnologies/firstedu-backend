@@ -16,6 +16,7 @@ import challengeYourselfService from "./challengeYourself.service.js";
 import competitionRepository from "../repository/competition.repository.js";
 import tournamentService from "./tournament.service.js";
 import { issueCourseCompletionCertificate } from "./certificate.service.js";
+import courseTestLinkRepository from "../repository/courseTestLink.repository.js";
 
 const hasCompletedRegistrationForLinkedEventTest = async (testId, studentId) => {
   const [linkedOlympiads, linkedTournaments] = await Promise.all([
@@ -1419,9 +1420,7 @@ const autoSubmitExam = async (sessionId, studentId, reason = "time_expired") => 
   try {
     const test = await examSessionRepository.findTestById(session.test);
     await awardCompletionPoints(studentId, session, test);
-    if (test.applicableFor === "certificate") {
-      await issueCourseCompletionCertificate(studentId, session.test);
-    }
+    await issueCourseCompletionCertificate(studentId, session.test);
   } catch (error) {
     console.error("Error awarding points for test completion:", error);
   }
@@ -1564,10 +1563,10 @@ export const submitExam = async (sessionId, studentId) => {
     // Don't fail submission if analysis fails
   }
 
-  // Award points based on test type.
   try {
     const test = await examSessionRepository.findTestById(session.test);
     await awardCompletionPoints(studentId, session, test);
+    await issueCourseCompletionCertificate(studentId, session.test);
   } catch (error) {
     console.error("Error awarding points for test completion:", error);
   }
@@ -1762,6 +1761,13 @@ export const getExamResults = async (sessionId, studentId) => {
 
   if (!session || session.status !== "completed") {
     throw new ApiError(404, "Exam session not found or not completed");
+  }
+
+  // Self-correction: check for missing certificate if this is a certification test
+  try {
+    await issueCourseCompletionCertificate(studentId, session.test?._id || session.test);
+  } catch (error) {
+    console.error("Error re-triggering certificate issuance:", error);
   }
 
   const testDoc = await examSessionRepository.findTestById(session.test);

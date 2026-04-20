@@ -207,5 +207,5 @@ export const uploadCourseMaterial = multer({
   limits: { fileSize: 500 * 1024 * 1024 }, // 500MB
 }).fields([
   { name: "image", maxCount: 1 },
-  { name: "pdf", maxCount: 1 },
+  { name: "pdf", maxCount: 30 },
 ]);

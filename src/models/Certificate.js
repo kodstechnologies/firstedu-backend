@@ -15,7 +15,7 @@ const certificateSchema = new mongoose.Schema(
     issuedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Admin",
-      required: true,
+      default: null,
     },
     issuedAt: {
       type: Date,

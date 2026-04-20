@@ -5,9 +5,8 @@ import certificateTemplateService from "../services/certificateTemplate.service.
 
 // Upload or replace the global certificate template PDF + layout
 export const uploadCertificateTemplate = asyncHandler(async (req, res) => {
-  if (!req.file || !req.file.buffer) {
-    throw new ApiError(400, "Template PDF file is required. Use field name 'pdf'.");
-  }
+  const pdfBuffer = req.file?.buffer;
+  const originalName = req.file?.originalname;
 
   const { layout } = req.body;
   let textLayout = {};
@@ -20,8 +19,8 @@ export const uploadCertificateTemplate = asyncHandler(async (req, res) => {
   }
 
   const template = await certificateTemplateService.uploadCertificateTemplate(
-    req.file.buffer,
-    req.file.originalname || "certificate-template.pdf",
+    pdfBuffer,
+    originalName,
     textLayout
   );
 

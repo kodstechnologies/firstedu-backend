@@ -125,34 +125,34 @@ export const computeNeedToImprove = async (studentId) => {
         isPurchased: purchasedTestIds.has(t._id.toString()),
       }));
 
-      // b) Suggested Videos — published video courses with this category
+      // b) Suggested Videos — published courses with video content in this category
       const videosRaw = await Course.find({
         categoryIds: categoryId,
-        contentType: "video",
+        "contents.type": "video",
         isPublished: true,
       })
-        .select("title contentType")
+        .select("title contents")
         .limit(MAX_VIDEOS);
 
       const videos = videosRaw.map((c) => ({
         courseId: c._id,
         title: c.title,
-        contentType: c.contentType,
+        contentType: c.contents?.[0]?.type || "video",
       }));
 
       // c) Study Materials — published PDF courses with this category
       const materialsRaw = await Course.find({
         categoryIds: categoryId,
-        contentType: "pdf",
+        "contents.type": "pdf",
         isPublished: true,
       })
-        .select("title contentType")
+        .select("title contents")
         .limit(MAX_STUDY_MATERIALS);
 
       const studyMaterials = materialsRaw.map((c) => ({
         courseId: c._id,
         title: c.title,
-        contentType: c.contentType,
+        contentType: c.contents?.[0]?.type || "pdf",
       }));
 
       // d) Teachers — approved teachers whose skills match category name
