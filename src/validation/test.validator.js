@@ -25,7 +25,8 @@ const createTest = Joi.object({
       "certificate",
       "School",
       "Competitive",
-      "Skill Development"
+      "Skill Development",
+      "trending_test"
     )
     .default("test"),
   isPublished: Joi.boolean().optional(),
@@ -53,7 +54,8 @@ const updateTest = Joi.object({
       "certificate",
       "School",
       "Competitive",
-      "Skill Development"
+      "Skill Development",
+      "trending_test"
     )
     .optional(),
   isPublished: Joi.boolean().optional(),

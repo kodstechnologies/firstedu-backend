@@ -46,7 +46,6 @@ const adminCreateTeacher = Joi.object({
   about: Joi.string().trim().allow("", null).optional(),
   experience: Joi.string().trim().allow("", null).optional(),
   language: Joi.string().trim().allow("", null).optional(),
-  hiringFor: Joi.string().trim().allow("", null).optional(),
   salaryPerMinute: Joi.number().min(0).optional(),
   skills: Joi.array().items(Joi.string().trim()).optional(),
 });
@@ -60,7 +59,7 @@ const adminUpdateTeacher = Joi.object({
   about: Joi.string().trim().allow("", null).optional(),
   experience: Joi.string().trim().allow("", null).optional(),
   language: Joi.string().trim().allow("", null).optional(),
-  hiringFor: Joi.string().trim().allow("", null).optional(),
+
   salaryPerMinute: Joi.number().min(0).optional(),
   skills: Joi.array().items(Joi.string().trim()).optional(),
 });

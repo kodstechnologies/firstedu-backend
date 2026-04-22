@@ -191,6 +191,7 @@ export const getTests = asyncHandler(async (req, res) => {
     category,
     sortBy = "createdAt",
     sortOrder = "desc",
+    applicableFor
   } = req.query;
 
   const { tests, pagination } = await marketplaceService.getTests({
@@ -201,6 +202,7 @@ export const getTests = asyncHandler(async (req, res) => {
     category,
     sortBy,
     sortOrder,
+    applicableFor
   });
 
   return res
