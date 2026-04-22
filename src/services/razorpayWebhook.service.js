@@ -8,6 +8,7 @@ import pointsService from "./points.service.js";
 import eventRegistrationRepository from "../repository/eventRegistration.repository.js";
 import walletService from "./wallet.service.js";
 import categoryPurchaseService from "./categoryPurchase.service.js";
+import categoryPurchaseRepository from "../repository/categoryPurchase.repository.js";
 
 const LOG_PREFIX = "[Razorpay Webhook]";
 
@@ -176,6 +177,20 @@ async function reconcilePaymentCaptured(orderId, paymentId, amountPaise) {
     } catch (e) {
       console.error(`${LOG_PREFIX} categoryPurchase error:`, e.message);
       return { reconciled: false, reason: "category_purchase_failed" };
+    }
+  } else if (type === "categoryUpgrade") {
+    // entityId = basePurchaseId (the CategoryPurchase doc to update)
+    // metadata.newCategoryIds = the snapshot of new IDs taken at checkout-upgrade time
+    try {
+      const newCategoryIds = intent.metadata?.newCategoryIds || [];
+      if (newCategoryIds.length > 0) {
+        await categoryPurchaseRepository.updateUnlockedIds(entityId, newCategoryIds);
+      }
+      await razorpayOrderIntentRepository.markReconciled(orderId, paymentId);
+      return { reconciled: true, reason: "upgrade_created" };
+    } catch (e) {
+      console.error(`${LOG_PREFIX} categoryUpgrade error:`, e.message);
+      return { reconciled: false, reason: "category_upgrade_failed" };
     }
   } else {
     return { reconciled: false, reason: "unknown_type" };

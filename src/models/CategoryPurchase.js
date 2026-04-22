@@ -46,6 +46,10 @@ const categoryPurchaseSchema = new mongoose.Schema(
       enum: ["pending", "completed", "failed"],
       default: "pending",
     },
+    lastUpgradedAt: {
+      type: Date,
+      default: null, // Will use createdAt as fallback if null
+    },
   },
   {
     timestamps: true,

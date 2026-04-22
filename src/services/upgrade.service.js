@@ -1,131 +1,160 @@
-import { ApiError } from "../utils/ApiError.js";
-import Category from "../models/Category.js";
-import CategoryPurchase from "../models/CategoryPurchase.js";
-import categoryRepository from "../repository/category.repository.js";
-import razorpayOrderIntentRepository from "../repository/razorpayOrderIntent.repository.js";
-import { createRazorpayOrder } from "../utils/razorpayUtils.js";
+/**
+ * upgrade.service.js
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Handles post-purchase upgrades for all 3 pillar categories when:
+ *  - Admin adds new tests/sub-categories after a student has already purchased
+ *  - Admin increases the category price
+ *
+ * Edge-cases handled:
+ *  • priceDiff <= 0 (price same or DECREASED) → free upgrade, no payment needed
+ *  • priceDiff > 0 (price INCREASED) → student pays only the difference
+ *  • Old content stays unlocked unconditionally — only new content is gated
+ *  • paymentMethod: "free" | "wallet" | "razorpay"
+ *  • Razorpay confirmUpgrade is fully implemented (was previously a stub)
+ *  • Webhook reconciliation for "categoryUpgrade" type is handled in webhook service
+ */
 
-const fetchDescendantIds = async (categoryId) => {
-  const children = await categoryRepository.findChildren(categoryId);
-  let ids = [];
-  for (const child of children) {
-    ids.push(child._id);
-    const subIds = await fetchDescendantIds(child._id);
-    ids = ids.concat(subIds);
-  }
-  return ids;
-};
+import { ApiError } from "../utils/ApiError.js";
+import categoryPurchaseRepository from "../repository/categoryPurchase.repository.js";
+import walletService from "./wallet.service.js";
+import razorpayOrderIntentRepository from "../repository/razorpayOrderIntent.repository.js";
+import { createRazorpayOrder, verifyPaymentSignature } from "../utils/razorpayUtils.js";
+import { resolveAccessStatus, fetchDescendantIds } from "../utils/categoryAccessUtils.js";
+
+// ─── calculateUpgradeCost ─────────────────────────────────────────────────────
 
 /**
- * Calculates upgrade cost for an existing user for a given category node.
- * Formula: MAX(0, CurrentPrice - PaidSoFar)
+ * Returns:
+ * {
+ *   upgradeCost: number       — 0 (free) or positive rupee amount
+ *   isFreeUpgrade: boolean
+ *   hasAccess: boolean        — false if student never purchased
+ *   hasNewContent: boolean    — whether new cats/tests exist after their snapshot
+ *   newCategoryIds: string[]  — IDs not in their snapshot
+ *   purchase: doc | null
+ *   currentPrice: number
+ *   paidSoFar: number
+ * }
  */
-export const calculateUpgradeCost = async (studentId, targetCategoryId) => {
-  const category = await Category.findById(targetCategoryId);
-  if (!category) throw new ApiError(404, "Category not found");
+export const calculateUpgradeCost = async (studentId, categoryId) => {
+  const status = await resolveAccessStatus(studentId, categoryId);
 
-  // Check if they already have access to this exact node
-  const existingAccess = await CategoryPurchase.findOne({
-    student: studentId,
-    unlockedCategoryIds: targetCategoryId,
-    paymentStatus: "completed"
-  });
-
-  if (existingAccess) {
-    return { upgradeCost: 0, hasFullAccess: true, category };
+  if (!status.hasAccess) {
+    // Student never purchased this category — direct purchase flow applies
+    throw new ApiError(
+      400,
+      "No existing purchase found for this category. Use the standard purchase flow."
+    );
   }
 
-  // Find all past purchases they made that INTERSECT this node's ancestors
-  // Actually, wait: we need to find if they bought any ancestor, or if we trace it up.
-  // E.g., they bought "School -> Class 1" for 500rs. They want "School -> Class 1 -> Math" (new subject).
-  // "targetCategoryId" is "Math". We find if they purchased "Class 1".
-  
-  // Get all ancestors of target category
-  let currentId = category.parent;
-  let paidSoFar = 0;
-  let basePurchaseId = null;
-
-  while (currentId) {
-    const parentPurchase = await CategoryPurchase.findOne({
-      student: studentId,
-      categoryId: currentId,
-      paymentStatus: "completed"
-    }).sort({ createdAt: -1 });
-
-    if (parentPurchase) {
-      paidSoFar = parentPurchase.purchasePrice;
-      basePurchaseId = parentPurchase._id;
-      break; 
-    }
-    const pCat = await Category.findById(currentId);
-    currentId = pCat ? pCat.parent : null;
-  }
-
-  if (!basePurchaseId) {
-    // They never bought any parent class. They must pay full price of this specific node.
-    let cp = category.discountedPrice !== null && category.discountedPrice !== undefined ? category.discountedPrice : category.price;
-    return { upgradeCost: cp, hasFullAccess: false, isIsolated: true, category };
-  }
-
-  // They did buy an ancestor. They want a new node under it.
-  // Evaluate the Upgrade cost against the ANCESTOR's current price.
-  // Because if admin increased "Class 1" from 50 to 60, cost is 10.
-  // Wait, what if they are upgrading to unlock the NEW subject?
-  // The cost should be: MAX(0, Current "Class 1" price - What they paid for "Class 1") 
-  const ancestorCat = await Category.findById(currentId); // Re-fetch base purchase category
-  const currentAncestorPrice = ancestorCat.discountedPrice !== null && ancestorCat.discountedPrice !== undefined ? ancestorCat.discountedPrice : ancestorCat.price;
-  
-  const diff = currentAncestorPrice - paidSoFar;
-  const upgradeCost = Math.max(0, diff);
-
-  return { upgradeCost, hasFullAccess: false, basePurchaseId, category };
+  return {
+    upgradeCost: status.upgradeCost,
+    isFreeUpgrade: status.isFreeUpgrade,
+    hasAccess: true,
+    hasNewContent: status.hasNewContent,
+    newCategoryIds: status.newCategoryIds,
+    purchase: status.purchase,
+    currentPrice: status.currentPrice,
+    paidSoFar: status.paidSoFar,
+  };
 };
 
-export const processUpgrade = async (studentId, targetCategoryId, paymentMethod = "free") => {
-  const { upgradeCost, hasFullAccess, basePurchaseId, isIsolated } = await calculateUpgradeCost(studentId, targetCategoryId);
+// ─── processUpgrade ───────────────────────────────────────────────────────────
 
-  if (hasFullAccess) {
-    throw new ApiError(400, "You already have access to this category.");
+/**
+ * Process the upgrade payment.
+ *
+ * paymentMethod: "free" | "wallet" | "razorpay"
+ *
+ * Rules:
+ *  - "free"     → only allowed when upgradeCost === 0 (price unchanged / lowered)
+ *  - "wallet"   → deduct difference; push new IDs immediately
+ *  - "razorpay" → create Razorpay order intent; caller must call confirmUpgrade after payment
+ *
+ * IMPORTANT: Old unlocked content is NEVER removed. We only ADD newCategoryIds.
+ */
+export const processUpgrade = async (studentId, categoryId, paymentMethod = "free") => {
+  const status = await resolveAccessStatus(studentId, categoryId);
+
+  if (!status.hasAccess) {
+    throw new ApiError(400, "No existing purchase found. Use the standard purchase flow.");
   }
 
-  if (isIsolated) {
-    throw new ApiError(400, "You do not hold a parent package. Use standard purchase flow for isolated purchases.");
+  if (!status.upgradable) {
+    throw new ApiError(400, "No new content to upgrade to. All content is already unlocked.");
   }
 
-  const category = await Category.findById(targetCategoryId);
-  const unlockedIds = [category._id, ...(await fetchDescendantIds(category._id))];
+  const { upgradeCost, newCategoryIds, purchase, isFreeUpgrade } = status;
 
-  if (upgradeCost <= 0 || paymentMethod === "free") {
+  // ── FREE upgrade (price diff ≤ 0 or explicit free paymentMethod call) ─────
+  if (paymentMethod === "free") {
     if (upgradeCost > 0) {
-      throw new ApiError(400, `Upgrade requires payment of Rs ${upgradeCost}`);
+      throw new ApiError(
+        400,
+        `This upgrade requires payment of ₹${upgradeCost}. Use paymentMethod: wallet or razorpay.`
+      );
+    }
+    // Auto-unlock: push all new IDs into the student's existing purchase doc
+    await categoryPurchaseRepository.acknowledgeUpgrade(purchase._id, newCategoryIds);
+    return {
+      completed: true,
+      message: `Auto-upgrade successful. New items unlocked at no cost.`,
+      newUnlockedCount: newCategoryIds.length,
+    };
+  }
+
+  // ── WALLET upgrade ────────────────────────────────────────────────────────
+  if (paymentMethod === "wallet") {
+    if (upgradeCost <= 0) {
+      // Redirect to free if cost is nothing — don't deduct unnecessarily
+      await categoryPurchaseRepository.acknowledgeUpgrade(purchase._id, newCategoryIds);
+      return {
+        completed: true,
+        message: `Auto-upgrade successful. New items unlocked at no cost.`,
+        newUnlockedCount: newCategoryIds.length,
+      };
+    }
+    // Deduct wallet balance (throws ApiError if insufficient balance)
+    await walletService.deductMonetaryBalance(studentId, upgradeCost, "User");
+    // Push new IDs immediately after payment
+    await categoryPurchaseRepository.acknowledgeUpgrade(purchase._id, newCategoryIds);
+    return {
+      completed: true,
+      message: `Upgrade successful. ₹${upgradeCost} deducted from wallet. New items unlocked.`,
+      newUnlockedCount: newCategoryIds.length,
+      amountPaid: upgradeCost,
+    };
+  }
+
+  // ── RAZORPAY upgrade ──────────────────────────────────────────────────────
+  if (paymentMethod === "razorpay") {
+    if (upgradeCost <= 0) {
+      // Free — no point going to Razorpay; auto-unlock
+      await categoryPurchaseRepository.acknowledgeUpgrade(purchase._id, newCategoryIds);
+      return {
+        completed: true,
+        message: `Auto-upgrade successful. New items unlocked at no cost.`,
+        newUnlockedCount: newCategoryIds.length,
+      };
     }
 
-    // Auto-grant access wrapper
-    const basePurchase = await CategoryPurchase.findById(basePurchaseId);
-    // Add the new targetCategoryId and all its children to their unlocked list
-    const newUnlocked = Array.from(new Set([...basePurchase.unlockedCategoryIds.map(o => o.toString()), ...unlockedIds.map(o => o.toString())]));
-    
-    basePurchase.unlockedCategoryIds = newUnlocked;
-    await basePurchase.save();
-
-    return { completed: true, message: "Auto-upgraded successfully (free of cost)." };
-  }
-
-  if (paymentMethod === "razorpay") {
-    // generate razorpay intent for upgrade
-    const receipt = `upg_${targetCategoryId}_${studentId}_${Date.now()}`.substring(0, 40);
+    const receipt = `upg_${categoryId}_${studentId}_${Date.now()}`.substring(0, 40);
     const order = await createRazorpayOrder(upgradeCost, receipt);
-    
+
+    // Store intent with enough metadata to fulfil the upgrade on confirmation/webhook
     await razorpayOrderIntentRepository.create({
       orderId: order.orderId,
       studentId,
       type: "categoryUpgrade",
-      entityId: basePurchaseId, 
+      entityId: purchase._id,           // basePurchaseId — so we know which doc to update
       entityModel: "CategoryPurchase",
       amountPaise: order.amount,
       currency: order.currency || "INR",
       receipt,
-      metadata: { targetCategoryId: targetCategoryId.toString() }
+      metadata: {
+        categoryId: categoryId.toString(),
+        newCategoryIds,                  // snapshot the new IDs at intent-creation time
+      },
     });
 
     return {
@@ -134,15 +163,64 @@ export const processUpgrade = async (studentId, targetCategoryId, paymentMethod 
       amount: order.amount,
       currency: order.currency,
       key: process.env.RAZORPAY_KEY_ID,
-      title: `Upgrade Access for ${category.name}`,
+      upgradeCost,
+      newContentCount: newCategoryIds.length,
     };
   }
 
-  throw new ApiError(400, "Invalid payment method");
+  throw new ApiError(400, "Invalid paymentMethod. Use: free, wallet, or razorpay.");
 };
 
-export const confirmUpgrade = async (studentId, { razorpayOrderId, razorpayPaymentId, razorpaySignature }) => {
-  // standard razorpay confirm, then basePurchase.unlockedCategoryIds.push(...) + save
+// ─── confirmUpgrade (Razorpay only) ─────────────────────────────────────────
+
+/**
+ * Called by the student after Razorpay checkout completes in the browser.
+ * Verifies signature → pushes new IDs → marks intent as reconciled.
+ */
+export const confirmUpgrade = async (
+  studentId,
+  { razorpayOrderId, razorpayPaymentId, razorpaySignature }
+) => {
+  if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
+    throw new ApiError(400, "razorpayOrderId, razorpayPaymentId, and razorpaySignature are required.");
+  }
+
+  // 1. Verify Razorpay HMAC signature
+  const isValid = verifyPaymentSignature(razorpayOrderId, razorpayPaymentId, razorpaySignature);
+  if (!isValid) throw new ApiError(400, "Payment verification failed. Invalid signature.");
+
+  // 2. Look up the intent
+  const intent = await razorpayOrderIntentRepository.findByOrderId(razorpayOrderId);
+  if (!intent) throw new ApiError(400, "Invalid order or payment already processed.");
+  if (intent.studentId?.toString() !== studentId?.toString()) {
+    throw new ApiError(403, "Payment user mismatch.");
+  }
+  if (intent.type !== "categoryUpgrade") {
+    throw new ApiError(400, "This order is not an upgrade payment.");
+  }
+
+  // 3. Load the base purchase and push new IDs
+  const basePurchaseId = intent.entityId;
+  const newCategoryIds = intent.metadata?.newCategoryIds || [];
+
+  if (newCategoryIds.length === 0) {
+    // Edge case: admin removed all new content between intent creation and confirmation
+    await razorpayOrderIntentRepository.markReconciled(razorpayOrderId, razorpayPaymentId);
+    return {
+      completed: true,
+      message: "Upgrade confirmed. No new items to unlock (content may have changed).",
+      newUnlockedCount: 0,
+    };
+  }
+
+  await categoryPurchaseRepository.acknowledgeUpgrade(basePurchaseId, newCategoryIds);
+  await razorpayOrderIntentRepository.markReconciled(razorpayOrderId, razorpayPaymentId);
+
+  return {
+    completed: true,
+    message: `Upgrade confirmed. New items unlocked.`,
+    newUnlockedCount: newCategoryIds.length,
+  };
 };
 
 export default {

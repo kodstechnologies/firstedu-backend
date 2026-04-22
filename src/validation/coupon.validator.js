@@ -23,7 +23,7 @@ const applyCoupon = Joi.object({
   code: Joi.string().required().trim(),
   amount: Joi.number().min(0).required(),
   itemType: Joi.string()
-    .valid("test", "testBundle", "course","Olympiads", "tournament", "workshop", "ecommerce", "all", "LiveCompetition", "liveCompetition", "live_competition","competitionCategory", "School", "Competitivet", "Skill Development")
+    .valid("test", "testBundle", "course","Olympiads", "tournament", "workshop", "ecommerce", "all", "LiveCompetition", "liveCompetition", "live_competition","competitionCategory", "School", "Competitive", "Skill Development")
     .default("all"),
 });
 

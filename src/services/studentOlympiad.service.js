@@ -2,14 +2,16 @@ import { ApiError } from "../utils/ApiError.js";
 import OlympiadTest from "../models/OlympiadTest.js";
 import Test from "../models/Test.js";
 import EventRegistration from "../models/EventRegistration.js";
+import ExamSession from "../models/ExamSession.js";
 import razorpayOrderIntentRepository from "../repository/razorpayOrderIntent.repository.js";
 import { createRazorpayOrder, verifyPaymentSignature } from "../utils/razorpayUtils.js";
 import walletService from "./wallet.service.js";
 import studentRepository from "../repository/student.repository.js";
 import { sendEventRegistrationEmail } from "../utils/sendEmail.js";
 import { attachOfferToList, attachOfferToItem, getAmountToCharge } from "../utils/offerUtils.js";
+import examSessionRepository from "../repository/examSession.repository.js";
 
-const VALID_STATUSES = ["upcoming", "open", "live", "completed", "past"];
+const VALID_STATUSES = ["upcoming", "open", "live", "completed", "past", "close"];
 
 const buildStatusQuery = (status) => {
   const now = new Date();
@@ -20,6 +22,11 @@ const buildStatusQuery = (status) => {
       return {
         registrationStartTime: { $lte: now },
         registrationEndTime: { $gte: now },
+      };
+    case "close":
+      return {
+        registrationEndTime: { $lt: now },
+        startTime: { $gt: now },
       };
     case "live":
       return {
@@ -90,9 +97,17 @@ export const getOlympiads = async (options = {}) => {
     registeredEventIds = new Set(registrations.map((r) => r.eventId.toString()));
   }
 
+  let studentExamSessions = [];
+  if (studentId && filtered.length > 0) {
+    studentExamSessions = await ExamSession.find({
+      student: studentId,
+      test: { $in: filtered.map((o) => o.testId?._id).filter(Boolean) },
+    }).select("test status").lean();
+  }
+
   const now = Date.now();
   const transformed = filtered.map(o => {
-    let currentStatus = "closed";
+    let currentStatus = "close";
     if (o.registrationStartTime && now < new Date(o.registrationStartTime).getTime()) currentStatus = "upcoming";
     else if (o.registrationStartTime && o.registrationEndTime && now >= new Date(o.registrationStartTime).getTime() && now <= new Date(o.registrationEndTime).getTime()) currentStatus = "open";
     else if (o.startTime && o.endTime && now >= new Date(o.startTime).getTime() && now <= new Date(o.endTime).getTime()) currentStatus = "live";
@@ -103,14 +118,29 @@ export const getOlympiads = async (options = {}) => {
       categoryName = `${o.categoryId.parent.name} > ${o.categoryId.name}`;
     }
 
+    let testStatus = null;
+    let testSessionId = null;
+    if (studentId && o.testId?._id) {
+      const session = studentExamSessions.find(
+        (s) => s.test?.toString() === o.testId._id.toString()
+      );
+      if (session) {
+        testStatus = session.status;
+        testSessionId = session._id;
+      }
+    }
+
     return {
       ...o,
       price: o.testId?.price || 0,
       originalPrice: o.testId?.price || 0,
       status: currentStatus,
+      isEventLive: currentStatus === "live",
       isRegistrationOpen: currentStatus === "open",
       categoryName,
       isRegistered: registeredEventIds.has(o._id.toString()),
+      testStatus,
+      testSessionId,
     };
   });
 
@@ -142,6 +172,8 @@ export const getOlympiadById = async (id, studentId = null) => {
   }
 
   let isRegistered = false;
+  let testStatus = null;
+  let testSessionId = null;
   if (studentId) {
     const existing = await EventRegistration.findOne({
       student: studentId,
@@ -149,10 +181,22 @@ export const getOlympiadById = async (id, studentId = null) => {
       eventId: id,
     });
     isRegistered = !!existing;
+
+    if (olympiad.testId?._id) {
+      const session = await ExamSession.findOne({
+        student: studentId,
+        test: olympiad.testId._id,
+      }).select("status _id").lean();
+      
+      if (session) {
+        testStatus = session.status;
+        testSessionId = session._id;
+      }
+    }
   }
 
   const now = Date.now();
-  let currentStatus = "closed";
+  let currentStatus = "close";
   if (olympiad.registrationStartTime && now < new Date(olympiad.registrationStartTime).getTime()) currentStatus = "upcoming";
   else if (olympiad.registrationStartTime && olympiad.registrationEndTime && now >= new Date(olympiad.registrationStartTime).getTime() && now <= new Date(olympiad.registrationEndTime).getTime()) currentStatus = "open";
   else if (olympiad.startTime && olympiad.endTime && now >= new Date(olympiad.startTime).getTime() && now <= new Date(olympiad.endTime).getTime()) currentStatus = "live";
@@ -168,9 +212,12 @@ export const getOlympiadById = async (id, studentId = null) => {
     price: olympiad.testId?.price || 0,
     originalPrice: olympiad.testId?.price || 0,
     status: currentStatus,
+    isEventLive: currentStatus === "live",
     isRegistrationOpen: currentStatus === "open",
     categoryName,
     isRegistered,
+    testStatus,
+    testSessionId,
   };
 
   const finalItem = await attachOfferToItem(transformed, "Olympiads", "price");
@@ -341,12 +388,24 @@ export const getMyOlympiads = async (studentId) => {
   const live = [];
   const past = [];
 
+  const testIds = registrations
+    .map((r) => r.eventId?.testId?._id)
+    .filter(Boolean);
+
+  let studentExamSessions = [];
+  if (testIds.length > 0) {
+    studentExamSessions = await ExamSession.find({
+      studentId,
+      testId: { $in: testIds },
+    }).select("testId status").lean();
+  }
+
   for (const reg of registrations) {
     if (!reg.eventId) continue;
     
     // We append session states logic if needed, simplify for now
     const o = reg.eventId;
-    let currentStatus = "closed";
+    let currentStatus = "close";
     if (o.startTime && now < new Date(o.startTime).getTime()) {
         currentStatus = "upcoming";
         upcoming.push(reg);
@@ -360,7 +419,109 @@ export const getMyOlympiads = async (studentId) => {
         past.push(reg);
     }
     reg.eventId.computedStatus = currentStatus;
+
+    if (reg.eventId?.testId?._id) {
+      const session = studentExamSessions.find(
+        (s) => s.testId?.toString() === reg.eventId.testId._id.toString()
+      );
+      if (session) {
+        reg.eventId.testStatus = session.status;
+        reg.eventId.testSessionId = session._id;
+      }
+    }
   }
 
   return { upcoming, live, past };
+};
+
+// ─── Leaderboard helpers (used by leaderboard.controller.js) ──────────────────
+
+/**
+ * Get paginated list of completed olympiads (endTime < now).
+ * Used by the leaderboard list view.
+ */
+export const getCompletedOlympiads = async ({ page = 1, limit = 10 } = {}) => {
+  const now = new Date();
+  const pageNum = parseInt(page, 10);
+  const limitNum = Math.min(parseInt(limit, 10), 50);
+  const skip = (pageNum - 1) * limitNum;
+
+  const query = { endTime: { $lt: now } };
+
+  const [olympiads, total] = await Promise.all([
+    OlympiadTest.find(query)
+      .populate({ path: "testId", select: "title _id" })
+      .sort({ endTime: -1 })
+      .skip(skip)
+      .limit(limitNum)
+      .lean(),
+    OlympiadTest.countDocuments(query),
+  ]);
+
+  return {
+    olympiads,
+    pagination: {
+      page: pageNum,
+      limit: limitNum,
+      total,
+      pages: Math.ceil(total / limitNum) || 1,
+    },
+  };
+};
+
+/**
+ * Get ranked leaderboard for a single olympiad.
+ * Only registered + payment-completed participants are included.
+ * Uses the same getRankedByTest aggregation as tournaments for consistency.
+ */
+export const getOlympiadLeaderboard = async (olympiadId, limit = 1000) => {
+  const olympiad = await OlympiadTest.findById(olympiadId)
+    .populate({ path: "testId", select: "title _id" })
+    .lean();
+
+  if (!olympiad) throw new ApiError(404, "Olympiad not found");
+
+  if (!olympiad.testId) {
+    return { leaderboard: [], olympiadTitle: olympiad.title, totalParticipants: 0 };
+  }
+
+  // Only registered + paid participants are ranked
+  const registrations = await EventRegistration.find({
+    eventType: "olympiad",
+    eventId: olympiadId,
+    paymentStatus: "completed",
+  })
+    .select("student")
+    .lean();
+
+  const registeredStudentIds = [
+    ...new Set(
+      registrations.map((r) => r.student?.toString()).filter(Boolean)
+    ),
+  ];
+
+  if (registeredStudentIds.length === 0) {
+    return { leaderboard: [], olympiadTitle: olympiad.title, totalParticipants: 0 };
+  }
+
+  // Reuse the same ranking aggregation tournaments use
+  const ranked = await examSessionRepository.getRankedByTest(
+    olympiad.testId._id,
+    registeredStudentIds,
+    limit
+  );
+
+  const leaderboard = ranked.map((r, index) => ({
+    rank: index + 1,
+    name: r.name,
+    score: r.score,
+    maxScore: r.maxScore,
+    completedAt: r.completedAt,
+  }));
+
+  return {
+    leaderboard,
+    olympiadTitle: olympiad.title,
+    totalParticipants: leaderboard.length,
+  };
 };

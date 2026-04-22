@@ -49,11 +49,14 @@ export const createOffer = asyncHandler(async (req, res) => {
 
 // Get All Offers (Admin)
 export const getOffers = asyncHandler(async (req, res) => {
-    const { page = 1, limit = 10, applicableOn, status, search } = req.query;
+    const { page = 1, limit = 10, applicableOn, status, search, entityId } = req.query;
 
     const query = {};
     if (applicableOn) query.applicableOn = applicableOn;
     if (status) query.status = status;
+    if (entityId !== undefined) {
+        query.entityId = entityId === 'null' ? null : entityId;
+    }
     if (search) {
         query.offerName = { $regex: search, $options: "i" };
     }

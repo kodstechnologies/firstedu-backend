@@ -151,7 +151,8 @@ import {
 } from "../controllers/successStory.controller.js";
 import {
   getCategoriesForStudent,
-  getCategoryDetailForStudent
+  getCategoryDetailForStudent,
+  resolveCategoryPathForStudent
 } from "../controllers/category.controller.js";
 import {
   initiateCategoryPurchase,
@@ -174,6 +175,8 @@ import {
 } from "../controllers/studentOlympiad.controller.js";
 
 import { getCompetitiveTestsForStudent } from "../controllers/competitiveTest.controller.js";
+import { getSchoolTestsForStudent } from "../controllers/schoolTest.controller.js";
+import { getSkillTestsForStudent } from "../controllers/skillTest.controller.js";
 
 import {
   getNeedToImprove,
@@ -269,12 +272,15 @@ router.post("/test-bundles/:id/purchase", verifyJWT, purchaseTestBundle);
 
 // Categories (taxonomy for filtering tests/question banks)
 router.get("/categories", verifyJWT, getCategoriesForStudent);
+router.get("/categories/resolve-path", verifyJWT, resolveCategoryPathForStudent);
 router.get("/categories/:id/detail", verifyJWT, getCategoryDetailForStudent);
 router.post("/categories/:categoryId/initiate-payment", verifyJWT, initiateCategoryPurchase);
 router.post("/categories/:categoryId/confirm-payment", verifyJWT, confirmCategoryPurchase);
 router.get("/categories/:categoryId/access", verifyJWT, checkCategoryAccess);
 router.get("/my-category-purchases", verifyJWT, getMyCategoryPurchases);
 router.get("/competitive-tests", verifyJWT, getCompetitiveTestsForStudent);
+router.get("/school-tests", verifyJWT, getSchoolTestsForStudent);
+router.get("/skill-tests", verifyJWT, getSkillTestsForStudent);
 
 // Upgrade logic
 router.get("/categories/:categoryId/upgrade-cost", verifyJWT, getUpgradeCost);

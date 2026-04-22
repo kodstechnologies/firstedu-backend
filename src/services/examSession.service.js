@@ -1,4 +1,5 @@
 import { ApiError } from "../utils/ApiError.js";
+import OlympiadTest from "../models/OlympiadTest.js";
 import examSessionRepository from "../repository/examSession.repository.js";
 import orderRepository from "../repository/order.repository.js";
 import testRepository from "../repository/test.repository.js";
@@ -34,8 +35,23 @@ const hasCompletedRegistrationForLinkedEventTest = async (testId, studentId) => 
     if (tournamentRegistration) return true;
   }
 
+  const linkedOlympiads = await OlympiadTest.find({ testId }).lean();
+  const olympiadIds = linkedOlympiads.map((o) => o?._id).filter(Boolean);
+  if (olympiadIds.length > 0) {
+    const olympiadRegistration = await eventRegistrationRepository.findOne({
+      student: studentId,
+      eventType: "olympiad",
+      eventId: { $in: olympiadIds },
+      paymentStatus: "completed",
+    });
+    if (olympiadRegistration) return true;
+  }
+
   return false;
 };
+
+// Pillar tests (Competitive / School / Skill Development) allow unlimited retakes.
+const RETAKEABLE_PILLAR_TESTS = ["Competitive", "School", "Skill Development"];
 
 const checkStudentAccessForPaidTest = async (testId, studentId, categoryId = null) => {
   if (categoryId) {
@@ -477,8 +493,11 @@ export const startExamSession = async (testId, studentId, options = {}) => {
     if (alreadyCompletedToday) {
       throw new ApiError(400, "You have already completed today's everyday challenge");
     }
-  } else if (test.applicableFor !== "challenge_yourfriends") {
-    // Non–everyday challenge: prevent retaking the same test
+  } else if (
+    test.applicableFor !== "challenge_yourfriends" &&
+    !RETAKEABLE_PILLAR_TESTS.includes(test.applicableFor)
+  ) {
+    // Non–everyday challenge, non-pillar: prevent retaking the same test
     const completedSession = await examSessionRepository.findOne({
       student: studentId,
       test: testId,
@@ -667,7 +686,10 @@ export const getExamInstructions = async (testId, studentId, options = {}) => {
         canStart = false;
         blockReason = "You have already completed today's everyday challenge";
       }
-    } else if (test.applicableFor !== "challenge_yourfriends") {
+    } else if (
+      test.applicableFor !== "challenge_yourfriends" &&
+      !RETAKEABLE_PILLAR_TESTS.includes(test.applicableFor)
+    ) {
       const completedSession = await examSessionRepository.findOne({
         student: studentId,
         test: testId,

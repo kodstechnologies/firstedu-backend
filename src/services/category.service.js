@@ -133,13 +133,21 @@ export const getCategoryTree = async (filter = {}) => {
   
   // Attach hasTests boolean to nodes
   const allBankIds = await QuestionBank.find({}).select('categories _id');
-  const allTestBanks = await Test.find({}).select('questionBank').lean();
+  const allTestBanks = await Test.find({}).select('questionBank categoryId').lean();
   const bankIdsWithTests = new Set(allTestBanks.map(t => t.questionBank?.toString()));
 
   const categoryIdsWithTests = new Set();
+  
   allBankIds.forEach(qb => {
     if (bankIdsWithTests.has(qb._id.toString())) {
         qb.categories.forEach(cid => categoryIdsWithTests.add(cid.toString()));
+    }
+  });
+
+  // Also include direct links where Test natively defines categoryId
+  allTestBanks.forEach(test => {
+    if (test.categoryId) {
+      categoryIdsWithTests.add(test.categoryId.toString());
     }
   });
 
@@ -415,30 +423,76 @@ export const getCategoriesForStudent = async (options = {}) => {
     }
   }
 
-  // ── Attach active global offer so the card grid can show discounted prices ──
+  // ── Attach computed prices to all subcategory nodes so frontend needs zero math ──
   const PILLAR_TO_APPLICABLE_ON = {
     "School":            "School",
     "Competitive":       "Competitive",
     "Skill Development": "Skill Development",
   };
   const applicableOn = rootType ? PILLAR_TO_APPLICABLE_ON[rootType] : null;
-  const globalOffer = applicableOn
-    ? (await Offer.findOne({ applicableOn, status: "active" }).lean()) ?? null
-    : null;
 
-  if (globalOffer) {
-    const attachOffer = (nodes) => {
-      nodes.forEach((node) => {
-        // Only attach to Subcategory nodes (they have the price field)
-        if (node.price != null) {
-          node.globalOffer = globalOffer;
-        }
-        if (node.children?.length) attachOffer(node.children);
-      });
+  if (applicableOn) {
+    // Fetch the single active global offer for this pillar once (1 DB query for ALL nodes)
+    const globalOffer = await Offer.findOne({ applicableOn, status: "active", entityId: null }).lean();
+
+    // Fetch any custom override offers used by nodes in the tree efficiently
+    const overrideIds = new Set();
+    const collectIds = (node) => {
+      if (node.offerOverrideId) overrideIds.add(node.offerOverrideId.toString());
+      if (node.children?.length) node.children.forEach(collectIds);
     };
-    attachOffer(tree);
+    tree.forEach(collectIds);
+
+    const overrideMap = {};
+    if (overrideIds.size > 0) {
+      const activeOverrides = await Offer.find({ _id: { $in: Array.from(overrideIds) }, status: "active" }).lean();
+      activeOverrides.forEach(o => overrideMap[o._id.toString()] = o);
+    }
+
+    const enrichNode = (node) => {
+      if (node.price != null) {
+        const basePrice = Number(node.price) || 0;
+        const activeOffer = (node.offerOverrideId && overrideMap[node.offerOverrideId.toString()])
+                            ? overrideMap[node.offerOverrideId.toString()]
+                            : globalOffer;
+
+        if (node.isFree || basePrice === 0) {
+          node.originalPrice = basePrice;
+          node.effectivePrice = 0;
+          node.discountedPrice = 0;
+        } else if (activeOffer) {
+          let discountAmount = 0;
+          if (activeOffer.discountType === "percentage") {
+            discountAmount = (basePrice * activeOffer.discountValue) / 100;
+          } else {
+            discountAmount = Math.min(activeOffer.discountValue, basePrice);
+          }
+          const discountedPrice = Math.max(0, basePrice - discountAmount);
+          node.originalPrice = basePrice;
+          node.discountedPrice = discountedPrice;
+          node.effectivePrice = discountedPrice;
+          node.discountAmount = discountAmount;
+          node.appliedOffer = {
+            _id: activeOffer._id,
+            offerName: activeOffer.offerName,
+            applicableOn: activeOffer.applicableOn,
+            discountType: activeOffer.discountType,
+            discountValue: activeOffer.discountValue,
+            description: activeOffer.description,
+            validTill: activeOffer.validTill,
+          };
+        } else {
+          // No active offer (global or override) — pass through as-is
+          node.originalPrice = basePrice;
+          node.effectivePrice = basePrice;
+          node.discountedPrice = basePrice;
+        }
+      }
+      if (node.children?.length) node.children.forEach(enrichNode);
+    };
+    tree.forEach(enrichNode);
   }
-  // ─────────────────────────────────────────────────────────────────────────────
+  // ──────────────────────────────────────────────────────────────────────────────
 
   if (format === "flat") {
     const flatten = (nodes, acc = []) => {

@@ -1,22 +1,10 @@
-import SchoolTest from "../models/SchoolTest.js";
+import Test from "../models/Test.js";
 import Category from "../models/Category.js";
-import { ApiError } from "../utils/ApiError.js";
-import { assertSubtreeNotPurchased } from "../utils/purchaseGuard.js";
+import { attachOfferToList } from "../utils/offerUtils.js";
 
 export const createSchoolTest = async (data) => {
-  const category = await Category.findById(data.categoryId);
-  if (!category) throw new ApiError(404, "Category not found");
-  await assertSubtreeNotPurchased(data.categoryId, "add tests to");
-
-  const existing = await SchoolTest.findOne({
-    categoryId: data.categoryId,
-    $or: [{ testId: data.testId }, { title: data.title }],
-  });
-  if (existing) {
-    throw new ApiError(400, "Test is already added or a test with this title already exists in this category");
-  }
-
-  return await SchoolTest.create(data);
+  // Legacy bypass: Tests now structurally link directly via Test module
+  return true;
 };
 
 export const getSchoolTests = async (options = {}) => {
@@ -25,17 +13,38 @@ export const getSchoolTests = async (options = {}) => {
   const limitNum = parseInt(limit);
   const skip = (pageNum - 1) * limitNum;
 
-  const query = {};
-  if (categoryId) query.categoryId = categoryId;
+  // Use Test.categoryId as the strict source of truth — tests belong only to the subcategory they were created in
+  const query = { categoryId, applicableFor: { $in: ["School", "test"] } };
 
-  const [tests, total] = await Promise.all([
-    SchoolTest.find(query)
-      .populate("testId", "title description durationMinutes price discountType discountValue")
+  const [rawTests, total] = await Promise.all([
+    Test.find(query)
       .skip(skip)
       .limit(limitNum)
       .sort({ createdAt: -1 }),
-    SchoolTest.countDocuments(query),
+    Test.countDocuments(query),
   ]);
+
+  let processedTests = rawTests.map(test => (test.toObject ? test.toObject() : { ...test }));
+
+  if (processedTests.length > 0 && categoryId) {
+    const category = await Category.findById(categoryId).lean();
+    if (category?.isFree) {
+      processedTests = processedTests.map(t => ({
+        ...t,
+        originalPrice: t.price || 0,
+        discountedPrice: 0,
+        effectivePrice: 0,
+        discountAmount: t.price || 0,
+      }));
+    } else {
+      const pillarModuleType = category?.rootType || "Test";
+      processedTests = await attachOfferToList(processedTests, pillarModuleType, "price");
+    }
+  } else if (processedTests.length > 0) {
+    processedTests = await attachOfferToList(processedTests, "Test", "price");
+  }
+
+  const tests = processedTests;
 
   return {
     tests,
@@ -49,30 +58,13 @@ export const getSchoolTests = async (options = {}) => {
 };
 
 export const updateSchoolTest = async (id, updateData) => {
-  const existing = await SchoolTest.findById(id);
-  if (!existing) throw new ApiError(404, "SchoolTest not found");
-  await assertSubtreeNotPurchased(existing.categoryId, "edit tests in");
-
-  if (updateData.title) {
-    const titleCheck = await SchoolTest.findOne({
-      categoryId: existing.categoryId,
-      title: updateData.title,
-      _id: { $ne: id },
-    });
-    if (titleCheck) {
-      throw new ApiError(400, "A test with this title already exists in this category");
-    }
-  }
-
-  return await SchoolTest.findByIdAndUpdate(id, updateData, { new: true });
+  // Not used actively since edits hit the main Test Builder API
+  return true;
 };
 
 export const deleteSchoolTest = async (id) => {
-  const existing = await SchoolTest.findById(id);
-  if (!existing) throw new ApiError(404, "SchoolTest not found");
-  await assertSubtreeNotPurchased(existing.categoryId, "delete tests from");
-
-  return await SchoolTest.findByIdAndDelete(id);
+  // Deleting from the folder just unlinks the explicit categoryId
+  return await Test.findByIdAndUpdate(id, { $unset: { categoryId: 1 } });
 };
 
 export default {

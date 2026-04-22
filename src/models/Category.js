@@ -66,13 +66,7 @@ const subcategorySchema = new mongoose.Schema(
     // ─── Content & Media ────────────────────────────────
     bannerImg:           { type: String, trim: true, default: null },
     description:         { type: String, trim: true, default: null },
-    about:               { type: String, trim: true, default: null },
     syllabus:            { type: String, trim: true, default: null },
-    markingScheme:       { type: String, trim: true, default: null },
-    rankingCriteria:     { type: String, trim: true, default: null },
-    examDatesAndDetails: { type: String, trim: true, default: null },
-    awards:              { type: String, trim: true, default: null },
-    rules:               { type: String, trim: true, default: null },
 
     // ─── Classification ─────────────────────────────────
     subjects: { type: [String], default: [] },

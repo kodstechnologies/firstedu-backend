@@ -19,8 +19,18 @@ import studentRepository from "../repository/student.repository.js";
 import { sendCourseEnrollmentEmail, sendTestBundlePurchaseEmail } from "../utils/sendEmail.js";
 
 const isDirectPurchasableTest = (test) => {
-  const applicableFor = test?.applicableFor ?? "test";
-  return applicableFor === "test" || applicableFor === "challenge_yourself";
+  const applicableFor = (test?.applicableFor || "test").toLowerCase().trim();
+  const allowed = [
+    "test",
+    "challenge_yourself",
+    "competitive",
+    "school",
+    "skill development",
+    "skill", // Added for backward compatibility/typos
+    "competition_sector",
+    "trending_test" // Specifically added for active tests labeled as trending
+  ];
+  return allowed.includes(applicableFor);
 };
 
 /**
@@ -608,8 +618,9 @@ export const initiateTestPayment = async (testId, studentId, paymentMethod, opti
   if (!test || !test.isPublished) {
     throw new ApiError(404, "Test not found");
   }
+  console.log("DEBUG_TEST_APPFOR:", test.applicableFor, test._id, test.title);
   if (!isDirectPurchasableTest(test)) {
-    throw new ApiError(400, "This test is not available for direct purchase");
+    throw new ApiError(400, `This test is not available for direct purchase. Its applicableFor is: ${test.applicableFor}`);
   }
 
   const existingPurchase = await orderRepository.findTestPurchase({
@@ -766,7 +777,7 @@ export const purchaseTest = async (
     throw new ApiError(404, "Test not found");
   }
   if (!isDirectPurchasableTest(test)) {
-    throw new ApiError(400, "This test is not available for direct purchase");
+    throw new ApiError(400, `This test is not available for direct purchase. Its applicableFor is: ${test.applicableFor}`);
   }
 
   const existingPurchase = await orderRepository.findTestPurchase({

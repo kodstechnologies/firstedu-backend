@@ -43,13 +43,7 @@ const updateCategoryPricing = Joi.object({
 
   // Content
   description:         Joi.string().trim().allow("", null).optional(),
-  about:               Joi.string().trim().allow("", null).optional(),
   syllabus:            Joi.string().trim().allow("", null).optional(),
-  markingScheme:       Joi.string().trim().allow("", null).optional(),
-  rankingCriteria:     Joi.string().trim().allow("", null).optional(),
-  examDatesAndDetails: Joi.string().trim().allow("", null).optional(),
-  awards:              Joi.string().trim().allow("", null).optional(),
-  rules:               Joi.string().trim().allow("", null).optional(),
 
   // Media
   bannerImg: Joi.string().trim().allow("", null).optional(),

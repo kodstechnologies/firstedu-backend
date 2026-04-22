@@ -2,71 +2,87 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import tournamentService from "../services/tournament.service.js";
+import {
+  getOlympiadLeaderboard,
+  getCompletedOlympiads,
+} from "../services/studentOlympiad.service.js";
+
+const VALID_TYPES = ["tournament", "olympiad"];
 
 /**
- * Student-facing: aggregated leaderboard API for tournaments.
+ * Student-facing: aggregated leaderboard API for olympiads and tournaments.
  *
  * Query params:
- * - type: "tournament" | "all" (default: "all")
+ * - type: "tournament" | "olympiad"
  * - eventId: optional; when provided, returns leaderboard only for that event
  * - page, limit: pagination over completed events when eventId is not provided
+ *
+ * The frontend always sends a specific type matching the active tab.
+ * Olympiad tab  → type=olympiad  → returns only completed olympiads
+ * Tournament tab → type=tournament → returns only completed tournaments
  */
 export const getLeaderboardsForStudent = asyncHandler(async (req, res) => {
   const {
-    type = "all",
+    type,
     eventId,
     page = 1,
     limit = 10,
   } = req.query;
 
-  const normalizedType = String(type).toLowerCase();
+  const normalizedType = String(type || "").toLowerCase();
+
+  if (!VALID_TYPES.includes(normalizedType)) {
+    throw new ApiError(400, "Invalid type. Use: tournament or olympiad");
+  }
+
+  const pageNum = parseInt(page) || 1;
+  const limitNum = Math.min(parseInt(limit) || 10, 50);
+
+  // ── SINGLE EVENT MODE ────────────────────────────────────────────────────────
+  // Returns one event's full leaderboard when eventId is provided.
 
   if (eventId) {
-    if (normalizedType !== "tournament" && normalizedType !== "all") {
-      throw new ApiError(
-        400,
-        "Invalid type. Use: tournament when eventId is provided"
+    if (normalizedType === "tournament") {
+      const result = await tournamentService.getTournamentLeaderboard(
+        eventId,
+        1000
+      );
+      return res.status(200).json(
+        ApiResponse.success(
+          {
+            type: "tournament",
+            eventId,
+            title: result.tournamentTitle,
+            stage: result.stage,
+            leaderboard: result.leaderboard,
+          },
+          "Tournament leaderboard fetched successfully"
+        )
       );
     }
 
-    const maxParticipants = 1000;
-
-    const result = await tournamentService.getTournamentLeaderboard(
-      eventId,
-      maxParticipants
-    );
+    // type === "olympiad"
+    const result = await getOlympiadLeaderboard(eventId, 1000);
     return res.status(200).json(
       ApiResponse.success(
         {
-          type: "tournament",
+          type: "olympiad",
           eventId,
-          title: result.tournamentTitle,
-          stage: result.stage,
+          title: result.olympiadTitle,
+          stage: null,
           leaderboard: result.leaderboard,
         },
-        "Tournament leaderboard fetched successfully"
+        "Olympiad leaderboard fetched successfully"
       )
     );
   }
 
-  // Aggregated mode: list all completed events with their leaderboards
-  const pageNum = parseInt(page) || 1;
-  const limitNum = Math.min(parseInt(limit) || 10, 50);
+  // ── LIST MODE ────────────────────────────────────────────────────────────────
+  // Returns paginated list of completed events for the requested type only.
+  // Each item already contains its leaderboard so the frontend avoids a
+  // second round-trip when auto-selecting the first event.
 
-  const includeTournaments =
-    normalizedType === "all" || normalizedType === "tournament";
-
-  if (!includeTournaments) {
-    throw new ApiError(
-      400,
-      "Invalid type. Use: tournament, or all"
-    );
-  }
-
-  const events = [];
-
-  // Fetch completed tournaments
-  if (includeTournaments) {
+  if (normalizedType === "tournament") {
     const tournamentResult = await tournamentService.getTournaments({
       page: pageNum,
       limit: limitNum,
@@ -74,29 +90,82 @@ export const getLeaderboardsForStudent = asyncHandler(async (req, res) => {
       isPublished: true,
     });
 
-    for (const t of tournamentResult.tournaments || []) {
-      const leaderboardResult =
-        await tournamentService.getTournamentLeaderboard(t._id, 1000);
-      events.push({
+    const tournaments = tournamentResult.tournaments || [];
+
+    // Fetch all leaderboards in parallel (avoids serial N+1 loop)
+    const leaderboards = tournaments.length
+      ? await Promise.all(
+          tournaments.map((t) =>
+            tournamentService.getTournamentLeaderboard(t._id, 1000)
+          )
+        )
+      : [];
+
+    const items = tournaments.map((t, i) => {
+      const lb = leaderboards[i];
+      return {
         type: "tournament",
         eventId: t._id,
         title: t.title,
-        stage: leaderboardResult.stage,
+        stage: lb.stage,
         status: "completed",
-        leaderboard: leaderboardResult.leaderboard,
-        totalParticipants: leaderboardResult.leaderboard.length,
-      });
-    }
+        leaderboard: lb.leaderboard,
+        totalParticipants: lb.leaderboard.length,
+      };
+    });
+
+    return res.status(200).json(
+      ApiResponse.success(
+        {
+          items,
+          pagination: {
+            page: pageNum,
+            limit: limitNum,
+            total: items.length,
+            pages: 1,
+          },
+        },
+        "Leaderboards fetched successfully"
+      )
+    );
   }
+
+  // type === "olympiad"
+  const olympiadResult = await getCompletedOlympiads({
+    page: pageNum,
+    limit: limitNum,
+  });
+
+  const olympiads = olympiadResult.olympiads || [];
+
+  // Fetch all leaderboards in parallel
+  const leaderboards = olympiads.length
+    ? await Promise.all(
+        olympiads.map((o) => getOlympiadLeaderboard(o._id, 1000))
+      )
+    : [];
+
+  const items = olympiads.map((o, i) => {
+    const lb = leaderboards[i];
+    return {
+      type: "olympiad",
+      eventId: o._id,
+      title: o.title,
+      stage: null,
+      status: "completed",
+      leaderboard: lb.leaderboard,
+      totalParticipants: lb.leaderboard.length,
+    };
+  });
 
   return res.status(200).json(
     ApiResponse.success(
       {
-        items: events,
+        items,
         pagination: {
           page: pageNum,
           limit: limitNum,
-          total: events.length,
+          total: items.length,
           pages: 1,
         },
       },
@@ -108,4 +177,3 @@ export const getLeaderboardsForStudent = asyncHandler(async (req, res) => {
 export default {
   getLeaderboardsForStudent,
 };
-
