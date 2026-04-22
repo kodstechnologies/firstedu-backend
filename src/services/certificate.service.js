@@ -8,7 +8,7 @@ import courseTestLinkRepository from "../repository/courseTestLink.repository.js
 import orderRepository from "../repository/order.repository.js";
 import { sendNotificationToStudent } from "./notification.service.js";
 import examSessionRepository from "../repository/examSession.repository.js";
-import { PDFDocument, StandardFonts } from "pdf-lib";
+import { PDFDocument, StandardFonts, rgb, degrees } from "pdf-lib";
 
 /**
  * Build a friendly PDF label (e.g. jee-certificate.pdf) from section title or explicit name.
@@ -129,6 +129,7 @@ export const getCertificateById = async (certificateId) => {
  * Idempotent: if a certificate already exists for (student, course), it does nothing.
  */
 export const issueCourseCompletionCertificate = async (studentId, testId) => {
+
   const student = await User.findById(studentId).select("name email");
   if (!student) {
     throw new ApiError(404, "Student not found");
@@ -196,34 +197,114 @@ export const issueCourseCompletionCertificate = async (studentId, testId) => {
     const page = pdfDoc.getPage(0);
 
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const emphasizedFont = await pdfDoc.embedFont(StandardFonts.HelveticaBoldOblique);
     const { width, height } = page.getSize();
 
     const layout = template.textLayout || {};
-    const studentPos = layout.studentName || { x: width / 2, y: height / 2 };
-    const coursePos = layout.courseTitle || {
-      x: width / 2,
-      y: height / 2 - 40,
+    const resolveTextColor = (colorName, fallbackColor) => {
+      const map = {
+        white: rgb(1, 1, 1),
+        darkBlue: rgb(0.09, 0.18, 0.52),
+        darkYellow: rgb(1, 0.66, 0),
+      };
+      return map[colorName] || fallbackColor;
     };
-    const datePos = layout.issuedAt || { x: width / 2, y: 60 };
+    // The frontend coordinates assume a standard A4 Landscape (842 x 595 pt).
+    // The actual uploaded template may be a completely different resolution or aspect ratio.
+    const TEMPLATE_ASSUMED_W = 842;
+    const TEMPLATE_ASSUMED_H = 595;
+    
+    // Compute scaling factors to project coordinates accurately
+    const scaleX = width / TEMPLATE_ASSUMED_W;
+    const scaleY = height / TEMPLATE_ASSUMED_H;
+    
+    const studentPosRaw = layout.studentName || { x: TEMPLATE_ASSUMED_W / 2, y: TEMPLATE_ASSUMED_H / 2 };
+    const coursePosRaw = layout.courseTitle || { x: TEMPLATE_ASSUMED_W / 2, y: TEMPLATE_ASSUMED_H / 2 - 40 };
+    const datePosRaw = layout.issuedAt || { x: TEMPLATE_ASSUMED_W / 2, y: 60 };
+    const signaturePosRaw = layout.signature || { x: 690, y: 92, size: 12 };
 
-    page.drawText(student.name || "Student", {
-      x: studentPos.x,
-      y: studentPos.y,
-      size: studentPos.size || 18,
-      font,
+   
+    const studentSize = (studentPosRaw.size || 18) * Math.min(scaleX, scaleY);
+     const studentX =studentPosRaw.x * scaleX;
+    const studentY = (studentPosRaw.y+studentSize )* scaleY;
+
+    const studentNameText = student.name || "Student";
+    const studentNameWidth = emphasizedFont.widthOfTextAtSize(studentNameText, studentSize);
+
+    const textColor = rgb(255/255, 255/255, 255/255); // White text (pdf-lib uses 0-1 range)
+
+    page.drawText(studentNameText, {
+      x: studentX - studentNameWidth / 2,
+      y: studentY,
+      size: studentSize,
+      font: emphasizedFont,
+      color: resolveTextColor(studentPosRaw.color, textColor),
     });
-    page.drawText(course.title || "Course", {
-      x: coursePos.x,
-      y: coursePos.y,
-      size: coursePos.size || 16,
-      font,
+
+    const courseSize = (coursePosRaw.size || 16) * Math.min(scaleX, scaleY);
+     const courseX = coursePosRaw.x * scaleX;
+    const courseY = (coursePosRaw.y * scaleY+courseSize);
+    const courseTitleText = course.title || "Course";
+    const courseTitleWidth = emphasizedFont.widthOfTextAtSize(courseTitleText, courseSize);
+
+    page.drawText(courseTitleText, {
+      x: courseX - courseTitleWidth / 2,
+      y: courseY,
+      size: courseSize,
+      font: emphasizedFont,
+      color: resolveTextColor(coursePosRaw.color, rgb(1, 1, 0)),
     });
-    page.drawText(now.toISOString().split("T")[0], {
-      x: datePos.x,
-      y: datePos.y,
-      size: datePos.size || 12,
-      font,
+
+    
+    const dateSize = (datePosRaw.size || 12) * Math.min(scaleX, scaleY);
+     const dateX =( datePosRaw.x-12) * scaleX;
+    const dateY = (datePosRaw.y-dateSize)* scaleY;
+
+    const dateText = now.toLocaleDateString("en-US", {
+      month: "short",
+      day: "2-digit",
+      year: "numeric",
     });
+    const fullDateText = `Date: ${dateText}`;
+    const dateWidth = font.widthOfTextAtSize(fullDateText, dateSize);
+
+    page.drawText(fullDateText, {
+      x: dateX - dateWidth / 2,
+      y: dateY,
+      size: dateSize,
+      font,
+      color: resolveTextColor(datePosRaw.color, textColor),
+    });
+
+    const signatureText = String(layout?.signature?.text || "").trim().slice(0, 80);
+    if (signatureText) {
+      const signatureFont = await pdfDoc.embedFont(StandardFonts.TimesRomanItalic);
+      const signatureSize = (signaturePosRaw.size || 12) * Math.min(scaleX, scaleY) * 1.12;
+      const signatureX = (signaturePosRaw.x+12) * scaleX;
+      const signatureY = ((signaturePosRaw.y) * scaleY);
+      const signatureWidth = signatureFont.widthOfTextAtSize(signatureText, signatureSize);
+      const signatureColor = resolveTextColor(signaturePosRaw.color, rgb(1, 0.66, 0));
+
+      // Two-pass draw keeps pen-like weight while maintaining straight orientation.
+      page.drawText(signatureText, {
+        x: signatureX - signatureWidth / 2 + 0.45,
+        y: signatureY + 0.2,
+        size: signatureSize,
+        font: signatureFont,
+        color: signatureColor,
+        rotate: degrees(0),
+        opacity: 0.45,
+      });
+
+      page.drawText(signatureText, {
+        x: signatureX - signatureWidth / 2,
+        y: signatureY,
+        size: signatureSize,
+        font: signatureFont,
+        color: signatureColor,
+        rotate: degrees(0),
+      });
+    }
 
     const pdfBytes = await pdfDoc.save();
 
@@ -267,10 +348,9 @@ export const issueCourseCompletionCertificate = async (studentId, testId) => {
       // Log only; do not break issuance
       console.error("Failed to send certificate notification:", e);
     }
-
     results.push(cert);
   }
-
+ 
   return results;
 };
 
