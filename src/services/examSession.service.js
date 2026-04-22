@@ -55,7 +55,7 @@ const hasCompletedRegistrationForLinkedEventTest = async (testId, studentId) => 
 // Pillar tests (Competitive / School / Skill Development) allow unlimited retakes.
 const RETAKEABLE_PILLAR_TESTS = ["Competitive", "School", "Skill Development"];
 
-const checkStudentAccessForPaidTest = async (testId, studentId, categoryId = null) => {
+export const checkStudentAccessForPaidTest = async (testId, studentId, categoryId = null) => {
   if (categoryId) {
     const hasCategoryAccess = await categoryPurchaseRepository.checkAccess(studentId, categoryId);
     if (hasCategoryAccess) {
