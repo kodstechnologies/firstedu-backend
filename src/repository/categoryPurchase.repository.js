@@ -66,10 +66,26 @@ const findByStudent = async (studentId, pillarType = null) => {
   }
 };
 
+/**
+ * Acknowledge an upgrade: atoms $addToSet new IDs and updates lastUpgradedAt.
+ */
+const acknowledgeUpgrade = async (purchaseId, newIds = []) => {
+  try {
+    const update = { $set: { lastUpgradedAt: new Date() } };
+    if (newIds && newIds.length > 0) {
+      update.$addToSet = { unlockedCategoryIds: { $each: newIds } };
+    }
+    return await CategoryPurchase.findByIdAndUpdate(purchaseId, update, { new: true });
+  } catch (error) {
+    throw new ApiError(500, "Failed to apply upgrade", error.message);
+  }
+};
+
 export default {
   findByStudentAndCategory,
   checkAccess,
   createPurchase,
   updatePurchaseStatus,
+  acknowledgeUpgrade,
   findByStudent,
 };

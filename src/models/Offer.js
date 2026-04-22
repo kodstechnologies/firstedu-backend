@@ -16,18 +16,29 @@ const offerSchema = new mongoose.Schema(
         "Test",
         "TestSeries",
         "Course",
-        "Olympiad",
         "Olympiads",
         "Tournament",
         "Workshop",
         "Ecommerce",
         "CompetitionCategory",
         "LiveCompetition",
-        "School Management",
-        "Competitive Management",
+        "School",
+        "Competitive",
         "Skill Development",
       ],
       required: true,
+    },
+
+    // 🔹 Scoping variables (Optional: to bind this offer to a specific document rather than a global pillar)
+    entityId: {
+      type: mongoose.Schema.Types.ObjectId,
+      default: null,
+      refPath: "entityModel",
+    },
+    entityModel: {
+      type: String,
+      enum: ["Category", null],
+      default: null,
     },
 
     // 🔹 Discount definition
@@ -68,9 +79,9 @@ const offerSchema = new mongoose.Schema(
   },
 );
 
-// 🔐 Only ONE active offer per module type
+// 🔐 Only ONE active offer per module type AND entity combinations
 offerSchema.index(
-  { applicableOn: 1, status: 1 },
+  { applicableOn: 1, status: 1, entityId: 1 },
   { unique: true, partialFilterExpression: { status: "active" } },
 );
 

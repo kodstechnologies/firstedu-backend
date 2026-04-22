@@ -5,8 +5,14 @@ const createOffer = async (offerData) => {
     try {
         // If creating an active offer, deactivate any existing active offer for the same module
         if (offerData.status === "active") {
+            const query = { applicableOn: offerData.applicableOn, status: "active" };
+            if (offerData.entityId) {
+                query.entityId = offerData.entityId;
+            } else {
+                query.entityId = null;
+            }
             await Offer.updateMany(
-                { applicableOn: offerData.applicableOn, status: "active" },
+                query,
                 { $set: { status: "inactive" } }
             );
         }
@@ -25,6 +31,7 @@ const getActiveOffer = async (moduleType) => {
         return await Offer.findOne({
             applicableOn: moduleType,
             status: "active",
+            entityId: null,
             $or: [{ validTill: null }, { validTill: { $gte: new Date() } }],
         });
     } catch (error) {

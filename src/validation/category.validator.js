@@ -6,7 +6,7 @@ const createCategorySchema = Joi.object({
   parent: Joi.string().optional().allow(null, ""),
   order: Joi.number().min(0).optional(),
   rootType: Joi.string()
-    .valid("School Management", "Competitive Management", "Olympiads", "Skill Development", "custom")
+    .valid("School", "Competitive", "Olympiads", "Skill Development", "custom")
     .optional(),
   isPredefined: Joi.boolean().optional(),
   children: Joi.array().items(Joi.link("#category")).optional(),
@@ -20,7 +20,7 @@ const updateCategory = Joi.object({
   order: Joi.number().min(0).optional(),
   isActive: Joi.boolean().optional(),
   rootType: Joi.string()
-    .valid("School Management", "Competitive Management", "Olympiads", "Skill Development", "custom")
+    .valid("School", "Competitive", "Olympiads", "Skill Development", "custom")
     .optional(),
   isPredefined: Joi.boolean().optional(),
 });
@@ -37,26 +37,19 @@ const updateCategoryPricing = Joi.object({
   status:          Joi.string().valid("Draft", "Public").optional(),
 
   // Policy
-  offerPolicy:     Joi.string().valid("inherit", "none").optional(),
-  couponPolicy:    Joi.string().valid("inherit", "none").optional(),
+  offerPolicy:     Joi.string().valid("inherit", "none", "custom").optional(),
+  couponPolicy:    Joi.string().valid("inherit", "none", "custom").optional(),
   offerOverrideId: Joi.string().regex(/^[0-9a-fA-F]{24}$/).allow(null, "").optional(),
 
   // Content
   description:         Joi.string().trim().allow("", null).optional(),
-  about:               Joi.string().trim().allow("", null).optional(),
   syllabus:            Joi.string().trim().allow("", null).optional(),
-  markingScheme:       Joi.string().trim().allow("", null).optional(),
-  rankingCriteria:     Joi.string().trim().allow("", null).optional(),
-  examDatesAndDetails: Joi.string().trim().allow("", null).optional(),
-  awards:              Joi.string().trim().allow("", null).optional(),
-  rules:               Joi.string().trim().allow("", null).optional(),
 
   // Media
   bannerImg: Joi.string().trim().allow("", null).optional(),
 
-  // Classification
-  subjects: Joi.array().items(Joi.string().trim()).optional(),
-  tags:     Joi.array().items(Joi.string().trim()).optional(),
+  // Classification (subjects is read-only, derived from children — not accepted here)
+  // tags removed: no longer exposed via API
 
   // Capacity
   capacity: Joi.number().min(1).allow(null).optional(),

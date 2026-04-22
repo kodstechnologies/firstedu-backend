@@ -36,7 +36,7 @@ const categorySchema = new mongoose.Schema(
     },
     rootType: {
       type: String,
-      enum: ["School Management", "Competitive Management", "Olympiads", "Skill Development", "custom"],
+      enum: ["School", "Competitive", "Olympiads", "Skill Development", "custom"],
       default: "custom",
     },
   },
@@ -66,16 +66,11 @@ const subcategorySchema = new mongoose.Schema(
     // ─── Content & Media ────────────────────────────────
     bannerImg:           { type: String, trim: true, default: null },
     description:         { type: String, trim: true, default: null },
-    about:               { type: String, trim: true, default: null },
     syllabus:            { type: String, trim: true, default: null },
-    markingScheme:       { type: String, trim: true, default: null },
-    rankingCriteria:     { type: String, trim: true, default: null },
-    examDatesAndDetails: { type: String, trim: true, default: null },
-    awards:              { type: String, trim: true, default: null },
-    rules:               { type: String, trim: true, default: null },
 
     // ─── Classification ─────────────────────────────────
     subjects: { type: [String], default: [] },
+    /* @deprecated – no longer accepted via API. Field kept to preserve legacy data. */
     tags:     { type: [String], default: [] },
 
     // ─── Capacity ────────────────────────────────────────
@@ -90,14 +85,18 @@ const subcategorySchema = new mongoose.Schema(
     status: { type: String, enum: ["Draft", "Public"], default: "Draft" },
 
     // ─── Offer / Coupon Policy ───────────────────────────────
+    // 'inherit'  = use the active global pillar-level offer/coupons
+    // 'custom'   = this category has its own override (offerOverrideId is set for offers,
+    //              or category-specific coupons exist); global is blocked
+    // 'none'     = no offer/coupon applies at all
     offerPolicy: {
       type: String,
-      enum: ["inherit", "none"],
+      enum: ["inherit", "none", "custom"],
       default: "inherit",
     },
     couponPolicy: {
       type: String,
-      enum: ["inherit", "none"],
+      enum: ["inherit", "none", "custom"],
       default: "inherit",
     },
     offerOverrideId: {

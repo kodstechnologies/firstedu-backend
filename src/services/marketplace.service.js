@@ -5,7 +5,6 @@ import courseTestLinkRepository from "../repository/courseTestLink.repository.js
 import orderRepository from "../repository/order.repository.js";
 import examSessionRepository from "../repository/examSession.repository.js";
 import eventRegistrationRepository from "../repository/eventRegistration.repository.js";
-import olympiadRepository from "../repository/olympiad.repository.js";
 import tournamentRepository from "../repository/tournament.repository.js";
 import razorpayOrderIntentRepository from "../repository/razorpayOrderIntent.repository.js";
 import categoryRepository from "../repository/category.repository.js";
@@ -21,15 +20,26 @@ import studentRepository from "../repository/student.repository.js";
 import { sendCourseEnrollmentEmail, sendTestBundlePurchaseEmail } from "../utils/sendEmail.js";
 
 const isDirectPurchasableTest = (test) => {
-  const applicableFor = test?.applicableFor ?? "test";
-  return (
-    applicableFor === "test" ||
-    applicableFor === "challenge_yourself" ||
-    applicableFor === "challenge_yourfriends"
-  );
+  const applicableFor = (test?.applicableFor || "test").toLowerCase().trim();
+  const allowed = [
+    "test",
+    "challenge_yourself",
+    "challenge_yourfriends",
+    "competitive",
+    "school",
+    "skill development",
+    "skill", // Added for backward compatibility/typos
+    "competition_sector",
+    "trending_test", // Specifically added for active tests labeled as trending
+  ];
+  return allowed.includes(applicableFor);
 };
 
-const attachPurchasedFlagToTests = async (tests = [], studentId, purchasedField = "isPurchased") => {
+const attachPurchasedFlagToTests = async (
+  tests = [],
+  studentId,
+  purchasedField = "isPurchased"
+) => {
   if (!studentId) return tests;
 
   return await Promise.all(
@@ -43,13 +53,22 @@ const attachPurchasedFlagToTests = async (tests = [], studentId, purchasedField 
       const purchased = !!purchase;
       const price = Number(testObj.price) || 0;
       const requiresPurchase = price > 0 && !purchased;
+
+      const applicableFor = (testObj.applicableFor || "test")
+        .toLowerCase()
+        .trim();
+      const isChallenge =
+        applicableFor === "challenge_yourself" ||
+        applicableFor === "challenge_yourfriends";
+
       return {
         ...testObj,
         [purchasedField]: purchased,
         requiresPurchase,
-        purchaseMessage: requiresPurchase
-          ? "Please purchase this test from the Resource Store, then you can create/start a challenge room."
-          : null,
+        purchaseMessage:
+          requiresPurchase && isChallenge
+            ? "Please purchase this test from the Resource Store, then you can create/start a challenge room."
+            : null,
       };
     })
   );
@@ -874,7 +893,7 @@ export const getChallengeMarketplaceTests = async (options = {}) => {
 };
 
 /**
- * Initiate test purchase. Handles free, wallet, and razorpay (like olympiad/tournament/workshop).
+ * Initiate test purchase. Handles free, wallet, and razorpay (like tournament/workshop).
  * - free: completes purchase immediately if price is 0
  * - wallet: deducts balance and completes purchase immediately
  * - razorpay: creates order, returns order details; purchase completed via purchase API after payment
@@ -887,8 +906,9 @@ export const initiateTestPayment = async (testId, studentId, paymentMethod, opti
   if (!test || !test.isPublished) {
     throw new ApiError(404, "Test not found");
   }
+  console.log("DEBUG_TEST_APPFOR:", test.applicableFor, test._id, test.title);
   if (!isDirectPurchasableTest(test)) {
-    throw new ApiError(400, "This test is not available for direct purchase");
+    throw new ApiError(400, `This test is not available for direct purchase. Its applicableFor is: ${test.applicableFor}`);
   }
 
   const existingPurchase = await orderRepository.findTestPurchase({
@@ -1045,7 +1065,7 @@ export const purchaseTest = async (
     throw new ApiError(404, "Test not found");
   }
   if (!isDirectPurchasableTest(test)) {
-    throw new ApiError(400, "This test is not available for direct purchase");
+    throw new ApiError(400, `This test is not available for direct purchase. Its applicableFor is: ${test.applicableFor}`);
   }
 
   const existingPurchase = await orderRepository.findTestPurchase({
@@ -1137,7 +1157,7 @@ export const getTestBundles = async (options = {}) => {
 };
 
 /**
- * Initiate test bundle purchase. Handles free, wallet, and razorpay (like olympiad/tournament/workshop).
+ * Initiate test bundle purchase. Handles free, wallet, and razorpay (like tournament/workshop).
  * @param {Object} options - { couponCode?: string }
  */
 export const initiateTestBundlePayment = async (bundleId, studentId, paymentMethod, options = {}) => {
@@ -1376,9 +1396,7 @@ const hasCategory = (categories, categoryId) => {
   return categories.some((c) => (c?._id ?? c)?.toString?.() === idStr);
 };
 
-const olympiadPopulate = [
-  { path: "test", select: "title description durationMinutes questionBank price", populate: { path: "questionBank", select: "name categories" } },
-];
+
 const tournamentStagesPopulate = [
   {
     path: "stages.test",
@@ -1388,10 +1406,10 @@ const tournamentStagesPopulate = [
 ];
 
 /**
- * Get exam hall - purchased tests, test bundles, and (when live) olympiads & tournaments the student joined.
- * Olympiad/tournament tests appear only when event startTime <= now <= endTime (or stage window for tournaments).
- * @param {string} type - "test" | "testBundle" | "olympiad" | "tournament" | "both" (test+bundle) | "all" (default: all)
- * @param {string} category - Filter by category ID (questionBank categories for tests / olympiad / tournament)
+ * Get exam hall - purchased tests, test bundles, and (when live) tournaments the student joined.
+ * Tournament tests appear only when event startTime <= now <= endTime (or stage window for tournaments).
+ * @param {string} type - "test" | "testBundle" | "tournament" | "both" (test+bundle) | "all" (default: all)
+ * @param {string} category - Filter by category ID (questionBank categories for tests / tournament)
  */
 export const getExamHall = async (studentId, page = 1, limit = 20, type = "all", category = null, search = null) => {
   const pageNum = parseInt(page);
@@ -1446,35 +1464,12 @@ export const getExamHall = async (studentId, page = 1, limit = 20, type = "all",
     });
 
   const eventRegs = await eventRegistrationRepository.find(
-    { student: studentId, eventType: { $in: ["olympiad", "tournament"] }, paymentStatus: "completed" },
+    { student: studentId, eventType: "tournament", paymentStatus: "completed" },
     { limit: 500 }
   );
-  const olympiadIds = [...new Set(eventRegs.filter((r) => r.eventType === "olympiad").map((r) => r.eventId).filter(Boolean))];
   const tournamentIds = [...new Set(eventRegs.filter((r) => r.eventType === "tournament").map((r) => r.eventId).filter(Boolean))];
 
-  const olympiadItems = [];
   const eventTestIds = [];
-  if (olympiadIds.length > 0) {
-    const olympiads = await olympiadRepository.find(
-      { _id: { $in: olympiadIds }, isPublished: true },
-      { populate: olympiadPopulate, limit: 500 }
-    );
-    for (const o of olympiads) {
-      if (isWithinEventWindow(o.startTime, o.endTime) && o.test) {
-        eventTestIds.push(o.test._id);
-        olympiadItems.push({
-          _id: o._id,
-          type: "olympiad",
-          olympiadId: o._id,
-          olympiadTitle: o.title,
-          test: o.test,
-          testId: o.test._id,
-          startTime: o.startTime,
-          endTime: o.endTime,
-        });
-      }
-    }
-  }
   const tournamentItems = [];
   if (tournamentIds.length > 0) {
     const tournaments = await tournamentRepository.find(
@@ -1513,10 +1508,6 @@ export const getExamHall = async (studentId, page = 1, limit = 20, type = "all",
       : {};
   const getEventTestStatus = (id) => eventStatusMap[id?.toString?.() ?? ""]?.status ?? "not_started";
   const getEventSessionId = (id) => eventStatusMap[id?.toString?.() ?? ""]?.sessionId ?? null;
-  olympiadItems.forEach((item) => {
-    item.testStatus = getEventTestStatus(item.testId);
-    item.sessionId = getEventSessionId(item.testId);
-  });
   tournamentItems.forEach((item) => {
     (item.stages || []).forEach((st) => {
       st.testStatus = getEventTestStatus(st.testId);
@@ -1573,7 +1564,6 @@ export const getExamHall = async (studentId, page = 1, limit = 20, type = "all",
   const typeFilter = (item) => {
     if (type === "test") return item.type === "test";
     if (type === "testBundle") return item.type === "testBundle";
-    if (type === "olympiad") return item.type === "olympiad";
     if (type === "tournament") return item.type === "tournament";
     if (type === "certificationTest") return item.type === "certificationTest";
     if (type === "both") return item.type === "test" || item.type === "testBundle";
@@ -1585,7 +1575,7 @@ export const getExamHall = async (studentId, page = 1, limit = 20, type = "all",
     if (item.type === "testBundle" && item.testBundle?.tests) {
       return item.testBundle.tests.some((t) => hasCategory(t?.questionBank?.categories, category));
     }
-    if (item.type === "olympiad" && item.test) return hasCategory(item.test?.questionBank?.categories, category);
+
     if (item.type === "tournament" && item.stages) {
       return item.stages.some((s) => hasCategory(s.test?.questionBank?.categories, category));
     }

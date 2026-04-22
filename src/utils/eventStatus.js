@@ -87,7 +87,7 @@ export const getGoesLiveAt = (item, options = {}) => {
 };
 
 /**
- * Get event status for Olympiads, Tournaments, and Workshops.
+ * Get event status for Tournaments and Workshops.
  *
  * Status flow:
  * - close: before registration starts

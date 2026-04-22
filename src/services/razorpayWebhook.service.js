@@ -7,6 +7,8 @@ import testRepository from "../repository/test.repository.js";
 import pointsService from "./points.service.js";
 import eventRegistrationRepository from "../repository/eventRegistration.repository.js";
 import walletService from "./wallet.service.js";
+import categoryPurchaseService from "./categoryPurchase.service.js";
+import categoryPurchaseRepository from "../repository/categoryPurchase.repository.js";
 
 const LOG_PREFIX = "[Razorpay Webhook]";
 
@@ -138,7 +140,7 @@ async function reconcilePaymentCaptured(orderId, paymentId, amountPaise) {
       paymentId,
       paymentStatus: "completed",
     });
-  } else if (type === "olympiad" || type === "tournament" || type === "workshop") {
+  } else if (type === "tournament" || type === "workshop") {
     const existing = await eventRegistrationRepository.findOne({
       student: studentId,
       eventType: type,
@@ -148,7 +150,7 @@ async function reconcilePaymentCaptured(orderId, paymentId, amountPaise) {
       await razorpayOrderIntentRepository.markReconciled(orderId, paymentId);
       return { reconciled: true, reason: "already_registered" };
     }
-    const entityModel = type === "olympiad" ? "Olympiad" : type === "tournament" ? "Tournament" : "Workshop";
+    const entityModel = type === "tournament" ? "Tournament" : "Workshop";
     await eventRegistrationRepository.create({
       student: studentId,
       eventType: type,
@@ -161,6 +163,35 @@ async function reconcilePaymentCaptured(orderId, paymentId, amountPaise) {
   } else if (type === "wallet") {
     const amountRupees = Math.round(amountPaise / 100);
     await walletService.addMonetaryBalance(studentId, amountRupees, paymentId, "User");
+  } else if (type === "categoryNode" || ["Olympiads", "School", "Competitive", "Skill Development"].includes(type)) {
+    try {
+      const purchaseResult = await categoryPurchaseService.reconcileWebhookPurchase(entityId, studentId, {
+        amountPaise,
+        paymentId,
+        couponId: intent.couponId
+      });
+      if (purchaseResult.reconciled) {
+        await razorpayOrderIntentRepository.markReconciled(orderId, paymentId);
+        return { reconciled: true, reason: purchaseResult.reason };
+      }
+    } catch (e) {
+      console.error(`${LOG_PREFIX} categoryPurchase error:`, e.message);
+      return { reconciled: false, reason: "category_purchase_failed" };
+    }
+  } else if (type === "categoryUpgrade") {
+    // entityId = basePurchaseId (the CategoryPurchase doc to update)
+    // metadata.newCategoryIds = the snapshot of new IDs taken at checkout-upgrade time
+    try {
+      const newCategoryIds = intent.metadata?.newCategoryIds || [];
+      if (newCategoryIds.length > 0) {
+        await categoryPurchaseRepository.updateUnlockedIds(entityId, newCategoryIds);
+      }
+      await razorpayOrderIntentRepository.markReconciled(orderId, paymentId);
+      return { reconciled: true, reason: "upgrade_created" };
+    } catch (e) {
+      console.error(`${LOG_PREFIX} categoryUpgrade error:`, e.message);
+      return { reconciled: false, reason: "category_upgrade_failed" };
+    }
   } else {
     return { reconciled: false, reason: "unknown_type" };
   }

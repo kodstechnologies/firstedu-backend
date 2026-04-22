@@ -12,7 +12,7 @@ export const createOffer = asyncHandler(async (req, res) => {
     }
 
     // Basic Validation
-    const VALID_APPLICABLE_ON = ["Test", "TestSeries", "Course", "Olympiad", "Tournament", "Workshop", "Ecommerce", "CompetitionCategory","LiveCompetition"];
+    const VALID_APPLICABLE_ON = ["all", "Test", "TestSeries", "Course", "Olympiads", "Tournament", "Workshop", "Ecommerce", "CompetitionCategory", "LiveCompetition", "School", "Competitive", "Skill Development"];
     if (!VALID_APPLICABLE_ON.includes(applicableOn)) {
         throw new ApiError(400, `applicableOn must be one of: ${VALID_APPLICABLE_ON.join(", ")}`);
     }
@@ -49,11 +49,14 @@ export const createOffer = asyncHandler(async (req, res) => {
 
 // Get All Offers (Admin)
 export const getOffers = asyncHandler(async (req, res) => {
-    const { page = 1, limit = 10, applicableOn, status, search } = req.query;
+    const { page = 1, limit = 10, applicableOn, status, search, entityId } = req.query;
 
     const query = {};
     if (applicableOn) query.applicableOn = applicableOn;
     if (status) query.status = status;
+    if (entityId !== undefined) {
+        query.entityId = entityId === 'null' ? null : entityId;
+    }
     if (search) {
         query.offerName = { $regex: search, $options: "i" };
     }

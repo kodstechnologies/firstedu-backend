@@ -72,7 +72,6 @@ const findTestPurchases = async (studentId) => {
     return await TestPurchase.find({ student: studentId, paymentStatus: "completed" })
       .populate("test", "title description price")
       .populate("testBundle", "name description price")
-      .populate("competitionCategory", "title description price")
       .populate("schoolCategory", "name description price")
       .populate("skillCategory", "name description price")
       .sort({ purchaseDate: -1 });
@@ -98,19 +97,6 @@ const findTestPurchasesForExamHall = async (studentId) => {
           populate: { path: "questionBank", select: "categories" },
         },
       })
-      .populate({
-        path: "competitionCategory",
-        select: "title description price tests",
-        populate: {
-          path: "tests",
-          select: "title description testId",
-          populate: {
-            path: "testId",
-            select: "title description durationMinutes questionBank",
-            populate: { path: "questionBank", select: "categories" },
-          },
-        },
-      })
       .populate("schoolCategory", "name description")
       .populate("skillCategory", "name description")
       .sort({ purchaseDate: -1 });
@@ -133,7 +119,7 @@ const findEventRegistrations = async (studentId) => {
   try {
     return await EventRegistration.find({
       student: studentId,
-      eventType: { $in: ["olympiad", "tournament", "workshop"] },
+      eventType: { $in: ["tournament", "workshop"] },
       paymentStatus: "completed",
     })
       .populate("eventId", "title price")
@@ -225,7 +211,6 @@ const createTestPurchase = async (purchaseData) => {
     return await TestPurchase.findById(purchase._id)
       .populate("test", "title description durationMinutes questionBank")
       .populate("testBundle", "name description tests price")
-      .populate("competitionCategory", "title description price tests")
       .populate("schoolCategory", "name description")
       .populate("skillCategory", "name description")
       .populate("student", "name email");

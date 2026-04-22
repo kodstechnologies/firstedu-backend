@@ -15,15 +15,17 @@ const createTest = Joi.object({
     .valid(
       "test",
       "testBundle",
-      "olympiad",
+      "Olympiads",
       "tournament",
       "challenge_yourself",
       "competition_sector",
       "everyday_challenge",
       "challenge_yourfriends",
-      "school",
       "skill",
-      "certificate"
+      "certificate",
+      "School",
+      "Competitive",
+      "Skill Development"
     )
     .default("test"),
   isPublished: Joi.boolean().optional(),
@@ -41,15 +43,17 @@ const updateTest = Joi.object({
     .valid(
       "test",
       "testBundle",
-      "olympiad",
+      "Olympiads",
       "tournament",
       "challenge_yourself",
       "competition_sector",
       "everyday_challenge",
       "challenge_yourfriends",
-      "school",
       "skill",
-      "certificate"
+      "certificate",
+      "School",
+      "Competitive",
+      "Skill Development"
     )
     .optional(),
   isPublished: Joi.boolean().optional(),

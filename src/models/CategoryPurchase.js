@@ -16,7 +16,7 @@ const categoryPurchaseSchema = new mongoose.Schema(
     },
     pillarType: {
       type: String,
-      enum: ["school", "competitive", "olympiad", "skill"],
+      enum: ["School", "Competitive", "Olympiads", "Skill Development"],
       required: true,
       index: true,
     },
@@ -45,6 +45,10 @@ const categoryPurchaseSchema = new mongoose.Schema(
       type: String,
       enum: ["pending", "completed", "failed"],
       default: "pending",
+    },
+    lastUpgradedAt: {
+      type: Date,
+      default: null, // Will use createdAt as fallback if null
     },
   },
   {

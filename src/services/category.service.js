@@ -4,32 +4,33 @@ import categoryRepository from "../repository/category.repository.js";
 import QuestionBank from "../models/QuestionBank.js";
 import Test from "../models/Test.js";
 import TestBundle from "../models/TestBundle.js";
-import Olympiad from "../models/Olympiad.js";
 import Tournament from "../models/Tournament.js";
-import CategoryPurchase from "../models/CategoryPurchase.js";
 import orderRepository from "../repository/order.repository.js";
 import eventRegistrationRepository from "../repository/eventRegistration.repository.js";
-import olympiadRepository from "../repository/olympiad.repository.js";
 import tournamentRepository from "../repository/tournament.repository.js";
 import { getApplicableOfferDetails } from "../utils/offerUtils.js";
-
+import Offer from "../models/Offer.js";
 import { assertSubtreeNotPurchased } from "../utils/purchaseGuard.js";
 
 /**
  * Recursively create children under a parent category.
  * Supports unlimited nesting: School -> Classes -> Class 1 -> Subjects -> Math -> Geometry, etc.
  */
-const createChildrenRecursive = async (children, parentId, createdBy, orderStart = 0) => {
+const createChildrenRecursive = async (children, parentId, createdBy, rootType, orderStart = 0) => {
   const created = [];
   let order = orderStart;
   for (const child of children) {
     const { name, children: nestedChildren } = child;
-    const category = await categoryRepository.create({
+    const payload = {
       name,
       parent: parentId,
       order: order++,
       createdBy,
-    });
+    };
+    if (rootType && rootType !== "custom") {
+      payload.rootType = rootType;
+    }
+    const category = await categoryRepository.create(payload);
     created.push(category);
 
     if (nestedChildren && nestedChildren.length > 0) {
@@ -37,6 +38,7 @@ const createChildrenRecursive = async (children, parentId, createdBy, orderStart
         nestedChildren,
         category._id,
         createdBy,
+        rootType,
         0
       );
     }
@@ -50,9 +52,25 @@ const createChildrenRecursive = async (children, parentId, createdBy, orderStart
  * - Nested: { name: "School", children: [{ name: "Classes", children: [{ name: "Class 1", children: [...] }] }] }
  */
 export const createCategory = async (data, createdBy) => {
+  let parentNode = null;
   if (data.parent) {
-    const parent = await categoryRepository.findById(data.parent);
-    if (!parent) throw new ApiError(404, "Parent category not found");
+    parentNode = await categoryRepository.findById(data.parent);
+    if (!parentNode) throw new ApiError(404, "Parent category not found");
+
+    if (["School", "Competitive", "Skill Development"].includes(parentNode.rootType)) {
+      const qBanks = await QuestionBank.find({ categories: parentNode._id }).select('_id');
+      if (qBanks.length > 0) {
+        const tests = await Test.exists({ questionBank: { $in: qBanks.map(qb => qb._id) } });
+        if (tests) {
+          throw new ApiError(400, "Cannot add subcategories to a node that already contains tests.");
+        }
+      }
+    }
+  }
+
+  let resolvedRootType = data.rootType || "custom";
+  if (!data.rootType && parentNode && parentNode.rootType && parentNode.rootType !== "custom") {
+    resolvedRootType = parentNode.rootType;
   }
 
   const payload = {
@@ -60,7 +78,7 @@ export const createCategory = async (data, createdBy) => {
     parent: data.parent || null,
     order: data.order ?? 0,
     createdBy,
-    ...(data.rootType   && { rootType:     data.rootType }),
+    rootType: resolvedRootType,
     ...(data.isPredefined !== undefined && { isPredefined: data.isPredefined }),
   };
   const created = await categoryRepository.create(payload);
@@ -70,6 +88,7 @@ export const createCategory = async (data, createdBy) => {
       data.children,
       created._id,
       createdBy,
+      resolvedRootType,
       0
     );
     return { category: created, children };
@@ -82,12 +101,12 @@ export const getCategories = async (options = {}) => {
   return await categoryRepository.findAll({}, options);
 };
 
-export const getCategoryTree = async () => {
+export const getCategoryTree = async (filter = {}) => {
   // Ensure the 4 predefined pillar roots are always marked correctly.
   // This is a lightweight idempotent upsert that runs on every tree fetch.
   const PILLAR_ROOTS = [
-    { name: "School Management",    rootType: "School Management" },
-    { name: "Competitive Management", rootType: "Competitive Management" },
+    { name: "School",    rootType: "School" },
+    { name: "Competitive", rootType: "Competitive" },
     { name: "Olympiads",             rootType: "Olympiads" },
     { name: "Skill Development",     rootType: "Skill Development" },
   ];
@@ -110,32 +129,98 @@ export const getCategoryTree = async () => {
     }
   }
 
-  return await categoryRepository.findTree({});
+  const fullTree = await categoryRepository.findTree({});
+  
+  // Attach hasTests boolean to nodes
+  const allBankIds = await QuestionBank.find({}).select('categories _id');
+  const allTestBanks = await Test.find({}).select('questionBank categoryId').lean();
+  const bankIdsWithTests = new Set(allTestBanks.map(t => t.questionBank?.toString()));
+
+  const categoryIdsWithTests = new Set();
+  
+  allBankIds.forEach(qb => {
+    if (bankIdsWithTests.has(qb._id.toString())) {
+        qb.categories.forEach(cid => categoryIdsWithTests.add(cid.toString()));
+    }
+  });
+
+  // Also include direct links where Test natively defines categoryId
+  allTestBanks.forEach(test => {
+    if (test.categoryId) {
+      categoryIdsWithTests.add(test.categoryId.toString());
+    }
+  });
+
+  const attachHasTests = (nodes) => {
+    nodes.forEach(node => {
+      node.hasTests = categoryIdsWithTests.has(node._id.toString());
+      if (node.children?.length) {
+        attachHasTests(node.children);
+      }
+    });
+  };
+  attachHasTests(fullTree);
+
+  if (filter && filter.rootType) {
+    const requestedRoot = fullTree.find(n => n.rootType === filter.rootType);
+    return requestedRoot ? [requestedRoot] : [];
+  }
+  
+  return fullTree;
 };
 
 export const getCategoryById = async (id) => {
   const item = await categoryRepository.findById(id);
   if (!item) throw new ApiError(404, "Category not found");
-  return item;
+
+  const obj = typeof item.toObject === "function" ? item.toObject() : { ...item };
+
+  // ── Enrich: Node-type metadata (isLeaf / isSecondSubcategory / linkedSubjects) ──
+  const children = await categoryRepository.findChildren(id);
+
+  const childMeta = await Promise.all(
+    children.map(async (child) => ({
+      name:        child.name,
+      hasChildren: await categoryRepository.hasChildren(child._id),
+    }))
+  );
+
+  const isLeaf              = children.length === 0;
+  const isSecondSubcategory = children.length > 0 && childMeta.every((c) => !c.hasChildren);
+
+  const SUBJECT_PILLARS = ["School", "Competitive", "Olympiads"];
+  const linkedSubcategories = isSecondSubcategory && SUBJECT_PILLARS.includes(obj.rootType)
+    ? childMeta.map((c) => c.name)
+    : [];
+
+  obj.isLeaf              = isLeaf;
+  obj.isSecondSubcategory = isSecondSubcategory;
+  obj.linkedSubcategories = linkedSubcategories;
+
+  // ── Enrich: Global pillar-level offer (for Mode A display in UI) ────────────────
+  const PILLAR_TO_APPLICABLE_ON = {
+    "School":            "School",
+    "Competitive":       "Competitive",
+    "Skill Development": "Skill Development",
+  };
+  const applicableOn = PILLAR_TO_APPLICABLE_ON[obj.rootType];
+  obj.globalOffer = applicableOn
+    ? (await Offer.findOne({ applicableOn, status: "active" }).lean()) ?? null
+    : null;
+
+  // ── Enrich: Category-specific override offer (for Mode B display in UI) ─────────
+  obj.overrideOffer = obj.offerOverrideId
+    ? (await Offer.findById(obj.offerOverrideId).lean()) ?? null
+    : null;
+  // ─────────────────────────────────────────────────────────────────────────────────
+
+  return obj;
 };
 
 export const getChildren = async (parentId) => {
   return await categoryRepository.findChildren(parentId);
 };
 
-/**
- * Get category IDs connected to question banks, tests, test bundles, olympiads, and/or tournaments.
- * linkedTo: "all" | "questionBank" | "test" | "testBundle" | "both" | "olympiad" | "tournament" | "examhall" | "course" | null
- * - all: union of test + testBundle + olympiad + tournament (categories used in marketplace/events)
- * - questionBank: categories on any question bank
- * - test: categories on question banks of published tests
- * - testBundle: categories on question banks of tests that are in at least one active bundle
- * - both: union of test + testBundle
- * - olympiad: categories on question banks of tests used by published olympiads
- * - tournament: categories on question banks of tests used in stages of published tournaments
- * - examhall: categories linked to items visible in the student's exam hall
- * - course: categories linked to published courses
- */
 const getConnectedCategoryIds = async (linkedTo, studentId) => {
   if (!linkedTo) return null;
 
@@ -168,18 +253,6 @@ const getConnectedCategoryIds = async (linkedTo, studentId) => {
       if (bankIdsFromBundles.length > 0) {
         const fromBundles = await QuestionBank.find({ _id: { $in: bankIdsFromBundles } }).distinct("categories");
         fromBundles.forEach((id) => categoryIds.add(id?.toString?.() || id));
-      }
-    }
-  }
-
-  if (linkedTo === "olympiad") {
-    const publishedOlympiads = await Olympiad.find({ isPublished: true }).select("test").lean();
-    const testIds = publishedOlympiads.map((o) => o.test).filter(Boolean);
-    if (testIds.length > 0) {
-      const bankIds = await Test.find({ _id: { $in: testIds } }).distinct("questionBank");
-      if (bankIds.length > 0) {
-        const fromOlympiads = await QuestionBank.find({ _id: { $in: bankIds } }).distinct("categories");
-        fromOlympiads.forEach((id) => categoryIds.add(id?.toString?.() || id));
       }
     }
   }
@@ -220,45 +293,21 @@ const getConnectedCategoryIds = async (linkedTo, studentId) => {
       }
     });
 
-    // 2) Registered olympiads / tournaments (from event registrations)
+    // 2) Registered tournaments (from event registrations)
     const regs = await eventRegistrationRepository.find(
       {
         student: studentId,
-        eventType: { $in: ["olympiad", "tournament"] },
+        eventType: "tournament",
         paymentStatus: "completed",
       },
       { limit: 500 }
     );
 
-    const olympiadIds = [
-      ...new Set(regs.filter((r) => r.eventType === "olympiad").map((r) => r.eventId).filter(Boolean)),
-    ];
     const tournamentIds = [
       ...new Set(regs.filter((r) => r.eventType === "tournament").map((r) => r.eventId).filter(Boolean)),
     ];
 
     const eventBankIds = new Set();
-
-    if (olympiadIds.length > 0) {
-      const olympiads = await olympiadRepository.find(
-        { _id: { $in: olympiadIds } },
-        {
-          populate: [
-            {
-              path: "test",
-              select: "questionBank",
-              populate: { path: "questionBank", select: "categories" },
-            },
-          ],
-          limit: 500,
-        }
-      );
-      olympiads.forEach((o) => {
-        const qb = o.test?.questionBank;
-        const qbId = qb?._id?.toString?.() || qb?.toString?.();
-        if (qbId) eventBankIds.add(qbId);
-      });
-    }
 
     if (tournamentIds.length > 0) {
       const tournaments = await tournamentRepository.find(
@@ -349,9 +398,10 @@ const filterTreeByConnected = (nodes, allowedIds) => {
  * format: "tree" | "flat"
  */
 export const getCategoriesForStudent = async (options = {}) => {
-  const { linkedTo, format = "tree", studentId } = options;
+  const { linkedTo, format = "tree", rootType, studentId } = options;
 
-  let tree = await categoryRepository.findTree({});
+  const filter = rootType ? { rootType } : {};
+  let tree = await categoryRepository.findTree(filter);
 
   if (linkedTo) {
     const connectedIds = await getConnectedCategoryIds(linkedTo, studentId);
@@ -367,6 +417,77 @@ export const getCategoriesForStudent = async (options = {}) => {
       tree = [];
     }
   }
+
+  // ── Attach computed prices to all subcategory nodes so frontend needs zero math ──
+  const PILLAR_TO_APPLICABLE_ON = {
+    "School":            "School",
+    "Competitive":       "Competitive",
+    "Skill Development": "Skill Development",
+  };
+  const applicableOn = rootType ? PILLAR_TO_APPLICABLE_ON[rootType] : null;
+
+  if (applicableOn) {
+    // Fetch the single active global offer for this pillar once (1 DB query for ALL nodes)
+    const globalOffer = await Offer.findOne({ applicableOn, status: "active", entityId: null }).lean();
+
+    // Fetch any custom override offers used by nodes in the tree efficiently
+    const overrideIds = new Set();
+    const collectIds = (node) => {
+      if (node.offerOverrideId) overrideIds.add(node.offerOverrideId.toString());
+      if (node.children?.length) node.children.forEach(collectIds);
+    };
+    tree.forEach(collectIds);
+
+    const overrideMap = {};
+    if (overrideIds.size > 0) {
+      const activeOverrides = await Offer.find({ _id: { $in: Array.from(overrideIds) }, status: "active" }).lean();
+      activeOverrides.forEach(o => overrideMap[o._id.toString()] = o);
+    }
+
+    const enrichNode = (node) => {
+      if (node.price != null) {
+        const basePrice = Number(node.price) || 0;
+        const activeOffer = (node.offerOverrideId && overrideMap[node.offerOverrideId.toString()])
+                            ? overrideMap[node.offerOverrideId.toString()]
+                            : globalOffer;
+
+        if (node.isFree || basePrice === 0) {
+          node.originalPrice = basePrice;
+          node.effectivePrice = 0;
+          node.discountedPrice = 0;
+        } else if (activeOffer) {
+          let discountAmount = 0;
+          if (activeOffer.discountType === "percentage") {
+            discountAmount = (basePrice * activeOffer.discountValue) / 100;
+          } else {
+            discountAmount = Math.min(activeOffer.discountValue, basePrice);
+          }
+          const discountedPrice = Math.max(0, basePrice - discountAmount);
+          node.originalPrice = basePrice;
+          node.discountedPrice = discountedPrice;
+          node.effectivePrice = discountedPrice;
+          node.discountAmount = discountAmount;
+          node.appliedOffer = {
+            _id: activeOffer._id,
+            offerName: activeOffer.offerName,
+            applicableOn: activeOffer.applicableOn,
+            discountType: activeOffer.discountType,
+            discountValue: activeOffer.discountValue,
+            description: activeOffer.description,
+            validTill: activeOffer.validTill,
+          };
+        } else {
+          // No active offer (global or override) — pass through as-is
+          node.originalPrice = basePrice;
+          node.effectivePrice = basePrice;
+          node.discountedPrice = basePrice;
+        }
+      }
+      if (node.children?.length) node.children.forEach(enrichNode);
+    };
+    tree.forEach(enrichNode);
+  }
+  // ──────────────────────────────────────────────────────────────────────────────
 
   if (format === "flat") {
     const flatten = (nodes, acc = []) => {
@@ -386,12 +507,17 @@ export const updateCategory = async (id, updateData) => {
   const existing = await categoryRepository.findById(id);
   if (!existing) throw new ApiError(404, "Category not found");
   await assertSubtreeNotPurchased(id, "rename");
-  if (updateData.parent) {
+  if (updateData.parent !== undefined) {
     if (updateData.parent === id) {
       throw new ApiError(400, "Category cannot be its own parent");
     }
-    const parent = await categoryRepository.findById(updateData.parent);
-    if (!parent) throw new ApiError(404, "Parent category not found");
+    if (updateData.parent) {
+      const parent = await categoryRepository.findById(updateData.parent);
+      if (!parent) throw new ApiError(404, "Parent category not found");
+      if (parent.rootType && parent.rootType !== "custom") {
+        updateData.rootType = parent.rootType;
+      }
+    }
   }
   return await categoryRepository.updateById(id, updateData);
 };
@@ -399,7 +525,7 @@ export const updateCategory = async (id, updateData) => {
 export const updateCategoryPricing = async (id, updateData) => {
   const existing = await categoryRepository.findById(id);
   if (!existing) throw new ApiError(404, "Category not found");
-  await assertSubtreeNotPurchased(id, "update pricing");
+  // Permitting editing of price, offer, coupon even when purchased
   return await categoryRepository.updateById(id, updateData);
 };
 
@@ -422,10 +548,9 @@ export const getNodeWithEffectivePrice = async (id) => {
 
   // Fallback to global offer
   const rootTypeMap = {
-    "School Management": "School Management",
-    "Competitive Management": "Competitive Management",
-    "Skill Development": "Skill Development",
-    "Olympiads": "Olympiads"
+    "School": "School",
+    "Competitive": "Competitive",
+    "Skill Development": "Skill Development"
   };
   const moduleName = rootTypeMap[obj.rootType] || "Category";
   

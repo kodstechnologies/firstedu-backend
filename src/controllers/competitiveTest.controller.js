@@ -1,51 +1,49 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
-import schoolTestService from "../services/schoolTest.service.js";
-import schoolTestValidator from "../validation/schoolTest.validator.js";
+import competitiveTestService from "../services/competitiveTest.service.js";
+import competitiveTestValidator from "../validation/competitiveTest.validator.js";
 import ExamSession from "../models/ExamSession.js";
 import TestPurchase from "../models/TestPurchase.js";
 import { resolveAccessStatus } from "../utils/categoryAccessUtils.js";
-
-export const createSchoolTest = asyncHandler(async (req, res) => {
-  const { error, value } = schoolTestValidator.createSchoolTest.validate(req.body);
+export const createCompetitiveTest = asyncHandler(async (req, res) => {
+  const { error, value } = competitiveTestValidator.createCompetitiveTest.validate(req.body);
   if (error) throw new ApiError(400, "Validation Error", error.details.map(x => x.message));
 
-  const created = await schoolTestService.createSchoolTest(value);
-  return res.status(201).json(ApiResponse.success(created, "School test added successfully"));
+  const created = await competitiveTestService.createCompetitiveTest(value);
+  return res.status(201).json(ApiResponse.success(created, "Competitive test added successfully"));
 });
 
-export const getSchoolTests = asyncHandler(async (req, res) => {
+export const getCompetitiveTests = asyncHandler(async (req, res) => {
   const { categoryId, page, limit } = req.query;
-  const result = await schoolTestService.getSchoolTests({ categoryId, page, limit });
-  return res.status(200).json(ApiResponse.success(result.tests, "School tests fetched successfully", result.pagination));
+  const result = await competitiveTestService.getCompetitiveTests({ categoryId, page, limit });
+  return res.status(200).json(ApiResponse.success(result.tests, "Competitive tests fetched successfully", result.pagination));
 });
 
-export const updateSchoolTest = asyncHandler(async (req, res) => {
+export const updateCompetitiveTest = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { error, value } = schoolTestValidator.updateSchoolTest.validate(req.body);
+  const { error, value } = competitiveTestValidator.updateCompetitiveTest.validate(req.body);
   if (error) throw new ApiError(400, "Validation Error", error.details.map(x => x.message));
 
-  const updated = await schoolTestService.updateSchoolTest(id, value);
-  return res.status(200).json(ApiResponse.success(updated, "School test updated successfully"));
+  const updated = await competitiveTestService.updateCompetitiveTest(id, value);
+  return res.status(200).json(ApiResponse.success(updated, "Competitive test updated successfully"));
 });
 
-export const deleteSchoolTest = asyncHandler(async (req, res) => {
+export const deleteCompetitiveTest = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  await schoolTestService.deleteSchoolTest(id);
-  return res.status(200).json(ApiResponse.success(null, "School test deleted successfully"));
+  await competitiveTestService.deleteCompetitiveTest(id);
+  return res.status(200).json(ApiResponse.success(null, "Competitive test deleted successfully"));
 });
 
-export const getSchoolTestsForStudent = asyncHandler(async (req, res) => {
-  const { categoryId, page, limit } = req.query;
+export const getCompetitiveTestsForStudent = asyncHandler(async (req, res) => {
+  const { categoryId, page, limit, search } = req.query;
   if (!categoryId) throw new ApiError(400, "categoryId is required");
   
-  // Resolve full post-purchase access status (new content detection + price diff)
+  // Resolve full post-purchase access status (handles new content + price diff)
   const accessStatus = await resolveAccessStatus(req.user._id, categoryId);
+  const result = await competitiveTestService.getCompetitiveTests({ categoryId, page, limit, search });
 
-  const result = await schoolTestService.getSchoolTests({ categoryId, page, limit });
-
-  // Attach testStatus and testSessionId
+  // Attach testStatus and testSessionId from existing exam sessions
   const testIds = result.tests.map(t => t._id);
   const examSessions = await ExamSession.find({
     student: req.user._id,
@@ -89,14 +87,14 @@ export const getSchoolTestsForStudent = asyncHandler(async (req, res) => {
   return res.status(200).json(
     ApiResponse.success(
       testsWithStatus,
-      "School tests fetched successfully",
+      "Competitive tests fetched successfully",
       {
         ...result.pagination,
-        hasAccess:     accessStatus.hasAccess,
-        upgradable:    accessStatus.upgradable,
-        upgradeCost:   accessStatus.upgradeCost,
+        hasAccess:    accessStatus.hasAccess,
+        upgradable:   accessStatus.upgradable,
+        upgradeCost:  accessStatus.upgradeCost,
         isFreeUpgrade: accessStatus.isFreeUpgrade,
-        hasNewContent: accessStatus.upgradable,
+        hasNewContent: accessStatus.upgradable, // alias for frontend clarity
       }
     )
   );

@@ -2,19 +2,22 @@ import Test from "../models/Test.js";
 import Category from "../models/Category.js";
 import { attachOfferToList } from "../utils/offerUtils.js";
 
-export const createSchoolTest = async (data) => {
+export const createCompetitiveTest = async (data) => {
   // Legacy bypass: Tests now structurally link directly via Test module
   return true;
 };
 
-export const getSchoolTests = async (options = {}) => {
-  const { categoryId, page = 1, limit = 10 } = options;
+export const getCompetitiveTests = async (options = {}) => {
+  const { categoryId, page = 1, limit = 10, search } = options;
   const pageNum = parseInt(page);
   const limitNum = parseInt(limit);
   const skip = (pageNum - 1) * limitNum;
 
   // Use Test.categoryId as the strict source of truth — tests belong only to the subcategory they were created in
-  const query = { categoryId, applicableFor: { $in: ["School", "test"] } };
+  const query = { categoryId };
+  if (search) {
+    query.title = { $regex: search, $options: 'i' };
+  }
 
   const [rawTests, total] = await Promise.all([
     Test.find(query)
@@ -24,12 +27,12 @@ export const getSchoolTests = async (options = {}) => {
     Test.countDocuments(query),
   ]);
 
-  let processedTests = rawTests.map(test => (test.toObject ? test.toObject() : { ...test }));
+  let tests = rawTests.map(t => (t.toObject ? t.toObject() : { ...t }));
 
-  if (processedTests.length > 0 && categoryId) {
+  if (tests.length > 0 && categoryId) {
     const category = await Category.findById(categoryId).lean();
     if (category?.isFree) {
-      processedTests = processedTests.map(t => ({
+      tests = tests.map(t => ({
         ...t,
         originalPrice: t.price || 0,
         discountedPrice: 0,
@@ -37,14 +40,13 @@ export const getSchoolTests = async (options = {}) => {
         discountAmount: t.price || 0,
       }));
     } else {
+      // Use pillar-level offer (e.g. "Competitive") when available; "Test" as fallback
       const pillarModuleType = category?.rootType || "Test";
-      processedTests = await attachOfferToList(processedTests, pillarModuleType, "price");
+      tests = await attachOfferToList(tests, pillarModuleType, "price");
     }
-  } else if (processedTests.length > 0) {
-    processedTests = await attachOfferToList(processedTests, "Test", "price");
+  } else if (tests.length > 0) {
+    tests = await attachOfferToList(tests, "Test", "price");
   }
-
-  const tests = processedTests;
 
   return {
     tests,
@@ -57,19 +59,19 @@ export const getSchoolTests = async (options = {}) => {
   };
 };
 
-export const updateSchoolTest = async (id, updateData) => {
+export const updateCompetitiveTest = async (id, updateData) => {
   // Not used actively since edits hit the main Test Builder API
   return true;
 };
 
-export const deleteSchoolTest = async (id) => {
+export const deleteCompetitiveTest = async (id) => {
   // Deleting from the folder just unlinks the explicit categoryId
   return await Test.findByIdAndUpdate(id, { $unset: { categoryId: 1 } });
 };
 
 export default {
-  createSchoolTest,
-  getSchoolTests,
-  updateSchoolTest,
-  deleteSchoolTest,
+  createCompetitiveTest,
+  getCompetitiveTests,
+  updateCompetitiveTest,
+  deleteCompetitiveTest,
 };

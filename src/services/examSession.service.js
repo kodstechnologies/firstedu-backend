@@ -1,47 +1,31 @@
 import { ApiError } from "../utils/ApiError.js";
+import OlympiadTest from "../models/OlympiadTest.js";
 import examSessionRepository from "../repository/examSession.repository.js";
 import orderRepository from "../repository/order.repository.js";
 import testRepository from "../repository/test.repository.js";
-import olympiadRepository from "../repository/olympiad.repository.js";
 import tournamentRepository from "../repository/tournament.repository.js";
 import eventRegistrationRepository from "../repository/eventRegistration.repository.js";
 import questionBankRepository from "../repository/questionBank.repository.js";
 import questionRepository from "../repository/question.repository.js";
 import categoryRepository from "../repository/category.repository.js";
+import categoryPurchaseRepository from "../repository/categoryPurchase.repository.js";
 import examAnalysisService from "./examAnalysis.service.js";
 import pointsService from "./points.service.js";
 import everydayChallengeService from "./everydayChallenge.service.js";
 import everydayChallengeCompletionRepository from "../repository/everydayChallengeCompletion.repository.js";
 import challengeYourselfService from "./challengeYourself.service.js";
-import competitionRepository from "../repository/competition.repository.js";
+
 import tournamentService from "./tournament.service.js";
 import { issueCourseCompletionCertificate } from "./certificate.service.js";
 import courseTestLinkRepository from "../repository/courseTestLink.repository.js";
 
 const hasCompletedRegistrationForLinkedEventTest = async (testId, studentId) => {
-  const [linkedOlympiads, linkedTournaments] = await Promise.all([
-    olympiadRepository.find(
-      { test: testId, isPublished: true },
-      { limit: 1000 }
-    ),
-    tournamentRepository.find(
+  const linkedTournaments = await tournamentRepository.find(
       { "stages.test": testId, isPublished: true },
       { limit: 1000 }
-    ),
-  ]);
+    );
 
-  const olympiadIds = linkedOlympiads.map((o) => o?._id).filter(Boolean);
   const tournamentIds = linkedTournaments.map((t) => t?._id).filter(Boolean);
-
-  if (olympiadIds.length > 0) {
-    const olympiadRegistration = await eventRegistrationRepository.findOne({
-      student: studentId,
-      eventType: "olympiad",
-      eventId: { $in: olympiadIds },
-      paymentStatus: "completed",
-    });
-    if (olympiadRegistration) return true;
-  }
 
   if (tournamentIds.length > 0) {
     const tournamentRegistration = await eventRegistrationRepository.findOne({
@@ -53,10 +37,32 @@ const hasCompletedRegistrationForLinkedEventTest = async (testId, studentId) => 
     if (tournamentRegistration) return true;
   }
 
+  const linkedOlympiads = await OlympiadTest.find({ testId }).lean();
+  const olympiadIds = linkedOlympiads.map((o) => o?._id).filter(Boolean);
+  if (olympiadIds.length > 0) {
+    const olympiadRegistration = await eventRegistrationRepository.findOne({
+      student: studentId,
+      eventType: "olympiad",
+      eventId: { $in: olympiadIds },
+      paymentStatus: "completed",
+    });
+    if (olympiadRegistration) return true;
+  }
+
   return false;
 };
 
-export const checkStudentAccessForPaidTest = async (testId, studentId) => {
+// Pillar tests (Competitive / School / Skill Development) allow unlimited retakes.
+const RETAKEABLE_PILLAR_TESTS = ["Competitive", "School", "Skill Development"];
+
+const checkStudentAccessForPaidTest = async (testId, studentId, categoryId = null) => {
+  if (categoryId) {
+    const hasCategoryAccess = await categoryPurchaseRepository.checkAccess(studentId, categoryId);
+    if (hasCategoryAccess) {
+      return { hasAccess: true, accessType: "category_purchase" };
+    }
+  }
+
   let purchase = await orderRepository.findTestPurchase({
     student: studentId,
     test: testId,
@@ -66,20 +72,7 @@ export const checkStudentAccessForPaidTest = async (testId, studentId) => {
     return { hasAccess: true, accessType: "direct_test_purchase" };
   }
 
-  const categoriesContainingTest = await competitionRepository.findCompetitionTestsByTestId(
-    testId
-  );
-  const categoryIds = categoriesContainingTest.map((c) => c.categoryId);
-  if (categoryIds.length > 0) {
-    purchase = await orderRepository.findTestPurchase({
-      student: studentId,
-      competitionCategory: { $in: categoryIds },
-      paymentStatus: "completed",
-    });
-    if (purchase) {
-      return { hasAccess: true, accessType: "competition_category_purchase" };
-    }
-  }
+
 
   const bundleIdsContainingTest = await testRepository.findBundleIdsContainingTest(testId);
   if (bundleIdsContainingTest.length > 0) {
@@ -558,8 +551,11 @@ export const startExamSession = async (testId, studentId, options = {}) => {
     if (alreadyCompletedToday) {
       throw new ApiError(400, "You have already completed today's everyday challenge");
     }
-  } else if (test.applicableFor !== "challenge_yourfriends") {
-    // Non–everyday challenge: prevent retaking the same test
+  } else if (
+    test.applicableFor !== "challenge_yourfriends" &&
+    !RETAKEABLE_PILLAR_TESTS.includes(test.applicableFor)
+  ) {
+    // Non–everyday challenge, non-pillar: prevent retaking the same test
     const completedSession = await examSessionRepository.findOne({
       student: studentId,
       test: testId,
@@ -753,7 +749,10 @@ export const getExamInstructions = async (testId, studentId, options = {}) => {
         canStart = false;
         blockReason = "You have already completed today's everyday challenge";
       }
-    } else if (test.applicableFor !== "challenge_yourfriends") {
+    } else if (
+      test.applicableFor !== "challenge_yourfriends" &&
+      !RETAKEABLE_PILLAR_TESTS.includes(test.applicableFor)
+    ) {
       const completedSession = await examSessionRepository.findOne({
         student: studentId,
         test: testId,
@@ -1771,31 +1770,49 @@ export const getExamResults = async (sessionId, studentId) => {
   }
 
   const testDoc = await examSessionRepository.findTestById(session.test);
-  const tournamentLb =
-    testDoc?.applicableFor === "tournament"
-      ? await tournamentService.getTournamentStageLeaderboardForStudent(
-          session.test?._id || session.test,
-          studentId
-        )
-      : null;
+  
+  let isResultsHidden = false;
+  let hiddenEventType = null;
+  let tournamentLb = null;
+  let olympiadInfo = null;
 
-  const stageEndDate = tournamentLb?.stageEndTime ? new Date(tournamentLb.stageEndTime) : null;
-  const resultsReleased = !tournamentLb || now >= stageEndDate;
+  if (testDoc?.applicableFor === "tournament") {
+    tournamentLb = await tournamentService.getTournamentStageLeaderboardForStudent(
+      session.test?._id || session.test,
+      studentId
+    );
+    const stageEndDate = tournamentLb?.stageEndTime ? new Date(tournamentLb.stageEndTime) : null;
+    isResultsHidden = tournamentLb && now < stageEndDate;
+    if (isResultsHidden) hiddenEventType = "tournament";
+  } else if (testDoc?.applicableFor === "Olympiads") {
+    const OlympiadTest = (await import("../models/OlympiadTest.js")).default;
+    const olympiad = await OlympiadTest.findOne({ testId: session.test?._id || session.test });
+    if (olympiad && olympiad.resultDeclarationDate) {
+      if (now < new Date(olympiad.resultDeclarationDate)) {
+        isResultsHidden = true;
+        hiddenEventType = "olympiad";
+        olympiadInfo = {
+          resultDeclarationDate: olympiad.resultDeclarationDate,
+          firstPlacePoints: olympiad.firstPlacePoints,
+          secondPlacePoints: olympiad.secondPlacePoints,
+          thirdPlacePoints: olympiad.thirdPlacePoints,
+        };
+      }
+    }
+  }
 
-  const redirectSuggestion =
-    tournamentLb && !resultsReleased
-      ? session.autoSubmitted
-        ? "results"
-        : "tournament"
-      : tournamentLb && resultsReleased
-        ? "results"
-        : null;
+  const redirectSuggestion = isResultsHidden
+    ? (hiddenEventType === "tournament"
+        ? (session.autoSubmitted ? "results" : "tournament")
+        : (session.autoSubmitted ? "results" : "my-olympiads"))
+    : (tournamentLb ? "results" : null);
 
-  if (tournamentLb && !resultsReleased) {
+  if (isResultsHidden) {
     const pct =
       session.maxScore > 0
         ? Math.round((session.score / session.maxScore) * 100 * 100) / 100
         : 0;
+
     return {
       session: {
         id: session._id,
@@ -1814,26 +1831,42 @@ export const getExamResults = async (sessionId, studentId) => {
         percentile: session.percentile,
         percentage: pct,
         resultsHiddenUntilStageEnd: true,
+        hiddenEventType,
       },
-      leaderboard: {
+      leaderboard: hiddenEventType === "tournament" && tournamentLb ? {
         resultsHeldUntilStageEnd: true,
         stageEndTime: tournamentLb.stageEndTime,
         top3: [],
         myRank: null,
         totalParticipants: tournamentLb.totalParticipants,
+      } : {
+        resultsHeldUntilStageEnd: true,
+        top3: [],
       },
-      tournament: {
-        tournamentId: tournamentLb.tournamentId,
-        tournamentTitle: tournamentLb.tournamentTitle,
-        stageName: tournamentLb.stageName,
-        stageEndTime: tournamentLb.stageEndTime,
-        resultsReleased: false,
-        redirectSuggestion,
-      },
+      ...(hiddenEventType === "tournament" && tournamentLb ? {
+        tournament: {
+          tournamentId: tournamentLb.tournamentId,
+          tournamentTitle: tournamentLb.tournamentTitle,
+          stageName: tournamentLb.stageName,
+          stageEndTime: tournamentLb.stageEndTime,
+          resultsReleased: false,
+          redirectSuggestion,
+        }
+      } : {}),
+      ...(hiddenEventType === "olympiad" ? {
+        olympiad: {
+          resultDeclarationDate: olympiadInfo.resultDeclarationDate,
+          firstPlacePoints: olympiadInfo.firstPlacePoints,
+          secondPlacePoints: olympiadInfo.secondPlacePoints,
+          thirdPlacePoints: olympiadInfo.thirdPlacePoints,
+          resultsReleased: false,
+          redirectSuggestion,
+        }
+      } : {}),
       sectionWiseResults: [],
       questions: [],
       message:
-        "Leaderboard, rank, and question-by-question review unlock after this round ends. Use redirectSuggestion for navigation (tournament vs results).",
+        "Results, leaderboard, rank, and question-by-question review unlock after the declaration threshold.",
     };
   }
 
@@ -2071,13 +2104,25 @@ export const getExamResults = async (sessionId, studentId) => {
     },
     sectionWiseResults,
     questions,
-    ...(tournamentLb && resultsReleased
+    ...(tournamentLb
       ? {
           tournament: {
             tournamentId: tournamentLb.tournamentId,
             tournamentTitle: tournamentLb.tournamentTitle,
             stageName: tournamentLb.stageName,
             stageEndTime: tournamentLb.stageEndTime,
+            resultsReleased: true,
+            redirectSuggestion: redirectSuggestion || "results",
+          },
+        }
+      : {}),
+    ...(olympiadInfo
+      ? {
+          olympiad: {
+            resultDeclarationDate: olympiadInfo.resultDeclarationDate,
+            firstPlacePoints: olympiadInfo.firstPlacePoints,
+            secondPlacePoints: olympiadInfo.secondPlacePoints,
+            thirdPlacePoints: olympiadInfo.thirdPlacePoints,
             resultsReleased: true,
             redirectSuggestion: redirectSuggestion || "results",
           },

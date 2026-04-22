@@ -19,7 +19,7 @@ const eventRegistrationSchema = new mongoose.Schema(
     },
     eventModel: {
       type: String,
-      enum: ["Olympiad", "Tournament", "Workshop", "Challenge"],
+      enum: ["Olympiad", "OlympiadTest", "Tournament", "Workshop", "Challenge"],
       required: true,
     },
     tournamentStage: {
