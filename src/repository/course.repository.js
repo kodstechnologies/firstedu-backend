@@ -76,7 +76,7 @@ const findAll = async (filter = {}, options = {}) => {
         .limit(limitNum),
       Course.countDocuments(query),
     ]);
-
+  
     return {
       courses,
       pagination: {
