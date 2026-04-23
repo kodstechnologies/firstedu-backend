@@ -43,7 +43,7 @@ export const getSchoolTestsForStudent = asyncHandler(async (req, res) => {
   // Resolve full post-purchase access status (new content detection + price diff)
   const accessStatus = await resolveAccessStatus(req.user._id, categoryId);
 
-  const result = await schoolTestService.getSchoolTests({ categoryId, page, limit });
+  const result = await schoolTestService.getSchoolTests({ categoryId, page, limit, isPublished: true });
 
   // Attach testStatus and testSessionId
   const testIds = result.tests.map(t => t._id);

@@ -41,7 +41,7 @@ export const getCompetitiveTestsForStudent = asyncHandler(async (req, res) => {
   
   // Resolve full post-purchase access status (handles new content + price diff)
   const accessStatus = await resolveAccessStatus(req.user._id, categoryId);
-  const result = await competitiveTestService.getCompetitiveTests({ categoryId, page, limit, search });
+  const result = await competitiveTestService.getCompetitiveTests({ categoryId, page, limit, search, isPublished: true });
 
   // Attach testStatus and testSessionId from existing exam sessions
   const testIds = result.tests.map(t => t._id);

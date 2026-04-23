@@ -204,13 +204,9 @@ export const confirmUpgrade = async (
   const newCategoryIds = intent.metadata?.newCategoryIds || [];
 
   if (newCategoryIds.length === 0) {
-    // Edge case: admin removed all new content between intent creation and confirmation
-    await razorpayOrderIntentRepository.markReconciled(razorpayOrderId, razorpayPaymentId);
-    return {
-      completed: true,
-      message: "Upgrade confirmed. No new items to unlock (content may have changed).",
-      newUnlockedCount: 0,
-    };
+    // If there are no new subcategories, it might just be new tests.
+    // We STILL need to acknowledge the upgrade to update the lastUpgradedAt timestamp.
+    // So we don't return early here.
   }
 
   await categoryPurchaseRepository.acknowledgeUpgrade(basePurchaseId, newCategoryIds);

@@ -20,6 +20,7 @@ import CategoryPurchase from "../models/CategoryPurchase.js";
 import categoryRepository from "../repository/category.repository.js";
 import Test from "../models/Test.js";
 import TestPurchase from "../models/TestPurchase.js";
+import Offer from "../models/Offer.js";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -42,12 +43,42 @@ export const fetchDescendantIds = async (categoryId) => {
  * Get the effective price of a category (discountedPrice takes priority over price).
  * Returns 0 if the category is free.
  */
-const getEffectivePrice = (category) => {
-  if (category.isFree) return 0;
+const getEffectivePrice = async (category) => {
+  if (category.isFree || !category.price) return 0;
+  
+  const basePrice = Number(category.price) || 0;
+  
+  const PILLAR_MAP = {
+    "School": "School",
+    "Competitive": "Competitive",
+    "Skill Development": "Skill Development",
+  };
+  const applicableOn = category.rootType ? PILLAR_MAP[category.rootType] : null;
+
+  let activeOffer = null;
+  if (category.offerOverrideId) {
+    activeOffer = await Offer.findOne({ _id: category.offerOverrideId, status: "active" }).lean();
+  }
+  
+  if (!activeOffer && applicableOn) {
+    activeOffer = await Offer.findOne({ applicableOn, status: "active", entityId: null }).lean();
+  }
+  
+  if (activeOffer) {
+    let discountAmount = 0;
+    if (activeOffer.discountType === "percentage") {
+      discountAmount = (basePrice * activeOffer.discountValue) / 100;
+    } else {
+      discountAmount = Math.min(activeOffer.discountValue, basePrice);
+    }
+    return Math.max(0, basePrice - discountAmount);
+  }
+  
+  // Fallback to static discount or base price
   if (category.discountedPrice !== null && category.discountedPrice !== undefined) {
     return category.discountedPrice;
   }
-  return category.price || 0;
+  return basePrice;
 };
 
 // ─── Core Export ─────────────────────────────────────────────────────────────
@@ -114,7 +145,8 @@ export const resolveAccessStatus = async (studentId, categoryId) => {
     };
   }
 
-  const currentPrice = getEffectivePrice(category);
+  const currentPrice = await getEffectivePrice(category);
+
   const paidSoFar = purchase.purchasePrice || 0;
 
   // ── 4. Determine price diff ───────────────────────────────────────────────
@@ -151,6 +183,7 @@ export const resolveAccessStatus = async (studentId, categoryId) => {
   const allCatIds = [categoryId.toString(), ...allCurrentDescendants];
   const newTestExists = await Test.exists({
     categoryId: { $in: allCatIds },
+    isPublished: true,
     createdAt: { $gt: purchaseDate },
     _id: { $nin: boughtTestIds }
   });
@@ -213,9 +246,9 @@ export const resolveBulkAccessStatus = async (studentId, nodes, tree, rootType) 
       }
       return null;
     };
-    
+
     const targetNode = findNodeAndChildrenIds(currentLayer);
-    
+
     // Once found, gather all descendant IDs
     const descendantIds = [];
     const gatherIds = (node) => {
@@ -226,7 +259,7 @@ export const resolveBulkAccessStatus = async (studentId, nodes, tree, rootType) 
         }
       }
     };
-    
+
     if (targetNode) gatherIds(targetNode);
     return descendantIds;
   };
@@ -258,14 +291,14 @@ export const resolveBulkAccessStatus = async (studentId, nodes, tree, rootType) 
 
       // Extract descendants safely from memory
       const allCurrentDescendants = getDescendantIdsFromTree(catIdStr, tree);
-      
+
       const alreadyUnlocked = new Set();
       purchases.forEach(p => {
         if (p.unlockedCategoryIds) {
           p.unlockedCategoryIds.forEach(id => alreadyUnlocked.add(id.toString()));
         }
       });
-      
+
       const newCategoryIds = allCurrentDescendants.filter((id) => !alreadyUnlocked.has(id));
 
       const purchaseDate = purchase.lastUpgradedAt || purchase.createdAt;
@@ -274,6 +307,7 @@ export const resolveBulkAccessStatus = async (studentId, nodes, tree, rootType) 
       const allCatIds = [catIdStr, ...allCurrentDescendants];
       const newTestExists = await Test.exists({
         categoryId: { $in: allCatIds },
+        isPublished: true,
         createdAt: { $gt: purchaseDate },
         _id: { $nin: boughtTestIds }
       });

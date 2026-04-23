@@ -8,13 +8,17 @@ export const createSchoolTest = async (data) => {
 };
 
 export const getSchoolTests = async (options = {}) => {
-  const { categoryId, page = 1, limit = 10 } = options;
+  const { categoryId, page = 1, limit = 10, isPublished } = options;
   const pageNum = parseInt(page);
   const limitNum = parseInt(limit);
   const skip = (pageNum - 1) * limitNum;
 
   // Use Test.categoryId as the strict source of truth — tests belong only to the subcategory they were created in
   const query = { categoryId, applicableFor: { $in: ["School", "test"] } };
+  // Student routes pass isPublished: true; admin routes omit so drafts remain visible.
+  if (isPublished !== undefined) {
+    query.isPublished = isPublished;
+  }
 
   const [rawTests, total] = await Promise.all([
     Test.find(query)

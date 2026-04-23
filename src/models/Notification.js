@@ -43,6 +43,7 @@ const notificationSchema = new mongoose.Schema(
         "test",
         "event",
         "system",
+        "upgrade",
         "teacher_withdrawal_approved",
         "teacher_withdrawal_rejected",
       ],

@@ -64,7 +64,6 @@ const Category = mongoose.models.Category || mongoose.model("Category", category
 const subcategorySchema = new mongoose.Schema(
   {
     // ─── Content & Media ────────────────────────────────
-    bannerImg:           { type: String, trim: true, default: null },
     description:         { type: String, trim: true, default: null },
     syllabus:            { type: String, trim: true, default: null },
 
