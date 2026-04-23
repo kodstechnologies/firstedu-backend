@@ -18,20 +18,61 @@ import couponService from "./coupon.service.js";
 import studentRepository from "../repository/student.repository.js";
 import { sendCourseEnrollmentEmail, sendTestBundlePurchaseEmail } from "../utils/sendEmail.js";
 
+const DIRECT_PURCHASABLE_TEST_TYPES = [
+  "test",
+  "challenge_yourself",
+  "challenge_yourfriends",
+  "competitive",
+  "school",
+  "skill development",
+  "skill",
+  "competition_sector",
+  "trending_test"
+];
+
 const isDirectPurchasableTest = (test) => {
   const applicableFor = (test?.applicableFor || "test").toLowerCase().trim();
-  const allowed = [
-    "test",
-    "challenge_yourself",
-    "challenge_yourfriends",
-    "competitive",
-    "school",
-    "skill development",
-    "skill", // Added for backward compatibility/typos
-    "competition_sector",
-    "trending_test" // Specifically added for active tests labeled as trending
-  ];
-  return allowed.includes(applicableFor);
+  return DIRECT_PURCHASABLE_TEST_TYPES.includes(applicableFor);
+};
+
+const getFrontendItemType = (test) => {
+  const appFor = (test?.applicableFor || "").toLowerCase();
+  if (appFor.startsWith("challenge")) return "challenge";
+  return "test";
+};
+
+const attachPurchasedFlagToTests = async (tests, studentId) => {
+  if (!studentId || !tests.length) {
+    tests.forEach((t) => (t.purchased = false));
+    return tests;
+  }
+  const testIds = tests.map((t) => t._id.toString());
+  const purchasedIds = await orderRepository.findPurchasedTestIdsForStudent(
+    studentId,
+    testIds
+  );
+  const purchasedSet = new Set(purchasedIds);
+  tests.forEach((t) => {
+    t.purchased = purchasedSet.has(t._id.toString());
+  });
+  return tests;
+};
+
+const attachPurchasedFlagToBundles = async (bundles, studentId) => {
+  if (!studentId || !bundles.length) {
+    bundles.forEach((b) => (b.purchased = false));
+    return bundles;
+  }
+  const purchases = await orderRepository.findTestPurchases(studentId);
+  const purchasedBundleIds = new Set(
+    purchases
+      .map((p) => p.testBundle?._id?.toString() || p.testBundle?.toString())
+      .filter(Boolean)
+  );
+  bundles.forEach((b) => {
+    b.purchased = purchasedBundleIds.has(b._id.toString());
+  });
+  return bundles;
 };
 
 /**
@@ -454,6 +495,7 @@ export const getTestsAndBundles = async (options = {}) => {
     sortBy = "createdAt",
     sortOrder = "desc",
     questionBank,
+    studentId,
   } = options;
 
   const pageNum = parseInt(page);
@@ -468,9 +510,35 @@ export const getTestsAndBundles = async (options = {}) => {
       questionBank,
       sortBy,
       sortOrder,
+      applicableFor: "test",
+      studentId,
     });
     return {
-      items: result.tests.map((t) => ({ ...toTestItem(t), itemType: "test" })),
+      items: result.tests.map((t) => ({
+        ...toTestItem(t),
+        itemType: getFrontendItemType(t),
+      })),
+      pagination: result.pagination,
+    };
+  }
+
+  if (type === "challenges") {
+    const result = await getTests({
+      page: pageNum,
+      limit: limitNum,
+      search,
+      category,
+      questionBank,
+      sortBy,
+      sortOrder,
+      applicableFor: ["challenge_yourself", "challenge_yourfriends"],
+      studentId,
+    });
+    return {
+      items: result.tests.map((t) => ({
+        ...toTestItem(t),
+        itemType: getFrontendItemType(t),
+      })),
       pagination: result.pagination,
     };
   }
@@ -483,9 +551,13 @@ export const getTestsAndBundles = async (options = {}) => {
       category,
       sortBy,
       sortOrder,
+      studentId,
     });
     return {
-      items: result.bundles.map((b) => ({ ...toBundleItem(b), itemType: "testBundle" })),
+      items: result.bundles.map((b) => ({
+        ...toBundleItem(b),
+        itemType: "testBundle",
+      })),
       pagination: result.pagination,
     };
   }
@@ -501,6 +573,7 @@ export const getTestsAndBundles = async (options = {}) => {
       questionBank,
       sortBy,
       sortOrder,
+      studentId,
     }),
     getTestBundles({
       page: 1,
@@ -509,6 +582,7 @@ export const getTestsAndBundles = async (options = {}) => {
       category,
       sortBy,
       sortOrder,
+      studentId,
     }),
   ]);
 
@@ -517,8 +591,14 @@ export const getTestsAndBundles = async (options = {}) => {
   const total = testsTotal + bundlesTotal;
   const sortDesc = sortOrder === "desc";
 
-  const testItems = testsResult.tests.map((t) => ({ ...toTestItem(t), itemType: "test" }));
-  const bundleItems = bundlesResult.bundles.map((b) => ({ ...toBundleItem(b), itemType: "testBundle" }));
+  const testItems = testsResult.tests.map((t) => ({
+    ...toTestItem(t),
+    itemType: getFrontendItemType(t),
+  }));
+  const bundleItems = bundlesResult.bundles.map((b) => ({
+    ...toBundleItem(b),
+    itemType: "testBundle",
+  }));
   const merged = [...testItems, ...bundleItems].sort((a, b) => {
     const dateA = new Date(a.createdAt || 0).getTime();
     const dateB = new Date(b.createdAt || 0).getTime();
@@ -562,14 +642,27 @@ export const getTests = async (options = {}) => {
     category,
     sortBy = "createdAt",
     sortOrder = "desc",
-    applicableFor
+    applicableFor,
+    studentId,
   } = options;
 
-  const query = { isPublished: true, applicableFor:applicableFor|| "test" };
+  const query = { isPublished: true };
+  if (applicableFor) {
+    query.applicableFor = Array.isArray(applicableFor)
+      ? { $in: applicableFor }
+      : applicableFor;
+  } else {
+    query.applicableFor = { $in: DIRECT_PURCHASABLE_TEST_TYPES };
+  }
+
   if (questionBank) query.questionBank = questionBank;
   if (search) {
     const regex = { $regex: search, $options: "i" };
-    query.$or = [{ title: regex }, { description: regex },{applicableFor:regex}];
+    query.$or = [
+      { title: regex },
+      { description: regex },
+      { applicableFor: regex },
+    ];
   }
 
   const pageNum = parseInt(page);
@@ -592,7 +685,10 @@ export const getTests = async (options = {}) => {
     delete testObj.randomConfig;
     return testObj;
   });
+
   const tests = await attachOfferToList(testsRaw, "Test", "price");
+  await attachPurchasedFlagToTests(tests, studentId);
+
   const total = result.pagination.total;
 
   return {
@@ -840,6 +936,7 @@ export const getTestBundles = async (options = {}) => {
     category,
     sortBy = "createdAt",
     sortOrder = "desc",
+    studentId,
   } = options;
 
   const query = { isActive: true };
@@ -862,7 +959,9 @@ export const getTestBundles = async (options = {}) => {
     isActive: true,
   });
 
-  const bundles = await attachOfferToList(result.bundles, "TestSeries", "price");
+  const bundlesRaw = result.bundles.map((b) => (b.toObject ? b.toObject() : b));
+  const bundles = await attachOfferToList(bundlesRaw, "TestSeries", "price");
+  await attachPurchasedFlagToBundles(bundles, studentId);
 
   return {
     bundles,
