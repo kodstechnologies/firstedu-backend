@@ -56,38 +56,28 @@ categorySchema.index({ isPredefined: 1 });
 
 const Category = mongoose.models.Category || mongoose.model("Category", categorySchema);
 
-/**
- * Subcategory Schema: Purchasable Product nodes inside the taxonomy.
- * Extends the base Category via Mongoose Discriminator.
- * All product fields are optional — context depends on the Pillar.
- */
 const subcategorySchema = new mongoose.Schema(
   {
     // ─── Content & Media ────────────────────────────────
-    description:         { type: String, trim: true, default: null },
-    syllabus:            { type: String, trim: true, default: null },
+    description: { type: String, trim: true, default: null },
+    syllabus: { type: String, trim: true, default: null },
 
     // ─── Classification ─────────────────────────────────
     subjects: { type: [String], default: [] },
     /* @deprecated – no longer accepted via API. Field kept to preserve legacy data. */
-    tags:     { type: [String], default: [] },
+    tags: { type: [String], default: [] },
 
     // ─── Capacity ────────────────────────────────────────
     capacity: { type: Number, default: null, min: 1 },
 
     // ─── Pricing ─────────────────────────────────────────
-    price:           { type: Number, default: 0, min: 0 },
+    price: { type: Number, default: 0, min: 0 },
     discountedPrice: { type: Number, default: null, min: 0 },
-    isFree:          { type: Boolean, default: false },
+    isFree: { type: Boolean, default: false },
 
     // ─── Publishing ──────────────────────────────────────
     status: { type: String, enum: ["Draft", "Public"], default: "Draft" },
 
-    // ─── Offer / Coupon Policy ───────────────────────────────
-    // 'inherit'  = use the active global pillar-level offer/coupons
-    // 'custom'   = this category has its own override (offerOverrideId is set for offers,
-    //              or category-specific coupons exist); global is blocked
-    // 'none'     = no offer/coupon applies at all
     offerPolicy: {
       type: String,
       enum: ["inherit", "none", "custom"],

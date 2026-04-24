@@ -2,6 +2,62 @@ import Test from "../models/Test.js";
 import Category from "../models/Category.js";
 import { attachOfferToList } from "../utils/offerUtils.js";
 
+/**
+ * Walk the category tree upward from `startId` and return a
+ * human-readable path string like "School > Class 1 > Biology".
+ * A single Category.find() fetches all ancestors at once, then we
+ * link them by their `parent` references — no recursive DB calls.
+ */
+async function buildCategoryPath(startId) {
+  if (!startId) return '';
+
+  // 1. Seed: fetch the leaf category first
+  const leaf = await Category.findById(startId).select('name parent').lean();
+  if (!leaf) return '';
+
+  // 2. Collect every ancestor ID by walking parent refs in memory
+  //    We do one broad find() up the tree (max depth guard: 10)
+  const visited = new Map(); // id → { name, parent }
+  visited.set(leaf._id.toString(), leaf);
+
+  let currentParentId = leaf.parent ? leaf.parent.toString() : null;
+  const parentIdsToFetch = [];
+  while (currentParentId && !visited.has(currentParentId)) {
+    parentIdsToFetch.push(currentParentId);
+    currentParentId = null; // will be resolved after batch fetch
+  }
+
+  if (parentIdsToFetch.length > 0) {
+    // Fetch them all at once, then keep walking up
+    let idsToFetch = [leaf.parent];
+    for (let depth = 0; depth < 10; depth++) {
+      if (!idsToFetch.length) break;
+      const ancestors = await Category
+        .find({ _id: { $in: idsToFetch } })
+        .select('name parent')
+        .lean();
+      idsToFetch = [];
+      for (const anc of ancestors) {
+        visited.set(anc._id.toString(), anc);
+        if (anc.parent && !visited.has(anc.parent.toString())) {
+          idsToFetch.push(anc.parent);
+        }
+      }
+    }
+  }
+
+  // 3. Walk from leaf → root, collect names, then reverse
+  const parts = [];
+  let current = leaf;
+  while (current) {
+    parts.push(current.name);
+    const parentId = current.parent ? current.parent.toString() : null;
+    current = parentId ? visited.get(parentId) : null;
+  }
+  parts.reverse();
+  return parts.join(' > ');
+}
+
 export const createSchoolTest = async (data) => {
   // Legacy bypass: Tests now structurally link directly via Test module
   return true;
@@ -20,6 +76,9 @@ export const getSchoolTests = async (options = {}) => {
     query.isPublished = isPublished;
   }
 
+  // Build the full ancestor path once for this categoryId (all tests share the same category)
+  const categoryPath = await buildCategoryPath(categoryId);
+
   const [rawTests, total] = await Promise.all([
     Test.find(query)
       .skip(skip)
@@ -28,7 +87,12 @@ export const getSchoolTests = async (options = {}) => {
     Test.countDocuments(query),
   ]);
 
-  let processedTests = rawTests.map(test => (test.toObject ? test.toObject() : { ...test }));
+  let processedTests = rawTests.map(test => {
+    const obj = test.toObject ? test.toObject() : { ...test };
+    // Attach the pre-built full path, e.g. "School > Class 1 > Biology"
+    obj.categoryPath = categoryPath;
+    return obj;
+  });
 
   if (processedTests.length > 0 && categoryId) {
     const category = await Category.findById(categoryId).lean();

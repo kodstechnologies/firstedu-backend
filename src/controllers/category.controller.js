@@ -15,11 +15,19 @@ import { resolveAccessStatus, resolveBulkAccessStatus } from "../utils/categoryA
 const DEPRECATED_FIELDS = ['about', 'markingScheme', 'rankingCriteria', 'examDatesAndDetails', 'awards', 'rules'];
 
 /**
- * Strip deprecated fields from a single category object (mutates in place).
+ * Strip deprecated fields from a category object and its children recursively (mutates in place).
  */
 function stripDeprecatedFields(obj) {
   if (!obj || typeof obj !== 'object') return obj;
+  
+  // Strip from current level
   DEPRECATED_FIELDS.forEach(f => delete obj[f]);
+  
+  // Recursively strip from children if they exist
+  if (obj.children && Array.isArray(obj.children)) {
+    obj.children.forEach(stripDeprecatedFields);
+  }
+  
   return obj;
 }
 
@@ -161,6 +169,7 @@ export const resolveCategoryPathForStudent = asyncHandler(async (req, res) => {
 
   if (enrichedNode) {
     delete enrichedNode.children;
+    stripDeprecatedFields(enrichedNode);
   }
 
   return res.json(ApiResponse.success({
@@ -196,6 +205,13 @@ export const getCategoriesForStudent = asyncHandler(async (req, res) => {
     rootType,
     studentId,
   });
+
+  // Strip deprecated legacy fields from the entire tree/flat list
+  if (Array.isArray(result)) {
+    result.forEach(node => stripDeprecatedFields(node));
+  } else if (result && typeof result === 'object') {
+    stripDeprecatedFields(result);
+  }
 
   return res.status(200).json(
       ApiResponse.success(
