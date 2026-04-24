@@ -24,7 +24,7 @@ import {
   getAllPressAnnouncementsAdmin,
   getPressAnnouncementByIdAdmin,
 } from "../controllers/pressAnnouncement.controller.js";
-import { getAllQnAsLandingPage } from "../controllers/qna.controller.js";
+import { createQnA, getAllQnAsLandingPage } from "../controllers/qna.controller.js";
 import { getCategoriesForStudent } from "../controllers/category.controller.js";
 
 import { contactUs } from "../controllers/contact.controller.js";
@@ -50,6 +50,8 @@ import {
   getTicketCategories,
 } from "../controllers/studentSupport.controller.js";
 import { verifyJWT } from "../middleware/auth.middleware.js";
+import { getWorkshopById } from "../controllers/workshop.controller.js";
+import { getTournamentById } from "../controllers/tournament.controller.js";
 
 const router = express.Router();
 
@@ -75,11 +77,14 @@ router.get("/teacher-connect/jobs", getAllApplyJobsUser);
 router.get("/teacher-connect/jobs/:id", getApplyJobByIdUser);
 router.get("/blogs", getAllBlogs);
 router.get("/blogs/:id", getBlogById);
-router.post("/blog-request", uploadImage.single("image"), submitBlogRequest);
+router.post("/blog-request",verifyJWT, uploadImage.single("image"), submitBlogRequest);
 router.get("/courses", getCourses);
 router.get("/courses/:id", getCourseById);
+router.get("/workshops/:id", getWorkshopById);
+router.get("/tournaments/:id", getTournamentById);
 router.get("/events", getAllEvents);
 router.get("/qna", getAllQnAsLandingPage);
+router.post("/qna-request", verifyJWT, createQnA);
 router.get("/categories", getCategoriesForStudent);
 
 // ==================== CAREARS (JOBS) ====================
