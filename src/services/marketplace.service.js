@@ -733,13 +733,18 @@ export const initiateTestPayment = async (testId, studentId, paymentMethod, opti
   const price = Number(test.price) || 0;
 
   const shouldApplyOfferAndCoupon = test.applicableFor !== "challenge_yourself";
+  
+  const moduleTypeForOffer = test.applicableFor && test.applicableFor !== "test" 
+    ? test.applicableFor 
+    : "Test";
+
   const {
     amountToCharge,
     couponId,
     appliedOffer,
     appliedCoupon,
   } = shouldApplyOfferAndCoupon
-    ? await getAmountToCharge("Test", price, couponCode)
+    ? await getAmountToCharge(moduleTypeForOffer, price, couponCode)
     : {
         amountToCharge: price,
         couponId: null,
@@ -854,7 +859,10 @@ export const getTestById = async (testId) => {
     throw new ApiError(404, "Test not found");
   }
 
-  const testData = await attachOfferToItem(test, "Test", "price");
+  const moduleTypeForOffer = test.applicableFor && test.applicableFor !== "test" 
+    ? test.applicableFor 
+    : "Test";
+  const testData = await attachOfferToItem(test, moduleTypeForOffer, "price");
   delete testData.questions;
   delete testData.randomConfig;
   return testData;

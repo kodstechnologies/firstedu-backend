@@ -7,6 +7,7 @@ import {
   uploadImageToCloudinary,
   deleteFileFromCloudinary,
 } from "../utils/s3Upload.js";
+import { sendUpgradeNotificationForCategory } from "./notification.service.js";
 
 const TESTS_IMAGE_FOLDER = "tests";
 
@@ -32,6 +33,14 @@ export const createTest = async (data, adminId, file) => {
     createdBy: adminId,
   });
   await enrichTestsWithBankStats(test);
+
+  if (test.categoryId && test.isPublished) {
+    // Fire asynchronously
+    sendUpgradeNotificationForCategory(test.categoryId, test.title, "test", adminId).catch(err => {
+      console.error("Failed to send upgrade notification for test:", err);
+    });
+  }
+
   return test;
 };
 
@@ -143,7 +152,21 @@ export const updateTest = async (id, data, file) => {
   }
 
   const updated = await testRepository.updateTestById(id, data);
-  if (updated) await enrichTestsWithBankStats(updated);
+  if (updated) {
+    await enrichTestsWithBankStats(updated);
+
+    // If the test was just published, send the upgrade notification now
+    if (!existing.isPublished && updated.isPublished && updated.categoryId) {
+      sendUpgradeNotificationForCategory(
+        updated.categoryId,
+        updated.title,
+        "test",
+        updated.createdBy
+      ).catch((err) => {
+        console.error("Failed to send upgrade notification for updated test:", err);
+      });
+    }
+  }
   return updated;
 };
 

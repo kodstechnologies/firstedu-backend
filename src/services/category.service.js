@@ -11,6 +11,7 @@ import tournamentRepository from "../repository/tournament.repository.js";
 import { getApplicableOfferDetails } from "../utils/offerUtils.js";
 import Offer from "../models/Offer.js";
 import { assertSubtreeNotPurchased } from "../utils/purchaseGuard.js";
+import { sendUpgradeNotificationForCategory } from "./notification.service.js";
 
 /**
  * Recursively create children under a parent category.
@@ -91,7 +92,20 @@ export const createCategory = async (data, createdBy) => {
       resolvedRootType,
       0
     );
+    
+    if (data.parent) {
+      sendUpgradeNotificationForCategory(data.parent, data.name, "category", createdBy).catch(err => {
+        console.error("Failed to send upgrade notification for category:", err);
+      });
+    }
+
     return { category: created, children };
+  }
+
+  if (data.parent) {
+    sendUpgradeNotificationForCategory(data.parent, data.name, "category", createdBy).catch(err => {
+      console.error("Failed to send upgrade notification for category:", err);
+    });
   }
 
   return created;

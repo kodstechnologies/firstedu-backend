@@ -43,7 +43,7 @@ export const getSkillTestsForStudent = asyncHandler(async (req, res) => {
   // Resolve full post-purchase access status (new content detection + price diff)
   const accessStatus = await resolveAccessStatus(req.user._id, categoryId);
 
-  const result = await skillTestService.getSkillTests({ categoryId, page, limit });
+  const result = await skillTestService.getSkillTests({ categoryId, page, limit, isPublished: true });
 
   // Attach testStatus and testSessionId so the frontend can show Result / Retake buttons
   const testIds = result.tests.map(t => t._id);

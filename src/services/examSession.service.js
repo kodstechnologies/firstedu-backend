@@ -460,7 +460,7 @@ export const startExamSession = async (testId, studentId, options = {}) => {
   // For `challenge_yourfriends`, every participant must have purchased.
   if (test.price > 0 && test.applicableFor !== "everyday_challenge") {
     if (test.applicableFor === "challenge_yourfriends") {
-      const access = await checkStudentAccessForPaidTest(testId, studentId);
+      const access = await checkStudentAccessForPaidTest(testId, studentId, categoryId);
       if (!access.hasAccess) {
         throw new ApiError(403, "You need to purchase this test first");
       }
@@ -468,7 +468,7 @@ export const startExamSession = async (testId, studentId, options = {}) => {
       const access =
         test.applicableFor === "challenge_yourself"
           ? await checkStudentAccessForPaidChallengeYourselfTest(testId, studentId)
-          : await checkStudentAccessForPaidTest(testId, studentId);
+          : await checkStudentAccessForPaidTest(testId, studentId, categoryId);
       if (!access.hasAccess) {
         throw new ApiError(
           403,
@@ -673,7 +673,7 @@ export const getExamInstructions = async (testId, studentId, options = {}) => {
 
   if (canStart && test.price > 0 && test.applicableFor !== "everyday_challenge") {
     if (test.applicableFor === "challenge_yourfriends") {
-      const access = await checkStudentAccessForPaidTest(testId, studentId);
+      const access = await checkStudentAccessForPaidTest(testId, studentId, categoryId);
       if (!access.hasAccess) {
         canStart = false;
         blockReason = "You need to purchase this test first";
@@ -684,7 +684,7 @@ export const getExamInstructions = async (testId, studentId, options = {}) => {
       const access =
         test.applicableFor === "challenge_yourself"
           ? await checkStudentAccessForPaidChallengeYourselfTest(testId, studentId)
-          : await checkStudentAccessForPaidTest(testId, studentId);
+          : await checkStudentAccessForPaidTest(testId, studentId, categoryId);
       if (!access.hasAccess) {
         canStart = false;
         blockReason =

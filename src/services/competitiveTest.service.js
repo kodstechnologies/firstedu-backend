@@ -8,13 +8,19 @@ export const createCompetitiveTest = async (data) => {
 };
 
 export const getCompetitiveTests = async (options = {}) => {
-  const { categoryId, page = 1, limit = 10, search } = options;
+  const { categoryId, page = 1, limit = 10, search, isPublished } = options;
   const pageNum = parseInt(page);
   const limitNum = parseInt(limit);
   const skip = (pageNum - 1) * limitNum;
 
   // Use Test.categoryId as the strict source of truth — tests belong only to the subcategory they were created in
   const query = { categoryId };
+  // When isPublished flag is provided, filter by publish status.
+  // Student routes pass isPublished: true so draft tests are never exposed.
+  // Admin routes omit this flag so all tests (including drafts) are returned.
+  if (isPublished !== undefined) {
+    query.isPublished = isPublished;
+  }
   if (search) {
     query.title = { $regex: search, $options: 'i' };
   }

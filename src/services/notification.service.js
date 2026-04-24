@@ -5,6 +5,8 @@ import studentSessionRepository from "../repository/studentSession.repository.js
 import CoursePurchase from "../models/CoursePurchase.js";
 import TestPurchase from "../models/TestPurchase.js";
 import EventRegistration from "../models/EventRegistration.js";
+import CategoryPurchase from "../models/CategoryPurchase.js";
+import categoryRepository from "../repository/category.repository.js";
 import {
   sendNotificationToDevice,
   sendNotificationToMultipleDevices,
@@ -561,5 +563,55 @@ export const markAllNotificationsAsRead = async (studentId) => {
 export const getUnreadCount = async (studentId) => {
   const count = await notificationRepository.getUnreadCount(studentId);
   return count;
+};
+
+/**
+ * Send an upgrade notification to all students who purchased a specific category or any of its ancestors.
+ * Used when a new test or subcategory is added.
+ */
+export const sendUpgradeNotificationForCategory = async (targetCategoryId, contentName, contentType, sentBy) => {
+  try {
+    if (!targetCategoryId) return;
+
+    // 1. Get ancestors of targetCategoryId
+    const ancestors = [];
+    let currentId = targetCategoryId.toString();
+    while (currentId) {
+      ancestors.push(currentId);
+      const category = await categoryRepository.findById(currentId);
+      if (category && category.parent) {
+        currentId = category.parent._id ? category.parent._id.toString() : category.parent.toString();
+      } else {
+        currentId = null;
+      }
+    }
+
+    // 2. Find all unique students who purchased any of these ancestors
+    const purchases = await CategoryPurchase.find({
+      categoryId: { $in: ancestors },
+      paymentStatus: "completed"
+    }).select("student").lean();
+
+    const studentIds = [...new Set(purchases.map(p => p.student.toString()))];
+
+    if (studentIds.length === 0) return;
+
+    // 3. Send notification
+    const title = contentType === "test" ? "New Test Added!" : "New Category Added!";
+    const body = contentType === "test" 
+      ? `New test '${contentName}' added, you can upgrade.`
+      : `New subcategory '${contentName}' added, you can upgrade.`;
+
+    // sendNotificationToMultipleStudents already exists in this file
+    await sendNotificationToMultipleStudents(
+      studentIds, 
+      title, 
+      body, 
+      { type: "upgrade", targetCategoryId: targetCategoryId.toString(), contentType }, 
+      sentBy
+    );
+  } catch (error) {
+    console.error("Error in sendUpgradeNotificationForCategory:", error);
+  }
 };
 
