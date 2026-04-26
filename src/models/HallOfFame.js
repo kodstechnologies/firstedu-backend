@@ -4,7 +4,7 @@ const hallOfFameSchema = new mongoose.Schema(
   {
     eventType: {
       type: String,
-      enum: ["tournament"],
+      enum: ["tournament", "olympiad"],
       required: true,
     },
     eventId: {
@@ -14,7 +14,7 @@ const hallOfFameSchema = new mongoose.Schema(
     },
     eventModel: {
       type: String,
-      enum: ["Tournament"],
+      enum: ["Tournament", "OlympiadTest"],
       required: true,
     },
     winners: [
@@ -58,6 +58,7 @@ const hallOfFameSchema = new mongoose.Schema(
   }
 );
 
+hallOfFameSchema.index({ eventType: 1, eventId: 1 }, { unique: true });
 hallOfFameSchema.index({ eventType: 1, eventDate: -1 });
 hallOfFameSchema.index({ "winners.position": 1 });
 

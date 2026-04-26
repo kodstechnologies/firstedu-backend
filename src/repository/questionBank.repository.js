@@ -52,11 +52,29 @@ const create = async (data) => {
   }
 };
 
+// Deep-populate helper: populates parent chain 3 levels deep (covers Pillar › Class › Subject)
+const CATEGORY_DEEP_POPULATE = {
+  path: "categories",
+  select: "name parent order rootType",
+  populate: {
+    path: "parent",
+    select: "name parent order rootType",
+    populate: {
+      path: "parent",
+      select: "name parent order rootType",
+      populate: {
+        path: "parent",
+        select: "name order rootType",
+      },
+    },
+  },
+};
+
 const findById = async (id, populate = true) => {
   try {
     let q = QuestionBank.findById(id);
     if (populate) {
-      q = q.populate("categories", "name parent order");
+      q = q.populate(CATEGORY_DEEP_POPULATE);
     }
     return await q;
   } catch (error) {
@@ -88,7 +106,7 @@ const findAll = async (filter = {}, options = {}) => {
 
     const [items, total] = await Promise.all([
       QuestionBank.find(query)
-        .populate("categories", "name parent order")
+        .populate(CATEGORY_DEEP_POPULATE)
         .sort(sort)
         .skip(skip)
         .limit(limitNum),

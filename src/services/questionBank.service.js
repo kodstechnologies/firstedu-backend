@@ -2,6 +2,7 @@ import { ApiError } from "../utils/ApiError.js";
 import questionBankRepository from "../repository/questionBank.repository.js";
 import questionRepository from "../repository/question.repository.js";
 import categoryRepository from "../repository/category.repository.js";
+import Test from "../models/Test.js";
 
 const validateQuestionOptions = (questionType, options) => {
   if (
@@ -459,6 +460,15 @@ export const toggleSectionWiseQuestions = async (id, useSectionWiseQuestions) =>
 export const deleteQuestionBank = async (id) => {
   const existing = await questionBankRepository.findById(id);
   if (!existing) throw new ApiError(404, "Question bank not found");
+  
+  const usedInTest = await Test.findOne({ questionBank: id });
+  if (usedInTest) {
+    throw new ApiError(
+      400,
+      "Cannot delete question bank because it is used in one or more tests. Please delete the associated tests first."
+    );
+  }
+
   await questionBankRepository.deleteQuestionsByBankId(id);
   return await questionBankRepository.deleteById(id);
 };

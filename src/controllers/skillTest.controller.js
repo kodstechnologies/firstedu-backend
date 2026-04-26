@@ -65,9 +65,25 @@ export const getSkillTestsForStudent = asyncHandler(async (req, res) => {
   }).lean();
   const purchasedTestIds = new Set(testPurchases.map(p => p.test.toString()));
 
+  // The original date the student purchased this category (never changes, even after upgrades)
+  const originalBuyDate = accessStatus.purchase?.createdAt;
+  const THIRTY_DAYS_AGO = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
   const testsWithStatus = result.tests.map(test => {
     const session = sessionMap[test._id];
 
+    // Core rules for NEW badge
+    const isAddedAfterPurchase = originalBuyDate
+      ? new Date(test.createdAt) > new Date(originalBuyDate)
+      : false;
+    const isUnder30Days = new Date(test.createdAt) > THIRTY_DAYS_AGO;
+    const isUnattempted = !session; // No exam session exists
+
+    // isNew: test was added AFTER the student's original purchase AND (is under 30 days old OR never attempted).
+    const isNew = isAddedAfterPurchase && (isUnder30Days || isUnattempted);
+
+    // isNewLocked: test added after latest upgrade checkpoint AND not individually purchased.
+    // Controls whether the test is locked (access gate).
     let isNewLocked = false;
     if (accessStatus.hasAccess && accessStatus.purchaseDate) {
       if (new Date(test.createdAt) > new Date(accessStatus.purchaseDate)) {
@@ -81,6 +97,7 @@ export const getSkillTestsForStudent = asyncHandler(async (req, res) => {
       ...test,
       testStatus: session ? session.status : null,
       testSessionId: session ? session._id : null,
+      isNew,
       isNewLocked,
       isPurchased: purchasedTestIds.has(test._id.toString())
     };
@@ -94,8 +111,9 @@ export const getSkillTestsForStudent = asyncHandler(async (req, res) => {
         ...result.pagination,
         hasAccess:     accessStatus.hasAccess,
         upgradable:    accessStatus.upgradable,
-        upgradeCost:   accessStatus.upgradeCost,
-        isFreeUpgrade: accessStatus.isFreeUpgrade,
+        // Only expose a cost when there is actually something to upgrade.
+        upgradeCost:   accessStatus.upgradable ? accessStatus.upgradeCost : 0,
+        isFreeUpgrade: accessStatus.upgradable ? accessStatus.isFreeUpgrade : false,
         hasNewContent: accessStatus.upgradable,
       }
     )

@@ -72,6 +72,10 @@ const testSchema = new mongoose.Schema(
       ref: "Admin",
       required: true,
     },
+    upgradeNotificationSent: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,

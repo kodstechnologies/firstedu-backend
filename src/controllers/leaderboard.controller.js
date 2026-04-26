@@ -6,8 +6,10 @@ import {
   getOlympiadLeaderboard,
   getCompletedOlympiads,
 } from "../services/studentOlympiad.service.js";
+import testRepository from "../repository/test.repository.js";
+import examSessionRepository from "../repository/examSession.repository.js";
 
-const VALID_TYPES = ["tournament", "olympiad"];
+const VALID_TYPES = ["tournament", "olympiad", "standalone_test"];
 
 /**
  * Student-facing: aggregated leaderboard API for olympiads and tournaments.
@@ -32,7 +34,7 @@ export const getLeaderboardsForStudent = asyncHandler(async (req, res) => {
   const normalizedType = String(type || "").toLowerCase();
 
   if (!VALID_TYPES.includes(normalizedType)) {
-    throw new ApiError(400, "Invalid type. Use: tournament or olympiad");
+    throw new ApiError(400, "Invalid type. Use: tournament, olympiad, or standalone_test");
   }
 
   const pageNum = parseInt(page) || 1;
@@ -57,6 +59,33 @@ export const getLeaderboardsForStudent = asyncHandler(async (req, res) => {
             leaderboard: result.leaderboard,
           },
           "Tournament leaderboard fetched successfully"
+        )
+      );
+    }
+
+    if (normalizedType === "standalone_test") {
+      const test = await testRepository.findTestById(eventId);
+      if (!test) throw new ApiError(404, "Test not found");
+
+      const ranked = await examSessionRepository.getRankedByTest(eventId, null, 1000);
+      const leaderboard = ranked.map((r, index) => ({
+        rank: index + 1,
+        name: r.name,
+        score: r.score,
+        maxScore: r.maxScore,
+        completedAt: r.completedAt,
+      }));
+
+      return res.status(200).json(
+        ApiResponse.success(
+          {
+            type: "standalone_test",
+            eventId,
+            title: test.title,
+            stage: null,
+            leaderboard,
+          },
+          "Test leaderboard fetched successfully"
         )
       );
     }
@@ -123,6 +152,59 @@ export const getLeaderboardsForStudent = asyncHandler(async (req, res) => {
             limit: limitNum,
             total: items.length,
             pages: 1,
+          },
+        },
+        "Leaderboards fetched successfully"
+      )
+    );
+  }
+
+  if (normalizedType === "standalone_test") {
+    // Only published tests that are meant for direct purchase or standalone pillars
+    const result = await testRepository.findAllTests({
+      isPublished: true,
+      applicableFor: { $in: ["Competitive", "School", "Skill Development"] }
+    }, { page: pageNum, limit: limitNum, sortBy: "createdAt", sortOrder: "desc" });
+
+    const tests = result.tests || [];
+
+    // Fetch all leaderboards in parallel
+    const leaderboards = tests.length
+      ? await Promise.all(
+          tests.map((t) => examSessionRepository.getRankedByTest(t._id, null, 1000))
+        )
+      : [];
+
+    const items = tests.map((t, i) => {
+      const ranked = leaderboards[i];
+      const lb = ranked.map((r, index) => ({
+        rank: index + 1,
+        name: r.name,
+        score: r.score,
+        maxScore: r.maxScore,
+        completedAt: r.completedAt,
+      }));
+
+      return {
+        type: "standalone_test",
+        eventId: t._id,
+        title: t.title,
+        stage: null,
+        status: "completed", // treating tests as completed since they are always available
+        leaderboard: lb,
+        totalParticipants: lb.length,
+      };
+    });
+
+    return res.status(200).json(
+      ApiResponse.success(
+        {
+          items,
+          pagination: {
+            page: pageNum,
+            limit: limitNum,
+            total: result.pagination.total,
+            pages: result.pagination.pages,
           },
         },
         "Leaderboards fetched successfully"

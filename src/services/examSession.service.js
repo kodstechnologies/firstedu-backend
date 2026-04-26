@@ -612,7 +612,7 @@ export const startExamSession = async (testId, studentId, options = {}) => {
     timeExpiredAt: null,
   }));
 
-  const maxScore = questions.reduce((sum, q) => sum + (q.marks || 0), 0);
+  const maxScore = questions.filter((q) => !q.isParent).reduce((sum, q) => sum + (q.marks || 0), 0);
 
   const session = await examSessionRepository.create({
     student: studentId,
@@ -659,8 +659,9 @@ export const getExamInstructions = async (testId, studentId, options = {}) => {
   }
 
   const totalQuestions = questions.filter((q) => !getNormalizedId(q?.parentQuestionId)).length;
-  const totalMarks = questions.reduce((sum, q) => sum + (q.marks || 0), 0);
-  const totalNegativeMarks = questions.reduce((sum, q) => sum + (q.negativeMarks || 0), 0);
+  const nonParentQuestions = questions.filter((q) => !q.isParent);
+  const totalMarks = nonParentQuestions.reduce((sum, q) => sum + (q.marks || 0), 0);
+  const totalNegativeMarks = nonParentQuestions.reduce((sum, q) => sum + (q.negativeMarks || 0), 0);
 
   let canStart = true;
   let blockReason = null;
@@ -2009,20 +2010,21 @@ export const getExamResults = async (sessionId, studentId) => {
     myRank = myRankIndex >= 0 ? myRankIndex + 1 : null;
     totalParticipants = rankedByTest.length;
   }
-  const earnedMarks = allQuestions.reduce(
+  const nonParentResults = allQuestions.filter((q) => !q.question?.isParent);
+  const earnedMarks = nonParentResults.reduce(
     (sum, q) => sum + (q.isCorrect ? Number(q.marks || 0) : 0),
     0
   );
-  const negativeMarksDeducted = allQuestions.reduce(
+  const negativeMarksDeducted = nonParentResults.reduce(
     (sum, q) => sum + (!q.isCorrect && q.status !== "skipped" ? Number(q.negativeMarks || 0) : 0),
     0
   );
-  const totalNegativeMarksPossible = allQuestions.reduce(
+  const totalNegativeMarksPossible = nonParentResults.reduce(
     (sum, q) => sum + Number(q.negativeMarks || 0),
     0
   );
   const sectionStatsMap = new Map();
-  allQuestions.forEach((q) => {
+  nonParentResults.forEach((q) => {
     const sectionIndex = Number.isInteger(q?.question?.sectionIndex)
       ? q.question.sectionIndex
       : 0;

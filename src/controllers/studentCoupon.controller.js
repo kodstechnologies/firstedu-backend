@@ -20,14 +20,14 @@ export const applyCoupon = asyncHandler(async (req, res) => {
     );
   }
 
-  const { code, amount, itemType = "all" } = value;
+  const { code, amount, itemType = "all", categoryId = null } = value;
   const purchaseAmount = Number(amount) || 0;
 
   if (purchaseAmount < 0) {
     throw new ApiError(400, "Amount must be a positive number");
   }
 
-  const result = await couponService.validateCoupon(code, purchaseAmount, itemType);
+  const result = await couponService.validateCoupon(code, purchaseAmount, itemType, categoryId);
 
   const discountedPrice = Math.max(0, purchaseAmount - result.discount);
 

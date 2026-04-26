@@ -25,6 +25,7 @@ const applyCoupon = Joi.object({
   itemType: Joi.string()
     .valid("test", "testBundle", "course","Olympiads", "tournament", "workshop", "ecommerce", "all", "LiveCompetition", "liveCompetition", "live_competition","competitionCategory", "School", "Competitive", "Skill Development")
     .default("all"),
+  categoryId: Joi.string().optional().allow(null, ""),
 });
 
 const updateCoupon = Joi.object({

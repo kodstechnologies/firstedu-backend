@@ -2,6 +2,8 @@ import { ApiError } from "../utils/ApiError.js";
 import hallOfFameRepository from "../repository/hallOfFame.repository.js";
 import tournamentRepository from "../repository/tournament.repository.js";
 import examSessionRepository from "../repository/examSession.repository.js";
+import OlympiadTest from "../models/OlympiadTest.js";
+import EventRegistration from "../models/EventRegistration.js";
 
 // Helper function to get prize based on position
 const getPrizeForPosition = (position) => {
@@ -13,14 +15,15 @@ const getPrizeForPosition = (position) => {
   return prizes[position] || `Position ${position}`;
 };
 
-// Automatically generate Hall of Fame entry for completed Tournaments
+// Automatically generate Hall of Fame entry for completed Tournaments and Olympiads
 export const autoGenerateHallOfFame = async (eventType, eventId, topN = 3) => {
-  if (eventType !== "tournament") {
-    throw new ApiError(400, "Hall of Fame only supports Tournaments");
+  if (eventType !== "tournament" && eventType !== "olympiad") {
+    throw new ApiError(400, "Hall of Fame only supports Tournaments and Olympiads");
   }
 
   const eventModelMap = {
     tournament: "Tournament",
+    olympiad: "OlympiadTest",
   };
 
   // Check if Hall of Fame entry already exists
@@ -37,51 +40,70 @@ export const autoGenerateHallOfFame = async (eventType, eventId, topN = 3) => {
   let event;
   let winners = [];
   let eventDate;
+  let testId;
+  let registeredStudentIds = null;
 
   if (eventType === "tournament") {
     event = await tournamentRepository.findById(eventId);
-    if (!event) {
-      throw new ApiError(404, "Tournament not found");
-    }
+    if (!event) throw new ApiError(404, "Tournament not found");
 
     // Get winners from the final stage
     const finalStage = event.stages[event.stages.length - 1];
-    if (!finalStage) {
-      throw new ApiError(400, "Tournament has no stages");
-    }
+    if (!finalStage) throw new ApiError(400, "Tournament has no stages");
+    
+    testId = finalStage.test;
+    eventDate = finalStage.endTime;
+  } else if (eventType === "olympiad") {
+    event = await OlympiadTest.findById(eventId);
+    if (!event) throw new ApiError(404, "Olympiad not found");
+    if (!event.testId) throw new ApiError(400, "Olympiad has no test mapped");
 
-    const sessionsResult = await examSessionRepository.findAll({
-      test: finalStage.test,
-      status: "completed",
-      score: { $ne: null },
-    }, {
-      page: 1,
-      limit: 1000, // Get more to sort properly
-      sortBy: "score",
-      sortOrder: "desc",
-    });
+    testId = event.testId;
+    eventDate = event.resultDeclarationDate || event.endTime || new Date();
 
-    // Sort by score desc, then by completion time (earlier is better)
-    const sessions = sessionsResult.sessions
-      .sort((a, b) => {
-        if (b.score !== a.score) return b.score - a.score;
-        return new Date(a.completedAt) - new Date(b.completedAt);
-      })
-      .slice(0, topN)
-      .map(session => ({
-        ...session.toObject(),
-        student: session.student || { _id: session.student },
-      }));
+    const registrations = await EventRegistration.find({
+      eventType: "olympiad",
+      eventId: eventId,
+      paymentStatus: "completed",
+    }).select("student").lean();
+    registeredStudentIds = registrations.map((r) => r.student?.toString()).filter(Boolean);
+    if (registeredStudentIds.length === 0) return null;
+  }
 
-    winners = sessions.map((session, index) => ({
-      position: index + 1,
-      student: session.student._id,
-      score: session.score || 0,
-      prize: getPrizeForPosition(index + 1),
+  const query = {
+    test: testId,
+    status: "completed",
+    score: { $ne: null },
+  };
+  if (registeredStudentIds) {
+    query.student = { $in: registeredStudentIds };
+  }
+
+  const sessionsResult = await examSessionRepository.findAll(query, {
+    page: 1,
+    limit: 1000, // Get more to sort properly
+    sortBy: "score",
+    sortOrder: "desc",
+  });
+
+  // Sort by score desc, then by completion time (earlier is better)
+  const sessions = sessionsResult.sessions
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return new Date(a.completedAt) - new Date(b.completedAt);
+    })
+    .slice(0, topN)
+    .map(session => ({
+      ...session.toObject(),
+      student: session.student || { _id: session.student },
     }));
 
-    eventDate = finalStage.endTime;
-  }
+  winners = sessions.map((session, index) => ({
+    position: index + 1,
+    student: session.student._id,
+    score: session.score || 0,
+    prize: getPrizeForPosition(index + 1),
+  }));
 
   if (winners.length === 0) {
     // Don't create entry if no winners yet
@@ -108,22 +130,40 @@ const updateExistingHallOfFame = async (eventType, eventId, topN = 3) => {
   if (!entry) return null;
 
   let testId;
+  let registeredStudentIds = null;
 
   if (eventType === "tournament") {
     const tournament = await tournamentRepository.findById(eventId);
     if (!tournament || tournament.stages.length === 0) return entry;
     const finalStage = tournament.stages[tournament.stages.length - 1];
     testId = finalStage.test;
+  } else if (eventType === "olympiad") {
+    const event = await OlympiadTest.findById(eventId);
+    if (!event || !event.testId) return entry;
+    testId = event.testId;
+
+    const registrations = await EventRegistration.find({
+      eventType: "olympiad",
+      eventId: eventId,
+      paymentStatus: "completed",
+    }).select("student").lean();
+    registeredStudentIds = registrations.map((r) => r.student?.toString()).filter(Boolean);
+    if (registeredStudentIds.length === 0) return entry;
   } else {
     return entry;
   }
 
-  // Get all completed sessions for this test, sorted by score
-  const sessionsResult = await examSessionRepository.findAll({
+  const query = {
     test: testId,
     status: "completed",
     score: { $ne: null },
-  }, {
+  };
+  if (registeredStudentIds) {
+    query.student = { $in: registeredStudentIds };
+  }
+
+  // Get all completed sessions for this test, sorted by score
+  const sessionsResult = await examSessionRepository.findAll(query, {
     page: 1,
     limit: 1000, // Get more to sort properly
     sortBy: "score",
@@ -179,21 +219,41 @@ const ensureHallOfFameGeneratedForCompletedEvents = async (eventType) => {
       }
     }
   }
+
+  if (!eventType || eventType === "olympiad") {
+    const olympiads = await OlympiadTest.find(
+      {
+        $or: [
+          { resultDeclarationDate: { $lte: now } },
+          { resultDeclarationDate: null, endTime: { $lte: now } },
+        ],
+      },
+      null,
+      { sort: { updatedAt: -1 }, limit: 200 }
+    );
+
+    for (const olympiad of olympiads) {
+      if (!olympiad.testId) continue;
+      try {
+        await autoGenerateHallOfFame("olympiad", olympiad._id, 3);
+      } catch (_) {
+        // Ignore generation errors
+      }
+    }
+  }
 };
 
 export const getHallOfFameEntries = async (options = {}) => {
   const { page = 1, limit = 10, eventType } = options;
 
-  const query = {};
+  const query = { eventModel: { $in: ["Tournament", "OlympiadTest"] } };
   if (eventType) {
-    if (eventType !== "tournament") {
-      throw new ApiError(400, "Invalid event type. Only tournament is supported.");
+    if (eventType !== "tournament" && eventType !== "olympiad") {
+      throw new ApiError(400, "Invalid event type. Only tournament and olympiad are supported.");
     }
     query.eventType = eventType;
   } else {
-    // If no specific eventType is provided, explicitly enforce "tournament" only
-    // to bypass any legacy "olympiad" docs that would crash mongoose on populate.
-    query.eventType = "tournament";
+    query.eventType = { $in: ["tournament", "olympiad"] };
   }
 
   await ensureHallOfFameGeneratedForCompletedEvents(eventType);

@@ -61,7 +61,7 @@ const createQuestion = Joi.object({
       otherwise: Joi.optional().allow(null),
     }),
   }),
-  explanation: Joi.string().trim().optional(),
+  explanation: Joi.string().trim().required(),
   subject: Joi.string().trim().optional(),
   questionBank: Joi.string().optional(),
   sectionIndex: Joi.number().min(0).optional(),
@@ -109,7 +109,7 @@ const updateQuestion = Joi.object({
   correctAnswer: Joi.alternatives()
     .try(Joi.string(), Joi.number(), Joi.boolean(), Joi.array())
     .optional(),
-  explanation: Joi.string().trim().optional(),
+  explanation: Joi.string().trim().required(),
   subject: Joi.string().trim().optional(),
   questionBank: Joi.string().optional().allow(null),
   sectionIndex: Joi.number().min(0).optional(),

@@ -129,10 +129,13 @@ export const resolveAccessStatus = async (studentId, categoryId) => {
     };
   }
 
-  // ── 3. Fetch current live category data ───────────────────────────────────
-  const category = await Category.findById(categoryId).lean();
-  if (!category) {
-    // Category deleted — treat as no access to prevent phantom access
+  // ── 3. Fetch the category the student actually PURCHASED (not the child being viewed) ──
+  // This fixes the nested price bug: if student bought class1 (free) and we're viewing
+  // bio (₹1000), we must compare class1's current price vs what was paid — not bio's price.
+  const purchasedCategoryId = purchase.categoryId?.toString?.() || purchase.categoryId;
+  const purchasedCategory = await Category.findById(purchasedCategoryId).lean();
+  if (!purchasedCategory) {
+    // Purchased category deleted — treat as no access
     return {
       hasAccess: false,
       upgradable: false,
@@ -145,7 +148,8 @@ export const resolveAccessStatus = async (studentId, categoryId) => {
     };
   }
 
-  const currentPrice = await getEffectivePrice(category);
+  // Price comparison is always against the PURCHASED node, not the child node
+  const currentPrice = await getEffectivePrice(purchasedCategory);
 
   const paidSoFar = purchase.purchasePrice || 0;
 
@@ -284,7 +288,15 @@ export const resolveBulkAccessStatus = async (studentId, nodes, tree, rootType) 
         };
       }
 
-      const currentPrice = getEffectivePrice(node);
+      // Fix: compare against the price of the category the student actually purchased,
+      // not the child node being displayed.
+      const purchasedCatId = purchase.categoryId?.toString?.() || purchase.categoryId;
+      const purchasedNode = currentLayer.find
+        ? currentLayer.find(n => n._id?.toString?.() === purchasedCatId)
+        : null;
+      // Fall back to node itself if we can't find the purchased node in-memory tree
+      const nodeForPrice = purchasedNode || node;
+      const currentPrice = getEffectivePrice(nodeForPrice);
       const paidSoFar = purchase.purchasePrice || 0;
       const priceDiff = currentPrice - paidSoFar;
       const upgradeCost = Math.max(0, priceDiff);

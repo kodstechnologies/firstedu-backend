@@ -34,11 +34,15 @@ export const createTest = async (data, adminId, file) => {
   });
   await enrichTestsWithBankStats(test);
 
-  if (test.categoryId && test.isPublished) {
+  const isNowPublished = test.isPublished === true || String(test.isPublished) === "true";
+
+  if (test.categoryId && isNowPublished) {
     // Fire asynchronously
     sendUpgradeNotificationForCategory(test.categoryId, test.title, "test", adminId).catch(err => {
       console.error("Failed to send upgrade notification for test:", err);
     });
+    // Mark as notified to prevent duplicate notifications
+    await testRepository.updateTestById(test._id, { upgradeNotificationSent: true });
   }
 
   return test;
@@ -155,8 +159,11 @@ export const updateTest = async (id, data, file) => {
   if (updated) {
     await enrichTestsWithBankStats(updated);
 
-    // If the test was just published, send the upgrade notification now
-    if (!existing.isPublished && updated.isPublished && updated.categoryId) {
+    // Strict checks for both existing and updated status
+    const isNowPublished = updated.isPublished === true || String(updated.isPublished) === "true";
+
+    // If the test was just published and hasn't notified yet, send the upgrade notification now
+    if (isNowPublished && !existing.upgradeNotificationSent && updated.categoryId) {
       sendUpgradeNotificationForCategory(
         updated.categoryId,
         updated.title,
@@ -165,6 +172,8 @@ export const updateTest = async (id, data, file) => {
       ).catch((err) => {
         console.error("Failed to send upgrade notification for updated test:", err);
       });
+      // Mark as notified so future edits don't spam students
+      await testRepository.updateTestById(id, { upgradeNotificationSent: true });
     }
   }
   return updated;

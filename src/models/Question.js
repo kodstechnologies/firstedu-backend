@@ -18,7 +18,11 @@ const connectedSubQuestionSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.Mixed,
       required: true,
     },
-    explanation: { type: String, trim: true },
+    explanation: { 
+      type: String, 
+      trim: true,
+      required: [true, 'Explanation is required. Please provide a detailed solution explanation for this question.']
+    },
     marks: { type: Number, default: 1 },
     negativeMarks: { type: Number, default: 0 },
   },
@@ -43,7 +47,11 @@ const questionSchema = new mongoose.Schema(
         return this.questionType !== "connected";
       },
     },
-    explanation: { type: String, trim: true },
+    explanation: { 
+      type: String, 
+      trim: true,
+      required: [true, 'Explanation is required. Please provide a detailed solution explanation for this question.']
+    },
     subject: { type: String, trim: true },
     questionBank: {
       type: mongoose.Schema.Types.ObjectId,

@@ -192,17 +192,20 @@ export const getAggregatedOrderHistory = async (
       amountUnit: "points",
       data: c,
     })),
-    ...categoryPurchases.map((p) => ({
-      id: p._id,
-      type: p.pillarType,
-      date: p.createdAt,
-      title: p.categoryId?.name || "Category",
-      itemName: p.categoryId?.name || "Category",
-      amount: toNumber(p.purchasePrice),
-      paymentMethod: normalizePaymentMethod(p.paymentId, p.purchasePrice),
-      status: p.paymentStatus,
-      data: p,
-    })),
+    ...categoryPurchases.map((p) => {
+      const catName = p.categoryId?.name ? `${p.pillarType} - ${p.categoryId.name}` : p.pillarType || "Category";
+      return {
+        id: p._id,
+        type: p.pillarType,
+        date: p.createdAt,
+        title: catName,
+        itemName: catName,
+        amount: toNumber(p.purchasePrice),
+        paymentMethod: normalizePaymentMethod(p.paymentId, p.purchasePrice),
+        status: p.paymentStatus,
+        data: p,
+      };
+    }),
   ].sort((a, b) => new Date(b.date) - new Date(a.date));
 
   const normalizeType = (value) => {
@@ -213,6 +216,10 @@ export const getAggregatedOrderHistory = async (
       "test-bundle": "testbundle",
       test_bundle: "testbundle",
       testbundle: "testbundle",
+      olympiad: "olympiads",
+      olympiads: "olympiads",
+      "skill development": "skill-development",
+      "skill_development": "skill-development",
     };
     return aliases[normalized] || normalized;
   };
