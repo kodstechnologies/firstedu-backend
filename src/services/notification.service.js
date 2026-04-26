@@ -575,10 +575,14 @@ export const sendUpgradeNotificationForCategory = async (targetCategoryId, conte
 
     // 1. Get ancestors of targetCategoryId
     const ancestors = [];
+    const categoryNames = [];
     let currentId = targetCategoryId.toString();
     while (currentId) {
       ancestors.push(currentId);
       const category = await categoryRepository.findById(currentId);
+      if (category) {
+        categoryNames.unshift(category.name);
+      }
       if (category && category.parent) {
         currentId = category.parent._id ? category.parent._id.toString() : category.parent.toString();
       } else {
@@ -597,10 +601,11 @@ export const sendUpgradeNotificationForCategory = async (targetCategoryId, conte
     if (studentIds.length === 0) return;
 
     // 3. Send notification
+    const fullPath = categoryNames.length > 0 ? ` (${categoryNames.join(' > ')})` : '';
     const title = contentType === "test" ? "New Test Added!" : "New Category Added!";
     const body = contentType === "test" 
-      ? `New test '${contentName}' added, you can upgrade.`
-      : `New subcategory '${contentName}' added, you can upgrade.`;
+      ? `A new test '${contentName}' has been added in${fullPath}. You can now access it!`
+      : `A new subcategory '${contentName}' has been added in${fullPath}. You can now access it!`;
 
     // sendNotificationToMultipleStudents already exists in this file
     await sendNotificationToMultipleStudents(

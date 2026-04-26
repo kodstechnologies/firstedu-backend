@@ -94,6 +94,7 @@ export const getLayoutForDate = async (dateSeed) => {
   // First occurrence wins (Bronze → … order). Later stages can sample the same testId;
   // overwriting would make getSlotForTest point at a locked level while the UI still shows Bronze.
   const testIdToSlot = new Map();
+  const testIdToSlots = new Map();
   stagesWithLevels.forEach((s) => {
     s.levels.forEach((lev) => {
       if (!lev.testId) return;
@@ -101,9 +102,13 @@ export const getLayoutForDate = async (dateSeed) => {
       if (!testIdToSlot.has(key)) {
         testIdToSlot.set(key, { stage: s.name, level: lev.level });
       }
+      if (!testIdToSlots.has(key)) {
+        testIdToSlots.set(key, []);
+      }
+      testIdToSlots.get(key).push({ stage: s.name, level: lev.level });
     });
   });
-  return { stagesWithLevels, testIdToSlot };
+  return { stagesWithLevels, testIdToSlot, testIdToSlots };
 };
 
 /**
@@ -154,24 +159,33 @@ export const isLevelUnlocked = async (studentId, stageName, levelNum) => {
  */
 export const recordProgress = async (studentId, session) => {
   const testId = session.test?._id || session.test;
-  const slot = await getSlotForTest(testId);
-  if (!slot) return;
+  const dateSeed = getDateSeed();
+  const { testIdToSlots } = await getLayoutForDate(dateSeed);
+  const slots = testIdToSlots.get(testId?.toString?.());
+  if (!slots || slots.length === 0) return;
+
   const score = session.score ?? 0;
   const maxScore = session.maxScore ?? 0;
   const fullMarks = maxScore > 0 && score >= maxScore;
-  const existing = await challengeYourselfProgressRepository.findOne({
-    student: studentId,
-    stage: slot.stage,
-    level: slot.level,
-  });
-  const alreadyFull = existing?.fullMarksAchieved;
-  await challengeYourselfProgressRepository.upsert(studentId, slot.stage, slot.level, {
-    fullMarksAchieved: alreadyFull || fullMarks,
-    bestScore: existing ? Math.max(existing.bestScore, score) : score,
-    maxScore,
-    lastExamSession: session._id,
-    lastCompletedAt: new Date(),
-  });
+
+  for (const slot of slots) {
+    const isUnlocked = await isLevelUnlocked(studentId, slot.stage, slot.level);
+    if (!isUnlocked) continue;
+
+    const existing = await challengeYourselfProgressRepository.findOne({
+      student: studentId,
+      stage: slot.stage,
+      level: slot.level,
+    });
+    const alreadyFull = existing?.fullMarksAchieved;
+    await challengeYourselfProgressRepository.upsert(studentId, slot.stage, slot.level, {
+      fullMarksAchieved: alreadyFull || fullMarks,
+      bestScore: existing ? Math.max(existing.bestScore, score) : score,
+      maxScore,
+      lastExamSession: session._id,
+      lastCompletedAt: new Date(),
+    });
+  }
 };
 
 /**
