@@ -77,7 +77,7 @@ router.get("/tests", getTests);
 router.get("/tests-and-bundles", getTestsAndBundles);
 router.get("/tests/:id", getTestById);
 router.get("/teachers", getAvailableTeachers);
-router.post("/teachers/:teacherId/rate", rateTeacher);
+router.post("/teachers/:teacherId/rate", verifyJWT, rateTeacher);
 router.get("/teacher-connect/jobs", getAllApplyJobsUser);
 router.get("/teacher-connect/jobs/:id", getApplyJobByIdUser);
 router.get("/blogs", getAllBlogs);
