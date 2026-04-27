@@ -8,7 +8,23 @@ import {
 } from "./socketAuth.util.js";
 
 const CALL_REQUEST_AUTO_CANCEL_MS = 45_000;
+const TEACHER_SOCKET_RECONNECT_GRACE_MS = Number(
+  process.env.TEACHER_SOCKET_RECONNECT_GRACE_MS || 30_000
+);
 const pendingCallCancelTimers = new Map();
+const callDisconnectCleanupTimers = new Map();
+
+const getCallDisconnectKey = (kind, userId, sessionId) =>
+  `${kind}:${userId?.toString?.() ?? userId}:${sessionId?.toString?.() ?? sessionId}`;
+
+const clearCallDisconnectCleanup = (kind, userId, sessionId) => {
+  const key = getCallDisconnectKey(kind, userId, sessionId);
+  const timerId = callDisconnectCleanupTimers.get(key);
+  if (timerId) {
+    clearTimeout(timerId);
+    callDisconnectCleanupTimers.delete(key);
+  }
+};
 
 const clearPendingCallAutoCancel = (sessionId) => {
   const key = sessionId?.toString?.() ?? String(sessionId || "");
@@ -29,15 +45,10 @@ function assertCallParticipant(session, userId, role) {
   throw new Error("Not a participant in this call session");
 }
 
-function resolveDurationMinutes(session, payloadDuration) {
-  if (typeof payloadDuration === "number" && payloadDuration > 0 && Number.isFinite(payloadDuration)) {
-    return Math.ceil(payloadDuration);
-  }
+function resolveDurationMinutes(session, endedAt = Date.now()) {
   if (session.callStartTime) {
-    return Math.max(
-      1,
-      Math.ceil((Date.now() - new Date(session.callStartTime).getTime()) / 60000)
-    );
+    const elapsedMs = Math.max(1000, endedAt - new Date(session.callStartTime).getTime());
+    return elapsedMs / 60000;
   }
   return 1;
 }
@@ -69,6 +80,11 @@ export const setupTeacherCallSocket = (io) => {
       socket.join(`student:${userId}`);
     }
 
+    const hasUserReconnected = () => {
+      const roomName = user.role === "teacher" ? `teacher:${userId}` : `student:${userId}`;
+      return (ns.adapter.rooms.get(roomName)?.size || 0) > 0;
+    };
+
     const schedulePendingCallAutoCancel = (sessionId, teacherId) => {
       const sid = sessionId.toString();
       clearPendingCallAutoCancel(sid);
@@ -95,6 +111,98 @@ export const setupTeacherCallSocket = (io) => {
       pendingCallCancelTimers.set(sid, timerId);
     };
 
+    const restoreCallState = async () => {
+      if (user.role === "student") {
+        const pending = await teacherSessionRepository.findOne({
+          student: userId,
+          sessionKind: "call",
+          status: "pending",
+        });
+        if (pending) {
+          const sid = pending._id.toString();
+          socket.data.pendingCallSessionId = sid;
+          clearCallDisconnectCleanup("pending", userId, sid);
+          socket.emit("pending_call_restored", { sessionId: sid, session: pending });
+        }
+      }
+
+      const ongoing =
+        user.role === "teacher"
+          ? await teacherSessionRepository.findTeacherActiveCallSession(userId)
+          : await teacherSessionRepository.findStudentOngoingCallSession(userId);
+
+      if (!ongoing) return;
+
+      const sid = ongoing._id.toString();
+      socket.join(`session:${sid}`);
+      socket.data.callSessionId = sid;
+      clearCallDisconnectCleanup("active", userId, sid);
+      socket.emit("joined_call_session", { sessionId: sid, session: ongoing, restored: true });
+    };
+
+    const schedulePendingCallDisconnectCleanup = (sessionId) => {
+      if (user.role !== "student") return;
+      const sid = sessionId?.toString?.() ?? String(sessionId || "");
+      if (!sid) return;
+
+      clearCallDisconnectCleanup("pending", userId, sid);
+      const key = getCallDisconnectKey("pending", userId, sid);
+      const timerId = setTimeout(async () => {
+        callDisconnectCleanupTimers.delete(key);
+        if (hasUserReconnected()) return;
+
+        try {
+          const sessionDoc = await teacherConnectService.cancelPendingCallRequestByStudent(userId, sid);
+          if (!sessionDoc) return;
+          const tid = sessionDoc.teacher._id.toString();
+          ns.to(`teacher:${tid}`).emit("call_request_withdrawn", {
+            sessionId: sessionDoc._id.toString(),
+            reason: "student_disconnected",
+            timestamp: new Date(),
+          });
+        } catch (err) {
+          console.error("Teacher call pending disconnect cleanup error:", err);
+        }
+      }, TEACHER_SOCKET_RECONNECT_GRACE_MS);
+      callDisconnectCleanupTimers.set(key, timerId);
+    };
+
+    const scheduleActiveCallDisconnectCleanup = (sessionId) => {
+      const sid = sessionId?.toString?.() ?? String(sessionId || "");
+      if (!sid) return;
+      const disconnectedAt = Date.now();
+
+      clearCallDisconnectCleanup("active", userId, sid);
+      const key = getCallDisconnectKey("active", userId, sid);
+      const timerId = setTimeout(async () => {
+        callDisconnectCleanupTimers.delete(key);
+        if (hasUserReconnected()) return;
+
+        try {
+          const session = await teacherSessionRepository.findById(sid);
+          if (session && session.sessionKind === "call" && session.status === "ongoing") {
+            const isTeacher = user.role === "teacher";
+            const durationMinutes = resolveDurationMinutes(session, disconnectedAt);
+            await endCallForSocket(
+              session._id,
+              isTeacher ? "teacher_disconnected" : "student_disconnected",
+              isTeacher
+                ? "The teacher disconnected. The call has ended."
+                : "The student disconnected. The call has ended.",
+              durationMinutes
+            );
+          }
+        } catch (err) {
+          console.error("Teacher call disconnect cleanup error:", err);
+        }
+      }, TEACHER_SOCKET_RECONNECT_GRACE_MS);
+      callDisconnectCleanupTimers.set(key, timerId);
+    };
+
+    restoreCallState().catch((err) => {
+      console.error("Teacher call restore state error:", err);
+    });
+
     socket.on("call_request", async (payload = {}) => {
       if (user.role !== "student") {
         socket.emit("call_error", { message: "Only students can request a call" });
@@ -108,6 +216,7 @@ export const setupTeacherCallSocket = (io) => {
       try {
         const session = await teacherConnectService.initiateCallRequest(userId, teacherId, subject);
         socket.data.pendingCallSessionId = session._id.toString();
+        clearCallDisconnectCleanup("pending", userId, session._id);
         schedulePendingCallAutoCancel(session._id, teacherId);
         socket.emit("call_request_sent", { session });
 
@@ -159,6 +268,7 @@ export const setupTeacherCallSocket = (io) => {
 
         socket.join(`session:${sid}`);
         socket.data.callSessionId = sid;
+        clearCallDisconnectCleanup("active", userId, sid);
 
         const acceptedPayload = {
           session,
@@ -243,8 +353,10 @@ export const setupTeacherCallSocket = (io) => {
         const sid = session._id.toString();
         socket.join(`session:${sid}`);
         socket.data.callSessionId = sid;
+        clearCallDisconnectCleanup("active", userId, sid);
         if (user.role === "student") {
           clearPendingCallAutoCancel(sid);
+          clearCallDisconnectCleanup("pending", userId, sid);
           delete socket.data.pendingCallSessionId;
         }
         socket.emit("joined_call_session", { sessionId: sid, session });
@@ -256,13 +368,13 @@ export const setupTeacherCallSocket = (io) => {
       }
     });
 
-    const endCallForSocket = async (sessionId, reason, message) => {
+    const endCallForSocket = async (sessionId, reason, message, resolvedDurationMinutes = null) => {
       const sid = sessionId.toString();
       const session = await teacherSessionRepository.findById(sessionId);
       if (!session || session.sessionKind !== "call" || session.status !== "ongoing") {
         return;
       }
-      const durationMinutes = resolveDurationMinutes(session, null);
+      const durationMinutes = resolvedDurationMinutes || resolveDurationMinutes(session);
       await teacherConnectService.endCall(
         sid,
         durationMinutes,
@@ -334,7 +446,7 @@ export const setupTeacherCallSocket = (io) => {
     });
 
     socket.on("end_call", async (payload = {}) => {
-      const { sessionId, durationMinutes, recordingUrl, agoraRecordingId } = payload || {};
+      const { sessionId, recordingUrl, agoraRecordingId } = payload || {};
       if (!sessionId) {
         socket.emit("call_error", { message: "sessionId is required" });
         return;
@@ -350,7 +462,7 @@ export const setupTeacherCallSocket = (io) => {
           socket.emit("call_error", { message: "Call is not active" });
           return;
         }
-        const dm = resolveDurationMinutes(session, durationMinutes);
+        const dm = resolveDurationMinutes(session);
         const updated = await teacherConnectService.endCall(
           sessionId,
           dm,
@@ -379,28 +491,10 @@ export const setupTeacherCallSocket = (io) => {
     });
 
     socket.on("disconnect", async () => {
-      try {
-        await withdrawStudentPendingCall();
-      } catch (err) {
-        console.error("Teacher call pending withdraw on disconnect:", err);
-      }
+      schedulePendingCallDisconnectCleanup(socket.data.pendingCallSessionId);
       const sid = socket.data.callSessionId;
       if (!sid) return;
-      try {
-        const session = await teacherSessionRepository.findById(sid);
-        if (session && session.sessionKind === "call" && session.status === "ongoing") {
-          const isTeacher = user.role === "teacher";
-          await endCallForSocket(
-            session._id,
-            isTeacher ? "teacher_disconnected" : "student_disconnected",
-            isTeacher
-              ? "The teacher disconnected. The call has ended."
-              : "The student disconnected. The call has ended."
-          );
-        }
-      } catch (err) {
-        console.error("Teacher call disconnect cleanup error:", err);
-      }
+      scheduleActiveCallDisconnectCleanup(sid);
     });
   });
 };

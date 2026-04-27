@@ -1,6 +1,7 @@
 import jwt from "jsonwebtoken";
 import examSessionService from "../services/examSession.service.js";
 import examSessionRepository from "../repository/examSession.repository.js";
+import { normalizeSocketAuthToken } from "./socketAuth.util.js";
 
 /**
  * Authenticate socket connection using JWT
@@ -33,7 +34,9 @@ export const setupExamSessionSocket = (io) => {
   const examNamespace = io.of("/exam");
 
   examNamespace.use((socket, next) => {
-    const token = socket.handshake.auth?.token || socket.handshake.headers?.authorization?.replace("Bearer ", "");
+    const token = normalizeSocketAuthToken(
+      socket.handshake.auth?.token || socket.handshake.headers?.authorization || ""
+    );
 
     if (!token) {
       return next(new Error("Authentication error: No token provided"));

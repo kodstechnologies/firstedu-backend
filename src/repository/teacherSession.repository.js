@@ -48,6 +48,23 @@ const updateById = async (sessionId, updateData) => {
   }
 };
 
+const completeOngoingSession = async (sessionId, updateData) => {
+  try {
+    return await TeacherSession.findOneAndUpdate(
+      {
+        _id: sessionId,
+        status: "ongoing",
+      },
+      { $set: updateData },
+      { new: true, runValidators: true }
+    )
+      .populate("student", "name email")
+      .populate("teacher", "name email skills perMinuteRate");
+  } catch (error) {
+    throw new ApiError(500, "Failed to complete session", error.message);
+  }
+};
+
 const findStudentSessions = async (studentId, options = {}) => {
   try {
     const {
@@ -357,6 +374,7 @@ export default {
   findById,
   findOne,
   updateById,
+  completeOngoingSession,
   deleteById,
   findStudentSessions,
   findTeacherSessions,

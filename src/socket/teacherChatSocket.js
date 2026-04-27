@@ -7,7 +7,23 @@ import {
 } from "./socketAuth.util.js";
 
 const CHAT_REQUEST_AUTO_CANCEL_MS = 45_000;
+const TEACHER_SOCKET_RECONNECT_GRACE_MS = Number(
+  process.env.TEACHER_SOCKET_RECONNECT_GRACE_MS || 30_000
+);
 const pendingChatCancelTimers = new Map();
+const chatDisconnectCleanupTimers = new Map();
+
+const getChatDisconnectKey = (kind, userId, sessionId) =>
+  `${kind}:${userId?.toString?.() ?? userId}:${sessionId?.toString?.() ?? sessionId}`;
+
+const clearChatDisconnectCleanup = (kind, userId, sessionId) => {
+  const key = getChatDisconnectKey(kind, userId, sessionId);
+  const timerId = chatDisconnectCleanupTimers.get(key);
+  if (timerId) {
+    clearTimeout(timerId);
+    chatDisconnectCleanupTimers.delete(key);
+  }
+};
 
 const clearPendingChatAutoCancel = (sessionId) => {
   const key = sessionId?.toString?.() ?? String(sessionId || "");
@@ -119,6 +135,11 @@ export const setupTeacherChatSocket = (io) => {
       socket.join(`student:${userId}`);
     }
 
+    const hasUserReconnected = () => {
+      const roomName = user.role === "teacher" ? `teacher:${userId}` : `student:${userId}`;
+      return (ns.adapter.rooms.get(roomName)?.size || 0) > 0;
+    };
+
     const schedulePendingChatAutoCancel = (sessionId, teacherId) => {
       const sid = sessionId.toString();
       clearPendingChatAutoCancel(sid);
@@ -145,6 +166,95 @@ export const setupTeacherChatSocket = (io) => {
       pendingChatCancelTimers.set(sid, timerId);
     };
 
+    const restoreChatState = async () => {
+      if (user.role === "student") {
+        const pending = await teacherSessionRepository.findOne({
+          student: userId,
+          sessionKind: "chat",
+          status: "pending",
+        });
+        if (pending) {
+          const sid = pending._id.toString();
+          socket.data.pendingChatSessionId = sid;
+          clearChatDisconnectCleanup("pending", userId, sid);
+          socket.emit("pending_chat_restored", { sessionId: sid, session: pending });
+        }
+      }
+
+      const ongoing =
+        user.role === "teacher"
+          ? await teacherSessionRepository.findTeacherActiveChatSession(userId)
+          : await teacherSessionRepository.findStudentOngoingChatSession(userId);
+
+      if (!ongoing) return;
+
+      const sid = ongoing._id.toString();
+      socket.join(`session:${sid}`);
+      socket.data.chatSessionId = sid;
+      clearChatDisconnectCleanup("active", userId, sid);
+      socket.emit("joined_chat_session", { sessionId: sid, session: ongoing, restored: true });
+    };
+
+    const schedulePendingChatDisconnectCleanup = (sessionId) => {
+      if (user.role !== "student") return;
+      const sid = sessionId?.toString?.() ?? String(sessionId || "");
+      if (!sid) return;
+
+      clearChatDisconnectCleanup("pending", userId, sid);
+      const key = getChatDisconnectKey("pending", userId, sid);
+      const timerId = setTimeout(async () => {
+        chatDisconnectCleanupTimers.delete(key);
+        if (hasUserReconnected()) return;
+
+        try {
+          const sessionDoc = await teacherChatService.cancelPendingChatRequestByStudent(userId, sid);
+          if (!sessionDoc) return;
+          const tid = sessionDoc.teacher._id.toString();
+          ns.to(`teacher:${tid}`).emit("chat_request_withdrawn", {
+            sessionId: sessionDoc._id.toString(),
+            reason: "student_disconnected",
+            timestamp: new Date(),
+          });
+        } catch (err) {
+          console.error("Teacher chat pending disconnect cleanup error:", err);
+        }
+      }, TEACHER_SOCKET_RECONNECT_GRACE_MS);
+      chatDisconnectCleanupTimers.set(key, timerId);
+    };
+
+    const scheduleActiveChatDisconnectCleanup = (sessionId) => {
+      const sid = sessionId?.toString?.() ?? String(sessionId || "");
+      if (!sid) return;
+
+      clearChatDisconnectCleanup("active", userId, sid);
+      const key = getChatDisconnectKey("active", userId, sid);
+      const timerId = setTimeout(async () => {
+        chatDisconnectCleanupTimers.delete(key);
+        if (hasUserReconnected()) return;
+
+        try {
+          const session = await teacherSessionRepository.findById(sid);
+          if (session && session.sessionKind === "chat" && session.status === "ongoing") {
+            const isTeacher = user.role === "teacher";
+            await endChatForSocket(
+              session._id,
+              isTeacher ? "teacher_disconnected" : "student_disconnected",
+              isTeacher
+                ? "The teacher disconnected. The chat has ended."
+                : "The student disconnected. The chat has ended."
+            );
+          }
+        } catch (err) {
+          console.error("Teacher chat disconnect cleanup error:", err);
+        }
+      }, TEACHER_SOCKET_RECONNECT_GRACE_MS);
+      chatDisconnectCleanupTimers.set(key, timerId);
+    };
+
+    restoreChatState().catch((err) => {
+      console.error("Teacher chat restore state error:", err);
+    });
+
     socket.on("chat_request", async (payload = {}) => {
       if (user.role !== "student") {
         socket.emit("chat_error", { message: "Only students can request a chat" });
@@ -158,6 +268,7 @@ export const setupTeacherChatSocket = (io) => {
       try {
         const session = await teacherChatService.initiateChatRequest(userId, teacherId, subject);
         socket.data.pendingChatSessionId = session._id.toString();
+        clearChatDisconnectCleanup("pending", userId, session._id);
         schedulePendingChatAutoCancel(session._id, teacherId);
         socket.emit("chat_request_sent", { session });
 
@@ -199,6 +310,7 @@ export const setupTeacherChatSocket = (io) => {
 
         socket.join(`session:${sid}`);
         socket.data.chatSessionId = sid;
+        clearChatDisconnectCleanup("active", userId, sid);
 
         startChatBilling(ns, session._id);
 
@@ -280,8 +392,10 @@ export const setupTeacherChatSocket = (io) => {
         const sid = session._id.toString();
         socket.join(`session:${sid}`);
         socket.data.chatSessionId = sid;
+        clearChatDisconnectCleanup("active", userId, sid);
         if (user.role === "student") {
           clearPendingChatAutoCancel(sid);
+          clearChatDisconnectCleanup("pending", userId, sid);
           delete socket.data.pendingChatSessionId;
         }
         socket.emit("joined_chat_session", { sessionId: sid, session });
@@ -433,28 +547,10 @@ export const setupTeacherChatSocket = (io) => {
     });
 
     socket.on("disconnect", async () => {
-      try {
-        await withdrawStudentPendingChat();
-      } catch (err) {
-        console.error("Teacher chat pending withdraw on disconnect:", err);
-      }
+      schedulePendingChatDisconnectCleanup(socket.data.pendingChatSessionId);
       const sid = socket.data.chatSessionId;
       if (!sid) return;
-      try {
-        const session = await teacherSessionRepository.findById(sid);
-        if (session && session.sessionKind === "chat" && session.status === "ongoing") {
-          const isTeacher = user.role === "teacher";
-          await endChatForSocket(
-            session._id,
-            isTeacher ? "teacher_disconnected" : "student_disconnected",
-            isTeacher
-              ? "The teacher disconnected. The chat has ended."
-              : "The student disconnected. The chat has ended."
-          );
-        }
-      } catch (err) {
-        console.error("Teacher chat disconnect cleanup error:", err);
-      }
+      scheduleActiveChatDisconnectCleanup(sid);
     });
   });
 };

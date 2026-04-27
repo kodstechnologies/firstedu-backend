@@ -1,4 +1,3 @@
-import admin from "../config/firebase.js";
 import { admin as firebaseAdmin } from "../config/firebase.js";
 
 /**

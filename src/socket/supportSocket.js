@@ -2,6 +2,7 @@ import jwt from "jsonwebtoken";
 import supportService from "../services/support.service.js";
 import supportTicketRepository from "../repository/supportTicket.repository.js";
 import supportMessageRepository from "../repository/supportMessage.repository.js";
+import { normalizeSocketAuthToken } from "./socketAuth.util.js";
 
 /**
  * Authenticate socket connection using JWT
@@ -23,7 +24,9 @@ export const setupSupportSocket = (io) => {
   const supportNamespace = io.of("/support");
 
   supportNamespace.use((socket, next) => {
-    const token = socket.handshake.auth?.token || socket.handshake.headers?.authorization?.replace("Bearer ", "");
+    const token = normalizeSocketAuthToken(
+      socket.handshake.auth?.token || socket.handshake.headers?.authorization || ""
+    );
 
     if (!token) {
       return next(new Error("Authentication error: No token provided"));

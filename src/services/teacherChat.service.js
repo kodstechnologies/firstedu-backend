@@ -267,11 +267,15 @@ export async function finalizeChatSession(
     return session;
   }
 
-  const updated = await teacherSessionRepository.updateById(sessionId, {
+  const updated = await teacherSessionRepository.completeOngoingSession(sessionId, {
     status: "completed",
     callEndTime: new Date(),
     sessionEndReason,
   });
+
+  if (!updated) {
+    return await teacherSessionRepository.findById(sessionId);
+  }
 
   const totalAmount = updated?.totalAmount ?? session.totalAmount ?? 0;
   const teacherId = session.teacher._id || session.teacher;

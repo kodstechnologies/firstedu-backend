@@ -24,6 +24,12 @@ const startServer = async () => {
 
     // Setup Socket.io
     const io = new Server(server, {
+      pingTimeout: Number(process.env.SOCKET_IO_PING_TIMEOUT_MS || 30000),
+      pingInterval: Number(process.env.SOCKET_IO_PING_INTERVAL_MS || 25000),
+      connectionStateRecovery: {
+        maxDisconnectionDuration: Number(process.env.SOCKET_IO_RECOVERY_MS || 120000),
+        skipMiddlewares: false,
+      },
       cors: {
         origin: process.env.CORS_ORIGIN?.split(",").map((o) => o.trim()) || [
           "http://localhost:3000",

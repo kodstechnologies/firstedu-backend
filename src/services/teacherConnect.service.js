@@ -8,6 +8,9 @@ import Teacher from "../models/Teacher.js";
 import { rejectChatSession, chatConstants } from "./teacherChat.service.js";
 
 const { INSUFFICIENT_REQUEST_MSG, TEACHER_BUSY_MSG } = chatConstants;
+const roundMoney = (value) => Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+const roundDurationMinutes = (value) =>
+  Math.round((Number(value) + Number.EPSILON) * 10000) / 10000;
 
 /** Strip phone and email from teacher object for student-facing responses */
 const omitContactFromTeacher = (teacher) => {
@@ -296,10 +299,40 @@ export const endCall = async (sessionId, durationMinutes, recordingUrl = null, a
     throw new ApiError(400, "Session is not ongoing");
   }
 
-  // Calculate total amount
-  const totalAmount = Math.ceil(durationMinutes * session.perMinuteRate);
+  const elapsedMinutes =
+    typeof durationMinutes === "number" && durationMinutes > 0 && Number.isFinite(durationMinutes)
+      ? durationMinutes
+      : session.callStartTime
+        ? Math.max(
+            1 / 60,
+            (Date.now() - new Date(session.callStartTime).getTime()) / 60000
+          )
+        : 1;
+  const billableMinutes = roundDurationMinutes(elapsedMinutes);
+  const totalAmount = roundMoney(billableMinutes * session.perMinuteRate);
 
-  // Deduct from student wallet
+  if (!session.amountDeducted) {
+    const wallet = await walletService.getWalletBalance(session.student._id, "User");
+    if (wallet.monetaryBalance < totalAmount) {
+      throw new ApiError(400, "Insufficient balance");
+    }
+  }
+
+  // Atomically claim completion so duplicate end/disconnect events cannot credit twice.
+  const updatedSession = await teacherSessionRepository.completeOngoingSession(sessionId, {
+    status: "completed",
+    callEndTime: new Date(),
+    durationMinutes: billableMinutes,
+    totalAmount,
+    amountDeducted: true,
+    recordingUrl,
+    agoraRecordingId,
+  });
+
+  if (!updatedSession) {
+    return await teacherSessionRepository.findById(sessionId);
+  }
+
   if (!session.amountDeducted) {
     await walletService.deductMonetaryBalance(
       session.student._id,
@@ -307,17 +340,6 @@ export const endCall = async (sessionId, durationMinutes, recordingUrl = null, a
       "User"
     );
   }
-
-  // Update session
-  const updatedSession = await teacherSessionRepository.updateById(sessionId, {
-    status: "completed",
-    callEndTime: new Date(),
-    durationMinutes: Math.ceil(durationMinutes),
-    totalAmount,
-    amountDeducted: true,
-    recordingUrl,
-    agoraRecordingId,
-  });
 
   const teacherId = session.teacher._id || session.teacher;
   if (totalAmount > 0) {
