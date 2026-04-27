@@ -2,6 +2,7 @@ import express from "express";
 import {
   getAvailableTeachers,
   getTeacherById,
+  rateTeacher,
 } from "../controllers/studentTeacherConnect.controller.js";
 import { getHallOfFame } from "../controllers/hallOfFame.controller.js";
 import { getLeaderboardsForStudent } from "../controllers/leaderboard.controller.js";
@@ -24,7 +25,10 @@ import {
   getAllPressAnnouncementsAdmin,
   getPressAnnouncementByIdAdmin,
 } from "../controllers/pressAnnouncement.controller.js";
-import { createQnA, getAllQnAsLandingPage } from "../controllers/qna.controller.js";
+import {
+  createQnA,
+  getAllQnAsLandingPage,
+} from "../controllers/qna.controller.js";
 import { getCategoriesForStudent } from "../controllers/category.controller.js";
 
 import { contactUs } from "../controllers/contact.controller.js";
@@ -73,11 +77,17 @@ router.get("/tests", getTests);
 router.get("/tests-and-bundles", getTestsAndBundles);
 router.get("/tests/:id", getTestById);
 router.get("/teachers", getAvailableTeachers);
+router.post("/teachers/:teacherId/rate", rateTeacher);
 router.get("/teacher-connect/jobs", getAllApplyJobsUser);
 router.get("/teacher-connect/jobs/:id", getApplyJobByIdUser);
 router.get("/blogs", getAllBlogs);
 router.get("/blogs/:id", getBlogById);
-router.post("/blog-request",verifyJWT, uploadImage.single("image"), submitBlogRequest);
+router.post(
+  "/blog-request",
+  verifyJWT,
+  uploadImage.single("image"),
+  submitBlogRequest,
+);
 router.get("/courses", getCourses);
 router.get("/courses/:id", getCourseById);
 router.get("/workshops/:id", getWorkshopById);
