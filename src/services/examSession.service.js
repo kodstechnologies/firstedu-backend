@@ -1289,8 +1289,20 @@ export const saveAnswer = async (sessionId, questionId, answer, studentId, statu
 
   startOrResumeQuestionTimer(session, questionId, now);
 
+  // Normalize the incoming answer to canonical option text before storing.
+  // This resolves _id-based answers (sent from frontend for duplicate-text-safe selection)
+  // back to the option's text value that scoring logic expects.
+  // Works for: plain text, _id hex strings, option objects { text, _id }, and arrays thereof.
+  let normalizedAnswer = answer;
+  if (answer !== null && answer !== undefined) {
+    // Load question options to resolve _id → text mapping
+    const question = await questionRepository.findById(questionId).catch(() => null);
+    const options = question?.options || [];
+    normalizedAnswer = resolveAnswerToText(answer, options);
+  }
+
   // Update answer
-  answerEntry.answer = answer;
+  answerEntry.answer = normalizedAnswer;
   answerEntry.status = status;
   if (status === "answered") {
     answerEntry.answeredAt = now;
@@ -1684,30 +1696,70 @@ const calculateScore = async (session) => {
 /**
  * Check if answer is correct
  */
+/**
+ * Resolve a student answer value to its canonical option text.
+ * Accepts:
+ *   - A plain string/number/boolean → returned as-is (legacy format)
+ *   - A MongoDB ObjectId string that matches an option._id → returns that option's text
+ *   - An option object { text, _id } → returns the text
+ *   - Arrays of any of the above
+ * This is the single authoritative resolver used by both save-time normalization
+ * and correctness checking, making the system resilient to duplicates.
+ */
+const resolveAnswerToText = (rawAnswer, options = []) => {
+  if (rawAnswer === null || rawAnswer === undefined) return rawAnswer;
+
+  const resolveOne = (val) => {
+    if (val === null || val === undefined) return val;
+    // Already a plain primitive (text, number, boolean) that is NOT an _id hex string
+    if (typeof val === "boolean") return val;
+    const str = String(val).trim();
+    if (!str) return str;
+    // Check if this value matches an option by _id (24-char hex = MongoDB ObjectId)
+    if (/^[a-f\d]{24}$/i.test(str) && Array.isArray(options) && options.length > 0) {
+      const matched = options.find((o) => o?._id?.toString?.() === str);
+      if (matched) return matched.text ?? matched.label ?? str;
+    }
+    // Check if it's an option object with a text property
+    if (typeof val === "object" && val !== null) {
+      if (val.text !== undefined) return val.text;
+      if (val.label !== undefined) return val.label;
+    }
+    return str;
+  };
+
+  if (Array.isArray(rawAnswer)) return rawAnswer.map(resolveOne);
+  return resolveOne(rawAnswer);
+};
+
 const checkAnswerCorrectness = (question, studentAnswer) => {
   if (!question || studentAnswer === null || studentAnswer === undefined) {
     return false;
   }
 
   const correctAnswer = question.correctAnswer;
+  // Resolve to canonical text so _id-based answers compare cleanly
+  const options = question.options || [];
+  const resolvedStudent = resolveAnswerToText(studentAnswer, options);
+  const resolvedCorrect = resolveAnswerToText(correctAnswer, options);
 
   switch (question.questionType) {
     case "single":
-      return String(studentAnswer).trim() === String(correctAnswer).trim();
+      return String(resolvedStudent).trim() === String(resolvedCorrect).trim();
 
-    case "multiple":
-      if (!Array.isArray(studentAnswer) || !Array.isArray(correctAnswer)) {
-        return false;
-      }
-      const studentSet = new Set(studentAnswer.map((a) => String(a).trim()));
-      const correctSet = new Set(correctAnswer.map((a) => String(a).trim()));
+    case "multiple": {
+      const sa = Array.isArray(resolvedStudent) ? resolvedStudent : [resolvedStudent];
+      const ca = Array.isArray(resolvedCorrect) ? resolvedCorrect : [resolvedCorrect];
+      const studentSet = new Set(sa.map((a) => String(a).trim()));
+      const correctSet = new Set(ca.map((a) => String(a).trim()));
       return (
         studentSet.size === correctSet.size &&
         Array.from(studentSet).every((val) => correctSet.has(val))
       );
+    }
 
     case "true_false":
-      return String(studentAnswer).toLowerCase() === String(correctAnswer).toLowerCase();
+      return String(resolvedStudent).toLowerCase() === String(resolvedCorrect).toLowerCase();
 
     default:
       return false;
