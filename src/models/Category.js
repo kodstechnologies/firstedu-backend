@@ -76,7 +76,7 @@ const subcategorySchema = new mongoose.Schema(
     isFree: { type: Boolean, default: false },
 
     // ─── Publishing ──────────────────────────────────────
-    status: { type: String, enum: ["Draft", "Public"], default: "Draft" },
+    status: { type: String, enum: ["Draft", "Public"], default: "Public" },
 
     offerPolicy: {
       type: String,

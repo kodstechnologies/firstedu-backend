@@ -105,10 +105,8 @@ export const resolveCategoryPathForStudent = asyncHandler(async (req, res) => {
     let enrichedChildren = immediateChildren;
     
     if (studentId) {
-      enrichedChildren = await Promise.all(immediateChildren.map(async (node) => {
-        const status = await resolveAccessStatus(studentId, node._id);
-        return { ...node, ...status };
-      }));
+      // Bulk: 2 fixed DB queries instead of N×5
+      enrichedChildren = await resolveBulkAccessStatus(studentId, immediateChildren, tree);
     }
 
     return res.json(ApiResponse.success({
@@ -156,10 +154,9 @@ export const resolveCategoryPathForStudent = asyncHandler(async (req, res) => {
   let enrichedNode = currentNode ? currentNode.toObject ? currentNode.toObject() : { ...currentNode } : null;
 
   if (studentId) {
-    enrichedChildren = await Promise.all(immediateChildren.map(async (node) => {
-      const status = await resolveAccessStatus(studentId, node._id);
-      return { ...node, ...status };
-    }));
+    // Bulk: 2 fixed DB queries instead of N×5
+    enrichedChildren = await resolveBulkAccessStatus(studentId, immediateChildren, tree);
+
 
     if (enrichedNode) {
       const status = await resolveAccessStatus(studentId, enrichedNode._id);
