@@ -67,13 +67,22 @@ const findByStudent = async (studentId, pillarType = null) => {
 };
 
 /**
- * Acknowledge an upgrade: atoms $addToSet new IDs and updates lastUpgradedAt.
+ * Acknowledge an upgrade: $addToSet new IDs, updates lastUpgradedAt,
+ * and increments purchasePrice by paidAmount (so the next upgrade
+ * cost calculation uses the correct baseline and never charges twice).
+ *
+ * @param {string|ObjectId} purchaseId
+ * @param {string[]} newIds  - new descendant category IDs to unlock
+ * @param {number}   paidAmount - amount the student paid for this upgrade (0 for free upgrades)
  */
-const acknowledgeUpgrade = async (purchaseId, newIds = []) => {
+const acknowledgeUpgrade = async (purchaseId, newIds = [], paidAmount = 0) => {
   try {
     const update = { $set: { lastUpgradedAt: new Date() } };
     if (newIds && newIds.length > 0) {
       update.$addToSet = { unlockedCategoryIds: { $each: newIds } };
+    }
+    if (paidAmount > 0) {
+      update.$inc = { purchasePrice: paidAmount };
     }
     return await CategoryPurchase.findByIdAndUpdate(purchaseId, update, { new: true });
   } catch (error) {

@@ -116,8 +116,9 @@ export const processUpgrade = async (studentId, categoryId, paymentMethod = "fre
     }
     // Deduct wallet balance (throws ApiError if insufficient balance)
     await walletService.deductMonetaryBalance(studentId, upgradeCost, "User");
-    // Push new IDs immediately after payment
-    await categoryPurchaseRepository.acknowledgeUpgrade(purchase._id, newCategoryIds);
+    // Push new IDs immediately after payment and record the amount paid
+    // so the next upgrade cost calculation uses the updated baseline (prevents infinite loop).
+    await categoryPurchaseRepository.acknowledgeUpgrade(purchase._id, newCategoryIds, upgradeCost);
     return {
       completed: true,
       message: `Upgrade successful. ₹${upgradeCost} deducted from wallet. New items unlocked.`,
@@ -209,7 +210,10 @@ export const confirmUpgrade = async (
     // So we don't return early here.
   }
 
-  await categoryPurchaseRepository.acknowledgeUpgrade(basePurchaseId, newCategoryIds);
+  // Record the amount paid so the next upgrade cost calculation uses the updated
+  // baseline and never asks the student to pay the same difference twice.
+  const paidAmount = (intent.amountPaise || 0) / 100;
+  await categoryPurchaseRepository.acknowledgeUpgrade(basePurchaseId, newCategoryIds, paidAmount);
   await razorpayOrderIntentRepository.markReconciled(razorpayOrderId, razorpayPaymentId);
 
   return {

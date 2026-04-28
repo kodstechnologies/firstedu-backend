@@ -27,6 +27,7 @@ const createChildrenRecursive = async (children, parentId, createdBy, rootType, 
       parent: parentId,
       order: order++,
       createdBy,
+      status: "Public",
     };
     if (rootType && rootType !== "custom") {
       payload.rootType = rootType;
@@ -80,6 +81,7 @@ export const createCategory = async (data, createdBy) => {
     order: data.order ?? 0,
     createdBy,
     rootType: resolvedRootType,
+    status: "Public",
     ...(data.isPredefined !== undefined && { isPredefined: data.isPredefined }),
   };
   const created = await categoryRepository.create(payload);
