@@ -1,8 +1,8 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { getGoesLiveAt } from "../utils/eventStatus.js";
-import tournamentService from "../services/tournament.service.js";
-import workshopService from "../services/workshop.service.js";
+import { getTournaments } from "../services/tournament.service.js";
+import { getWorkshops } from "../services/workshop.service.js";
 
 /** tournament | workshop | both (both = tournaments + workshops only) */
 const VALID_CATEGORIES = ["tournament", "workshop", "both"];
@@ -58,6 +58,17 @@ export const getAllEvents = asyncHandler(async (req, res) => {
     search: search || undefined,
     status: status || undefined,
   };
+
+  // ── Fetch data from services (conditional on resolved category) ──────────
+  const [tournamentResult, workshopResult] = await Promise.all([
+    fetchTournaments
+      ? getTournaments(baseOptions)
+      : Promise.resolve({ tournaments: [], pagination: null }),
+    fetchWorkshops
+      ? getWorkshops(baseOptions)
+      : Promise.resolve({ workshops: [], pagination: null }),
+  ]);
+  // ─────────────────────────────────────────────────────────────────────────
 
   const message = !normalizedCategory || normalizedCategory === "both"
     ? "Tournaments and workshops fetched successfully"
