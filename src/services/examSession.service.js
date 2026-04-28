@@ -1744,9 +1744,33 @@ const checkAnswerCorrectness = (question, studentAnswer) => {
     return false;
   }
 
-  const correctAnswer = question.correctAnswer;
-  // Resolve to canonical text so _id-based answers compare cleanly
   const options = question.options || [];
+  const isIdString = (val) => typeof val === "string" && /^[a-f\d]{24}$/i.test(val.trim());
+  const hasCorrectFlags = options.some(o => o.isCorrect === true);
+
+  // If we have explicit correctness flags and the student provided _id(s), perform strict option evaluation.
+  // This correctly scores duplicate text options based on the exact choice the student made.
+  if (hasCorrectFlags) {
+    if ((question.questionType === "single" || question.questionType === "true_false") && isIdString(studentAnswer)) {
+      const matchedOption = options.find((o) => o?._id?.toString?.() === studentAnswer.trim());
+      if (matchedOption) {
+        return matchedOption.isCorrect === true;
+      }
+    } else if (question.questionType === "multiple") {
+      const saArray = Array.isArray(studentAnswer) ? studentAnswer : [studentAnswer];
+      if (saArray.length > 0 && saArray.every(isIdString)) {
+        const selectedOptions = saArray.map(id => options.find((o) => o?._id?.toString?.() === id.trim())).filter(Boolean);
+        const correctOptions = options.filter(o => o.isCorrect === true);
+        if (selectedOptions.length === correctOptions.length && selectedOptions.every(o => o.isCorrect === true)) {
+          return true;
+        }
+        return false;
+      }
+    }
+  }
+
+  const correctAnswer = question.correctAnswer;
+  // Resolve to canonical text so _id-based answers compare cleanly as a fallback
   const resolvedStudent = resolveAnswerToText(studentAnswer, options);
   const resolvedCorrect = resolveAnswerToText(correctAnswer, options);
 
