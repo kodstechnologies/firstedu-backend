@@ -1859,6 +1859,7 @@ export const getExamResults = async (sessionId, studentId) => {
         ? (session.autoSubmitted ? "results" : "tournament")
         : (session.autoSubmitted ? "results" : "my-olympiads"))
     : (tournamentLb ? "results" : null);
+  const resultsReleased = !isResultsHidden;
 
   if (isResultsHidden) {
     const pct =
