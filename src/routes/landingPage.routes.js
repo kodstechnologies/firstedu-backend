@@ -71,6 +71,7 @@ router.get("/press-announcements", getAllPressAnnouncementsAdmin);
 router.get("/press-announcements/:id", getPressAnnouncementByIdAdmin);
 router.get("/teachers", getAvailableTeachers);
 router.get("/teachers/:teacherId", getTeacherById);
+router.post("/teachers/:teacherId/rate", verifyJWT, rateTeacher);
 router.get("/hall-of-fame", getHallOfFame);
 router.get("/leaderboard", getLeaderboardsForStudent);
 router.get("/tests", getTests);
