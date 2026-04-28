@@ -2,7 +2,13 @@ import Joi from "joi";
 
 const deliveryAddressSchema = Joi.object({
   fullName: Joi.string().required().trim(),
-  phone: Joi.string().required().trim(),
+  phone:Joi.string()
+    .pattern(/^[6-9]\d{9}$/)
+    .required()
+    .messages({
+      "string.empty": "Phone number is required",
+      "string.pattern.base": "Enter a valid 10-digit mobile number",
+    }),
   addressLine1: Joi.string().required().trim(),
   addressLine2: Joi.string().trim().optional().allow(""),
   city: Joi.string().required().trim(),

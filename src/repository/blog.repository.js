@@ -28,7 +28,6 @@ const create = async (data) => {
 const findAll = async (filters = {}, page = 1, limit = 10) => {
   const query = {};
    const andConditions = [];
-
   if (filters.subject) {
     andConditions.push({
       subject: new RegExp(escapeRegex(filters.subject), "i"),
@@ -47,7 +46,10 @@ const findAll = async (filters = {}, page = 1, limit = 10) => {
       ],
     });
   }
-
+ // ✅ IMPORTANT FIX
+  if (andConditions.length > 0) {
+    query.$and = andConditions;
+  }
   const skip = (page - 1) * limit;
 
   const [blogs, total] = await Promise.all([

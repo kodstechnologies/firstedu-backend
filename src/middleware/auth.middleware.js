@@ -13,7 +13,7 @@ export const verifyJWT = asyncHandler(async (req, _, next) => {
 
   if (!token) {
     // If no token is present, throw an unauthorized error.
-    throw new ApiError(401, "Unauthorized request. No token provided.");
+    throw new ApiError(401, "Unauthorized request. please login to continue.");
     //  return next();
   }
 

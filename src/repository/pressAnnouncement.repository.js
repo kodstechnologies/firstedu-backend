@@ -7,11 +7,16 @@ const create = async (data) => {
 
 const findAllPaginated = async (filters = {}, options = {}) => {
   const { page = 1, limit = 10 } = options;
+  const{pressname}=filters
   const query = {};
-  if (filters.pressname) {
-    query.pressname = new RegExp(filters.pressname, "i");
-  }
-  // type: filter by type; "allnews" = show all (no type filter)
+     if (pressname) {
+      query.$or = [
+        { pressname: { $regex: pressname, $options: "i" } },
+        { title: { $regex: pressname, $options: "i" } },
+        { type: { $regex: pressname, $options: "i" } },
+      ];
+    }
+      // type: filter by type; "allnews" = show all (no type filter)
   if (filters.type && filters.type !== "allnews" && PRESS_ANNOUNCEMENT_TYPES.includes(filters.type)) {
     query.type = filters.type;
   }
