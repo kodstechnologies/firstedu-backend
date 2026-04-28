@@ -21,9 +21,9 @@ import courseTestLinkRepository from "../repository/courseTestLink.repository.js
 
 const hasCompletedRegistrationForLinkedEventTest = async (testId, studentId) => {
   const linkedTournaments = await tournamentRepository.find(
-      { "stages.test": testId, isPublished: true },
-      { limit: 1000 }
-    );
+    { "stages.test": testId, isPublished: true },
+    { limit: 1000 }
+  );
 
   const tournamentIds = linkedTournaments.map((t) => t?._id).filter(Boolean);
 
@@ -299,11 +299,11 @@ const resolveContainerStatusFromChildren = (children = []) => {
 const sanitizeOptionsForExamResponse = (options = []) =>
   Array.isArray(options)
     ? options.map((option) => {
-        if (!option || typeof option !== "object") return option;
-        const plainOption = option.toObject ? option.toObject() : { ...option };
-        delete plainOption.isCorrect;
-        return plainOption;
-      })
+      if (!option || typeof option !== "object") return option;
+      const plainOption = option.toObject ? option.toObject() : { ...option };
+      delete plainOption.isCorrect;
+      return plainOption;
+    })
     : [];
 
 const sanitizeConnectedQuestionForResponse = (questionObj = {}, subQuestions = []) => ({
@@ -587,12 +587,12 @@ export const startExamSession = async (testId, studentId, options = {}) => {
 
   const sectionConfigForTiming =
     test?.questionBank?.useSectionWiseQuestions &&
-    Array.isArray(test?.questionBank?.sections)
+      Array.isArray(test?.questionBank?.sections)
       ? test.questionBank.sections.map((section, index) => ({
-          index,
-          count: section.count,
-          difficulty: section.difficulty,
-        }))
+        index,
+        count: section.count,
+        difficulty: section.difficulty,
+      }))
       : [];
   const { questionTimesMs } = buildPerQuestionTimePlan(
     questions,
@@ -820,11 +820,11 @@ export const getExamInstructions = async (testId, studentId, options = {}) => {
 
   const sections = hasSectionsConfigured
     ? test.questionBank.sections.map((section, index) => ({
-        id: section.id ?? index + 1,
-        name: section.name || `Section ${index + 1}`,
-        count: section.count || 0,
-        difficulty: section.difficulty || null,
-      }))
+      id: section.id ?? index + 1,
+      name: section.name || `Section ${index + 1}`,
+      count: section.count || 0,
+      difficulty: section.difficulty || null,
+    }))
     : [];
 
   let tournamentExam = null;
@@ -944,7 +944,7 @@ export const getExamSession = async (sessionId, studentId) => {
           "questionText questionType options subject topic marks negativeMarks difficulty isParent passage parentQuestionId childQuestions connectedQuestions imageUrl sectionIndex orderInBank",
         populate: {
           path: "childQuestions",
-              select: "questionText questionType options marks negativeMarks difficulty imageUrl",
+          select: "questionText questionType options marks negativeMarks difficulty imageUrl",
         },
       },
     }
@@ -1044,31 +1044,31 @@ export const getExamSession = async (sessionId, studentId) => {
     if (questionObj.isParent && questionObj.questionType === "connected") {
       const subQuestions = Array.isArray(questionObj.childQuestions)
         ? questionObj.childQuestions
-            .map((childRef) => {
-              const childId = getNormalizedId(childRef);
-              if (!childId) return null;
-              const populatedChild =
-                childRef && typeof childRef === "object" && childRef.questionText != null
-                  ? childRef
-                  : null;
-              const childObj = populatedChild || answerQuestionById.get(childId) || { _id: childId };
-              delete childObj.correctAnswer;
-              childObj.options = sanitizeOptionsForExamResponse(childObj.options);
-              const childAnswer = answerMetaByQuestionId.get(childId);
-              return {
-                _id: childObj._id,
-                questionText: childObj.questionText || "",
-                questionType: childObj.questionType || "single",
-                options: sanitizeOptionsForExamResponse(childObj.options),
-                explanation: childObj.explanation,
-                marks: childObj.marks ?? 1,
-                negativeMarks: childObj.negativeMarks ?? 0,
-                studentAnswer: childAnswer?.answer ?? null,
-                status: childAnswer?.status ?? "not_visited",
-                answeredAt: childAnswer?.answeredAt ?? null,
-              };
-            })
-            .filter(Boolean)
+          .map((childRef) => {
+            const childId = getNormalizedId(childRef);
+            if (!childId) return null;
+            const populatedChild =
+              childRef && typeof childRef === "object" && childRef.questionText != null
+                ? childRef
+                : null;
+            const childObj = populatedChild || answerQuestionById.get(childId) || { _id: childId };
+            delete childObj.correctAnswer;
+            childObj.options = sanitizeOptionsForExamResponse(childObj.options);
+            const childAnswer = answerMetaByQuestionId.get(childId);
+            return {
+              _id: childObj._id,
+              questionText: childObj.questionText || "",
+              questionType: childObj.questionType || "single",
+              options: sanitizeOptionsForExamResponse(childObj.options),
+              explanation: childObj.explanation,
+              marks: childObj.marks ?? 1,
+              negativeMarks: childObj.negativeMarks ?? 0,
+              studentAnswer: childAnswer?.answer ?? null,
+              status: childAnswer?.status ?? "not_visited",
+              answeredAt: childAnswer?.answeredAt ?? null,
+            };
+          })
+          .filter(Boolean)
         : [];
       questionObj = sanitizeConnectedQuestionForResponse(questionObj, subQuestions);
     }
@@ -1163,11 +1163,11 @@ export const getExamSession = async (sessionId, studentId) => {
   const sectionedQuestions =
     sectionConfig.length > 0
       ? sectionConfig.map((section) => ({
-          ...section,
-          questions: questions.filter(
-            (q) => q?.question?.sectionIndex === section.index
-          ),
-        }))
+        ...section,
+        questions: questions.filter(
+          (q) => q?.question?.sectionIndex === section.index
+        ),
+      }))
       : [];
 
   const { questionTimesMs, sectionTimesMs, strategy } = buildPerQuestionTimePlan(
@@ -1196,25 +1196,25 @@ export const getExamSession = async (sessionId, studentId) => {
   const sectionedQuestionsWithTime =
     sectionedQuestions.length > 0
       ? sectionedQuestions.map((section) => {
-          const sectionTotalMs = sectionTimesMs[section.index] || 0;
-          const sectionQuestions = questionsWithTime.filter(
-            (q) => q?.question?.sectionIndex === section.index
-          );
-          return {
-            ...section,
-            recommendedTotalTimeMs: sectionTotalMs,
-            recommendedTotalTimeFormatted: formatTime(sectionTotalMs),
-            recommendedPerQuestionMs:
-              sectionQuestions.length > 0
-                ? Math.round(sectionTotalMs / sectionQuestions.length)
-                : 0,
-            recommendedPerQuestionFormatted:
-              sectionQuestions.length > 0
-                ? formatTime(Math.round(sectionTotalMs / sectionQuestions.length))
-                : formatTime(0),
-            questions: sectionQuestions,
-          };
-        })
+        const sectionTotalMs = sectionTimesMs[section.index] || 0;
+        const sectionQuestions = questionsWithTime.filter(
+          (q) => q?.question?.sectionIndex === section.index
+        );
+        return {
+          ...section,
+          recommendedTotalTimeMs: sectionTotalMs,
+          recommendedTotalTimeFormatted: formatTime(sectionTotalMs),
+          recommendedPerQuestionMs:
+            sectionQuestions.length > 0
+              ? Math.round(sectionTotalMs / sectionQuestions.length)
+              : 0,
+          recommendedPerQuestionFormatted:
+            sectionQuestions.length > 0
+              ? formatTime(Math.round(sectionTotalMs / sectionQuestions.length))
+              : formatTime(0),
+          questions: sectionQuestions,
+        };
+      })
       : [];
 
   let tournamentExam = null;
@@ -1289,13 +1289,20 @@ export const saveAnswer = async (sessionId, questionId, answer, studentId, statu
 
   startOrResumeQuestionTimer(session, questionId, now);
 
-  // Normalize the incoming answer to canonical option text before storing.
-  // This resolves _id-based answers (sent from frontend for duplicate-text-safe selection)
-  // back to the option's text value that scoring logic expects.
-  // Works for: plain text, _id hex strings, option objects { text, _id }, and arrays thereof.
+  // Store the answer. If the frontend sends an option _id (24-char hex), keep it as-is so
+  // the frontend can unambiguously re-hydrate the selection even when two options share the
+  // same display text. For plain-text / number / object answers (legacy / mobile), still
+  // normalise to canonical text for backward compatibility.
+  // NOTE: checkAnswerCorrectness already calls resolveAnswerToText internally, so scoring
+  // works correctly regardless of whether we store an _id or a text string here.
+  const isIdString = (val) =>
+    typeof val === "string" && /^[a-f\d]{24}$/i.test(val.trim());
+  const isIdArray = (val) =>
+    Array.isArray(val) && val.length > 0 && val.every(isIdString);
+
   let normalizedAnswer = answer;
-  if (answer !== null && answer !== undefined) {
-    // Load question options to resolve _id → text mapping
+  if (answer !== null && answer !== undefined && !isIdString(answer) && !isIdArray(answer)) {
+    // Non-_id value: resolve to canonical text (backward compat for mobile / legacy)
     const question = await questionRepository.findById(questionId).catch(() => null);
     const options = question?.options || [];
     normalizedAnswer = resolveAnswerToText(answer, options);
@@ -1481,10 +1488,10 @@ export const logProctoringEvent = async (sessionId, eventType, metadata, student
     console.log(`Auto-submitting exam session ${sessionId} due to proctoring violations (${violationCount} violations)`);
     try {
       await autoSubmitExam(sessionId, studentId, "proctoring_violation");
-      return { 
-        success: true, 
+      return {
+        success: true,
         message: "Proctoring event logged. Exam auto-submitted due to proctoring violations.",
-        autoSubmitted: true 
+        autoSubmitted: true
       };
     } catch (error) {
       console.error("Error auto-submitting exam due to proctoring violation:", error);
@@ -1597,7 +1604,7 @@ export const submitExam = async (sessionId, studentId) => {
 export const autoSubmitExpiredSessions = async () => {
   try {
     const expiredSessions = await examSessionRepository.findExpiredInProgressSessions();
-    
+
     if (expiredSessions.length === 0) {
       return { processed: 0, message: "No expired sessions found" };
     }
@@ -1608,17 +1615,17 @@ export const autoSubmitExpiredSessions = async () => {
       expiredSessions.map(async (session) => {
         try {
           await autoSubmitExam(session._id, session.student, "time_expired");
-          return { 
-            sessionId: session._id.toString(), 
+          return {
+            sessionId: session._id.toString(),
             studentId: session.student.toString(),
-            success: true 
+            success: true
           };
         } catch (error) {
           console.error(`Error auto-submitting session ${session._id}:`, error);
-          return { 
-            sessionId: session._id.toString(), 
-            success: false, 
-            error: error.message 
+          return {
+            sessionId: session._id.toString(),
+            success: false,
+            error: error.message
           };
         }
       })
@@ -1688,7 +1695,7 @@ const calculateScore = async (session) => {
 
   // Calculate percentile
   await calculatePercentile(session);
-  
+
   // Save session with updated score
   await examSessionRepository.save(session);
 };
@@ -1823,7 +1830,7 @@ export const getExamResults = async (sessionId, studentId) => {
   }
 
   const testDoc = await examSessionRepository.findTestById(session.test);
-  
+
   let isResultsHidden = false;
   let hiddenEventType = null;
   let tournamentLb = null;
@@ -1856,8 +1863,8 @@ export const getExamResults = async (sessionId, studentId) => {
 
   const redirectSuggestion = isResultsHidden
     ? (hiddenEventType === "tournament"
-        ? (session.autoSubmitted ? "results" : "tournament")
-        : (session.autoSubmitted ? "results" : "my-olympiads"))
+      ? (session.autoSubmitted ? "results" : "tournament")
+      : (session.autoSubmitted ? "results" : "my-olympiads"))
     : (tournamentLb ? "results" : null);
   const resultsReleased = !isResultsHidden;
 
@@ -1945,25 +1952,25 @@ export const getExamResults = async (sessionId, studentId) => {
     if (question.isParent && question.childQuestions) {
       childQuestions = question.childQuestions
         .map((child) => {
-        const childId = getNormalizedId(child);
-        if (!childId) return null;
-        const populatedChild =
-          child && typeof child === "object" && child.questionText != null
-            ? child
-            : null;
-        const childObj = populatedChild || answerQuestionById.get(childId) || { _id: childId };
-        return {
-          _id: childObj._id,
-          questionText: childObj.questionText || "",
-          questionType: childObj.questionType || "single",
-          options: childObj.options || [],
-          correctAnswer: childObj.correctAnswer,
-          explanation: childObj.explanation,
-          marks: childObj.marks,
-          negativeMarks: childObj.negativeMarks,
-        };
-      })
-      .filter(Boolean);
+          const childId = getNormalizedId(child);
+          if (!childId) return null;
+          const populatedChild =
+            child && typeof child === "object" && child.questionText != null
+              ? child
+              : null;
+          const childObj = populatedChild || answerQuestionById.get(childId) || { _id: childId };
+          return {
+            _id: childObj._id,
+            questionText: childObj.questionText || "",
+            questionType: childObj.questionType || "single",
+            options: childObj.options || [],
+            correctAnswer: childObj.correctAnswer,
+            explanation: childObj.explanation,
+            marks: childObj.marks,
+            negativeMarks: childObj.negativeMarks,
+          };
+        })
+        .filter(Boolean);
     }
 
     const questionObj = question.toObject ? question.toObject() : question;
@@ -2146,8 +2153,8 @@ export const getExamResults = async (sessionId, studentId) => {
       skippedCount: session.skippedCount,
       totalQuestions: logicalSummary.total,
       percentile: session.percentile,
-      percentage: session.maxScore > 0 
-        ? Math.round((session.score / session.maxScore) * 100 * 100) / 100 
+      percentage: session.maxScore > 0
+        ? Math.round((session.score / session.maxScore) * 100 * 100) / 100
         : 0,
       rank: myRank,
     },
@@ -2161,27 +2168,27 @@ export const getExamResults = async (sessionId, studentId) => {
     questions,
     ...(tournamentLb
       ? {
-          tournament: {
-            tournamentId: tournamentLb.tournamentId,
-            tournamentTitle: tournamentLb.tournamentTitle,
-            stageName: tournamentLb.stageName,
-            stageEndTime: tournamentLb.stageEndTime,
-            resultsReleased: true,
-            redirectSuggestion: redirectSuggestion || "results",
-          },
-        }
+        tournament: {
+          tournamentId: tournamentLb.tournamentId,
+          tournamentTitle: tournamentLb.tournamentTitle,
+          stageName: tournamentLb.stageName,
+          stageEndTime: tournamentLb.stageEndTime,
+          resultsReleased: true,
+          redirectSuggestion: redirectSuggestion || "results",
+        },
+      }
       : {}),
     ...(olympiadInfo
       ? {
-          olympiad: {
-            resultDeclarationDate: olympiadInfo.resultDeclarationDate,
-            firstPlacePoints: olympiadInfo.firstPlacePoints,
-            secondPlacePoints: olympiadInfo.secondPlacePoints,
-            thirdPlacePoints: olympiadInfo.thirdPlacePoints,
-            resultsReleased: true,
-            redirectSuggestion: redirectSuggestion || "results",
-          },
-        }
+        olympiad: {
+          resultDeclarationDate: olympiadInfo.resultDeclarationDate,
+          firstPlacePoints: olympiadInfo.firstPlacePoints,
+          secondPlacePoints: olympiadInfo.secondPlacePoints,
+          thirdPlacePoints: olympiadInfo.thirdPlacePoints,
+          resultsReleased: true,
+          redirectSuggestion: redirectSuggestion || "results",
+        },
+      }
       : {}),
   };
 };
