@@ -232,6 +232,15 @@ export const joinChallenge = async (id, userId) => {
     throw new ApiError(400, "Already participating in this challenge");
   }
 
+  // Validate if the test is paid and the user has purchased it before joining
+  const test = await testRepository.findTestById(challenge.test);
+  if (test && test.price > 0) {
+    const access = await checkStudentAccessForPaidTest(challenge.test, userId);
+    if (!access.hasAccess) {
+      throw new ApiError(403, `First buy this test '${test.title}' from resource store`);
+    }
+  }
+
   challenge.participants.push({
     student: userId,
     joinedAt: new Date(),
