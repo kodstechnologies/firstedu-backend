@@ -2,7 +2,8 @@ import { ApiError } from "../utils/ApiError.js";
 import questionBankRepository from "../repository/questionBank.repository.js";
 import questionRepository from "../repository/question.repository.js";
 import categoryRepository from "../repository/category.repository.js";
-import Test from "../models/Test.js";
+import { assertBankNotInUse } from "../utils/bankUsageGuard.js";
+
 
 const validateQuestionOptions = (questionType, options) => {
   if (
@@ -405,6 +406,10 @@ export const getQuestionsByBankId = async (bankId) => {
 export const updateQuestionBank = async (id, updateData) => {
   const existing = await questionBankRepository.findById(id);
   if (!existing) throw new ApiError(404, "Question bank not found");
+
+  // Block edit if the bank is currently used in any test
+  await assertBankNotInUse(id, "edit");
+
   if (updateData.categories && updateData.categories.length > 0) {
     for (const catId of updateData.categories) {
       const cat = await categoryRepository.findById(catId);
@@ -443,6 +448,9 @@ export const toggleSectionWiseQuestions = async (id, useSectionWiseQuestions) =>
   const existing = await questionBankRepository.findById(id, false);
   if (!existing) throw new ApiError(404, "Question bank not found");
 
+  // Block toggle if the bank is currently used in any test
+  await assertBankNotInUse(id, "edit");
+
   if (useSectionWiseQuestions === true) {
     const hasSections =
       Array.isArray(existing.sections) && existing.sections.length > 0;
@@ -460,14 +468,9 @@ export const toggleSectionWiseQuestions = async (id, useSectionWiseQuestions) =>
 export const deleteQuestionBank = async (id) => {
   const existing = await questionBankRepository.findById(id);
   if (!existing) throw new ApiError(404, "Question bank not found");
-  
-  const usedInTest = await Test.findOne({ questionBank: id });
-  if (usedInTest) {
-    throw new ApiError(
-      400,
-      "Cannot delete question bank because it is used in one or more tests. Please delete the associated tests first."
-    );
-  }
+
+  // Block delete if the bank is currently used in any test (lists all test names)
+  await assertBankNotInUse(id, "delete");
 
   await questionBankRepository.deleteQuestionsByBankId(id);
   return await questionBankRepository.deleteById(id);

@@ -17,6 +17,39 @@ import { attachOfferToList, attachOfferToItem, getApplicableOfferDetails, getAmo
 import couponService from "./coupon.service.js";
 import studentRepository from "../repository/student.repository.js";
 import { sendCourseEnrollmentEmail, sendTestBundlePurchaseEmail } from "../utils/sendEmail.js";
+import Category from "../models/Category.js";
+
+const buildCategoryPathsMap = async () => {
+  const categories = await Category.find({}).select('name parent').lean();
+  const catMap = new Map();
+  categories.forEach(c => catMap.set(c._id.toString(), c));
+
+  const pathMap = new Map();
+  const getPath = (id) => {
+    if (!id) return '';
+    const idStr = id.toString();
+    if (pathMap.has(idStr)) return pathMap.get(idStr);
+    
+    let current = catMap.get(idStr);
+    if (!current) {
+      pathMap.set(idStr, '');
+      return '';
+    }
+    
+    const parts = [];
+    const visited = new Set();
+    while (current && !visited.has(current._id.toString())) {
+      parts.push(current.name);
+      visited.add(current._id.toString());
+      current = current.parent ? catMap.get(current.parent.toString()) : null;
+    }
+    const path = parts.reverse().join(' > ');
+    pathMap.set(idStr, path);
+    return path;
+  };
+
+  return getPath;
+};
 
 const DIRECT_PURCHASABLE_TEST_TYPES = [
   "test",
@@ -679,10 +712,21 @@ export const getTests = async (options = {}) => {
     isPublished: true,
   });
 
+  const getPath = await buildCategoryPathsMap();
+
   const testsRaw = result.tests.map((test) => {
     const testObj = test.toObject();
     delete testObj.questions;
     delete testObj.randomConfig;
+
+    let catId = testObj.categoryId;
+    if (!catId && testObj.questionBank?.categories?.length > 0) {
+      catId = testObj.questionBank.categories[0]._id || testObj.questionBank.categories[0];
+    }
+    if (catId) {
+      testObj.categoryPath = getPath(catId);
+    }
+
     return testObj;
   });
 
@@ -865,6 +909,16 @@ export const getTestById = async (testId) => {
   const testData = await attachOfferToItem(test, moduleTypeForOffer, "price");
   delete testData.questions;
   delete testData.randomConfig;
+
+  const getPath = await buildCategoryPathsMap();
+  let catId = testData.categoryId;
+  if (!catId && testData.questionBank?.categories?.length > 0) {
+    catId = testData.questionBank.categories[0]._id || testData.questionBank.categories[0];
+  }
+  if (catId) {
+    testData.categoryPath = getPath(catId);
+  }
+
   return testData;
 };
 
@@ -967,7 +1021,21 @@ export const getTestBundles = async (options = {}) => {
     isActive: true,
   });
 
-  const bundlesRaw = result.bundles.map((b) => (b.toObject ? b.toObject() : b));
+  const getPath = await buildCategoryPathsMap();
+  const bundlesRaw = result.bundles.map((b) => {
+    const bundleObj = b.toObject ? b.toObject() : b;
+    let catId = bundleObj.category;
+    if (catId) {
+      bundleObj.categoryPath = getPath(catId);
+    } else if (bundleObj.tests?.length > 0) {
+      const firstTest = bundleObj.tests[0];
+      const testCatId = firstTest?.categoryId || (firstTest?.questionBank?.categories?.[0]?._id || firstTest?.questionBank?.categories?.[0]);
+      if (testCatId) {
+        bundleObj.categoryPath = getPath(testCatId);
+      }
+    }
+    return bundleObj;
+  });
   const bundles = await attachOfferToList(bundlesRaw, "TestSeries", "price");
   await attachPurchasedFlagToBundles(bundles, studentId);
 

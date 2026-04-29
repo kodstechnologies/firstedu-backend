@@ -4,6 +4,19 @@ import CoursePurchase from "../models/CoursePurchase.js";
 import EventRegistration from "../models/EventRegistration.js";
 import SupportTicket from "../models/SupportTicket.js";
 import { ApiError } from "../utils/ApiError.js";
+import mongoose from "mongoose";
+
+// Register missing CompetitionCategory model to prevent Mongoose populate error
+if (!mongoose.models.CompetitionCategory) {
+  mongoose.model("CompetitionCategory", new mongoose.Schema({}, { strict: false, collection: "categories" }));
+}
+
+// Ensure other populated models are loaded
+import "../models/Test.js";
+import "../models/TestBundle.js";
+import "../models/Category.js";
+import "../models/Course.js";
+
 
 /**
  * Get start and end of a month (in UTC)
@@ -343,27 +356,15 @@ export const getRevenueHistory = async ({
     throw new ApiError(400, "'from' date cannot be after 'to' date");
   }
 
-  const buildRange = (dateField) => {
-    const query = {
-      paymentStatus: "completed",
-    };
-
-    if (fromDate || toDate) {
-      query[dateField] = {};
-      if (fromDate) query[dateField].$gte = fromDate;
-      if (toDate) query[dateField].$lte = toDate;
-    }
-
-    return query;
-  };
-
   const normalizeType = (value) => {
-    const key = String(value || "").trim().toLowerCase();
+    if (!value) return null;
+    const key = String(value).trim().toLowerCase();
     const aliases = {
       bundle: "test_bundle",
-      "test-bundle": "test_bundle",
       testbundle: "test_bundle",
-      test_bundle: "test_bundle",
+      "test-bundle": "test_bundle",
+      olympiad: "olympiads",
+      olympiads: "olympiads",
       competition: "competition_category",
       competitioncategory: "competition_category",
       competition_category: "competition_category",
@@ -380,136 +381,220 @@ export const getRevenueHistory = async ({
         .filter(Boolean)
     : [];
 
-  const [coursePurchases, testPurchases, eventRegistrations] = await Promise.all([
-    CoursePurchase.find(buildRange("purchaseDate"))
-      .populate("student", "name email phone")
-      .populate("course", "title")
-      .lean(),
-    TestPurchase.find(buildRange("purchaseDate"))
-      .populate("student", "name email phone")
-      .populate("test", "title")
-      .populate("testBundle", "name")
-      .populate("competitionCategory", "title")
-      .lean(),
-    EventRegistration.find({
-      ...buildRange("registeredAt"),
-      eventType: { $in: ["tournament", "workshop"] },
-    })
-      .populate("student", "name email phone")
-      .populate("eventId", "title")
-      .lean(),
-  ]);
-
-  const getStudentData = (student) => ({
-    id: student?._id || null,
-    name: student?.name || "Unknown User",
-    email: student?.email || null,
-    phone: student?.phone || null,
-  });
-
-  const transactions = [
-    ...coursePurchases.map((p) => ({
-      id: p._id,
-      sourceType: "course",
-      purchasedAt: p.purchaseDate || p.createdAt,
-      itemName: p.course?.title || "Course",
-      amount: Number(p.purchasePrice) || 0,
-      paymentId: p.paymentId || null,
-      paymentStatus: p.paymentStatus,
-      user: getStudentData(p.student),
-    })),
-    ...testPurchases.map((p) => {
-      const sourceType = p.test
-        ? "test"
-        : p.testBundle
-          ? "test_bundle"
-          : "competition_category";
-      const itemName =
-        p.test?.title ||
-        p.testBundle?.name ||
-        p.competitionCategory?.title ||
-        "Test Purchase";
-
-      return {
-        id: p._id,
-        sourceType,
-        purchasedAt: p.purchaseDate || p.createdAt,
-        itemName,
-        amount: Number(p.purchasePrice) || 0,
-        paymentId: p.paymentId || null,
-        paymentStatus: p.paymentStatus,
-        user: getStudentData(p.student),
-      };
-    }),
-    ...eventRegistrations.map((r) => ({
-      id: r._id,
-      sourceType: r.eventType,
-      purchasedAt: r.registeredAt || r.createdAt,
-      itemName: r.eventId?.title || r.eventType || "Event Registration",
-      amount: Number(r.amountPaid) || 0,
-      paymentId: r.paymentId || null,
-      paymentStatus: r.paymentStatus,
-      user: getStudentData(r.student),
-    })),
-  ]
-    .sort((a, b) => new Date(b.purchasedAt) - new Date(a.purchasedAt));
-
-  let filteredTransactions = transactions;
+  const matchStage = {};
 
   if (requestedTypes.length > 0) {
-    filteredTransactions = filteredTransactions.filter((t) =>
-      requestedTypes.includes(normalizeType(t.sourceType))
-    );
+    matchStage.sourceType = { $in: requestedTypes };
+  }
+
+  if (from) {
+    const fromDate = new Date(from);
+    if (!Number.isNaN(fromDate.getTime())) {
+      matchStage.purchasedAt = { $gte: fromDate };
+    }
+  }
+
+  if (to) {
+    const toDate = new Date(to);
+    if (!Number.isNaN(toDate.getTime())) {
+      if (typeof to === "string" && !to.includes("T")) {
+        toDate.setHours(23, 59, 59, 999);
+      }
+      matchStage.purchasedAt = matchStage.purchasedAt || {};
+      matchStage.purchasedAt.$lte = toDate;
+    }
   }
 
   if (search && String(search).trim()) {
-    const q = String(search).trim().toLowerCase();
-    filteredTransactions = filteredTransactions.filter((t) => {
-      const haystack = [
-        t.itemName,
-        t.sourceType,
-        t.paymentId,
-        t.user?.name,
-        t.user?.email,
-        t.user?.phone,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return haystack.includes(q);
-    });
+    const q = String(search).trim();
+    const amountSearch = Number(q);
+    
+    const searchConditions = [
+      { itemName: { $regex: q, $options: "i" } },
+      { paymentId: { $regex: q, $options: "i" } },
+      { "user.name": { $regex: q, $options: "i" } },
+      { "user.email": { $regex: q, $options: "i" } },
+      { "user.phone": { $regex: q, $options: "i" } }
+    ];
+
+    if (!Number.isNaN(amountSearch)) {
+      searchConditions.push({ amount: amountSearch });
+    }
+
+    matchStage.$or = searchConditions;
   }
 
-  const totalRevenue = filteredTransactions.reduce(
-    (sum, entry) => sum + (Number(entry.amount) || 0),
-    0
-  );
-
-  const breakdownMap = filteredTransactions.reduce((acc, entry) => {
-    const key = entry.sourceType;
-    if (!acc[key]) {
-      acc[key] = { sourceType: key, transactions: 0, revenue: 0 };
+  const pipeline = [
+    {
+      $project: {
+        sourceType: { $literal: "course" },
+        purchasedAt: { $ifNull: ["$purchaseDate", "$createdAt"] },
+        amount: { $convert: { input: "$purchasePrice", to: "double", onError: 0, onNull: 0 } },
+        paymentId: { $ifNull: ["$paymentId", ""] },
+        paymentStatus: { $ifNull: ["$paymentStatus", "completed"] },
+        studentId: "$student",
+        itemId: "$course"
+      }
+    },
+    {
+      $unionWith: {
+        coll: "testpurchases",
+        pipeline: [
+          {
+            $project: {
+              sourceType: {
+                $cond: [
+                  { $ifNull: ["$test", false] }, "test",
+                  { $cond: [{ $ifNull: ["$testBundle", false] }, "test_bundle", "competition_category"] }
+                ]
+              },
+              purchasedAt: { $ifNull: ["$purchaseDate", "$createdAt"] },
+              amount: { $convert: { input: "$purchasePrice", to: "double", onError: 0, onNull: 0 } },
+              paymentId: { $ifNull: ["$paymentId", ""] },
+              paymentStatus: { $ifNull: ["$paymentStatus", "completed"] },
+              studentId: "$student",
+              itemId: {
+                $cond: [
+                  { $ifNull: ["$test", false] }, "$test",
+                  { $cond: [{ $ifNull: ["$testBundle", false] }, "$testBundle", "$competitionCategory"] }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      $unionWith: {
+        coll: "eventregistrations",
+        pipeline: [
+          { $match: { eventType: { $in: ["tournament", "workshop"] } } },
+          {
+            $project: {
+              sourceType: "$eventType",
+              purchasedAt: { $ifNull: ["$registeredAt", "$createdAt"] },
+              amount: { $convert: { input: "$amountPaid", to: "double", onError: 0, onNull: 0 } },
+              paymentId: { $ifNull: ["$paymentId", ""] },
+              paymentStatus: { $ifNull: ["$paymentStatus", "completed"] },
+              studentId: "$student",
+              itemId: "$eventId"
+            }
+          }
+        ]
+      }
+    },
+    {
+      $lookup: {
+        from: "users",
+        localField: "studentId",
+        foreignField: "_id",
+        as: "userDoc"
+      }
+    },
+    { $unwind: { path: "$userDoc", preserveNullAndEmptyArrays: true } },
+    {
+      $lookup: { from: "courses", localField: "itemId", foreignField: "_id", as: "cDoc" }
+    },
+    {
+      $lookup: { from: "tests", localField: "itemId", foreignField: "_id", as: "tDoc" }
+    },
+    {
+      $lookup: { from: "testbundles", localField: "itemId", foreignField: "_id", as: "bDoc" }
+    },
+    {
+      $lookup: { from: "categories", localField: "itemId", foreignField: "_id", as: "catDoc" }
+    },
+    {
+      $lookup: { from: "tournaments", localField: "itemId", foreignField: "_id", as: "tournDoc" }
+    },
+    {
+      $lookup: { from: "workshops", localField: "itemId", foreignField: "_id", as: "workDoc" }
+    },
+    {
+      $addFields: {
+        itemName: {
+          $ifNull: [
+            { $arrayElemAt: ["$cDoc.title", 0] },
+            { $arrayElemAt: ["$tDoc.title", 0] },
+            { $arrayElemAt: ["$bDoc.name", 0] },
+            { $arrayElemAt: ["$catDoc.name", 0] },
+            { $arrayElemAt: ["$tournDoc.title", 0] },
+            { $arrayElemAt: ["$workDoc.title", 0] },
+            "Unknown Item"
+          ]
+        },
+        user: {
+          id: "$userDoc._id",
+          name: { $ifNull: ["$userDoc.name", "Unknown User"] },
+          email: { $ifNull: ["$userDoc.email", null] },
+          phone: { $ifNull: ["$userDoc.phone", null] }
+        }
+      }
+    },
+    {
+      $project: {
+        cDoc: 0, tDoc: 0, bDoc: 0, catDoc: 0, tournDoc: 0, workDoc: 0, userDoc: 0, studentId: 0, itemId: 0
+      }
+    },
+    { $match: matchStage },
+    { $sort: { purchasedAt: -1 } },
+    {
+      $facet: {
+        metadata: [{ $count: "total" }],
+        data: [{ $skip: skip }, { $limit: limitNum }],
+        revenueSummary: [
+          {
+            $group: {
+              _id: null,
+              totalRevenue: { $sum: "$amount" }
+            }
+          }
+        ],
+        sourceBreakdown: [
+          {
+            $group: {
+              _id: "$sourceType",
+              revenue: { $sum: "$amount" },
+              transactions: { $sum: 1 }
+            }
+          },
+          { $sort: { revenue: -1 } },
+          {
+            $project: {
+              sourceType: "$_id",
+              revenue: 1,
+              transactions: 1,
+              _id: 0
+            }
+          }
+        ]
+      }
     }
-    acc[key].transactions += 1;
-    acc[key].revenue += Number(entry.amount) || 0;
-    return acc;
-  }, {});
+  ];
 
-  const sourceBreakdown = Object.values(breakdownMap).sort(
-    (a, b) => b.revenue - a.revenue
-  );
+  const results = await CoursePurchase.aggregate(pipeline);
+  const facetResult = results[0];
 
-  const total = filteredTransactions.length;
-  const paginatedTransactions = filteredTransactions.slice(skip, skip + limitNum);
+  const total = facetResult.metadata[0]?.total || 0;
+  const transactions = facetResult.data.map(t => ({
+    id: t._id,
+    sourceType: t.sourceType,
+    purchasedAt: t.purchasedAt,
+    itemName: t.itemName,
+    amount: t.amount,
+    paymentId: t.paymentId,
+    paymentStatus: t.paymentStatus,
+    user: t.user
+  }));
+
+  const totalRevenue = facetResult.revenueSummary[0]?.totalRevenue || 0;
+  const sourceBreakdown = facetResult.sourceBreakdown || [];
 
   return {
     summary: {
       totalTransactions: total,
-      totalRevenue: Math.round(totalRevenue),
-      sourceBreakdown: sourceBreakdown.map((entry) => ({
-        ...entry,
-        revenue: Math.round(entry.revenue),
-      })),
+      totalRevenue,
+      sourceBreakdown,
     },
     pagination: {
       page: pageNum,
@@ -517,10 +602,7 @@ export const getRevenueHistory = async ({
       total,
       pages: Math.ceil(total / limitNum) || 1,
     },
-    transactions: paginatedTransactions.map((entry) => ({
-      ...entry,
-      amount: Math.round(Number(entry.amount) || 0),
-    })),
+    transactions,
   };
 };
 

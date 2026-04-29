@@ -1,6 +1,7 @@
 import { ApiError } from "../utils/ApiError.js";
 import questionRepository from "../repository/question.repository.js";
 import questionBankRepository from "../repository/questionBank.repository.js";
+import { assertBankNotInUse } from "../utils/bankUsageGuard.js";
 
 const toQuestionPlain = (doc) => {
   if (!doc) return null;
@@ -301,6 +302,11 @@ export const updateQuestion = async (id, updateData) => {
     throw new ApiError(404, "Question not found");
   }
 
+  // Block edit if the question's parent bank is currently used in any test
+  if (existingQuestion.questionBank) {
+    await assertBankNotInUse(existingQuestion.questionBank, "edit");
+  }
+
   // Validate correct answer if options are being updated
   if (updateData.options && updateData.questionType !== "connected") {
     validateQuestionOptions(
@@ -469,6 +475,11 @@ export const deleteQuestion = async (id) => {
   const question = await questionRepository.findById(id);
   if (!question) {
     throw new ApiError(404, "Question not found");
+  }
+
+  // Block delete if the question's parent bank is currently used in any test
+  if (question.questionBank) {
+    await assertBankNotInUse(question.questionBank, "delete");
   }
 
   await questionRepository.deleteById(id);
