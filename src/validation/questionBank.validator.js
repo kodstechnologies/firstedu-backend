@@ -78,7 +78,11 @@ const questionItemSchema = Joi.object({
       otherwise: Joi.optional().allow(null),
     }),
   }),
-  explanation: Joi.string().trim().required(),
+  explanation: Joi.string().when("questionType", {
+    is: "connected",
+    then: Joi.string().trim().allow("").optional(),
+    otherwise: Joi.string().trim().required(),
+  }),
   subject: Joi.string().trim().optional(),
   topic: Joi.string().trim().optional(),
   difficulty: Joi.string()

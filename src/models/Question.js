@@ -50,7 +50,9 @@ const questionSchema = new mongoose.Schema(
     explanation: { 
       type: String, 
       trim: true,
-      required: [true, 'Explanation is required. Please provide a detailed solution explanation for this question.']
+      required: function () {
+        return this.questionType !== "connected";
+      },
     },
     subject: { type: String, trim: true },
     questionBank: {
