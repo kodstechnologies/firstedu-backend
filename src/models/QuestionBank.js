@@ -10,6 +10,7 @@ const sectionSchema = new mongoose.Schema(
       enum: ["easy", "medium", "hard"],
       required: true,
     },
+    timeMinutes: { type: Number, min: 0, default: 0 },
     questions: [
       {
         type: mongoose.Schema.Types.ObjectId,

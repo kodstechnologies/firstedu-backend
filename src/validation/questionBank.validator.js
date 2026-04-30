@@ -38,6 +38,7 @@ const sectionSchema = Joi.object({
     .lowercase(),
   id: Joi.number().optional(),
   name: Joi.string().trim().optional(),
+  timeMinutes: Joi.number().min(0).optional().default(0),
   questions: Joi.array().items(Joi.string()).optional(),
 });
 

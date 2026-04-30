@@ -242,8 +242,22 @@ const buildPerQuestionTimePlan = (questions, sectionConfig, durationMinutes) => 
     return { questionTimesMs, sectionTimesMs: {}, strategy: "equal" };
   }
 
-  const sectionRatios = new Array(activeSectionEntries.length).fill(1);
-  const sectionBudgets = allocateIntegerShares(totalDurationMs, sectionRatios);
+  // Use per-section timeMinutes if any section has it configured; otherwise equal split.
+  const hasSectionTimes = activeSectionEntries.some(
+    (entry) => Number(entry.section.timeMinutes) > 0
+  );
+
+  let sectionBudgets;
+  if (hasSectionTimes) {
+    // Each section's budget comes directly from its own timeMinutes.
+    sectionBudgets = activeSectionEntries.map((entry) =>
+      Math.round((Number(entry.section.timeMinutes) || 0) * 60 * 1000)
+    );
+  } else {
+    // Legacy: split total duration equally across sections.
+    const sectionRatios = new Array(activeSectionEntries.length).fill(1);
+    sectionBudgets = allocateIntegerShares(totalDurationMs, sectionRatios);
+  }
 
   const questionTimesMs = new Array(questionCount).fill(0);
   const sectionTimesMs = {};
@@ -263,7 +277,7 @@ const buildPerQuestionTimePlan = (questions, sectionConfig, durationMinutes) => 
   return {
     questionTimesMs,
     sectionTimesMs,
-    strategy: "section_equal",
+    strategy: hasSectionTimes ? "section_timed" : "section_equal",
   };
 };
 
@@ -592,8 +606,23 @@ export const startExamSession = async (testId, studentId, options = {}) => {
         index,
         count: section.count,
         difficulty: section.difficulty,
+        timeMinutes: section.timeMinutes || 0,
       }))
       : [];
+
+  // If section-wise times are configured, sum them for total duration
+  const sectionTimesSum = sectionConfigForTiming.reduce(
+    (sum, s) => sum + (Number(s.timeMinutes) || 0), 0
+  );
+  if (sectionTimesSum > 0) {
+    durationMinutesForPlan = sectionTimesSum;
+    // Also update endTime for non-tournament tests
+    if (test.applicableFor !== "tournament") {
+      const durationMs = sectionTimesSum * 60 * 1000;
+      endTime = new Date(now.getTime() + durationMs);
+    }
+  }
+
   const { questionTimesMs } = buildPerQuestionTimePlan(
     questions,
     sectionConfigForTiming,
