@@ -1,7 +1,32 @@
 import crypto from 'crypto';
+import mongoose from 'mongoose';
 import Student from '../models/Student.js';
 import Wallet from '../models/Wallet.js';
 import walletRepository from '../repository/wallet.repository.js';
+import studentRepository from '../repository/student.repository.js';
+import StudentSession from '../models/StudentSession.js';
+import PointsTransaction from '../models/PointsTransaction.js';
+import ExamSession from '../models/ExamSession.js';
+import TestPurchase from '../models/TestPurchase.js';
+import CoursePurchase from '../models/CoursePurchase.js';
+import CategoryPurchase from '../models/CategoryPurchase.js';
+import Order from '../models/Order.js';
+import EventRegistration from '../models/EventRegistration.js';
+import Challenge from '../models/Challenge.js';
+import ChallengeYourselfProgress from '../models/ChallengeYourselfProgress.js';
+import EverydayChallengeCompletion from '../models/EverydayChallengeCompletion.js';
+import Forum from '../models/Forum.js';
+import Certificate from '../models/Certificate.js';
+import Notification from '../models/Notification.js';
+import NeedToImprove from '../models/NeedToImprove.js';
+import MerchandiseClaim from '../models/MerchandiseClaim.js';
+import ContactSupport from '../models/ContactSupport.js';
+import SupportTicket from '../models/SupportTicket.js';
+import SupportMessage from '../models/SupportMessage.js';
+import LiveCompetitionSubmission from '../models/LiveCompetitionSubmission.js';
+import RazorpayOrderIntent from '../models/RazorpayOrderIntent.js';
+import TeacherRating from '../models/TeacherRating.js';
+import BlogRequest from '../models/BlogRequest.js';
 
 /**
  * Generate a unique referral code based on the user's name.
@@ -312,6 +337,98 @@ export const getMyReferrals = async (studentId, options = {}) => {
   };
 };
 
+/**
+ * Permanently delete a student account and all associated data.
+ * Removes records from: sessions, wallet, points, purchases, exams,
+ * forums, challenges, events, certificates, notifications, support, etc.
+ * @param {string} studentId - The student's ID
+ * @returns {Promise<Object>} - Summary of deleted counts
+ */
+export const deleteAccount = async (studentId) => {
+  const student = await Student.findById(studentId);
+  if (!student) {
+    throw new Error('Student not found');
+  }
+
+  // Delete all related data in parallel for performance
+  const results = await Promise.allSettled([
+    // Sessions & Auth
+    StudentSession.deleteMany({ student: studentId }),
+
+    // Wallet & Points
+    Wallet.deleteMany({ user: studentId, userType: 'User' }),
+    PointsTransaction.deleteMany({ student: studentId }),
+
+    // Purchases
+    TestPurchase.deleteMany({ student: studentId }),
+    CoursePurchase.deleteMany({ student: studentId }),
+    CategoryPurchase.deleteMany({ student: studentId }),
+    Order.deleteMany({ student: studentId }),
+    RazorpayOrderIntent.deleteMany({ student: studentId }),
+
+    // Exam Sessions
+    ExamSession.deleteMany({ student: studentId }),
+
+    // Events & Registrations
+    EventRegistration.deleteMany({ student: studentId }),
+
+    // Challenges
+    Challenge.deleteMany({ createdBy: studentId }),
+    ChallengeYourselfProgress.deleteMany({ student: studentId }),
+    EverydayChallengeCompletion.deleteMany({ student: studentId }),
+
+    // Forums (delete student's own forums)
+    Forum.deleteMany({ author: studentId }),
+
+    // Certificates
+    Certificate.deleteMany({ student: studentId }),
+
+    // Notifications
+    Notification.deleteMany({ recipient: studentId }),
+
+    // Need to Improve
+    NeedToImprove.deleteMany({ student: studentId }),
+
+    // Merchandise Claims
+    MerchandiseClaim.deleteMany({ student: studentId }),
+
+    // Support
+    ContactSupport.deleteMany({ student: studentId }),
+    SupportTicket.deleteMany({ student: studentId }),
+    SupportMessage.deleteMany({ sender: studentId }),
+
+    // Live Competitions
+    LiveCompetitionSubmission.deleteMany({ student: studentId }),
+
+    // Teacher Ratings
+    TeacherRating.deleteMany({ student: studentId }),
+
+    // Blog Requests
+    BlogRequest.deleteMany({ student: studentId }),
+
+    // Remove from referral histories of other students
+    Student.updateMany(
+      { referralHistory: studentId },
+      { $pull: { referralHistory: studentId } }
+    ),
+  ]);
+
+  // Log any failures (non-critical)
+  results.forEach((result, index) => {
+    if (result.status === 'rejected') {
+      console.error(`Delete operation ${index} failed:`, result.reason);
+    }
+  });
+
+  // Finally, delete the student document itself
+  await studentRepository.deleteById(studentId);
+
+  return {
+    message: 'Account permanently deleted',
+    studentId,
+  };
+};
+
 const studentService = {
   generateReferralCode,
   validateAndGetReferrerId,
@@ -322,7 +439,9 @@ const studentService = {
   convertPointsToMoney,
   getReferralInfo,
   getMyReferrals,
+  deleteAccount,
   REFERRAL_REWARD_POINTS,
 };
 
 export default studentService;
+

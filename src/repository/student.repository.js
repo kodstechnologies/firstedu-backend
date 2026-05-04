@@ -120,6 +120,15 @@ const save = async (student) => {
   }
 };
 
+const deleteById = async (userId) => {
+  try {
+    const deleted = await User.findByIdAndDelete(userId);
+    return deleted;
+  } catch (error) {
+    throw new ApiError(500, "Failed to delete student", error.message);
+  }
+};
+
 export default {
   create,
   findOne,
@@ -128,4 +137,5 @@ export default {
   updateById,
   save,
   getCounts,
+  deleteById,
 };

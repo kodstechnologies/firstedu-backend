@@ -12,6 +12,7 @@ import {
   convertPoints,
   getReferralInfo,
   getMyReferrals,
+  deleteAccount,
 } from "../controllers/studentAuth.controller.js";
 import {
   getCourses,
@@ -234,6 +235,7 @@ router.put(
   updateProfile,
 );
 router.put("/change-password", verifyJWT, changePassword);
+router.delete("/delete-account", verifyJWT, deleteAccount);
 
 // Dadshboard api
 router.get("/dashboard/stats", verifyJWT, getStudentDashboardStats);

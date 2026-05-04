@@ -514,3 +514,41 @@ export const getMyReferrals = asyncHandler(async (req, res) => {
   );
 });
 
+// Permanently Delete Student Account
+export const deleteAccount = asyncHandler(async (req, res) => {
+  const studentId = req.user._id;
+  const { password } = req.body;
+
+  if (!password) {
+    throw new ApiError(400, "Password is required to delete your account");
+  }
+
+  // Verify the student's password before proceeding
+  const student = await studentRepository.findOne({ _id: studentId }, true);
+  if (!student) {
+    throw new ApiError(404, "Student not found");
+  }
+
+  const isPasswordValid = await student.isPasswordCorrect(password);
+  if (!isPasswordValid) {
+    throw new ApiError(401, "Incorrect password. Account deletion denied.");
+  }
+
+  // Proceed with permanent deletion
+  const result = await studentService.deleteAccount(studentId);
+
+  // Clear auth cookies
+  const options = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "None",
+  };
+
+  return res
+    .status(200)
+    .clearCookie("accessToken", options)
+    .clearCookie("refreshToken", options)
+    .json(ApiResponse.success(result, "Account deleted permanently"));
+});
+
+
