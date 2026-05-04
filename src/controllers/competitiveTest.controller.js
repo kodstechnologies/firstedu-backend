@@ -38,7 +38,7 @@ export const deleteCompetitiveTest = asyncHandler(async (req, res) => {
 export const getCompetitiveTestsForStudent = asyncHandler(async (req, res) => {
   const { categoryId, page, limit, search } = req.query;
   if (!categoryId) throw new ApiError(400, "categoryId is required");
-  
+
   // Resolve full post-purchase access status (handles new content + price diff)
   const accessStatus = await resolveAccessStatus(req.user._id, categoryId);
   const result = await competitiveTestService.getCompetitiveTests({ categoryId, page, limit, search, isPublished: true });
@@ -107,10 +107,10 @@ export const getCompetitiveTestsForStudent = asyncHandler(async (req, res) => {
       "Competitive tests fetched successfully",
       {
         ...result.pagination,
-        hasAccess:    accessStatus.hasAccess,
-        upgradable:   accessStatus.upgradable,
+        hasAccess: accessStatus.hasAccess,
+        upgradable: accessStatus.upgradable,
         // Only expose a cost when there is actually something to upgrade.
-        upgradeCost:  accessStatus.upgradable ? accessStatus.upgradeCost : 0,
+        upgradeCost: accessStatus.upgradable ? accessStatus.upgradeCost : 0,
         isFreeUpgrade: accessStatus.upgradable ? accessStatus.isFreeUpgrade : false,
         hasNewContent: accessStatus.upgradable,
       }

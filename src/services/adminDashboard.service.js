@@ -425,6 +425,7 @@ export const getRevenueHistory = async ({
   }
 
   const pipeline = [
+    { $match: { paymentStatus: "completed" } },
     {
       $project: {
         sourceType: { $literal: "course" },
@@ -440,6 +441,7 @@ export const getRevenueHistory = async ({
       $unionWith: {
         coll: "testpurchases",
         pipeline: [
+          { $match: { paymentStatus: "completed" } },
           {
             $project: {
               sourceType: {
@@ -468,7 +470,7 @@ export const getRevenueHistory = async ({
       $unionWith: {
         coll: "eventregistrations",
         pipeline: [
-          { $match: { eventType: { $in: ["tournament", "workshop"] } } },
+          { $match: { paymentStatus: "completed" } },
           {
             $project: {
               sourceType: "$eventType",
@@ -511,6 +513,12 @@ export const getRevenueHistory = async ({
       $lookup: { from: "workshops", localField: "itemId", foreignField: "_id", as: "workDoc" }
     },
     {
+      $lookup: { from: "olympiadtests", localField: "itemId", foreignField: "_id", as: "olyDoc" }
+    },
+    {
+      $lookup: { from: "challenges", localField: "itemId", foreignField: "_id", as: "chalDoc" }
+    },
+    {
       $addFields: {
         itemName: {
           $ifNull: [
@@ -520,6 +528,8 @@ export const getRevenueHistory = async ({
             { $arrayElemAt: ["$catDoc.name", 0] },
             { $arrayElemAt: ["$tournDoc.title", 0] },
             { $arrayElemAt: ["$workDoc.title", 0] },
+            { $arrayElemAt: ["$olyDoc.title", 0] },
+            { $arrayElemAt: ["$chalDoc.title", 0] },
             "Unknown Item"
           ]
         },
@@ -533,7 +543,7 @@ export const getRevenueHistory = async ({
     },
     {
       $project: {
-        cDoc: 0, tDoc: 0, bDoc: 0, catDoc: 0, tournDoc: 0, workDoc: 0, userDoc: 0, studentId: 0, itemId: 0
+        cDoc: 0, tDoc: 0, bDoc: 0, catDoc: 0, tournDoc: 0, workDoc: 0, olyDoc: 0, chalDoc: 0, userDoc: 0, studentId: 0, itemId: 0
       }
     },
     { $match: matchStage },
