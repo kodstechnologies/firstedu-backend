@@ -166,6 +166,22 @@ const getSectionIndexByCount = (sectionConfigs = [], questionIndex = 0) => {
   return undefined;
 };
 
+/**
+ * Appends totalTimeMinutes to a question bank plain object.
+ * Only added when useSectionWiseDifficulty === true.
+ */
+const appendTotalTime = (bank) => {
+  if (!bank) return bank;
+  const plain = bank.toObject ? bank.toObject({ virtuals: true }) : { ...bank };
+  if (plain.useSectionWiseDifficulty === true && Array.isArray(plain.sections)) {
+    plain.totalTimeMinutes = plain.sections.reduce(
+      (sum, s) => sum + (Number(s.timeMinutes) || 0),
+      0
+    );
+  }
+  return plain;
+};
+
 export const createQuestionBank = async (data, createdBy) => {
   const categoryIds = data.categories || [];
   for (const catId of categoryIds) {
@@ -380,20 +396,24 @@ export const createQuestionBankWithQuestions = async (data, createdBy) => {
 
   const bankWithPopulate = await questionBankRepository.findById(bank._id);
   return {
-    questionBank: bankWithPopulate,
+    questionBank: appendTotalTime(bankWithPopulate),
     questions: createdQuestions,
     passageQuestionSets: buildPassageQuestionSets(createdQuestions),
   };
 };
 
 export const getQuestionBanks = async (options = {}) => {
-  return await questionBankRepository.findAll({}, options);
+  const result = await questionBankRepository.findAll({}, options);
+  return {
+    ...result,
+    items: result.items.map(appendTotalTime),
+  };
 };
 
 export const getQuestionBankById = async (id) => {
   const bank = await questionBankRepository.findById(id);
   if (!bank) throw new ApiError(404, "Question bank not found");
-  return bank;
+  return appendTotalTime(bank);
 };
 
 export const getQuestionsByBankId = async (bankId) => {

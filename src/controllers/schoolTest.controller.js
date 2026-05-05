@@ -39,7 +39,7 @@ export const deleteSchoolTest = asyncHandler(async (req, res) => {
 export const getSchoolTestsForStudent = asyncHandler(async (req, res) => {
   const { categoryId, page, limit } = req.query;
   if (!categoryId) throw new ApiError(400, "categoryId is required");
-  
+
   // Resolve full post-purchase access status (new content detection + price diff)
   const accessStatus = await resolveAccessStatus(req.user._id, categoryId);
 
@@ -109,11 +109,11 @@ export const getSchoolTestsForStudent = asyncHandler(async (req, res) => {
       "School tests fetched successfully",
       {
         ...result.pagination,
-        hasAccess:     accessStatus.hasAccess,
-        upgradable:    accessStatus.upgradable,
+        hasAccess: accessStatus.hasAccess,
+        upgradable: accessStatus.upgradable,
         // Only expose a cost when there is actually something to upgrade.
         // If upgradable=false, cost must be 0 to avoid misleading the frontend.
-        upgradeCost:   accessStatus.upgradable ? accessStatus.upgradeCost : 0,
+        upgradeCost: accessStatus.upgradable ? accessStatus.upgradeCost : 0,
         isFreeUpgrade: accessStatus.upgradable ? accessStatus.isFreeUpgrade : false,
         hasNewContent: accessStatus.upgradable,
       }
