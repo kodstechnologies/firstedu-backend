@@ -123,9 +123,13 @@ export const getCourses = async (options = {}) => {
     sortOrder = "desc",
     type,
     access,
+    isCertification,
   } = options;
  
   const query = { isPublished: true };
+  if (typeof isCertification === "boolean") {
+    query.isCertification = isCertification;
+  }
   if (category) query.category = category;
   if (search) {
     const regex = { $regex: search, $options: "i" };
@@ -420,12 +424,19 @@ export const purchaseCourse = async (
  * Filters: search (title/description), contentType (pdf | video | audio)
  */
 export const getMyCourses = async (studentId, page = 1, limit = 10, options = {}) => {
-  const { search, contentType } = options;
+  const { search, contentType, isCertification } = options;
   const pageNum = parseInt(page);
   const limitNum = parseInt(limit);
   const skip = (pageNum - 1) * limitNum;
 
   let purchases = await orderRepository.findCoursePurchases(studentId);
+
+  // Filter by isCertification
+  if (typeof isCertification === "boolean") {
+    purchases = purchases.filter(
+      (p) => p.course && Boolean(p.course.isCertification) === isCertification
+    );
+  }
 
   // Filter by contentType (pdf, video, audio)
   if (contentType) {
