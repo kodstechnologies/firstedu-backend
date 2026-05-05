@@ -100,6 +100,14 @@ const startServer = async () => {
     console.log('⏰ Minute cron: auto-submit + tournament notifications');
 
     const port = process.env.PORT || 8000;
+
+    // Increase timeouts for large file uploads (up to 500MB)
+    // Default Node.js timeout is 2 minutes — not enough for large video/audio uploads
+    server.timeout = 10 * 60 * 1000;         // 10 minutes
+    server.headersTimeout = 10 * 60 * 1000;   // 10 minutes
+    server.keepAliveTimeout = 10 * 60 * 1000; // 10 minutes
+    server.requestTimeout = 10 * 60 * 1000;   // 10 minutes
+
     server.listen(port, '0.0.0.0', () => {
       console.log(`🚀!! Server running on http://0.0.0.0:${port} at ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`);
       console.log(`📡 Socket.io server initialized`);
