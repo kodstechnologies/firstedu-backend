@@ -8,6 +8,7 @@ import {
 } from "../services/studentOlympiad.service.js";
 import testRepository from "../repository/test.repository.js";
 import examSessionRepository from "../repository/examSession.repository.js";
+import orderRepository from "../repository/order.repository.js";
 
 const VALID_TYPES = ["tournament", "olympiad", "standalone_test"];
 
@@ -256,6 +257,128 @@ export const getLeaderboardsForStudent = asyncHandler(async (req, res) => {
   );
 });
 
+export const getPurchasedTestLeaderboards = asyncHandler(async (req, res) => {
+  const { eventId, page = 1, limit = 10 } = req.query;
+
+  const pageNum = parseInt(page) || 1;
+  const limitNum = Math.min(parseInt(limit) || 10, 50);
+
+  const studentId = req.user?._id;
+  if (!studentId) {
+    throw new ApiError(401, "Unauthorized");
+  }
+
+  // ── SINGLE EVENT MODE ────────────────────────────────────────────────────────
+  if (eventId) {
+    const test = await testRepository.findTestById(eventId);
+    if (!test) throw new ApiError(404, "Test not found");
+
+    const ranked = await examSessionRepository.getRankedByTest(eventId, null, 1000);
+    const leaderboard = ranked.map((r, index) => ({
+      rank: index + 1,
+      name: r.name,
+      score: r.score,
+      maxScore: r.maxScore,
+      completedAt: r.completedAt,
+    }));
+
+    return res.status(200).json(
+      ApiResponse.success(
+        {
+          type: "standalone_test",
+          eventId,
+          title: test.title,
+          stage: null,
+          leaderboard,
+        },
+        "Test leaderboard fetched successfully"
+      )
+    );
+  }
+
+  // ── LIST MODE ────────────────────────────────────────────────────────────────
+  let purchasedTestIds = [];
+  const purchases = await orderRepository.findTestPurchasesForExamHall(studentId);
+  purchases.forEach((p) => {
+    if (p.test) purchasedTestIds.push(p.test._id.toString());
+    if (p.testBundle && p.testBundle.tests) {
+      p.testBundle.tests.forEach((t) => purchasedTestIds.push(t._id.toString()));
+    }
+  });
+
+  purchasedTestIds = [...new Set(purchasedTestIds)];
+
+  if (purchasedTestIds.length === 0) {
+    return res.status(200).json(
+      ApiResponse.success(
+        {
+          items: [],
+          pagination: {
+            page: pageNum,
+            limit: limitNum,
+            total: 0,
+            pages: 1,
+          },
+        },
+        "Leaderboards fetched successfully"
+      )
+    );
+  }
+
+  const query = {
+    isPublished: true,
+    applicableFor: { $in: ["Competitive", "School", "Skill Development"] },
+    _id: { $in: purchasedTestIds }
+  };
+
+  const result = await testRepository.findAllTests(query, { page: pageNum, limit: limitNum, sortBy: "createdAt", sortOrder: "desc" });
+
+  const tests = result.tests || [];
+
+  const leaderboards = tests.length
+    ? await Promise.all(
+        tests.map((t) => examSessionRepository.getRankedByTest(t._id, null, 1000))
+      )
+    : [];
+
+  const items = tests.map((t, i) => {
+    const ranked = leaderboards[i];
+    const lb = ranked.map((r, index) => ({
+      rank: index + 1,
+      name: r.name,
+      score: r.score,
+      maxScore: r.maxScore,
+      completedAt: r.completedAt,
+    }));
+
+    return {
+      type: "standalone_test",
+      eventId: t._id,
+      title: t.title,
+      stage: null,
+      status: "completed",
+      leaderboard: lb,
+      totalParticipants: lb.length,
+    };
+  });
+
+  return res.status(200).json(
+    ApiResponse.success(
+      {
+        items,
+        pagination: {
+          page: pageNum,
+          limit: limitNum,
+          total: result.pagination.total,
+          pages: result.pagination.pages,
+        },
+      },
+      "Leaderboards fetched successfully"
+    )
+  );
+});
+
 export default {
   getLeaderboardsForStudent,
+  getPurchasedTestLeaderboards,
 };

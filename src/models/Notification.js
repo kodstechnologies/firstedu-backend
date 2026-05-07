@@ -46,6 +46,7 @@ const notificationSchema = new mongoose.Schema(
         "upgrade",
         "teacher_withdrawal_approved",
         "teacher_withdrawal_rejected",
+        "live_competition_result",
       ],
       default: "general",
     },

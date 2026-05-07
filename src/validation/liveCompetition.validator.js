@@ -11,6 +11,9 @@ const submissionConfigSchema = Joi.object({
   text: Joi.object({
     limit:     Joi.number().integer().min(1).optional(),
     limitType: Joi.string().valid("WORDS", "CHARACTERS").default("WORDS"),
+    topic:     Joi.string().trim().optional(),
+    rules:     Joi.array().items(Joi.string().trim()).optional(),
+    walletPoints: Joi.number().min(0).default(0).optional(),
   }).optional(),
   duration:        Joi.number().integer().min(1).optional().allow(null),
   autoGeneratePdf: Joi.boolean().default(false),
@@ -18,6 +21,8 @@ const submissionConfigSchema = Joi.object({
     allowedTypes: Joi.array().items(Joi.string()).optional(),
     maxSize:      Joi.number().min(0).optional(),
     maxFiles:     Joi.number().integer().min(1).default(1),
+    instructions: Joi.array().items(Joi.string().trim()).optional(),
+    walletPoints: Joi.number().min(0).default(0).optional(),
   }).optional(),
 });
 
@@ -63,6 +68,9 @@ const updateEvent = Joi.object({
     text: Joi.object({
       limit:     Joi.number().integer().min(1).optional(),
       limitType: Joi.string().valid("WORDS", "CHARACTERS").optional(),
+      topic:     Joi.string().trim().optional(),
+      rules:     Joi.array().items(Joi.string().trim()).optional(),
+      walletPoints: Joi.number().min(0).optional(),
     }).optional(),
     duration:        Joi.number().integer().min(1).optional().allow(null),
     autoGeneratePdf: Joi.boolean().optional(),
@@ -70,6 +78,8 @@ const updateEvent = Joi.object({
       allowedTypes: Joi.array().items(Joi.string()).optional(),
       maxSize:      Joi.number().min(0).optional(),
       maxFiles:     Joi.number().integer().min(1).optional(),
+      instructions: Joi.array().items(Joi.string().trim()).optional(),
+      walletPoints: Joi.number().min(0).optional(),
     }).optional(),
   }).optional(),
   fee: Joi.object({
