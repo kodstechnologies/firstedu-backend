@@ -130,7 +130,6 @@ export const getCourses = async (options = {}) => {
   if (typeof isCertification === "boolean") {
     query.isCertification = isCertification;
   }
-  if (category) query.category = category;
   if (search) {
     const regex = { $regex: search, $options: "i" };
     query.$or = [{ title: regex }, { description: regex }];
@@ -1013,7 +1012,6 @@ export const getTestBundles = async (options = {}) => {
   } = options;
 
   const query = { isActive: true };
-  if (category) query.category = category;
   if (search) {
     const regex = { $regex: search, $options: "i" };
     query.$or = [{ name: regex }, { description: regex }];

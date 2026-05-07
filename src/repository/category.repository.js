@@ -170,6 +170,16 @@ const hasChildren = async (id) => {
   return count > 0;
 };
 
+const findDescendantIds = async (id) => {
+  const ids = [id.toString()];
+  const children = await Category.find({ parent: id }).select("_id").lean();
+  for (const child of children) {
+    const childIds = await findDescendantIds(child._id);
+    ids.push(...childIds);
+  }
+  return ids;
+};
+
 export default {
   create,
   findById,
@@ -180,4 +190,5 @@ export default {
   deleteById,
   deleteByIdCascade,
   hasChildren,
+  findDescendantIds,
 };

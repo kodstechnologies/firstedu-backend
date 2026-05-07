@@ -188,7 +188,7 @@ export const resolveCategoryPathForStudent = asyncHandler(async (req, res) => {
  * - tournament: categories used by published tournaments (via stage tests' question banks)
  */
 export const getCategoriesForStudent = asyncHandler(async (req, res) => {
-  const { linkedTo, format = "tree", rootType } = req.query;
+  const { linkedTo, format = "tree", rootType, isCertification } = req.query;
   const studentId = req.user?._id;
 
   const validLinkedTo = ["all", "questionBank", "test", "testBundle", "both", "olympiad", "tournament", "examhall", "course"].includes(linkedTo)
@@ -201,6 +201,7 @@ export const getCategoriesForStudent = asyncHandler(async (req, res) => {
     format: validFormat,
     rootType,
     studentId,
+    isCertification: isCertification === 'true' || isCertification === true,
   });
 
   // Strip deprecated legacy fields from the entire tree/flat list

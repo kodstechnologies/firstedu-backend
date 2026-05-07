@@ -237,16 +237,32 @@ export const getChildren = async (parentId) => {
   return await categoryRepository.findChildren(parentId);
 };
 
-const getConnectedCategoryIds = async (linkedTo, studentId) => {
+const getConnectedCategoryIds = async (linkedTo, studentId, isCertification) => {
   if (!linkedTo) return null;
 
   let categoryIds = new Set();
 
   if (linkedTo === "course") {
     const Course = (await import("../models/Course.js")).default;
-    const fromCourses = await Course.find({ isPublished: true }).distinct("categoryIds");
+    const query = { isPublished: true };
+    if (typeof isCertification !== "undefined") {
+      query.isCertification = isCertification;
+    }
+    const fromCourses = await Course.find(query).distinct("categoryIds");
     fromCourses.forEach((id) => categoryIds.add(id?.toString?.() || id));
   }
+
+  const DIRECT_PURCHASABLE_TEST_TYPES = [
+    "test",
+    "challenge_yourself",
+    "challenge_yourfriends",
+    "competitive",
+    "school",
+    "skill development",
+    "skill",
+    "competition_sector",
+    "trending_test"
+  ];
 
   if (linkedTo === "questionBank") {
     const fromBanks = await QuestionBank.distinct("categories");
@@ -254,22 +270,35 @@ const getConnectedCategoryIds = async (linkedTo, studentId) => {
   }
 
   if (linkedTo === "test" || linkedTo === "both") {
-    const publishedBankIds = await Test.find({ isPublished: true }).distinct("questionBank");
+    const publishedTests = await Test.find({ 
+      isPublished: true,
+      applicableFor: { $in: DIRECT_PURCHASABLE_TEST_TYPES }
+    }).select("questionBank categoryId").lean();
+
+    const publishedBankIds = [...new Set(publishedTests.map(t => t.questionBank?.toString()).filter(Boolean))];
+    const directCategoryIds = [...new Set(publishedTests.map(t => t.categoryId?.toString()).filter(Boolean))];
+
     if (publishedBankIds.length > 0) {
       const fromTests = await QuestionBank.find({ _id: { $in: publishedBankIds } }).distinct("categories");
       fromTests.forEach((id) => categoryIds.add(id?.toString?.() || id));
     }
+    directCategoryIds.forEach((id) => categoryIds.add(id));
   }
 
   if (linkedTo === "all" || linkedTo === "testBundle" || linkedTo === "both") {
     const activeBundles = await TestBundle.find({ isActive: true }).select("tests").lean();
     const allTestIds = activeBundles.flatMap((b) => b.tests || []);
     if (allTestIds.length > 0) {
-      const bankIdsFromBundles = await Test.find({ _id: { $in: allTestIds } }).distinct("questionBank");
+      const bundleTests = await Test.find({ _id: { $in: allTestIds } }).select("questionBank categoryId").lean();
+      
+      const bankIdsFromBundles = [...new Set(bundleTests.map(t => t.questionBank?.toString()).filter(Boolean))];
+      const directCategoryIdsFromBundles = [...new Set(bundleTests.map(t => t.categoryId?.toString()).filter(Boolean))];
+
       if (bankIdsFromBundles.length > 0) {
         const fromBundles = await QuestionBank.find({ _id: { $in: bankIdsFromBundles } }).distinct("categories");
         fromBundles.forEach((id) => categoryIds.add(id?.toString?.() || id));
       }
+      directCategoryIdsFromBundles.forEach((id) => categoryIds.add(id));
     }
   }
 
@@ -414,13 +443,13 @@ const filterTreeByConnected = (nodes, allowedIds) => {
  * format: "tree" | "flat"
  */
 export const getCategoriesForStudent = async (options = {}) => {
-  const { linkedTo, format = "tree", rootType, studentId } = options;
+  const { linkedTo, format = "tree", rootType, studentId, isCertification } = options;
 
   const filter = rootType ? { rootType } : {};
   let tree = await categoryRepository.findTree(filter);
 
   if (linkedTo) {
-    const connectedIds = await getConnectedCategoryIds(linkedTo, studentId);
+    const connectedIds = await getConnectedCategoryIds(linkedTo, studentId, isCertification);
     if (connectedIds && connectedIds.size > 0) {
       const idToParent = buildIdToParentFromTree(tree);
       const allowedIds = new Set(connectedIds);

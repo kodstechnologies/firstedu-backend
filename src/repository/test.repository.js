@@ -3,6 +3,7 @@ import TestBundle from "../models/TestBundle.js";
 import Question from "../models/Question.js";
 import QuestionBank from "../models/QuestionBank.js";
 import { ApiError } from "../utils/ApiError.js";
+import categoryRepository from "./category.repository.js";
 
 // ========== Test Repository ==========
 const createTest = async (testData) => {
@@ -55,8 +56,16 @@ const findAllTests = async (filter = {}, options = {}) => {
     }
 
     if (category) {
-      const bankIds = await QuestionBank.find({ categories: category }).distinct("_id");
-      query.questionBank = { $in: bankIds };
+      const descendantIds = await categoryRepository.findDescendantIds(category);
+      const bankIds = await QuestionBank.find({ categories: { $in: descendantIds } }).distinct("_id");
+      
+      query.$and = query.$and || [];
+      query.$and.push({
+        $or: [
+          { questionBank: { $in: bankIds } },
+          { categoryId: { $in: descendantIds } }
+        ]
+      });
     }
 
     if (typeof isPublished !== "undefined") {
@@ -69,7 +78,10 @@ const findAllTests = async (filter = {}, options = {}) => {
 
     if (search) {
       const regex = { $regex: search, $options: "i" };
-      query.$or = [{ title: regex }, { description: regex }];
+      query.$and = query.$and || [];
+      query.$and.push({
+        $or: [{ title: regex }, { description: regex }]
+      });
     }
 
     const pageNum = parseInt(page);
@@ -184,9 +196,24 @@ const findAllBundles = async (filter = {}, options = {}) => {
       sortOrder = "desc",
       search,
       isActive,
+      category,
     } = options;
 
     const query = { ...filter };
+
+    if (category) {
+      const descendantIds = await categoryRepository.findDescendantIds(category);
+      const bankIds = await QuestionBank.find({ categories: { $in: descendantIds } }).distinct("_id");
+      
+      const matchedTests = await Test.find({
+        $or: [
+          { questionBank: { $in: bankIds } },
+          { categoryId: { $in: descendantIds } }
+        ]
+      }).distinct("_id");
+
+      query.tests = { $in: matchedTests };
+    }
 
     if (typeof isActive !== "undefined") {
       query.isActive = isActive === "true" || isActive === true;

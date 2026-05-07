@@ -1,5 +1,6 @@
 import Course from "../models/Course.js";
 import { ApiError } from "../utils/ApiError.js";
+import categoryRepository from "./category.repository.js";
 
 const create = async (courseData) => {
   try {
@@ -34,7 +35,8 @@ const findAll = async (filter = {}, options = {}) => {
     const query = { ...filter };
 
     if (category) {
-      query.categoryIds = category;
+      const descendantIds = await categoryRepository.findDescendantIds(category);
+      query.categoryIds = { $in: descendantIds };
     }
 
     if (typeof isPublished !== "undefined") {
