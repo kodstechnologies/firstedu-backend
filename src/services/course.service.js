@@ -123,7 +123,15 @@ export const getCourseById = async (id) => {
   if (!course) {
     throw new ApiError(404, "Course not found");
   }
-  return course;
+
+  const courseObj = course.toObject ? course.toObject() : course;
+
+  if (course.isCertification) {
+    const links = await courseTestLinkRepository.findAll({ course: id });
+    courseObj.certificationTestIds = links.map((link) => link.test?._id || link.test);
+  }
+
+  return courseObj;
 };
 
 export const updateCourse = async (id, data, files) => {
@@ -251,12 +259,14 @@ const syncCertificationTestsForCourse = async (courseId, testIds, adminId) => {
     course: courseId,
   });
 
+  const getTestIdStr = (l) => (l.test?._id || l.test).toString();
+
   const existingTestIdSet = new Set(
-    existingLinks.map((l) => l.test.toString())
+    existingLinks.map(getTestIdStr)
   );
 
   const toRemove = existingLinks.filter(
-    (l) => !uniqueIds.includes(l.test.toString())
+    (l) => !uniqueIds.includes(getTestIdStr(l))
   );
   const toAdd = uniqueIds.filter((id) => !existingTestIdSet.has(id));
 
