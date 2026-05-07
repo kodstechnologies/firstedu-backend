@@ -32,13 +32,12 @@ export const uploadPDF = multer({
   limits: { fileSize: 500 * 1024 * 1024 }, // 500MB limit for PDFs
 });
 
-// Image-only file filter
 const imageFileFilter = (req, file, cb) => {
-  const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg'];
+  const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp'];
   if (allowedTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error('Only JPEG and PNG image files are allowed'), false);
+    cb(new Error('Only JPEG, PNG, and WEBP image files are allowed'), false);
   }
 };
 
@@ -57,11 +56,11 @@ export const uploadAnyImages = multer({
 
 // Combined file filter for PDF and images (for teacher signup with resume and profileImage)
 const pdfAndImageFileFilter = (req, file, cb) => {
-  const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'];
+  const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp', 'application/pdf'];
   if (allowedTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error('Only JPEG, PNG images and PDF files are allowed'), false);
+    cb(new Error('Only PDF and Image files (JPEG/PNG/WEBP) are allowed'), false);
   }
 };
 
