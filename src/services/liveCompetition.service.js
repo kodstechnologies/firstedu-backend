@@ -14,6 +14,7 @@ import couponService from "./coupon.service.js";
 import { getAmountToCharge, getApplicableOfferDetails } from "../utils/offerUtils.js";
 import razorpayOrderIntentRepository from "../repository/razorpayOrderIntent.repository.js";
 import { createRazorpayOrder, verifyPaymentSignature } from "../utils/razorpayUtils.js";
+import { sendNotificationToMultipleStudents } from "./notification.service.js";
 
 /**
  * Generic file upload — routes to the right S3 helper by MIME type.
@@ -285,13 +286,16 @@ export const declareWinner = async (eventId, { winnerId }) => {
   if (!event) throw new ApiError(404, "Live competition not found");
 
   // If winnerId is passed, validate it
+  let winnerSub = null;
   if (winnerId) {
-    const sub = await liveCompetitionRepository.findSubmissionById(winnerId);
-    if (!sub) throw new ApiError(404, `Submission ${winnerId} not found`);
-    if (sub.event.toString() !== eventId.toString()) {
+    winnerSub = await liveCompetitionRepository.findSubmissionById(winnerId, [
+      { path: "participant", select: "name" }
+    ]);
+    if (!winnerSub) throw new ApiError(404, `Submission ${winnerId} not found`);
+    if (winnerSub.event.toString() !== eventId.toString()) {
       throw new ApiError(400, `Submission ${winnerId} does not belong to this event`);
     }
-    if (!sub.submittedAt) {
+    if (!winnerSub.submittedAt) {
       throw new ApiError(400, `Submission ${winnerId} has not been submitted yet`);
     }
   }
@@ -317,10 +321,58 @@ export const declareWinner = async (eventId, { winnerId }) => {
   // Assign new winner
   await liveCompetitionRepository.updateSubmissionById(winnerId, { isWinner: true });
 
+  // Add wallet points if configured
+  const walletPoints = event.submission?.text?.walletPoints || event.submission?.file?.walletPoints || 0;
+  
+  if (walletPoints > 0 && winnerSub) {
+    try {
+      await walletService.addRewardPoints(
+        winnerSub.participant._id,
+        walletPoints,
+        "live_competition_win",
+        `Winner - ${event.title}`,
+        eventId,
+        "LiveCompetition"
+      );
+    } catch (e) {
+      console.error(`Failed to credit ${walletPoints} points to winner ${winnerSub.participant._id}: ${e.message}`);
+    }
+  }
+
   // Mark event as RESULT_DECLARED
   const updatedEvent = await liveCompetitionRepository.updateEventById(eventId, {
     status: "RESULT_DECLARED",
   });
+
+  // Trigger push notifications to all participants
+  if (winnerSub && winnerSub.participant) {
+    try {
+      const allSubmissions = await liveCompetitionRepository.findSubmissions(
+        { event: eventId },
+        { limit: 10000 }
+      );
+      
+      const participantIds = allSubmissions.map((sub) => 
+        sub.participant._id ? sub.participant._id.toString() : sub.participant.toString()
+      );
+      const uniqueParticipantIds = [...new Set(participantIds)];
+
+      if (uniqueParticipantIds.length > 0) {
+        const winnerName = winnerSub.participant.name || "A Participant";
+        const winnerIdString = winnerSub.participant._id.toString();
+
+        await sendNotificationToMultipleStudents(
+          uniqueParticipantIds,
+          `Result Declared: ${updatedEvent.title}`,
+          `The winner is ${winnerName} (ID: ${winnerIdString}). Congratulations!`,
+          { type: "live_competition_result", eventId: eventId.toString() },
+          null
+        );
+      }
+    } catch (err) {
+      console.error("Failed to send winner notifications:", err);
+    }
+  }
 
   return updatedEvent;
 };
@@ -776,8 +828,9 @@ export const submitWork = async (eventId, studentId, { text }, files = []) => {
     throw new ApiError(400, "Event has not started yet");
   }
 
-  // Block submission after event window closes
-  const isLate = now > new Date(event.eventWindow.end);
+  // Block submission after event window closes (with a 2-minute grace period for auto-submits)
+  const gracePeriodEnd = new Date(event.eventWindow.end.getTime() + 2 * 60000);
+  const isLate = now > gracePeriodEnd;
   if (isLate) {
     throw new ApiError(400, "Submission deadline has passed — the event window is closed");
   }

@@ -63,6 +63,12 @@ const liveCompetitionSchema = new mongoose.Schema(
           enum: ["WORDS", "CHARACTERS"],
           default: "WORDS",
         },
+        topic: String,
+        rules: [String],
+        walletPoints: {
+          type: Number,
+          default: 0,
+        },
       },
 
       duration: Number, // minutes (for LIVE mode)
@@ -79,6 +85,11 @@ const liveCompetitionSchema = new mongoose.Schema(
         maxFiles: {
           type: Number,
           default: 1,
+        },
+        instructions: [String],
+        walletPoints: {
+          type: Number,
+          default: 0,
         },
       },
     },
