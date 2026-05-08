@@ -327,7 +327,6 @@ export const getPurchasedTestLeaderboards = asyncHandler(async (req, res) => {
 
   const query = {
     isPublished: true,
-    applicableFor: { $in: ["Competitive", "School", "Skill Development"] },
     _id: { $in: purchasedTestIds }
   };
 
