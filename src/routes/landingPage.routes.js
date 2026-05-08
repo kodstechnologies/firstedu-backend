@@ -1,4 +1,4 @@
-import express from "express";
+import { Router } from "express";
 import {
   getAvailableTeachers,
   getTeacherById,
@@ -57,7 +57,7 @@ import { verifyJWT } from "../middleware/auth.middleware.js";
 import { getWorkshopById } from "../controllers/workshop.controller.js";
 import { getTournamentById } from "../controllers/tournament.controller.js";
 
-const router = express.Router();
+const router = Router();
 
 //start Landing Page routes
 router.post("/signup", uploadImage.single("profileImage"), signup);

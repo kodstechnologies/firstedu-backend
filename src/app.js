@@ -16,22 +16,23 @@ app.use(
   cors({
     origin: (origin, callback) => {
       const allowedOrigins = process.env.CORS_ORIGIN?.split(",").map((o) =>
-        o.trim()
+        o.trim(),
       ) || [
-          "https://iscorre.com",
-          "https://admin.iscorre.com",
-          "http://localhost:3000",
-          "http://localhost:5173",
-          "http://localhost:5174",
-        ];
+        "https://iscorre.com",
+        "https://admin.iscorre.com",
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "http://localhost:5174",
+      ];
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
-        callback(new Error("Not allowed by CORS"));
+        console.warn(`CORS Warning: Origin ${origin} not allowed. Allowed origins:`, allowedOrigins);
+        callback(null, false);
       }
     },
     credentials: true,
-  })
+  }),
 );
 
 // app.use(cors());
@@ -40,7 +41,7 @@ app.use(
 app.use(
   "/webhooks/razorpay",
   express.raw({ type: "application/json", limit: "64kb" }),
-  webhooksRoutes
+  webhooksRoutes,
 );
 
 app.use(express.json({ limit: "16kb" }));
@@ -49,10 +50,9 @@ app.use(express.json({ limit: "16kb" }));
 app.use("/user", studentRoutes);
 app.use("/admin", adminRoutes);
 app.use("/teacher", teacherRoutes);
-app.use('/landing-page',landingPageRoutes);
+app.use("/landing-page", landingPageRoutes);
 // Test Route
 app.get("/test", (req, res) => {
-
   // Send it in the response
   res.json({
     success: true,
@@ -73,7 +73,11 @@ app.use((err, req, res, next) => {
   }
 
   // Handle multer file type errors
-  if (err.message && (err.message.includes("video files") || err.message.includes("Only video files"))) {
+  if (
+    err.message &&
+    (err.message.includes("video files") ||
+      err.message.includes("Only video files"))
+  ) {
     return res.status(400).json({
       success: false,
       message: err.message,
@@ -85,7 +89,8 @@ app.use((err, req, res, next) => {
   if (err.code === "LIMIT_UNEXPECTED_FILE") {
     return res.status(400).json({
       success: false,
-      message: "Invalid field name. Use 'video' as the field name for file upload.",
+      message:
+        "Invalid field name. Use 'video' as the field name for file upload.",
       data: null,
     });
   }
@@ -96,6 +101,7 @@ app.use((err, req, res, next) => {
   }
 
   // Otherwise, fallback to generic
+  console.error("Unhandled Error:", err);
   res.status(500).json({
     success: false,
     message: err.message || "Internal Server Error",
