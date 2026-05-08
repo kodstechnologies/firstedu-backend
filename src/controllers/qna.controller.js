@@ -17,7 +17,7 @@ export const createQnA = asyncHandler(async (req, res) => {
   }
   const{_id,userType}=req.user;
   const createdQnA = await qnaService.createQnA(value,_id,userType);
-
+ 
   return res
     .status(201)
     .json(ApiResponse.success(createdQnA, "QnA created successfully"));
@@ -32,6 +32,7 @@ export const getAllQnAs = asyncHandler(async (req, res) => {
     status: userType === "Admin" ? "" : "approved",
     type: type === "all" ? "" : type,
   });
+
   return res
     .status(200)
     .json(

@@ -1,6 +1,7 @@
 import { ApiError } from "../utils/ApiError.js";
 import qnaRepository from "../repository/qna.repository.js";
 
+
 export const createQnA = async (qnaData, createdBy, userType) => {
   // Add creator info
   qnaData.createdBy = createdBy;

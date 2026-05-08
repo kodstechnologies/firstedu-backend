@@ -41,7 +41,7 @@ const findAll = async (filter = {}, options = {}) => {
       subject,
     } = options;
 
-    const query = { ...filter, subject: subject || "general" };
+    const query = { ...filter };
 
     if (search) {
       query.$or = [
@@ -53,16 +53,15 @@ const findAll = async (filter = {}, options = {}) => {
         { creatorModel: { $regex: search, $options: "i" } },
       ];
     }
-
     if (type) {
       query.creatorModel = type;
     }
-    if (status) {
-      query.status = status;
+    
+    if(subject){
+      query.subject= subject || "general"
     }
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const sort = { [sortBy]: sortOrder === "desc" ? -1 : 1 };
-
     const s = await qna
       .find(query)
       .populate("createdBy", "name email userType")
