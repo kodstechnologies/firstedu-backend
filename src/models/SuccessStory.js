@@ -24,7 +24,6 @@ const successStorySchema = new mongoose.Schema(
     },
     mediaUrl: {
       type: String,
-      required: [true, "Media (video) URL is required"],
       trim: true,
     },
     thumbnailUrl: {

@@ -21,19 +21,16 @@ const IMAGE_MIMETYPES = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp'];
  * Create a new success story (Admin) - media = video only, thumbnail = image only
  */
 const createSuccessStory = async (data, files, adminId) => {
-  if (!files?.media?.[0]) {
-    throw new ApiError(400, 'Media (video) file is required');
+  
+  const mediaFile = files?.media?.[0];
+  const thumbFile = files?.thumbnail?.[0];
+  if(!thumbFile){
+     throw new ApiError(400, 'Thumbnail image is required');
   }
-  if (!files?.thumbnail?.[0]) {
-    throw new ApiError(400, 'Thumbnail (image) file is required');
-  }
-
-  const mediaFile = files.media[0];
-  const thumbFile = files.thumbnail[0];
-
-  if (!VIDEO_MIMETYPES.includes(mediaFile.mimetype)) {
+   if (mediaFile && !VIDEO_MIMETYPES.includes(mediaFile.mimetype)) {
     throw new ApiError(400, 'Media must be a video file (MP4, MOV, WEBM, etc.)');
   }
+
   if (!IMAGE_MIMETYPES.includes(thumbFile.mimetype)) {
     throw new ApiError(400, 'Thumbnail must be an image file (JPEG, PNG, WEBP)');
   }
@@ -42,6 +39,7 @@ const createSuccessStory = async (data, files, adminId) => {
   let thumbnailUrl;
 
   try {
+     if(mediaFile)(
     mediaUrl = await uploadVideoToCloudinary(
       mediaFile.buffer,
       mediaFile.originalname,
@@ -58,7 +56,7 @@ const createSuccessStory = async (data, files, adminId) => {
       description: data.description,
       achievement: data.achievement,
       achieveIn: data.achieveIn,
-      mediaUrl,
+      mediaUrl:mediaUrl?mediaUrl:"",
       thumbnailUrl,
       status: data.status ?? 'DRAFT',
       createdBy: adminId,
