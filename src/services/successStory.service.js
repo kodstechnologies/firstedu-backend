@@ -1,54 +1,59 @@
-import successStoryRepository from '../repository/successStory.repository.js';
-import ApiError from '../utils/ApiError.js';
+import successStoryRepository from "../repository/successStory.repository.js";
+import ApiError from "../utils/ApiError.js";
 import {
   uploadImageToCloudinary,
   uploadVideoToCloudinary,
   deleteFileFromCloudinary,
-} from '../utils/s3Upload.js';
+} from "../utils/s3Upload.js";
 
 const VIDEO_MIMETYPES = [
-  'video/mp4',
-  'video/mpeg',
-  'video/quicktime',
-  'video/x-msvideo',
-  'video/webm',
-  'video/x-ms-wmv',
-  'video/3gpp',
+  "video/mp4",
+  "video/mpeg",
+  "video/quicktime",
+  "video/x-msvideo",
+  "video/webm",
+  "video/x-ms-wmv",
+  "video/3gpp",
 ];
-const IMAGE_MIMETYPES = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp'];
+const IMAGE_MIMETYPES = ["image/jpeg", "image/png", "image/jpg", "image/webp"];
 
 /**
  * Create a new success story (Admin) - media = video only, thumbnail = image only
  */
 const createSuccessStory = async (data, files, adminId) => {
-  
   const mediaFile = files?.media?.[0];
   const thumbFile = files?.thumbnail?.[0];
-  if(!thumbFile){
-     throw new ApiError(400, 'Thumbnail image is required');
+  if (!thumbFile) {
+    throw new ApiError(400, "Thumbnail image is required");
   }
-   if (mediaFile && !VIDEO_MIMETYPES.includes(mediaFile.mimetype)) {
-    throw new ApiError(400, 'Media must be a video file (MP4, MOV, WEBM, etc.)');
+  if (mediaFile && !VIDEO_MIMETYPES.includes(mediaFile.mimetype)) {
+    throw new ApiError(
+      400,
+      "Media must be a video file (MP4, MOV, WEBM, etc.)",
+    );
   }
 
   if (!IMAGE_MIMETYPES.includes(thumbFile.mimetype)) {
-    throw new ApiError(400, 'Thumbnail must be an image file (JPEG, PNG, WEBP)');
+    throw new ApiError(
+      400,
+      "Thumbnail must be an image file (JPEG, PNG, WEBP)",
+    );
   }
 
   let mediaUrl;
   let thumbnailUrl;
 
   try {
-     if(mediaFile)(
-    mediaUrl = await uploadVideoToCloudinary(
-      mediaFile.buffer,
-      mediaFile.originalname,
-      'success-stories/videos',
-    );
+    if (mediaFile)
+      mediaUrl = await uploadVideoToCloudinary(
+        mediaFile.buffer,
+        mediaFile.originalname,
+        "success-stories/videos",
+      );
     thumbnailUrl = await uploadImageToCloudinary(
       thumbFile.buffer,
       thumbFile.originalname,
-      'success-stories/thumbnails',
+      "success-stories/thumbnails",
     );
 
     const storyData = {
@@ -56,9 +61,9 @@ const createSuccessStory = async (data, files, adminId) => {
       description: data.description,
       achievement: data.achievement,
       achieveIn: data.achieveIn,
-      mediaUrl:mediaUrl?mediaUrl:"",
+      mediaUrl: mediaUrl ? mediaUrl : "",
       thumbnailUrl,
-      status: data.status ?? 'DRAFT',
+      status: data.status ?? "DRAFT",
       createdBy: adminId,
     };
 
@@ -83,7 +88,7 @@ const getAllStories = async (filters, page, limit) => {
 const getStoryById = async (id) => {
   const story = await successStoryRepository.findById(id);
   if (!story) {
-    throw new ApiError(404, 'Success story not found');
+    throw new ApiError(404, "Success story not found");
   }
   return story;
 };
@@ -94,7 +99,7 @@ const getStoryById = async (id) => {
 const updateSuccessStory = async (id, data, files) => {
   const story = await successStoryRepository.findById(id);
   if (!story) {
-    throw new ApiError(404, 'Success story not found');
+    throw new ApiError(404, "Success story not found");
   }
 
   const updateData = {};
@@ -110,27 +115,36 @@ const updateSuccessStory = async (id, data, files) => {
     if (files?.media?.[0]) {
       const mediaFile = files.media[0];
       if (!VIDEO_MIMETYPES.includes(mediaFile.mimetype)) {
-        throw new ApiError(400, 'Media must be a video file (MP4, MOV, WEBM, etc.)');
+        throw new ApiError(
+          400,
+          "Media must be a video file (MP4, MOV, WEBM, etc.)",
+        );
       }
       updateData.mediaUrl = await uploadVideoToCloudinary(
         mediaFile.buffer,
         mediaFile.originalname,
-        'success-stories/videos',
+        "success-stories/videos",
       );
     }
     if (files?.thumbnail?.[0]) {
       const thumbFile = files.thumbnail[0];
       if (!IMAGE_MIMETYPES.includes(thumbFile.mimetype)) {
-        throw new ApiError(400, 'Thumbnail must be an image file (JPEG, PNG, WEBP)');
+        throw new ApiError(
+          400,
+          "Thumbnail must be an image file (JPEG, PNG, WEBP)",
+        );
       }
       updateData.thumbnailUrl = await uploadImageToCloudinary(
         thumbFile.buffer,
         thumbFile.originalname,
-        'success-stories/thumbnails',
+        "success-stories/thumbnails",
       );
     }
 
-    const updatedStory = await successStoryRepository.updateById(id, updateData);
+    const updatedStory = await successStoryRepository.updateById(
+      id,
+      updateData,
+    );
 
     if (updateData.mediaUrl && oldMediaUrl) {
       await deleteFileFromCloudinary(oldMediaUrl);
@@ -157,7 +171,7 @@ const updateSuccessStory = async (id, data, files) => {
 const updateStoryStatus = async (id, status) => {
   const story = await successStoryRepository.findById(id);
   if (!story) {
-    throw new ApiError(404, 'Success story not found');
+    throw new ApiError(404, "Success story not found");
   }
   return await successStoryRepository.updateById(id, { status });
 };
@@ -168,7 +182,7 @@ const updateStoryStatus = async (id, status) => {
 const deleteSuccessStory = async (id) => {
   const story = await successStoryRepository.findById(id);
   if (!story) {
-    throw new ApiError(404, 'Success story not found');
+    throw new ApiError(404, "Success story not found");
   }
   if (story.mediaUrl) await deleteFileFromCloudinary(story.mediaUrl);
   if (story.thumbnailUrl) await deleteFileFromCloudinary(story.thumbnailUrl);
@@ -188,7 +202,7 @@ const getFeaturedStories = async (limit = 3) => {
 const getAllPublishedStories = async (filters) => {
   return await successStoryRepository.findSuccessStories({
     ...filters,
-    status: 'PUBLISHED',
+    status: "PUBLISHED",
   });
 };
 
@@ -198,10 +212,10 @@ const getAllPublishedStories = async (filters) => {
 const getPublishedStoryById = async (id) => {
   const story = await successStoryRepository.findById(id);
   if (!story) {
-    throw new ApiError(404, 'Success story not found');
+    throw new ApiError(404, "Success story not found");
   }
-  if (story.status !== 'PUBLISHED') {
-    throw new ApiError(404, 'Success story not found');
+  if (story.status !== "PUBLISHED") {
+    throw new ApiError(404, "Success story not found");
   }
   return story;
 };
