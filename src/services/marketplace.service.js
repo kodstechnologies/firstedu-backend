@@ -18,6 +18,8 @@ import couponService from "./coupon.service.js";
 import studentRepository from "../repository/student.repository.js";
 import { sendCourseEnrollmentEmail, sendTestBundlePurchaseEmail } from "../utils/sendEmail.js";
 import Category from "../models/Category.js";
+import { getOlympiads } from "./studentOlympiad.service.js";
+import { getTournaments } from "./tournament.service.js";
 
 const buildCategoryPathsMap = async () => {
   const categories = await Category.find({}).select('name parent').lean();
@@ -55,12 +57,17 @@ const DIRECT_PURCHASABLE_TEST_TYPES = [
   "test",
   "challenge_yourself",
   "challenge_yourfriends",
+  "competition_sector",
+  "Olympiads",
+  "School",
+  "Competitive",
+  "Skill Development",
+  "certificate",
   "competitive",
   "school",
   "skill development",
   "skill",
-  "competition_sector",
-  "trending_test"
+  "olympiads",
 ];
 
 const isDirectPurchasableTest = (test) => {
@@ -69,8 +76,12 @@ const isDirectPurchasableTest = (test) => {
 };
 
 const getFrontendItemType = (test) => {
-  const appFor = (test?.applicableFor || "").toLowerCase();
+  const appFor = (test?.applicableFor || "").toLowerCase().trim();
   if (appFor.startsWith("challenge")) return "challenge";
+  if (appFor === "school") return "school";
+  if (appFor === "competitive") return "competitive";
+  if (appFor === "skill" || appFor === "skill development") return "skill";
+  if (appFor === "olympiads") return "olympiad";
   return "test";
 };
 
@@ -553,7 +564,7 @@ export const getTestsAndBundles = async (options = {}) => {
       questionBank,
       sortBy,
       sortOrder,
-      applicableFor: "test",
+      applicableFor: DIRECT_PURCHASABLE_TEST_TYPES,
       studentId,
     });
     return {
@@ -586,6 +597,69 @@ export const getTestsAndBundles = async (options = {}) => {
     };
   }
 
+  if (type === "school") {
+    const result = await getTests({
+      page: pageNum,
+      limit: limitNum,
+      search,
+      category,
+      questionBank,
+      sortBy,
+      sortOrder,
+      applicableFor: ["school", "School"],
+      studentId,
+    });
+    return {
+      items: result.tests.map((t) => ({
+        ...toTestItem(t),
+        itemType: getFrontendItemType(t),
+      })),
+      pagination: result.pagination,
+    };
+  }
+
+  if (type === "competitive") {
+    const result = await getTests({
+      page: pageNum,
+      limit: limitNum,
+      search,
+      category,
+      questionBank,
+      sortBy,
+      sortOrder,
+      applicableFor: ["competitive", "Competitive"],
+      studentId,
+    });
+    return {
+      items: result.tests.map((t) => ({
+        ...toTestItem(t),
+        itemType: getFrontendItemType(t),
+      })),
+      pagination: result.pagination,
+    };
+  }
+
+  if (type === "skill") {
+    const result = await getTests({
+      page: pageNum,
+      limit: limitNum,
+      search,
+      category,
+      questionBank,
+      sortBy,
+      sortOrder,
+      applicableFor: ["skill", "skill development", "Skill Development"],
+      studentId,
+    });
+    return {
+      items: result.tests.map((t) => ({
+        ...toTestItem(t),
+        itemType: getFrontendItemType(t),
+      })),
+      pagination: result.pagination,
+    };
+  }
+
   if (type === "testBundle") {
     const result = await getTestBundles({
       page: pageNum,
@@ -605,9 +679,42 @@ export const getTestsAndBundles = async (options = {}) => {
     };
   }
 
-  // type === "both" — single merged list + one pagination
+  if (type === "olympiad") {
+    const result = await getOlympiads({
+      page: pageNum,
+      limit: limitNum,
+      search,
+      categoryId: category,
+      studentId,
+    });
+    return {
+      items: result.olympiads.map((o) => ({
+        ...toOlympiadItem(o),
+      })),
+      pagination: result.pagination,
+    };
+  }
+
+  if (type === "tournament") {
+    const result = await getTournaments({
+      page: pageNum,
+      limit: limitNum,
+      search,
+      category,
+      isPublished: true,
+      studentId,
+    });
+    return {
+      items: result.tournaments.map((t) => ({
+        ...toTournamentItem(t),
+      })),
+      pagination: result.pagination,
+    };
+  }
+
+  // type === "both" or "all" — single merged list + one pagination
   const fetchSize = pageNum * limitNum;
-  const [testsResult, bundlesResult] = await Promise.all([
+  const [testsResult, bundlesResult, olympiadsResult, tournamentsResult] = await Promise.all([
     getTests({
       page: 1,
       limit: fetchSize,
@@ -627,11 +734,28 @@ export const getTestsAndBundles = async (options = {}) => {
       sortOrder,
       studentId,
     }),
+    getOlympiads({
+      page: 1,
+      limit: fetchSize,
+      search,
+      categoryId: category,
+      studentId,
+    }),
+    getTournaments({
+      page: 1,
+      limit: fetchSize,
+      search,
+      category,
+      isPublished: true,
+      studentId,
+    }),
   ]);
 
   const testsTotal = testsResult.pagination.total;
   const bundlesTotal = bundlesResult.pagination.total;
-  const total = testsTotal + bundlesTotal;
+  const olympiadsTotal = olympiadsResult.pagination.total;
+  const tournamentsTotal = tournamentsResult.pagination.total;
+  const total = testsTotal + bundlesTotal + olympiadsTotal + tournamentsTotal;
   const sortDesc = sortOrder === "desc";
 
   const testItems = testsResult.tests.map((t) => ({
@@ -642,7 +766,14 @@ export const getTestsAndBundles = async (options = {}) => {
     ...toBundleItem(b),
     itemType: "testBundle",
   }));
-  const merged = [...testItems, ...bundleItems].sort((a, b) => {
+  const olympiadItems = olympiadsResult.olympiads.map((o) => ({
+    ...toOlympiadItem(o),
+  }));
+  const tournamentItems = tournamentsResult.tournaments.map((t) => ({
+    ...toTournamentItem(t),
+  }));
+
+  const merged = [...testItems, ...bundleItems, ...olympiadItems, ...tournamentItems].sort((a, b) => {
     const dateA = new Date(a.createdAt || 0).getTime();
     const dateB = new Date(b.createdAt || 0).getTime();
     return sortDesc ? dateB - dateA : dateA - dateB;
@@ -671,6 +802,24 @@ const toTestItem = (test) => {
 
 const toBundleItem = (bundle) => {
   return bundle?.toObject ? bundle.toObject() : { ...bundle };
+};
+
+const toOlympiadItem = (olympiad) => {
+  const obj = olympiad?.toObject ? olympiad.toObject() : { ...olympiad };
+  return {
+    ...obj,
+    itemType: "olympiad",
+    purchased: Boolean(obj.isRegistered),
+  };
+};
+
+const toTournamentItem = (tournament) => {
+  const obj = tournament?.toObject ? tournament.toObject() : { ...tournament };
+  return {
+    ...obj,
+    itemType: "tournament",
+    // purchased field will be added by attachPurchasedFlagToTournaments if we want
+  };
 };
 
 /**

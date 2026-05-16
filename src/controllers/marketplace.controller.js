@@ -226,7 +226,7 @@ export const getTestsAndBundles = asyncHandler(async (req, res) => {
   const studentId = req.user?._id;
 
   const result = await marketplaceService.getTestsAndBundles({
-    type: ["test", "testBundle", "both", "challenges"].includes(type) ? type : "both",
+    type: ["test", "testBundle", "both", "challenges", "olympiad", "tournament", "school", "competitive", "skill", "all"].includes(type) ? type : "both",
     page,
     limit,
     search,

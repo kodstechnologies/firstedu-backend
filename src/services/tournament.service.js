@@ -531,7 +531,7 @@ const buildStatusQuery = (status) => {
 };
 
 export const getTournaments = async (options = {}) => {
-  const { page = 1, limit = 10, search, isPublished, status, category } = options;
+  const { page = 1, limit = 10, search, isPublished, status, category, studentId } = options;
 
   const query = {};
   if (search) {
@@ -568,7 +568,7 @@ export const getTournaments = async (options = {}) => {
   const limitNum = parseInt(limit);
   const skip = (pageNum - 1) * limitNum;
 
-  const [tournaments, total] = await Promise.all([
+  const [tournamentsRaw, total] = await Promise.all([
     tournamentRepository.find(query, {
       populate: [
         stagesTestWithQuestionBankPopulate,
@@ -581,9 +581,22 @@ export const getTournaments = async (options = {}) => {
     tournamentRepository.count(query),
   ]);
 
-  await enrichTournamentStagesWithBankStats(tournaments);
+  await enrichTournamentStagesWithBankStats(tournamentsRaw);
 
-  const tournamentsWithOffer = await attachOfferToList(tournaments, "Tournament", "price");
+  const tournamentsWithOffer = await attachOfferToList(tournamentsRaw, "Tournament", "price");
+
+  if (studentId && tournamentsWithOffer.length > 0) {
+    const registrations = await eventRegistrationRepository.find({
+      student: studentId,
+      eventType: "tournament",
+      eventId: { $in: tournamentsWithOffer.map((t) => t._id) },
+      paymentStatus: "completed",
+    });
+    const registeredIds = new Set(registrations.map((r) => r.eventId?.toString() || r.eventId));
+    tournamentsWithOffer.forEach((t) => {
+      t.purchased = registeredIds.has(t._id.toString());
+    });
+  }
 
   return {
     tournaments: tournamentsWithOffer,
