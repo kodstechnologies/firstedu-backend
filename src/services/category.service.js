@@ -94,7 +94,7 @@ export const createCategory = async (data, createdBy) => {
       resolvedRootType,
       0
     );
-    
+
     if (data.parent) {
       sendUpgradeNotificationForCategory(data.parent, data.name, "category", createdBy).catch(err => {
         console.error("Failed to send upgrade notification for category:", err);
@@ -121,10 +121,10 @@ export const getCategoryTree = async (filter = {}) => {
   // Ensure the 4 predefined pillar roots are always marked correctly.
   // This is a lightweight idempotent upsert that runs on every tree fetch.
   const PILLAR_ROOTS = [
-    { name: "School",    rootType: "School" },
+    { name: "School", rootType: "School" },
     { name: "Competitive", rootType: "Competitive" },
-    { name: "Olympiads",             rootType: "Olympiads" },
-    { name: "Skill Development",     rootType: "Skill Development" },
+    { name: "Olympiads", rootType: "Olympiads" },
+    { name: "Skill Development", rootType: "Skill Development" },
   ];
 
   for (const pillar of PILLAR_ROOTS) {
@@ -146,17 +146,17 @@ export const getCategoryTree = async (filter = {}) => {
   }
 
   const fullTree = await categoryRepository.findTree({});
-  
+
   // Attach hasTests boolean to nodes
   const allBankIds = await QuestionBank.find({}).select('categories _id');
   const allTestBanks = await Test.find({}).select('questionBank categoryId').lean();
   const bankIdsWithTests = new Set(allTestBanks.map(t => t.questionBank?.toString()));
 
   const categoryIdsWithTests = new Set();
-  
+
   allBankIds.forEach(qb => {
     if (bankIdsWithTests.has(qb._id.toString())) {
-        qb.categories.forEach(cid => categoryIdsWithTests.add(cid.toString()));
+      qb.categories.forEach(cid => categoryIdsWithTests.add(cid.toString()));
     }
   });
 
@@ -181,7 +181,7 @@ export const getCategoryTree = async (filter = {}) => {
     const requestedRoot = fullTree.find(n => n.rootType === filter.rootType);
     return requestedRoot ? [requestedRoot] : [];
   }
-  
+
   return fullTree;
 };
 
@@ -196,12 +196,12 @@ export const getCategoryById = async (id) => {
 
   const childMeta = await Promise.all(
     children.map(async (child) => ({
-      name:        child.name,
+      name: child.name,
       hasChildren: await categoryRepository.hasChildren(child._id),
     }))
   );
 
-  const isLeaf              = children.length === 0;
+  const isLeaf = children.length === 0;
   const isSecondSubcategory = children.length > 0 && childMeta.every((c) => !c.hasChildren);
 
   const SUBJECT_PILLARS = ["School", "Competitive", "Olympiads"];
@@ -209,14 +209,14 @@ export const getCategoryById = async (id) => {
     ? childMeta.map((c) => c.name)
     : [];
 
-  obj.isLeaf              = isLeaf;
+  obj.isLeaf = isLeaf;
   obj.isSecondSubcategory = isSecondSubcategory;
   obj.linkedSubcategories = linkedSubcategories;
 
   // ── Enrich: Global pillar-level offer (for Mode A display in UI) ────────────────
   const PILLAR_TO_APPLICABLE_ON = {
-    "School":            "School",
-    "Competitive":       "Competitive",
+    "School": "School",
+    "Competitive": "Competitive",
     "Skill Development": "Skill Development",
   };
   const applicableOn = PILLAR_TO_APPLICABLE_ON[obj.rootType];
@@ -270,7 +270,7 @@ const getConnectedCategoryIds = async (linkedTo, studentId, isCertification) => 
   }
 
   if (linkedTo === "test" || linkedTo === "both") {
-    const publishedTests = await Test.find({ 
+    const publishedTests = await Test.find({
       isPublished: true,
       applicableFor: { $in: DIRECT_PURCHASABLE_TEST_TYPES }
     }).select("questionBank categoryId").lean();
@@ -290,7 +290,7 @@ const getConnectedCategoryIds = async (linkedTo, studentId, isCertification) => 
     const allTestIds = activeBundles.flatMap((b) => b.tests || []);
     if (allTestIds.length > 0) {
       const bundleTests = await Test.find({ _id: { $in: allTestIds } }).select("questionBank categoryId").lean();
-      
+
       const bankIdsFromBundles = [...new Set(bundleTests.map(t => t.questionBank?.toString()).filter(Boolean))];
       const directCategoryIdsFromBundles = [...new Set(bundleTests.map(t => t.categoryId?.toString()).filter(Boolean))];
 
@@ -465,8 +465,8 @@ export const getCategoriesForStudent = async (options = {}) => {
 
   // ── Attach computed prices to all subcategory nodes so frontend needs zero math ──
   const PILLAR_TO_APPLICABLE_ON = {
-    "School":            "School",
-    "Competitive":       "Competitive",
+    "School": "School",
+    "Competitive": "Competitive",
     "Skill Development": "Skill Development",
   };
   const applicableOn = rootType ? PILLAR_TO_APPLICABLE_ON[rootType] : null;
@@ -493,8 +493,8 @@ export const getCategoriesForStudent = async (options = {}) => {
       if (node.price != null) {
         const basePrice = Number(node.price) || 0;
         const activeOffer = (node.offerOverrideId && overrideMap[node.offerOverrideId.toString()])
-                            ? overrideMap[node.offerOverrideId.toString()]
-                            : globalOffer;
+          ? overrideMap[node.offerOverrideId.toString()]
+          : globalOffer;
 
         if (node.isFree || basePrice === 0) {
           node.originalPrice = basePrice;
@@ -577,14 +577,14 @@ export const updateCategoryPricing = async (id, updateData) => {
 export const getNodeWithEffectivePrice = async (id) => {
   const node = await categoryRepository.findById(id);
   if (!node) throw new ApiError(404, "Category not found");
-  
+
   const obj = typeof node.toObject === "function" ? node.toObject() : { ...node };
-  
+
   if (obj.isFree) {
     obj.effectivePrice = 0;
     return obj;
   }
-  
+
   if (obj.discountedPrice !== null && obj.discountedPrice !== undefined) {
     // Admin set a specific node-level discount. It overrides global offer completely.
     obj.effectivePrice = obj.discountedPrice;
@@ -598,21 +598,21 @@ export const getNodeWithEffectivePrice = async (id) => {
     "Skill Development": "Skill Development"
   };
   const moduleName = rootTypeMap[obj.rootType] || "Category";
-  
+
   const offerDetails = await getApplicableOfferDetails(moduleName, obj.price || 0);
-  
+
   obj.appliedOffer = offerDetails.appliedOffer;
   obj.originalPrice = offerDetails.originalPrice;
   obj.discountedPrice = offerDetails.discountedPrice;
   obj.discountAmount = offerDetails.discountAmount;
   obj.effectivePrice = offerDetails.discountedPrice;
-  
+
   if (!offerDetails.appliedOffer) {
     delete obj.appliedOffer;
     delete obj.discountAmount;
     obj.effectivePrice = obj.originalPrice;
   }
-  
+
   return obj;
 };
 
