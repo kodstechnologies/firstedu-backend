@@ -32,10 +32,14 @@ export const awardTestCompletionPoints = async (
   studentId,
   testId,
   testTitle,
+  customPoints = null
 ) => {
+  const points = customPoints != null ? Number(customPoints) : POINTS_CONFIG.TEST_COMPLETION;
+  if (points <= 0) return null;
+
   return await walletService.addRewardPoints(
     studentId,
-    POINTS_CONFIG.TEST_COMPLETION,
+    points,
     "test_completion",
     `Points earned for completing test: ${testTitle}`,
     testId,
@@ -53,16 +57,28 @@ export const awardChallengeYourselfCompletionPoints = async (
   testTitle,
   testPrice,
 ) => {
-  const points = Math.round(Math.max(0, Number(testPrice) || 0) * 5);
-  if (points <= 0) {
-    return null;
-  }
+  // USER REQUIREMENT: Remove the 500% points logic. 
+  // Points are now awarded only upon purchase (handled in marketplace service).
+  return null;
+};
+
+/**
+ * Award points for test purchase
+ */
+export const awardTestPurchasePoints = async (
+  studentId,
+  testId,
+  testTitle,
+  customPoints = null
+) => {
+  const points = customPoints != null ? Number(customPoints) : 0; // Default to 0 for purchase unless specified
+  if (points <= 0) return null;
 
   return await walletService.addRewardPoints(
     studentId,
     points,
-    "challenge_yourself_completion",
-    `Points earned for completing challenge-yourself test: ${testTitle}`,
+    "test_purchase",
+    `Points earned for purchasing test: ${testTitle}`,
     testId,
     "Test",
   );
@@ -89,6 +105,7 @@ export const awardCategoryPurchasePoints = async (
 export default {
   awardCoursePurchasePoints,
   awardTestCompletionPoints,
+  awardTestPurchasePoints,
   awardChallengeYourselfCompletionPoints,
   awardCategoryPurchasePoints,
   POINTS_CONFIG,

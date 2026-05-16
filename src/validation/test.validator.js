@@ -31,6 +31,7 @@ const createTest = Joi.object({
     .default("test"),
   isPublished: Joi.boolean().optional(),
   categoryId: objectId.optional().allow(null),
+  rewardPoints: Joi.number().min(0).optional(),
 });
 
 const updateTest = Joi.object({
@@ -60,6 +61,7 @@ const updateTest = Joi.object({
     .optional(),
   isPublished: Joi.boolean().optional(),
   categoryId: objectId.optional().allow(null),
+  rewardPoints: Joi.number().min(0).optional(),
 });
 
 // Test Bundle

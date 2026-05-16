@@ -134,21 +134,11 @@ const awardCompletionPoints = async (studentId, session, test) => {
     return;
   }
 
-  if (test.applicableFor === "challenge_yourself") {
-    await pointsService.awardChallengeYourselfCompletionPoints(
-      studentId,
-      session.test,
-      test.title || "Challenge Yourself Test",
-      test.price
-    );
-    return;
-  }
+  // NOTE: challenge_yourself points are now awarded only upon purchase (handled in marketplace service).
+  // awardChallengeYourselfCompletionPoints has been disabled.
 
-  await pointsService.awardTestCompletionPoints(
-    studentId,
-    session.test,
-    test.title || "Test"
-  );
+
+  // Reward points are now awarded on purchase, not completion.
 };
 
 const buildCategoryPath = (categoryId, categoryMap) => {
@@ -967,7 +957,7 @@ export const getExamSession = async (sessionId, studentId) => {
       student: studentId,
     },
     {
-      test: "title description durationMinutes applicableFor proctoringInstructions questionBank",
+      test: "title description durationMinutes applicableFor questionBank",
       answers: {
         select:
           "questionText questionType options subject topic marks negativeMarks difficulty isParent passage parentQuestionId childQuestions connectedQuestions imageUrl sectionIndex orderInBank",
@@ -996,7 +986,7 @@ export const getExamSession = async (sessionId, studentId) => {
           student: studentId,
         },
         {
-          test: "title description durationMinutes applicableFor proctoringInstructions questionBank",
+          test: "title description durationMinutes applicableFor questionBank",
           answers: {
             select:
               "questionText questionType options subject topic marks negativeMarks difficulty isParent passage parentQuestionId childQuestions connectedQuestions imageUrl sectionIndex orderInBank",

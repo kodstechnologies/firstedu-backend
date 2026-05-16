@@ -62,6 +62,7 @@ const enrichTestsWithBankStats = async (tests) => {
       const key = t.questionBank._id.toString();
       const stats = statsMap.get(key) || { totalQuestions: 0, totalMarks: 0 };
       t.questionBank.totalQuestions = stats.totalQuestions;
+
       t.questionBank.totalMarks = stats.totalMarks;
     }
   });

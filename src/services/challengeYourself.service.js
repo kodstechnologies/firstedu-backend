@@ -2,6 +2,7 @@ import testRepository from "../repository/test.repository.js";
 import questionBankRepository from "../repository/questionBank.repository.js";
 import challengeYourselfProgressRepository from "../repository/challengeYourselfProgress.repository.js";
 import orderRepository from "../repository/order.repository.js";
+import { attachPurchasedFlagToTests } from "./marketplace.service.js";
 
 /**
  * 6 stages: Bronze (1), Silver (5), Gold (10), Platinum (15), Diamond (20), Heroic (25) levels.
@@ -52,47 +53,53 @@ const deterministicSample = (arr, count, seed) => {
 };
 
 /**
- * Get date seed (YYYY-MM-DD UTC) for deterministic daily challenge layout
- */
-const getDateSeed = () => {
-  const d = new Date();
-  d.setUTCHours(0, 0, 0, 0);
-  return d.toISOString().slice(0, 10);
-};
-
-/**
  * Build levels for one stage: each level has a test ID (or null if pool empty).
+ * Each test used is removed from the provided pools to ensure permanent uniqueness.
  */
-const buildStageLevels = (stage, pools, dateSeed) => {
+const buildStageLevels = (stage, pools) => {
   const levels = [];
   const { name, levels: levelCount, easy: e, medium: m, hard: h } = stage;
-  const pool = pools.challengeYourself;
+  
   const order = [];
   for (let i = 0; i < e; i++) order.push("easy");
   for (let i = 0; i < m; i++) order.push("medium");
   for (let i = 0; i < h; i++) order.push("hard");
-  const seedBase = dateSeed + name;
+
   for (let i = 0; i < levelCount; i++) {
     const diff = order[i] || "easy";
-    const poolArr = pool[diff] || [];
-    const sampled = deterministicSample(poolArr, 1, seedBase + i);
-    levels.push({ level: i + 1, testId: sampled[0] || null, difficulty: diff });
+    const poolArr = pools[diff] || [];
+    
+    let testId = null;
+    if (poolArr.length > 0) {
+      // PERMANENT ASSIGNMENT: Shift the first available test from the sorted difficulty pool.
+      // Since repository sorts by createdAt, this assignment is stable forever.
+      testId = poolArr.shift();
+    }
+    
+    levels.push({ level: i + 1, testId, difficulty: diff });
   }
   return levels;
 };
 
 /**
- * Get today's layout (stage/level -> testId) and reverse map (testId -> { stage, level }).
+ * Get the permanent layout (stage/level -> testId) and reverse map (testId -> { stage, level }).
+ * Ensures each test is assigned to exactly one slot forever based on its creation date.
  */
-export const getLayoutForDate = async (dateSeed) => {
+export const getLayoutForDate = async (_dateSeed) => {
   const challengeByDiff = await testRepository.findChallengeYourselfTestsByDifficulty();
-  const pools = { challengeYourself: challengeByDiff };
+  
+  // Clone pools to allow destructive shift()
+  const pools = {
+    easy: [...(challengeByDiff.easy || [])],
+    medium: [...(challengeByDiff.medium || [])],
+    hard: [...(challengeByDiff.hard || [])],
+  };
+
   const stagesWithLevels = STAGES.map((stage) => {
-    const levels = buildStageLevels(stage, pools, dateSeed);
+    const levels = buildStageLevels(stage, pools);
     return { name: stage.name, totalLevels: stage.levels, levels };
   });
-  // First occurrence wins (Bronze → … order). Later stages can sample the same testId;
-  // overwriting would make getSlotForTest point at a locked level while the UI still shows Bronze.
+
   const testIdToSlot = new Map();
   const testIdToSlots = new Map();
   stagesWithLevels.forEach((s) => {
@@ -115,8 +122,7 @@ export const getLayoutForDate = async (dateSeed) => {
  * Get (stage, level) for a test in today's challenge-yourself layout, or null.
  */
 export const getSlotForTest = async (testId) => {
-  const dateSeed = getDateSeed();
-  const { testIdToSlot } = await getLayoutForDate(dateSeed);
+  const { testIdToSlot } = await getLayoutForDate();
   return testIdToSlot.get(testId?.toString?.()) || null;
 };
 
@@ -159,8 +165,7 @@ export const isLevelUnlocked = async (studentId, stageName, levelNum) => {
  */
 export const recordProgress = async (studentId, session) => {
   const testId = session.test?._id || session.test;
-  const dateSeed = getDateSeed();
-  const { testIdToSlots } = await getLayoutForDate(dateSeed);
+  const { testIdToSlots } = await getLayoutForDate();
   const slots = testIdToSlots.get(testId?.toString?.());
   if (!slots || slots.length === 0) return;
 
@@ -192,8 +197,7 @@ export const recordProgress = async (studentId, session) => {
  * GET challenge-yourself: 6 stages with levels, tests, unlocked, and completedWithFullMarks.
  */
 export const getChallengeYourself = async (studentId) => {
-  const dateSeed = getDateSeed();
-  const { stagesWithLevels, testIdToSlot } = await getLayoutForDate(dateSeed);
+  const { stagesWithLevels, testIdToSlot } = await getLayoutForDate();
 
   const progressList = studentId ? await challengeYourselfProgressRepository.findByStudent(studentId) : [];
   const progressMap = new Map();
@@ -203,12 +207,6 @@ export const getChallengeYourself = async (studentId) => {
     s.levels.map((l) => l.testId).filter(Boolean)
   );
   const uniqueIds = [...new Set(allTestIds.map((id) => id.toString()))];
-
-  const purchasedTestIdSet = new Set(
-    studentId && uniqueIds.length > 0
-      ? await orderRepository.findPurchasedTestIdsForStudent(studentId, uniqueIds)
-      : []
-  );
 
   if (uniqueIds.length === 0) {
     const withUnlock = stagesWithLevels.map((stage) => ({
@@ -220,7 +218,7 @@ export const getChallengeYourself = async (studentId) => {
         test: null,
         unlocked: lev.level === 1 && stage.name === "Bronze",
         completedWithFullMarks: false,
-        isPurchased: false,
+        purchased: false,
       })),
     }));
     return { stages: withUnlock };
@@ -233,6 +231,10 @@ export const getChallengeYourself = async (studentId) => {
   );
   const testMap = new Map(tests.filter(Boolean).map((t) => [t._id.toString(), t]));
   await enrichTestsWithBankStats([...testMap.values()]);
+  
+  if (studentId) {
+    await attachPurchasedFlagToTests([...testMap.values()], studentId);
+  }
 
   const stagesWithTests = await Promise.all(
     stagesWithLevels.map(async (stage) => ({
@@ -246,16 +248,15 @@ export const getChallengeYourself = async (studentId) => {
             ? await isLevelUnlocked(studentId, stage.name, lev.level)
             : lev.level === 1 && stage.name === "Bronze";
           const progress = studentId ? progressMap.get(`${stage.name}:${lev.level}`) : null;
-          const testIdStr = lev.testId?.toString?.() ?? null;
-          const isPurchased = Boolean(
-            studentId && testIdStr && purchasedTestIdSet.has(testIdStr)
-          );
+          const isPurchased = !!test?.purchased;
+
           return {
             level: lev.level,
             difficulty: lev.difficulty,
             test: testObj,
             unlocked,
             completedWithFullMarks: !!progress?.fullMarksAchieved,
+            hasCompletedAttempt: !!progress,
             isPurchased,
           };
         })

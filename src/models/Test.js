@@ -76,6 +76,10 @@ const testSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    rewardPoints: {
+      type: Number,
+      default: 0,
+    },
   },
   {
     timestamps: true,
