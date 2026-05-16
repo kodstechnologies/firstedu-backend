@@ -456,7 +456,7 @@ export const getExamHall = asyncHandler(async (req, res) => {
   const studentId = req.user._id;
   const { page = 1, limit = 20, type = "all", category, search } = req.query;
 
-  const filterType = ["test", "testBundle", "olympiad", "tournament", "certificationTest", "both", "all"].includes(type)
+  const filterType = ["test", "testBundle", "olympiad", "tournament", "certificationTest", "school", "competitive", "skill", "both", "all"].includes(type)
     ? type
     : "all";
 

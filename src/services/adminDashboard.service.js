@@ -249,6 +249,8 @@ export const getDashboardData = async () => {
     ticketsOpenedLastMonth,
     totalRevenueAllTime,
     revenueChart,
+    totalStudents,
+    totalTestsSold,
   ] = await Promise.all([
     getRazorpayRevenueInRange(currentMonth.start, currentMonth.end),
     getRazorpayRevenueInRange(lastMonth.start, lastMonth.end),
@@ -261,6 +263,8 @@ export const getDashboardData = async () => {
     getTicketsOpenedInRange(lastMonth.start, lastMonth.end),
     getRazorpayTotalRevenue(),
     getRevenueLast7Days(),
+    User.countDocuments({}),
+    TestPurchase.countDocuments({ paymentStatus: "completed" }),
   ]);
 
   const formatCurrency = (n) => `₹${Number(n).toLocaleString("en-IN")}`;
@@ -277,21 +281,21 @@ export const getDashboardData = async () => {
   const stats = [
     {
       title: "Total Revenue",
-      value: formatCurrency(revenueCurrentMonth),
+      value: formatCurrency(totalRevenueAllTime),
       change: revenueChangeStr,
       iconKey: "TrendingUp",
       positive: revenueKpi.positive,
     },
     {
-      title: "New Signups",
-      value: String(signupsCurrentMonth),
+      title: "Total Students",
+      value: String(totalStudents),
       change: signupsKpi.change,
       iconKey: "Users",
       positive: signupsKpi.positive,
     },
     {
-      title: "Tests Sold",
-      value: String(testsSoldCurrentMonth),
+      title: "Total Tests Sold",
+      value: String(totalTestsSold),
       change: testsKpi.change,
       iconKey: "ShoppingCart",
       positive: testsKpi.positive,

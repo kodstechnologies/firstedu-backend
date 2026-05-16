@@ -18,6 +18,7 @@ import couponService from "./coupon.service.js";
 import studentRepository from "../repository/student.repository.js";
 import { sendCourseEnrollmentEmail, sendTestBundlePurchaseEmail } from "../utils/sendEmail.js";
 import Category from "../models/Category.js";
+import OlympiadTest from "../models/OlympiadTest.js";
 import { getOlympiads } from "./studentOlympiad.service.js";
 import { getTournaments } from "./tournament.service.js";
 
@@ -1458,12 +1459,14 @@ const tournamentStagesPopulate = [
  * @param {string} type - "test" | "testBundle" | "tournament" | "both" (test+bundle) | "all" (default: all)
  * @param {string} category - Filter by category ID (questionBank categories for tests / tournament)
  */
-export const getExamHall = async (studentId, page = 1, limit = 20, type = "all", category = null) => {
+export const getExamHall = async (studentId, page = 1, limit = 20, type = "all", category = null, search = null) => {
   const pageNum = parseInt(page);
   const limitNum = parseInt(limit);
   const skip = (pageNum - 1) * limitNum;
   const now = new Date();
   const nowMs = now.getTime();
+  const getPath = await buildCategoryPathsMap();
+
   /** Include in exam hall whenever event is live: startTime <= now <= endTime. */
   const isWithinEventWindow = (startTime, endTime) => {
     const startMs = new Date(startTime).getTime();
@@ -1472,6 +1475,7 @@ export const getExamHall = async (studentId, page = 1, limit = 20, type = "all",
     return nowMs >= startMs && nowMs <= endMs;
   };
 
+  // 1. Fetch Test & Bundle Purchases
   const purchases = await orderRepository.findTestPurchasesForExamHall(studentId);
   const purchaseTestIds = [];
   purchases.forEach((p) => {
@@ -1479,6 +1483,7 @@ export const getExamHall = async (studentId, page = 1, limit = 20, type = "all",
     else if (p.testBundle?.tests?.length)
       p.testBundle.tests.forEach((t) => t?._id && purchaseTestIds.push(t._id));
   });
+
   const statusMap = await examSessionRepository.getSessionStatusMapByStudent(studentId, purchaseTestIds);
   const getTestStatus = (testId) => statusMap[testId?.toString?.() ?? ""]?.status ?? "not_started";
   const getSessionId = (testId) => statusMap[testId?.toString?.() ?? ""]?.sessionId ?? null;
@@ -1488,18 +1493,53 @@ export const getExamHall = async (studentId, page = 1, limit = 20, type = "all",
     .map((p) => {
       const base = { _id: p._id, purchaseDate: p.purchaseDate, purchasePrice: p.purchasePrice };
       if (p.test) {
+        const testObj = p.test?.toObject ? p.test.toObject() : { ...p.test };
+        const catId = testObj.questionBank?.categories?.[0];
+        const categoryPath = getPath(catId) || "";
+        const rootCategory = categoryPath.split(" > ")[0] || "Test";
+        
+        let appFor = testObj.applicableFor || "Test";
+        if (appFor.toLowerCase() === "test" && rootCategory !== "Test") {
+          appFor = rootCategory;
+        }
+
+        const itemType = getFrontendItemType({ ...testObj, applicableFor: appFor });
+        
         return {
           ...base,
-          type: "test",
-          test: p.test,
-          testId: p.test._id,
-          testStatus: getTestStatus(p.test._id),
-          sessionId: getSessionId(p.test._id),
+          type: itemType,
+          test: {
+            ...testObj,
+            itemType,
+            applicableFor: appFor,
+            categoryPath,
+          },
+          testId: testObj._id,
+          testStatus: getTestStatus(testObj._id),
+          sessionId: getSessionId(testObj._id),
         };
       }
       const bundleTests = (p.testBundle?.tests || []).map((t) => {
-        const plain = t?.toObject ? t.toObject() : { ...t };
-        return { ...plain, testStatus: getTestStatus(t._id), sessionId: getSessionId(t._id) };
+        const testObj = t?.toObject ? t.toObject() : { ...t };
+        const catId = testObj.questionBank?.categories?.[0];
+        const categoryPath = getPath(catId) || "";
+        const rootCategory = categoryPath.split(" > ")[0] || "Test";
+
+        let appFor = testObj.applicableFor || "Test";
+        if (appFor.toLowerCase() === "test" && rootCategory !== "Test") {
+          appFor = rootCategory;
+        }
+
+        const itemType = getFrontendItemType({ ...testObj, applicableFor: appFor });
+
+        return {
+          ...testObj,
+          itemType,
+          applicableFor: appFor,
+          categoryPath,
+          testStatus: getTestStatus(testObj._id),
+          sessionId: getSessionId(testObj._id),
+        };
       });
       return {
         ...base,
@@ -1510,11 +1550,14 @@ export const getExamHall = async (studentId, page = 1, limit = 20, type = "all",
       };
     });
 
+  // 2. Fetch Tournament & Olympiad Registrations
   const eventRegs = await eventRegistrationRepository.find(
-    { student: studentId, eventType: "tournament", paymentStatus: "completed" },
+    { student: studentId, eventType: { $in: ["tournament", "olympiad"] }, paymentStatus: "completed" },
     { limit: 500 }
   );
+  
   const tournamentIds = [...new Set(eventRegs.filter((r) => r.eventType === "tournament").map((r) => r.eventId).filter(Boolean))];
+  const olympiadIds = [...new Set(eventRegs.filter((r) => r.eventType === "olympiad").map((r) => r.eventId).filter(Boolean))];
 
   const eventTestIds = [];
   const tournamentItems = [];
@@ -1530,11 +1573,17 @@ export const getExamHall = async (studentId, page = 1, limit = 20, type = "all",
         .filter((s) => isWithinEventWindow(s.startTime, s.endTime))
         .map((s) => {
           eventTestIds.push(s.test._id);
-          const plain = s.test?.toObject ? s.test.toObject() : { ...s.test };
+          const testObj = s.test?.toObject ? s.test.toObject() : { ...s.test };
+          const catId = testObj.questionBank?.categories?.[0];
           return {
             ...(s.toObject ? s.toObject() : { ...s }),
-            test: { ...plain },
-            testId: s.test._id,
+            test: {
+              ...testObj,
+              itemType: "tournament",
+              applicableFor: "Tournament",
+              categoryPath: getPath(catId) || "",
+            },
+            testId: testObj._id,
           };
         });
       if (liveStages.length > 0) {
@@ -1544,8 +1593,43 @@ export const getExamHall = async (studentId, page = 1, limit = 20, type = "all",
           tournamentId: t._id,
           tournamentTitle: t.title,
           stages: liveStages,
+          createdAt: t.createdAt
         });
       }
+    }
+  }
+
+  const olympiadItems = [];
+  if (olympiadIds.length > 0) {
+    const olympiads = await OlympiadTest.find({ _id: { $in: olympiadIds } })
+      .populate({
+        path: "testId",
+        select: "title description durationMinutes imageUrl questionBank applicableFor",
+        populate: { path: "questionBank", select: "name categories" }
+      })
+      .lean();
+    
+    for (const o of olympiads) {
+      if (!o.testId) continue;
+      if (o.startTime && o.endTime && !isWithinEventWindow(o.startTime, o.endTime)) continue;
+      
+      const testObj = o.testId;
+      const catId = testObj.questionBank?.categories?.[0];
+      eventTestIds.push(testObj._id);
+      olympiadItems.push({
+        _id: o._id,
+        type: "olympiad",
+        olympiadId: o._id,
+        olympiadTitle: o.title,
+        test: {
+          ...testObj,
+          itemType: "olympiad",
+          applicableFor: "Olympiad",
+          categoryPath: getPath(catId) || "",
+        },
+        testId: testObj._id,
+        createdAt: o.createdAt
+      });
     }
   }
 
@@ -1555,6 +1639,7 @@ export const getExamHall = async (studentId, page = 1, limit = 20, type = "all",
       : {};
   const getEventTestStatus = (id) => eventStatusMap[id?.toString?.() ?? ""]?.status ?? "not_started";
   const getEventSessionId = (id) => eventStatusMap[id?.toString?.() ?? ""]?.sessionId ?? null;
+
   tournamentItems.forEach((item) => {
     (item.stages || []).forEach((st) => {
       st.testStatus = getEventTestStatus(st.testId);
@@ -1565,29 +1650,79 @@ export const getExamHall = async (studentId, page = 1, limit = 20, type = "all",
     });
   });
 
-  let combined = [...purchaseItems, ...tournamentItems];
+  olympiadItems.forEach((item) => {
+    item.testStatus = getEventTestStatus(item.testId);
+    item.sessionId = getEventSessionId(item.testId);
+    if (item.test) {
+      item.test = { ...item.test, testStatus: item.testStatus, sessionId: item.sessionId };
+    }
+  });
+
+  let combined = [...purchaseItems, ...tournamentItems, ...olympiadItems];
 
   const typeFilter = (item) => {
-    if (type === "test") return item.type === "test";
-    if (type === "testBundle") return item.type === "testBundle";
-    if (type === "tournament") return item.type === "tournament";
-    if (type === "both") return item.type === "test" || item.type === "testBundle";
+    const t = (type || "all").toLowerCase();
+    const isTest = ["test", "school", "competitive", "skill", "challenge"].includes(item.type);
+    
+    if (t === "all") return true;
+    if (t === "both") return isTest || item.type === "testBundle";
+    if (t === "test") return isTest;
+    if (t === "testbundle") return item.type === "testBundle";
+    if (t === "tournament") return item.type === "tournament";
+    if (t === "olympiad") return item.type === "olympiad";
+    
+    // Sub-types for tests
+    if (["school", "competitive", "skill"].includes(t)) {
+      if (item.type !== "test" || !item.test) return false;
+      const frontendType = item.test.itemType || getFrontendItemType(item.test);
+      return frontendType === t;
+    }
+    
     return true;
   };
+
+  const searchFilter = (item) => {
+    if (!search || !search.trim()) return true;
+    const term = search.toLowerCase().trim();
+    if (item.type === "test" && item.test) {
+      return (item.test.title || "").toLowerCase().includes(term) || (item.test.description || "").toLowerCase().includes(term);
+    }
+    if (item.type === "testBundle" && item.testBundle) {
+      return (item.testBundle.name || "").toLowerCase().includes(term) || (item.testBundle.description || "").toLowerCase().includes(term);
+    }
+    if (item.type === "tournament") {
+      return (item.tournamentTitle || "").toLowerCase().includes(term);
+    }
+    if (item.type === "olympiad") {
+      return (item.olympiadTitle || "").toLowerCase().includes(term);
+    }
+    return false;
+  };
+
   const categoryFilter = (item) => {
     if (!category) return true;
     if (item.type === "test" && item.test) return hasCategory(item.test?.questionBank?.categories, category);
     if (item.type === "testBundle" && item.testBundle?.tests) {
       return item.testBundle.tests.some((t) => hasCategory(t?.questionBank?.categories, category));
     }
-
     if (item.type === "tournament" && item.stages) {
       return item.stages.some((s) => hasCategory(s.test?.questionBank?.categories, category));
+    }
+    if (item.type === "olympiad" && item.test) {
+      return hasCategory(item.test?.questionBank?.categories, category);
     }
     return false;
   };
 
-  combined = combined.filter((i) => typeFilter(i) && categoryFilter(i));
+  combined = combined.filter((i) => typeFilter(i) && searchFilter(i) && categoryFilter(i));
+  
+  // Sort by createdAt desc
+  combined.sort((a, b) => {
+    const dateA = new Date(a.createdAt || a.purchaseDate || 0).getTime();
+    const dateB = new Date(b.createdAt || b.purchaseDate || 0).getTime();
+    return dateB - dateA;
+  });
+
   const total = combined.length;
   const paginated = combined.slice(skip, skip + limitNum);
 
