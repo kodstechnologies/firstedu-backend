@@ -13,6 +13,7 @@ const offerSchema = new mongoose.Schema(
     applicableOn: {
       type: String,
       enum: [
+        "all",
         "Test",
         "TestSeries",
         "Course",
@@ -26,7 +27,7 @@ const offerSchema = new mongoose.Schema(
         "Competitive",
         "Skill Development",
       ],
-      required: true,
+      default: "all",
     },
 
     // 🔹 Scoping variables (Optional: to bind this offer to a specific document rather than a global pillar)
