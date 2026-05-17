@@ -18,6 +18,7 @@ export const getMerchandiseItems = asyncHandler(async (req, res) => {
   const meta = {
     ...result.pagination,
     totalPoints: wallet.rewardPoints ?? 0,
+    monetaryBalance: wallet.monetaryBalance ?? 0,
   };
 
   return res.status(200).json(
@@ -39,9 +40,12 @@ export const getMerchandiseById = asyncHandler(async (req, res) => {
   const item = await merchandiseService.getMerchandiseById(id);
 
   const wallet = await walletService.getOrCreateWallet(studentId, "User");
-  const totalPoints = wallet.rewardPoints ?? 0;
   const plainItem = item?.toObject ? item.toObject() : { ...item };
-  const data = { ...plainItem, totalPoints };
+  const data = {
+    ...plainItem,
+    totalPoints: wallet.rewardPoints ?? 0,
+    monetaryBalance: wallet.monetaryBalance ?? 0,
+  };
 
   return res
     .status(200)
@@ -49,15 +53,25 @@ export const getMerchandiseById = asyncHandler(async (req, res) => {
 });
 
 /**
- * Claim merchandise item
+ * Claim / purchase merchandise — unified endpoint.
+ *
+ * Supports paymentMethod: "points" (default) | "wallet" | "gateway"
+ *
+ * Mobile app backward compatibility:
+ *   Omitting paymentMethod defaults to "points" — existing app behaviour
+ *   is completely unchanged.
+ *
+ * Gateway two-step:
+ *   Call 1 (no razorpayPaymentId) → returns { requiresAction:true, orderId, key, amount }
+ *   Call 2 (with razorpay* fields) → creates claim, returns claim object
  */
 export const claimMerchandise = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const studentId = req.user._id;
-  
-  // Get merchandise to check if physical
+
+  // Fetch item first so validator knows if it's physical
   const item = await merchandiseService.getMerchandiseById(id);
-  
+
   const { error, value } = merchandiseValidator.claimMerchandise.validate(
     req.body,
     { context: { isPhysical: item.isPhysical } }
@@ -71,16 +85,19 @@ export const claimMerchandise = asyncHandler(async (req, res) => {
     );
   }
 
-  const claim = await merchandiseService.claimMerchandise(
-    studentId,
-    id,
-    value.deliveryAddress,
-    value?.couponCode
-  );
+  const result = await merchandiseService.claimMerchandise(studentId, id, value);
 
+  // Gateway Step 1: Razorpay order created, frontend must open checkout
+  if (result?.requiresAction) {
+    return res
+      .status(200)
+      .json(ApiResponse.success(result, "Payment initiation successful"));
+  }
+
+  // Points / Wallet / Gateway Step 2: claim created
   return res
     .status(201)
-    .json(ApiResponse.success(claim, "Merchandise claimed successfully"));
+    .json(ApiResponse.success(result, "Merchandise claimed successfully"));
 });
 
 /**
@@ -107,4 +124,3 @@ export default {
   claimMerchandise,
   getMyClaims,
 };
-

@@ -428,7 +428,7 @@ export const updateQuestionBank = async (id, updateData) => {
   if (!existing) throw new ApiError(404, "Question bank not found");
 
   // Block edit if the bank is currently used in any test
-  // await assertBankNotInUse(id, "edit"); // Removed as requested
+  await assertBankNotInUse(id, "edit");
 
   if (updateData.categories && updateData.categories.length > 0) {
     for (const catId of updateData.categories) {
@@ -469,7 +469,7 @@ export const toggleSectionWiseQuestions = async (id, useSectionWiseQuestions) =>
   if (!existing) throw new ApiError(404, "Question bank not found");
 
   // Block toggle if the bank is currently used in any test
-  // await assertBankNotInUse(id, "edit"); // Removed as requested
+  await assertBankNotInUse(id, "edit");
 
   if (useSectionWiseQuestions === true) {
     const hasSections =

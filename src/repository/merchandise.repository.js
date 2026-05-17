@@ -41,6 +41,7 @@ const createMerchandise = async (merchandiseData) => {
     const payload = {
       name: merchandiseData.name,
       pointsRequired: merchandiseData.pointsRequired,
+      price: merchandiseData.price ?? 0,
       description: merchandiseData.description || undefined,
       imageUrl: merchandiseData.imageUrl || undefined,
     
@@ -87,7 +88,7 @@ const createMerchandiseClaim = async (claimData) => {
 const findMerchandiseClaimById = async (id) => {
   try {
     return await MerchandiseClaim.findById(id)
-      .populate("merchandise", "name description imageUrl pointsRequired isPhysical")
+      .populate("merchandise", "name description imageUrl pointsRequired price isPhysical")
       .populate("student", "name email phone");
   } catch (error) {
     throw new ApiError(500, "Failed to fetch merchandise claim", error.message);
@@ -103,7 +104,7 @@ const findMerchandiseClaims = async (query, options = {}) => {
 
     const [claims, total] = await Promise.all([
       MerchandiseClaim.find(query)
-        .populate("merchandise", "name description imageUrl pointsRequired isPhysical")
+        .populate("merchandise", "name description imageUrl pointsRequired price isPhysical")
         .populate("student", "name email phone")
         .sort(sort)
         .skip(skip)

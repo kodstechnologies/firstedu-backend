@@ -20,6 +20,11 @@ const merchandiseSchema = new mongoose.Schema(
       required: true,
       min: 0,
     },
+    price: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     isPhysical: {
       type: Boolean,
       default: true, // true if requires delivery address

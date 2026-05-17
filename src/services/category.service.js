@@ -552,7 +552,7 @@ export const updateCategory = async (id, updateData) => {
   const existing = await categoryRepository.findById(id);
   if (!existing) throw new ApiError(404, "Category not found");
   // Edit allowed even if purchased.
-  // We will send a notification if the name changed and the category has purchases.
+  // Notification is sent if the name changed.
   if (updateData.parent !== undefined) {
     if (updateData.parent === id) {
       throw new ApiError(400, "Category cannot be its own parent");

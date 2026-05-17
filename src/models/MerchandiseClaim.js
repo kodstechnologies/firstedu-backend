@@ -17,6 +17,19 @@ const merchandiseClaimSchema = new mongoose.Schema(
       required: true,
       min: 0,
     },
+    moneyPaid: {
+      type: Number,
+      default: 0,
+    },
+    paymentMethod: {
+      type: String,
+      enum: ["points", "wallet", "gateway"],
+      default: "points",
+    },
+    paymentId: {
+      type: String,
+      trim: true,
+    },
     status: {
       type: String,
       enum: ["pending", "processing", "shipped", "delivered", "cancelled"],

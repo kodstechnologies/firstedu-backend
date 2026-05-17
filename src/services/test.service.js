@@ -113,12 +113,39 @@ export const getTestById = async (id) => {
     throw new ApiError(404, "Test not found");
   }
   await enrichTestsWithBankStats(test);
+
+  // Attach isPurchased so the frontend can lock core fields
+  const purchase = await TestPurchase.exists({
+    test: test._id,
+    paymentStatus: "completed",
+  });
+  test.isPurchased = !!purchase;
+  if (test._doc) test._doc.isPurchased = !!purchase;
+
   return test;
 };
 
 export const updateTest = async (id, data, file) => {
   const existing = await testRepository.findTestById(id);
   if (!existing) throw new ApiError(404, "Test not found");
+
+  // Check if this test has been purchased by any student
+  const isPurchased = !!(await TestPurchase.exists({
+    test: id,
+    paymentStatus: "completed",
+  }));
+
+  // Block changing questionBank or durationMinutes if test is purchased
+  if (isPurchased) {
+    if (Object.prototype.hasOwnProperty.call(data, "questionBank") &&
+      String(data.questionBank) !== String(existing.questionBank?._id ?? existing.questionBank)) {
+      throw new ApiError(400, "Cannot change Question Bank: this test has already been purchased by a student.");
+    }
+    if (Object.prototype.hasOwnProperty.call(data, "durationMinutes") &&
+      Number(data.durationMinutes) !== Number(existing.durationMinutes)) {
+      throw new ApiError(400, "Cannot change Duration: this test has already been purchased by a student.");
+    }
+  }
 
   // Restrict changing applicableFor once a standalone test ("test") has purchases
   if (
