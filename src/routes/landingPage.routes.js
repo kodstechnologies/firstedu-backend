@@ -7,7 +7,7 @@ import {
 import { getHallOfFame } from "../controllers/hallOfFame.controller.js";
 import { getLeaderboardsForStudent } from "../controllers/leaderboard.controller.js";
 import {
-  getCourseById,
+  getCourseByIdLandingPage,
   getCourses,
   getTestById,
   getTests,
@@ -90,7 +90,7 @@ router.post(
   submitBlogRequest,
 );
 router.get("/courses", getCourses);
-router.get("/courses/:id", getCourseById);
+router.get("/courses/:id", getCourseByIdLandingPage);
 router.get("/workshops/:id", getWorkshopById);
 router.get("/tournaments/:id", getTournamentById);
 router.get("/events", getAllEvents);
