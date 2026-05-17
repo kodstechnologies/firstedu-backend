@@ -3,18 +3,24 @@ import { ApiError } from "../utils/ApiError.js";
 
 const createOffer = async (offerData) => {
     try {
-        // If creating an active offer, deactivate any existing active offer for the same module
+        // If creating an active offer, deactivate conflicting active offers:
+        // - If this offer is "all", deactivate ALL active offers (global replaces everything)
+        // - If this is specific, deactivate any active offer for the same module AND any active "all" offer
         if (offerData.status === "active") {
-            const query = { applicableOn: offerData.applicableOn, status: "active" };
-            if (offerData.entityId) {
-                query.entityId = offerData.entityId;
+            const entityId = offerData.entityId || null;
+            let deactivateQuery;
+            if (offerData.applicableOn === "all") {
+                // A new "all" offer supersedes every active offer
+                deactivateQuery = { status: "active", entityId };
             } else {
-                query.entityId = null;
+                // A specific offer supersedes same-module AND "all" offers
+                deactivateQuery = {
+                    applicableOn: { $in: [offerData.applicableOn, "all"] },
+                    status: "active",
+                    entityId,
+                };
             }
-            await Offer.updateMany(
-                query,
-                { $set: { status: "inactive" } }
-            );
+            await Offer.updateMany(deactivateQuery, { $set: { status: "inactive" } });
         }
         return await Offer.create(offerData);
     } catch (error) {
@@ -27,12 +33,24 @@ const createOffer = async (offerData) => {
 
 const getActiveOffer = async (moduleType) => {
     try {
-        // Find active offer that is either not expired (validTill >= now) or has no expiry (validTill is null)
-        return await Offer.findOne({
+        const now = new Date();
+        const validityFilter = { $or: [{ validTill: null }, { validTill: { $gte: now } }] };
+
+        // 1. Try to find a specific active offer for this exact moduleType first
+        const specificOffer = await Offer.findOne({
             applicableOn: moduleType,
             status: "active",
             entityId: null,
-            $or: [{ validTill: null }, { validTill: { $gte: new Date() } }],
+            ...validityFilter,
+        });
+        if (specificOffer) return specificOffer;
+
+        // 2. Fall back to an active "all" offer (global discount)
+        return await Offer.findOne({
+            applicableOn: "all",
+            status: "active",
+            entityId: null,
+            ...validityFilter,
         });
     } catch (error) {
         throw new ApiError(500, "Failed to fetch active offer", error.message);
@@ -72,17 +90,20 @@ const updateOffer = async (id, updateData) => {
         if (updateData.status === "active") {
             const offer = await Offer.findById(id);
             if (offer) {
-                // Enforce same module type logic if applicableOn is not in updateData
                 const applicableOn = updateData.applicableOn || offer.applicableOn;
-
-                await Offer.updateMany(
-                    {
-                        applicableOn: applicableOn,
+                let deactivateQuery;
+                if (applicableOn === "all") {
+                    // Activating an "all" offer → deactivate every other active offer
+                    deactivateQuery = { status: "active", _id: { $ne: id } };
+                } else {
+                    // Activating a specific offer → deactivate same-module AND any "all" offer
+                    deactivateQuery = {
+                        applicableOn: { $in: [applicableOn, "all"] },
                         status: "active",
-                        _id: { $ne: id }
-                    },
-                    { $set: { status: "inactive" } }
-                );
+                        _id: { $ne: id },
+                    };
+                }
+                await Offer.updateMany(deactivateQuery, { $set: { status: "inactive" } });
             }
         }
 

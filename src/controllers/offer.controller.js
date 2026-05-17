@@ -5,10 +5,10 @@ import offerRepository from "../repository/offer.repository.js";
 
 // Create Offer
 export const createOffer = asyncHandler(async (req, res) => {
-    const { offerName, applicableOn, discountType, discountValue, validTill, status, description } = req.body;
+    const { offerName, applicableOn = "all", discountType, discountValue, validTill, status, description } = req.body;
 
-    if (!offerName || !applicableOn || !discountType || discountValue === undefined) {
-        throw new ApiError(400, "Missing required fields: offerName, applicableOn, discountType, discountValue");
+    if (!offerName || !discountType || discountValue === undefined) {
+        throw new ApiError(400, "Missing required fields: offerName, discountType, discountValue");
     }
 
     // Basic Validation
