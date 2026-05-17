@@ -386,6 +386,7 @@ const findChallengeYourselfTestsByDifficulty = async () => {
     })
       .select("_id questionBank")
       .populate("questionBank", "overallDifficulty useSectionWiseDifficulty sections")
+      .sort({ createdAt: 1 })
       .lean();
     const easy = [];
     const medium = [];

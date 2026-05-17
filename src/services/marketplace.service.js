@@ -7,6 +7,7 @@ import examSessionRepository from "../repository/examSession.repository.js";
 import eventRegistrationRepository from "../repository/eventRegistration.repository.js";
 import tournamentRepository from "../repository/tournament.repository.js";
 import razorpayOrderIntentRepository from "../repository/razorpayOrderIntent.repository.js";
+import categoryRepository from "../repository/category.repository.js";
 import pointsService from "./points.service.js";
 import walletService from "./wallet.service.js";
 import {
@@ -86,7 +87,7 @@ const getFrontendItemType = (test) => {
   return "test";
 };
 
-const attachPurchasedFlagToTests = async (tests, studentId) => {
+export const attachPurchasedFlagToTests = async (tests, studentId) => {
   if (!studentId || !tests.length) {
     tests.forEach((t) => (t.purchased = false));
     return tests;
@@ -565,7 +566,7 @@ export const getTestsAndBundles = async (options = {}) => {
       questionBank,
       sortBy,
       sortOrder,
-      applicableFor: DIRECT_PURCHASABLE_TEST_TYPES,
+      applicableFor: ["test", "trending_test"],
       studentId,
     });
     return {
@@ -967,6 +968,10 @@ export const initiateTestPayment = async (testId, studentId, paymentMethod, opti
       paymentId: "free",
       paymentStatus: "completed",
     });
+    // Award reward points for purchase if configured on test
+    if (test.rewardPoints > 0) {
+      await pointsService.awardTestPurchasePoints(studentId, testId, test.title, test.rewardPoints);
+    }
     return { purchase, completed: true };
   }
 
@@ -982,6 +987,10 @@ export const initiateTestPayment = async (testId, studentId, paymentMethod, opti
       paymentId: "wallet",
       paymentStatus: "completed",
     });
+    // Award reward points for purchase if configured on test
+    if (test.rewardPoints > 0) {
+      await pointsService.awardTestPurchasePoints(studentId, testId, test.title, test.rewardPoints);
+    }
     if (couponId) {
       await couponService.incrementCouponUsedCount(couponId);
     }
@@ -1140,6 +1149,10 @@ export const purchaseTest = async (
     paymentId: razorpayPaymentId,
     paymentStatus: "completed",
   });
+  // Award reward points for purchase if configured on test
+  if (test.rewardPoints > 0) {
+    await pointsService.awardTestPurchasePoints(studentId, testId, test.title, test.rewardPoints);
+  }
   await razorpayOrderIntentRepository.markReconciled(razorpayOrderId, razorpayPaymentId);
   if (intent.couponId) {
     await couponService.incrementCouponUsedCount(intent.couponId);
@@ -1466,6 +1479,12 @@ export const getExamHall = async (studentId, page = 1, limit = 20, type = "all",
   const now = new Date();
   const nowMs = now.getTime();
   const getPath = await buildCategoryPathsMap();
+  
+  // Resolve category descendants for hierarchical filtering
+  let descendantCategoryIds = null;
+  if (category && category !== "All" && category !== "all") {
+    descendantCategoryIds = await categoryRepository.findDescendantIds(category);
+  }
 
   /** Include in exam hall whenever event is live: startTime <= now <= endTime. */
   const isWithinEventWindow = (startTime, endTime) => {
@@ -1496,18 +1515,12 @@ export const getExamHall = async (studentId, page = 1, limit = 20, type = "all",
         const testObj = p.test?.toObject ? p.test.toObject() : { ...p.test };
         const catId = testObj.questionBank?.categories?.[0];
         const categoryPath = getPath(catId) || "";
-        const rootCategory = categoryPath.split(" > ")[0] || "Test";
-        
-        let appFor = testObj.applicableFor || "Test";
-        if (appFor.toLowerCase() === "test" && rootCategory !== "Test") {
-          appFor = rootCategory;
-        }
-
+        const appFor = testObj.applicableFor || "Test";
         const itemType = getFrontendItemType({ ...testObj, applicableFor: appFor });
         
         return {
           ...base,
-          type: itemType,
+          type: "test",
           test: {
             ...testObj,
             itemType,
@@ -1523,13 +1536,7 @@ export const getExamHall = async (studentId, page = 1, limit = 20, type = "all",
         const testObj = t?.toObject ? t.toObject() : { ...t };
         const catId = testObj.questionBank?.categories?.[0];
         const categoryPath = getPath(catId) || "";
-        const rootCategory = categoryPath.split(" > ")[0] || "Test";
-
-        let appFor = testObj.applicableFor || "Test";
-        if (appFor.toLowerCase() === "test" && rootCategory !== "Test") {
-          appFor = rootCategory;
-        }
-
+        const appFor = testObj.applicableFor || "Test";
         const itemType = getFrontendItemType({ ...testObj, applicableFor: appFor });
 
         return {
@@ -1574,6 +1581,7 @@ export const getExamHall = async (studentId, page = 1, limit = 20, type = "all",
         .map((s) => {
           eventTestIds.push(s.test._id);
           const testObj = s.test?.toObject ? s.test.toObject() : { ...s.test };
+          const isPurchased = !!testObj.purchased;
           const catId = testObj.questionBank?.categories?.[0];
           return {
             ...(s.toObject ? s.toObject() : { ...s }),
@@ -1666,7 +1674,11 @@ export const getExamHall = async (studentId, page = 1, limit = 20, type = "all",
     
     if (t === "all") return true;
     if (t === "both") return isTest || item.type === "testBundle";
-    if (t === "test") return isTest;
+    if (t === "test") {
+      if (item.type !== "test" || !item.test) return false;
+      const frontendType = item.test.itemType || getFrontendItemType(item.test);
+      return frontendType === "test";
+    }
     if (t === "testbundle") return item.type === "testBundle";
     if (t === "tournament") return item.type === "tournament";
     if (t === "olympiad") return item.type === "olympiad";
@@ -1700,16 +1712,25 @@ export const getExamHall = async (studentId, page = 1, limit = 20, type = "all",
   };
 
   const categoryFilter = (item) => {
-    if (!category) return true;
-    if (item.type === "test" && item.test) return hasCategory(item.test?.questionBank?.categories, category);
+    if (!descendantCategoryIds) return true;
+    
+    const checkCategories = (categories) => {
+      if (!categories || !Array.isArray(categories)) return false;
+      return categories.some((c) => {
+        const idStr = (c?._id ?? c)?.toString?.();
+        return idStr && descendantCategoryIds.includes(idStr);
+      });
+    };
+
+    if (item.type === "test" && item.test) return checkCategories(item.test?.questionBank?.categories);
     if (item.type === "testBundle" && item.testBundle?.tests) {
-      return item.testBundle.tests.some((t) => hasCategory(t?.questionBank?.categories, category));
+      return item.testBundle.tests.some((t) => checkCategories(t?.questionBank?.categories));
     }
     if (item.type === "tournament" && item.stages) {
-      return item.stages.some((s) => hasCategory(s.test?.questionBank?.categories, category));
+      return item.stages.some((s) => checkCategories(s.test?.questionBank?.categories));
     }
     if (item.type === "olympiad" && item.test) {
-      return hasCategory(item.test?.questionBank?.categories, category);
+      return checkCategories(item.test?.questionBank?.categories);
     }
     return false;
   };
