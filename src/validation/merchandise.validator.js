@@ -24,6 +24,13 @@ const claimMerchandise = Joi.object({
     otherwise: Joi.optional(),
   }),
   couponCode: Joi.string().trim().optional().allow("", null),
+  paymentMethod: Joi.string()
+    .valid("points", "wallet", "gateway")
+    .default("points")
+    .optional(),
+  razorpayPaymentId: Joi.string().optional(),
+  razorpayOrderId: Joi.string().optional(),
+  razorpaySignature: Joi.string().optional(),
 });
 
 const createMerchandise = Joi.object({
@@ -31,6 +38,7 @@ const createMerchandise = Joi.object({
   description: Joi.string().trim().optional().allow(""),
   imageUrl: Joi.string().trim().optional().allow("").empty(""),
   pointsRequired: Joi.number().integer().min(0).required(),
+  price: Joi.number().min(0).optional().default(0),
 
   isActive: Joi.boolean().truthy("true", "1").falsy("false", "0").default(true),
   stockQuantity: Joi.number().integer().min(0).allow(null).optional(),
@@ -41,6 +49,7 @@ const updateMerchandise = Joi.object({
   description: Joi.string().trim().optional().allow(""),
   imageUrl: Joi.string().trim().optional().allow("").empty(""),
   pointsRequired: Joi.number().integer().min(0).optional(),
+  price: Joi.number().min(0).optional(),
 
   isActive: Joi.boolean().truthy("true", "1").falsy("false", "0").optional(),
   stockQuantity: Joi.number().integer().min(0).allow(null).optional(),

@@ -620,3 +620,61 @@ export const sendUpgradeNotificationForCategory = async (targetCategoryId, conte
   }
 };
 
+/**
+ * Send a notification to all students who have purchased a category or its ancestors
+ * when the category is renamed.
+ */
+export const sendRenameNotificationForCategory = async (targetCategoryId, oldName, newName, sentBy) => {
+  try {
+    console.log(`[sendRenameNotificationForCategory] Triggered for category ${targetCategoryId} from '${oldName}' to '${newName}'`);
+    if (!targetCategoryId) return;
+
+    const ancestors = [];
+    const pathNames = [];
+    let currentId = targetCategoryId.toString();
+    while (currentId) {
+      ancestors.push(currentId);
+      const category = await categoryRepository.findById(currentId);
+      if (category) {
+        pathNames.unshift(currentId === targetCategoryId.toString() ? oldName : category.name);
+      }
+      if (category && category.parent) {
+        currentId = category.parent._id ? category.parent._id.toString() : category.parent.toString();
+      } else {
+        currentId = null;
+      }
+    }
+
+    const fullPath = pathNames.join(" > ");
+
+    const purchases = await CategoryPurchase.find({
+      $or: [
+        { categoryId: { $in: ancestors } },
+        { unlockedCategoryIds: targetCategoryId }
+      ],
+      paymentStatus: "completed"
+    }).select("student").lean();
+
+    console.log(`[sendRenameNotificationForCategory] Found ${purchases.length} purchases with access to this category.`);
+
+    const studentIds = [...new Set(purchases.map(p => p.student.toString()))];
+
+    console.log(`[sendRenameNotificationForCategory] Unique student IDs to notify: ${studentIds.length}`);
+
+    if (studentIds.length === 0) return;
+
+    const title = "Category Updated";
+    const body = `The category '${fullPath}' has been renamed to '${newName}' by the team.`;
+
+    const result = await sendNotificationToMultipleStudents(
+      studentIds, 
+      title, 
+      body, 
+      { type: "system", event: "category_rename", targetCategoryId: targetCategoryId.toString() }, 
+      sentBy
+    );
+    console.log(`[sendRenameNotificationForCategory] Success: Sent ${result.totalSent} in-app notifications and ${result.fcmSent} push notifications.`);
+  } catch (error) {
+    console.error("Error in sendRenameNotificationForCategory:", error);
+  }
+};

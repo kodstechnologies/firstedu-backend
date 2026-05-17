@@ -93,15 +93,17 @@ const findTree = async (filter = {}) => {
     all.forEach((c) => {
       const node = byId.get(c._id.toString());
       if (!c.parent) {
-        roots.push(node);
+        if (c.isPredefined) {
+          roots.push(node);
+        }
       } else {
         const parentId = c.parent._id?.toString?.() || c.parent?.toString?.();
         const parent = byId.get(parentId);
         if (parent) {
           parent.children.push(node);
-        } else {
-          roots.push(node);
         }
+        // Do nothing if parent doesn't exist (e.g. parent was deleted/inactive),
+        // preventing orphaned children from becoming root categories.
       }
     });
 
