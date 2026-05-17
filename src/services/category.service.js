@@ -11,7 +11,7 @@ import tournamentRepository from "../repository/tournament.repository.js";
 import { getApplicableOfferDetails } from "../utils/offerUtils.js";
 import Offer from "../models/Offer.js";
 import { assertSubtreeNotPurchased } from "../utils/purchaseGuard.js";
-import { sendUpgradeNotificationForCategory } from "./notification.service.js";
+import { sendUpgradeNotificationForCategory, sendRenameNotificationForCategory } from "./notification.service.js";
 
 /**
  * Recursively create children under a parent category.
@@ -551,7 +551,8 @@ export const getCategoriesForStudent = async (options = {}) => {
 export const updateCategory = async (id, updateData) => {
   const existing = await categoryRepository.findById(id);
   if (!existing) throw new ApiError(404, "Category not found");
-  await assertSubtreeNotPurchased(id, "rename");
+  // Edit allowed even if purchased.
+  // We will send a notification if the name changed and the category has purchases.
   if (updateData.parent !== undefined) {
     if (updateData.parent === id) {
       throw new ApiError(400, "Category cannot be its own parent");
@@ -564,7 +565,16 @@ export const updateCategory = async (id, updateData) => {
       }
     }
   }
-  return await categoryRepository.updateById(id, updateData);
+  const updated = await categoryRepository.updateById(id, updateData);
+
+  // If the name changed, send a notification asynchronously
+  if (updateData.name && updateData.name !== existing.name) {
+    sendRenameNotificationForCategory(id, existing.name, updateData.name).catch(err => {
+      console.error("Failed to send rename notification:", err);
+    });
+  }
+
+  return updated;
 };
 
 export const updateCategoryPricing = async (id, updateData) => {
