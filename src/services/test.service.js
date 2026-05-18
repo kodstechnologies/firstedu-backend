@@ -7,7 +7,10 @@ import {
   uploadImageToCloudinary,
   deleteFileFromCloudinary,
 } from "../utils/s3Upload.js";
-import { sendUpgradeNotificationForCategory } from "./notification.service.js";
+import {
+  sendUpgradeNotificationForCategory,
+  sendTestEditNotification,
+} from "./notification.service.js";
 
 const TESTS_IMAGE_FOLDER = "tests";
 
@@ -187,6 +190,16 @@ export const updateTest = async (id, data, file) => {
   if (updated) {
     await enrichTestsWithBankStats(updated);
 
+    const changedFieldsList = [];
+    if (data.title && data.title !== existing.title) changedFieldsList.push("Title");
+    if (data.description !== undefined && data.description !== existing.description) changedFieldsList.push("Description");
+    if (data.price !== undefined && Number(data.price) !== existing.price) changedFieldsList.push("Price");
+    if (data.durationMinutes !== undefined && Number(data.durationMinutes) !== existing.durationMinutes) changedFieldsList.push("Duration");
+    if (data.questionBank && String(data.questionBank) !== String(existing.questionBank?._id ?? existing.questionBank)) changedFieldsList.push("Question Bank");
+    if (file) changedFieldsList.push("Image");
+    if (data.rewardPoints !== undefined && Number(data.rewardPoints) !== existing.rewardPoints) changedFieldsList.push("Reward Points");
+    if (data.categoryId && String(data.categoryId) !== String(existing.categoryId)) changedFieldsList.push("Category");
+
     // Strict checks for both existing and updated status
     const isNowPublished = updated.isPublished === true || String(updated.isPublished) === "true";
 
@@ -202,6 +215,18 @@ export const updateTest = async (id, data, file) => {
       });
       // Mark as notified so future edits don't spam students
       await testRepository.updateTestById(id, { upgradeNotificationSent: true });
+    } else if (isNowPublished) {
+      // Test was already published and is being edited, send update notification
+      sendTestEditNotification(
+        id,
+        updated.title,
+        updated.categoryId,
+        updated.createdBy,
+        existing.title,
+        changedFieldsList
+      ).catch((err) => {
+        console.error("Failed to send edit notification for updated test:", err);
+      });
     }
   }
   return updated;
