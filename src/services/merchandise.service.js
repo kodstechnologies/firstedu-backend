@@ -214,6 +214,7 @@ export const claimMerchandise = async (studentId, itemId, payload = {}) => {
       paymentMethod: "wallet",
       paymentId: "wallet",
       status: "pending",
+      paymentStatus: "completed",
       deliveryAddress: item.isPhysical ? deliveryAddress : undefined,
     });
 

@@ -153,10 +153,13 @@ export const scheduleInterview = asyncHandler(async (req, res) => {
 /**
  * Approve application – auto-create teacher account and send credentials (admin)
  * POST /admin/teacher-connect/applications/:id/approve
+ * Optional: multipart/form-data with field "attachment" (PDF or image) to attach to the email
  */
 export const approveApplication = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { application, teacher } = await jobApplicationService.approveApplication(id);
+  // req.file is set by multer if admin uploaded an attachment (optional)
+  const attachmentFile = req.file || null;
+  const { application, teacher } = await jobApplicationService.approveApplication(id, attachmentFile);
   return res.status(200).json(
     ApiResponse.success(
       { application, teacher },

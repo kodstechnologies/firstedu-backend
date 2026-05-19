@@ -44,7 +44,7 @@ export const assertSubtreeNotPurchased = async (categoryId, action = "modify") =
       }).lean();
 
       if (directTestPurchase) {
-        throw new ApiError(403, `Cannot ${action}: a test within this subcategory has active student purchases.`);
+        // Restriction removed: allow editing even when a test in this subcategory has active student purchases.
       }
 
       const bundlesWithTests = await TestBundle.find({ tests: { $in: testIds } }).select("_id").lean();

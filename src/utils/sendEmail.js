@@ -126,6 +126,7 @@ export const sendEmailWithTemplate = async ({
   defaultSubject,
   defaultHtml,
   from = `"Iscorre" <${process.env.SMTP_EMAIL}>`,
+  attachments = [],
 }) => {
   if (!email) throw new ApiError(400, 'Email address is required');
   if (missingVars.length > 0) {
@@ -144,7 +145,11 @@ export const sendEmailWithTemplate = async ({
   if (!subject || !html) {
     throw new ApiError(500, `No email template content found for ${category}/${slug}`);
   }
-  const info = await transporter.sendMail({ from, to: email, subject, html });
+  const mailOptions = { from, to: email, subject, html };
+  if (attachments && attachments.length > 0) {
+    mailOptions.attachments = attachments;
+  }
+  const info = await transporter.sendMail(mailOptions);
   console.log(`✅ Email sent to ${email}. Message ID: ${info.messageId}`);
   return info;
 };
@@ -309,6 +314,7 @@ export const sendTeacherApprovalWithCredentialsEmail = async ({
   teacherName,
   email,
   password,
+  attachments = [],
 }) => {
   try {
     if (!toEmail || !email || !password) {
@@ -341,6 +347,7 @@ export const sendTeacherApprovalWithCredentialsEmail = async ({
         </div>
       `,
       from: `"Iscorre Teacher Connect" <${process.env.SMTP_EMAIL}>`,
+      attachments,
     });
     console.log(`✅ Teacher approval email sent to ${toEmail}. Message ID: ${info.messageId}`);
     return info;

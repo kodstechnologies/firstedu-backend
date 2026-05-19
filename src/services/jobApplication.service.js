@@ -135,7 +135,7 @@ const scheduleInterview = async (applicationId, data) => {
   return updated;
 };
 
-const approveApplication = async (applicationId) => {
+const approveApplication = async (applicationId, attachmentFile = null) => {
   const application = await jobApplicationRepository.findById(applicationId);
   if (!application) {
     throw new ApiError(404, "Application not found");
@@ -167,11 +167,22 @@ const approveApplication = async (applicationId) => {
 
   const teacher = await teacherRepository.create(teacherData);
 
+  // Build nodemailer attachments array if a file was uploaded
+  const attachments = [];
+  if (attachmentFile && attachmentFile.buffer) {
+    attachments.push({
+      filename: attachmentFile.originalname || "offer-letter",
+      content: attachmentFile.buffer,
+      contentType: attachmentFile.mimetype,
+    });
+  }
+
   await sendTeacherApprovalWithCredentialsEmail({
     toEmail: application.email,
     teacherName: application.name,
     email: application.email,
     password: generatedPassword,
+    attachments,
   });
 
   const updatedApplication = await jobApplicationRepository.updateById(applicationId, {
@@ -180,6 +191,7 @@ const approveApplication = async (applicationId) => {
 
   return { application: updatedApplication, teacher };
 };
+
 
 const rejectApplication = async (applicationId) => {
   const application = await jobApplicationRepository.findById(applicationId);

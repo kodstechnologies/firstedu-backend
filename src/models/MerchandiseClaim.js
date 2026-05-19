@@ -35,6 +35,12 @@ const merchandiseClaimSchema = new mongoose.Schema(
       enum: ["pending", "processing", "shipped", "delivered", "cancelled"],
       default: "pending",
     },
+    // New field – reflects the result of the payment transaction
+    paymentStatus: {
+      type: String,
+      enum: ["pending", "completed", "failed"],
+      default: "pending",
+    },
     deliveryAddress: {
       fullName: { type: String, required: true, trim: true },
       phone: { type: String, required: true, trim: true },

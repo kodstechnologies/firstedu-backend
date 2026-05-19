@@ -268,7 +268,7 @@ import {
   postAdminApproveWithdrawal,
   postAdminRejectWithdrawal,
 } from "../controllers/teacherWithdrawal.controller.js";
-import { uploadCourseMaterial, uploadImage, uploadAnyImages, uploadPDF, uploadSuccessStory } from '../utils/multerConfig.js';
+import { uploadCourseMaterial, uploadImage, uploadAnyImages, uploadPDF, uploadSuccessStory, uploadPDFAndImage } from '../utils/multerConfig.js';
 import {
   createEvent as createLiveCompetition,
   getEvents as getLiveCompetitions,
@@ -634,7 +634,7 @@ router.get('/teacher-connect/applications', verifyJWT, getAllApplicationsAdmin);
 router.get('/teacher-connect/interview-taken', verifyJWT, getInterviewTakenAdmin);
 router.get('/teacher-connect/applications/:id', verifyJWT, getApplicationByIdAdmin);
 router.post('/teacher-connect/applications/:id/schedule-interview', verifyJWT, scheduleInterview);
-router.post('/teacher-connect/applications/:id/approve', verifyJWT, approveApplication);
+router.post('/teacher-connect/applications/:id/approve', verifyJWT, uploadPDFAndImage.single('attachment'), approveApplication);
 router.post('/teacher-connect/applications/:id/reject', verifyJWT, rejectApplication);
 
 // ==================== EMAIL TEMPLATES ====================
