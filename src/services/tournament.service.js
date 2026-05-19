@@ -13,7 +13,7 @@ import {
 } from "../utils/s3Upload.js";
 import { attachOfferToList, attachOfferToItem } from "../utils/offerUtils.js";
 import { getStageStatus, getGoesLiveAt } from "../utils/eventStatus.js";
-import { sendNotificationToStudent } from "./notification.service.js";
+import { sendNotificationToStudent, sendTournamentEditNotification } from "./notification.service.js";
 
 const TOURNAMENTS_IMAGE_FOLDER = "tournaments";
 
@@ -623,11 +623,27 @@ export const getTournamentById = async (id, isAdmin = false) => {
   return await attachOfferToItem(tournament, "Tournament", "price");
 };
 
-export const updateTournament = async (id, updateData, file) => {
+const toISO = (v) => (v ? new Date(v).toISOString() : null);
+const fmtDate = (v) =>
+  v
+    ? new Date(v).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })
+    : "—";
+
+export const updateTournament = async (id, updateData, file, adminId) => {
   const tournament = await tournamentRepository.findById(id);
   if (!tournament) {
     throw new ApiError(404, "Tournament not found");
   }
+
+  // ── Snapshot old values for change-detection ──
+  const oldTitle = tournament.title;
+  const oldRegStart = toISO(tournament.registrationStartTime);
+  const oldRegEnd = toISO(tournament.registrationEndTime);
+  const oldStages = (tournament.stages || []).map((s) => ({
+    name: s.name,
+    startTime: toISO(s.startTime),
+    endTime: toISO(s.endTime),
+  }));
 
   if (file) {
     if (tournament.imageUrl) {
@@ -648,8 +664,6 @@ export const updateTournament = async (id, updateData, file) => {
     // Prevent reusing the same test across tournaments (excluding this tournament)
     const stageTestIds = updateData.stages.map((s) => s.test).filter(Boolean);
     if (stageTestIds.length > 0) {
-
-
       const tournamentUsingTest = await tournamentRepository.findOne({
         _id: { $ne: id },
         "stages.test": { $in: stageTestIds },
@@ -663,7 +677,49 @@ export const updateTournament = async (id, updateData, file) => {
     }
   }
 
-  return await tournamentRepository.updateById(id, updateData);
+  const updated = await tournamentRepository.updateById(id, updateData);
+
+  // ── Build changed-fields list for notification ──
+  try {
+    const newTitle = updateData.title ?? oldTitle;
+    const changedFields = [];
+
+    if (updateData.title && updateData.title !== oldTitle) {
+      changedFields.push(`Title ("${oldTitle}" → "${updateData.title}")`);
+    }
+    if (updateData.registrationStartTime && toISO(updateData.registrationStartTime) !== oldRegStart) {
+      changedFields.push(`Registration start date (→ ${fmtDate(updateData.registrationStartTime)})`);
+    }
+    if (updateData.registrationEndTime && toISO(updateData.registrationEndTime) !== oldRegEnd) {
+      changedFields.push(`Registration end date (→ ${fmtDate(updateData.registrationEndTime)})`);
+    }
+    if (updateData.stages && Array.isArray(updateData.stages)) {
+      updateData.stages.forEach((newStage) => {
+        const old = oldStages.find((o) => o.name === newStage.name);
+        if (old && toISO(newStage.startTime) !== old.startTime) {
+          changedFields.push(`${newStage.name} start time (→ ${fmtDate(newStage.startTime)})`);
+        }
+        if (old && toISO(newStage.endTime) !== old.endTime) {
+          changedFields.push(`${newStage.name} end time (→ ${fmtDate(newStage.endTime)})`);
+        }
+      });
+    }
+
+    // Only fire notification if something meaningful changed
+    if (changedFields.length > 0) {
+      await sendTournamentEditNotification(
+        id,
+        newTitle,
+        adminId || null,
+        oldTitle,
+        changedFields
+      );
+    }
+  } catch (notifyErr) {
+    console.error("Tournament edit notification failed:", notifyErr);
+  }
+
+  return updated;
 };
 
 export const deleteTournament = async (id) => {

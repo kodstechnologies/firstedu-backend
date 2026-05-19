@@ -796,3 +796,73 @@ export const sendTestEditNotification = async (testId, testName, categoryId, adm
     console.error("Error in sendTestEditNotification:", error);
   }
 };
+
+export const sendTournamentEditNotification = async (tournamentId, tournamentName, adminId, oldTournamentName, changedFieldsList = []) => {
+  try {
+    const registrations = await EventRegistration.find({
+      eventId: tournamentId,
+      eventType: "tournament",
+      paymentStatus: "completed"
+    }).select("student").lean();
+
+    const studentIds = [...new Set(registrations.map(r => r.student.toString()))];
+
+    if (studentIds.length === 0) return;
+
+    const nameChangeText = (oldTournamentName && oldTournamentName !== tournamentName)
+      ? `'${oldTournamentName}' (now '${tournamentName}')`
+      : `'${tournamentName}'`;
+
+    const title = "Tournament Updated";
+    let body = `The tournament ${nameChangeText} has been updated by the team. Check out the latest changes!`;
+
+    if (changedFieldsList && changedFieldsList.length > 0) {
+      body += ` (Changes: ${changedFieldsList.join(", ")})`;
+    }
+
+    await sendNotificationToMultipleStudents(
+      studentIds,
+      title,
+      body,
+      { type: "system", event: "tournament_update", tournamentId: tournamentId.toString() },
+      adminId
+    );
+  } catch (error) {
+    console.error("Error in sendTournamentEditNotification:", error);
+  }
+};
+
+export const sendOlympiadTestEditNotification = async (olympiadId, olympiadTitle, adminId, oldOlympiadTitle, changedFieldsList = []) => {
+  try {
+    const registrations = await EventRegistration.find({
+      eventId: olympiadId,
+      eventType: "olympiad",
+      paymentStatus: "completed"
+    }).select("student").lean();
+
+    const studentIds = [...new Set(registrations.map(r => r.student.toString()))];
+
+    if (studentIds.length === 0) return;
+
+    const nameChangeText = (oldOlympiadTitle && oldOlympiadTitle !== olympiadTitle)
+      ? `'${oldOlympiadTitle}' (now '${olympiadTitle}')`
+      : `'${olympiadTitle}'`;
+
+    const title = "Olympiad Test Updated";
+    let body = `The Olympiad Test ${nameChangeText} has been updated. Check out the latest changes!`;
+
+    if (changedFieldsList && changedFieldsList.length > 0) {
+      body += ` (Changes: ${changedFieldsList.join(", ")})`;
+    }
+
+    await sendNotificationToMultipleStudents(
+      studentIds,
+      title,
+      body,
+      { type: "system", event: "olympiad_update", olympiadId: olympiadId.toString() },
+      adminId
+    );
+  } catch (error) {
+    console.error("Error in sendOlympiadTestEditNotification:", error);
+  }
+};

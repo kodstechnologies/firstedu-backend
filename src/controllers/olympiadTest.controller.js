@@ -29,7 +29,7 @@ export const updateOlympiadTest = asyncHandler(async (req, res) => {
   const { error, value } = olympiadTestValidator.updateOlympiadTest.validate(req.body);
   if (error) throw new ApiError(400, "Validation Error", error.details.map(x => x.message));
 
-  const updated = await olympiadTestService.updateOlympiadTest(id, value);
+  const updated = await olympiadTestService.updateOlympiadTest(id, value, req.user?._id);
   return res.status(200).json(ApiResponse.success(updated, "Olympiad test updated successfully"));
 });
 

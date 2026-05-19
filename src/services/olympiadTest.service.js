@@ -3,6 +3,13 @@ import Category from "../models/Category.js";
 import Test from "../models/Test.js";
 import { ApiError } from "../utils/ApiError.js";
 import { assertSubtreeNotPurchased } from "../utils/purchaseGuard.js";
+import { sendOlympiadTestEditNotification } from "./notification.service.js";
+
+const toISO = (v) => (v ? new Date(v).toISOString() : null);
+const fmtDate = (v) =>
+  v
+    ? new Date(v).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })
+    : "—";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -97,10 +104,18 @@ export const getOlympiadTestById = async (id) => {
   return item;
 };
 
-export const updateOlympiadTest = async (id, updateData) => {
+export const updateOlympiadTest = async (id, updateData, adminId) => {
   const existing = await OlympiadTest.findById(id);
   if (!existing) throw new ApiError(404, "Olympiad Test not found");
   await assertSubtreeNotPurchased(existing.categoryId, "edit tests in");
+
+  // ── Snapshot old values for change-detection ──
+  const oldTitle = existing.title;
+  const oldRegStart = toISO(existing.registrationStartTime);
+  const oldRegEnd = toISO(existing.registrationEndTime);
+  const oldStartTime = toISO(existing.startTime);
+  const oldEndTime = toISO(existing.endTime);
+  const oldResultDate = toISO(existing.resultDeclarationDate);
 
   if (updateData.title) {
     const titleCheck = await OlympiadTest.findOne({
@@ -130,7 +145,46 @@ export const updateOlympiadTest = async (id, updateData) => {
     resultDeclarationDate: updateData.resultDeclarationDate ?? existing.resultDeclarationDate,
   });
 
-  return await OlympiadTest.findByIdAndUpdate(id, updateData, { new: true });
+  const updated = await OlympiadTest.findByIdAndUpdate(id, updateData, { new: true });
+
+  // ── Build changed-fields list & send notification ──
+  try {
+    const newTitle = updateData.title ?? oldTitle;
+    const changedFields = [];
+
+    if (updateData.title && updateData.title !== oldTitle) {
+      changedFields.push(`Title ("${oldTitle}" → "${updateData.title}")`);
+    }
+    if (updateData.registrationStartTime && toISO(updateData.registrationStartTime) !== oldRegStart) {
+      changedFields.push(`Registration start date (→ ${fmtDate(updateData.registrationStartTime)})`);
+    }
+    if (updateData.registrationEndTime && toISO(updateData.registrationEndTime) !== oldRegEnd) {
+      changedFields.push(`Registration end date (→ ${fmtDate(updateData.registrationEndTime)})`);
+    }
+    if (updateData.startTime && toISO(updateData.startTime) !== oldStartTime) {
+      changedFields.push(`Exam start time (→ ${fmtDate(updateData.startTime)})`);
+    }
+    if (updateData.endTime && toISO(updateData.endTime) !== oldEndTime) {
+      changedFields.push(`Exam end time (→ ${fmtDate(updateData.endTime)})`);
+    }
+    if (updateData.resultDeclarationDate && toISO(updateData.resultDeclarationDate) !== oldResultDate) {
+      changedFields.push(`Result declaration date (→ ${fmtDate(updateData.resultDeclarationDate)})`);
+    }
+
+    if (changedFields.length > 0) {
+      await sendOlympiadTestEditNotification(
+        id,
+        newTitle,
+        adminId || null,
+        oldTitle,
+        changedFields
+      );
+    }
+  } catch (notifyErr) {
+    console.error("Olympiad test edit notification failed:", notifyErr);
+  }
+
+  return updated;
 };
 
 export const deleteOlympiadTest = async (id) => {
