@@ -93,9 +93,7 @@ const findTree = async (filter = {}) => {
     all.forEach((c) => {
       const node = byId.get(c._id.toString());
       if (!c.parent) {
-        if (c.isPredefined) {
-          roots.push(node);
-        }
+        roots.push(node);
       } else {
         const parentId = c.parent._id?.toString?.() || c.parent?.toString?.();
         const parent = byId.get(parentId);
