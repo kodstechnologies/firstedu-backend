@@ -60,7 +60,7 @@ export const sendNotificationToStudent = async (studentId, title, body, data = {
     } catch (error) {
       console.error("Error sending FCM notification:", error);
       if (error.code === "messaging/invalid-registration-token" ||
-          error.code === "messaging/registration-token-not-registered") {
+        error.code === "messaging/registration-token-not-registered") {
         await studentSessionRepository.updateFcmToken(studentId, null);
       }
     }
@@ -380,7 +380,7 @@ export const sendNotificationToAllStudents = async (title, body, data = {}, sent
     if (!result.students || result.students.length === 0) break;
 
     allStudentIds.push(...result.students.map((s) => s._id));
-    
+
     if (result.students.length < limit) break;
     page++;
   }
@@ -392,7 +392,7 @@ export const sendNotificationToAllStudents = async (title, body, data = {}, sent
   // Send in batches to avoid overwhelming the system
   const batchSize = 500;
   const batches = [];
-  
+
   for (let i = 0; i < allStudentIds.length; i += batchSize) {
     batches.push(allStudentIds.slice(i, i + batchSize));
   }
@@ -463,12 +463,12 @@ export const sendNotificationToAllTeachers = async (title, body, data = {}, sent
  */
 export const getStudentNotifications = async (studentId, options = {}) => {
   const query = { recipient: studentId };
-  
+
   // Add isRead filter if provided
   if (options.isRead !== undefined) {
     query.isRead = options.isRead === true || options.isRead === "true";
   }
-  
+
   return await notificationRepository.findAll(query, options);
 };
 
@@ -541,7 +541,7 @@ export const markAllTeacherNotificationsAsRead = async (teacherId) => {
  */
 export const markNotificationAsRead = async (notificationId, studentId) => {
   const notification = await notificationRepository.findById(notificationId);
-  
+
   if (!notification) {
     throw new Error("Notification not found");
   }
@@ -606,16 +606,16 @@ export const sendUpgradeNotificationForCategory = async (targetCategoryId, conte
     // 3. Send notification
     const fullPath = categoryNames.length > 0 ? ` (${categoryNames.join(' > ')})` : '';
     const title = contentType === "test" ? "New Test Added!" : "New Category Added!";
-    const body = contentType === "test" 
+    const body = contentType === "test"
       ? `A new test '${contentName}' has been added in${fullPath}. You can now access it!`
       : `A new subcategory '${contentName}' has been added in${fullPath}. You can now access it!`;
 
     // sendNotificationToMultipleStudents already exists in this file
     await sendNotificationToMultipleStudents(
-      studentIds, 
-      title, 
-      body, 
-      { type: "upgrade", targetCategoryId: targetCategoryId.toString(), contentType }, 
+      studentIds,
+      title,
+      body,
+      { type: "upgrade", targetCategoryId: targetCategoryId.toString(), contentType },
       sentBy
     );
   } catch (error) {
@@ -670,10 +670,10 @@ export const sendRenameNotificationForCategory = async (targetCategoryId, oldNam
     const body = `The category '${fullPath}' has been renamed to '${newName}' by the team.`;
 
     const result = await sendNotificationToMultipleStudents(
-      studentIds, 
-      title, 
-      body, 
-      { type: "system", event: "category_rename", targetCategoryId: targetCategoryId.toString() }, 
+      studentIds,
+      title,
+      body,
+      { type: "system", event: "category_rename", targetCategoryId: targetCategoryId.toString() },
       sentBy
     );
     console.log(`[sendRenameNotificationForCategory] Success: Sent ${result.totalSent} in-app notifications and ${result.fcmSent} push notifications.`);
@@ -696,7 +696,7 @@ export const sendTestEditNotification = async (testId, testName, categoryId, adm
       test: testId,
       paymentStatus: "completed"
     }).select("student").lean();
-    
+
     studentIds.push(...directPurchases.map(p => p.student.toString()));
 
     // 2. Test Bundle Purchasers
@@ -762,7 +762,7 @@ export const sendTestEditNotification = async (testId, testName, categoryId, adm
           ],
           paymentStatus: "completed"
         }).select("student").lean();
-        
+
         studentIds.push(...subcategoryPurchases.map(p => p.student.toString()));
       }
     }
@@ -772,8 +772,8 @@ export const sendTestEditNotification = async (testId, testName, categoryId, adm
 
     if (studentIds.length === 0) return;
 
-    const nameChangeText = (oldTestName && oldTestName !== testName) 
-      ? `'${oldTestName}' (now '${testName}')` 
+    const nameChangeText = (oldTestName && oldTestName !== testName)
+      ? `'${oldTestName}' (now '${testName}')`
       : `'${testName}'`;
 
     const pathText = fullPath ? ` in ${fullPath}` : "";
@@ -866,3 +866,68 @@ export const sendOlympiadTestEditNotification = async (olympiadId, olympiadTitle
     console.error("Error in sendOlympiadTestEditNotification:", error);
   }
 };
+
+/**
+ * Notify all registered students that the Olympiad exam has started.
+ * Called from olympiadTest.service.js when the admin sets/updates startTime
+ * and that time is now or in the past.
+ */
+export const sendOlympiadStartNotification = async (olympiadId, olympiadTitle, adminId) => {
+  try {
+    const registrations = await EventRegistration.find({
+      eventId: olympiadId,
+      eventType: "olympiad",
+      paymentStatus: "completed",
+    }).select("student").lean();
+
+    const studentIds = [...new Set(registrations.map(r => r.student.toString()))];
+
+    if (studentIds.length === 0) return;
+
+    const title = `${olympiadTitle} - Olympiad Has Started!`;
+    const body = `The Olympiad "${olympiadTitle}" is now live. Open the app and start your test before time runs out!`;
+
+    await sendNotificationToMultipleStudents(
+      studentIds,
+      title,
+      body,
+      { type: "event", event: "olympiad_start", olympiadId: olympiadId.toString() },
+      adminId
+    );
+  } catch (error) {
+    console.error("Error in sendOlympiadStartNotification:", error);
+  }
+};
+
+/**
+ * Notify all registered students that the Olympiad results have been declared.
+ * Called from olympiadTest.service.js when the admin sets/updates resultDeclarationDate
+ * and that date is now or in the past.
+ */
+export const sendOlympiadResultDeclaredNotification = async (olympiadId, olympiadTitle, adminId) => {
+  try {
+    const registrations = await EventRegistration.find({
+      eventId: olympiadId,
+      eventType: "olympiad",
+      paymentStatus: "completed",
+    }).select("student").lean();
+
+    const studentIds = [...new Set(registrations.map(r => r.student.toString()))];
+
+    if (studentIds.length === 0) return;
+
+    const title = `${olympiadTitle} - Results Declared!`;
+    const body = `The results for the Olympiad "${olympiadTitle}" have been officially declared. Check your score and ranking  now!`;
+
+    await sendNotificationToMultipleStudents(
+      studentIds,
+      title,
+      body,
+      { type: "event", event: "olympiad_result", olympiadId: olympiadId.toString() },
+      adminId
+    );
+  } catch (error) {
+    console.error("Error in sendOlympiadResultDeclaredNotification:", error);
+  }
+};
+
