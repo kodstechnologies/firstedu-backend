@@ -6,6 +6,9 @@ import CoursePurchase from "../models/CoursePurchase.js";
 import TestPurchase from "../models/TestPurchase.js";
 import EventRegistration from "../models/EventRegistration.js";
 import CategoryPurchase from "../models/CategoryPurchase.js";
+import TestBundle from "../models/TestBundle.js";
+import Tournament from "../models/Tournament.js";
+import Challenge from "../models/Challenge.js";
 import categoryRepository from "../repository/category.repository.js";
 import {
   sendNotificationToDevice,
@@ -676,5 +679,120 @@ export const sendRenameNotificationForCategory = async (targetCategoryId, oldNam
     console.log(`[sendRenameNotificationForCategory] Success: Sent ${result.totalSent} in-app notifications and ${result.fcmSent} push notifications.`);
   } catch (error) {
     console.error("Error in sendRenameNotificationForCategory:", error);
+  }
+};
+
+/**
+ * Send an edit notification to students who purchased a specific test directly,
+ * or purchased a subcategory that contains the test.
+ * This explicitly excludes notifying students who ONLY purchased the root/pillar categories.
+ */
+export const sendTestEditNotification = async (testId, testName, categoryId, adminId, oldTestName, changedFieldsList = []) => {
+  try {
+    let studentIds = [];
+
+    // 1. Direct Test Purchasers
+    const directPurchases = await TestPurchase.find({
+      test: testId,
+      paymentStatus: "completed"
+    }).select("student").lean();
+    
+    studentIds.push(...directPurchases.map(p => p.student.toString()));
+
+    // 2. Test Bundle Purchasers
+    const bundles = await TestBundle.find({ tests: testId }).select("_id").lean();
+    if (bundles.length > 0) {
+      const bundleIds = bundles.map(b => b._id);
+      const bundlePurchases = await TestPurchase.find({
+        testBundle: { $in: bundleIds },
+        paymentStatus: "completed"
+      }).select("student").lean();
+      studentIds.push(...bundlePurchases.map(p => p.student.toString()));
+    }
+
+    // 3. Tournament Purchasers
+    const tournaments = await Tournament.find({ "stages.test": testId }).select("_id").lean();
+    if (tournaments.length > 0) {
+      const tournamentIds = tournaments.map(t => t._id);
+      const tournamentRegistrations = await EventRegistration.find({
+        eventId: { $in: tournamentIds },
+        eventModel: "Tournament",
+        paymentStatus: "completed"
+      }).select("student").lean();
+      studentIds.push(...tournamentRegistrations.map(r => r.student.toString()));
+    }
+
+    // 4. Challenge Participants
+    const challenges = await Challenge.find({ test: testId }).select("participants").lean();
+    if (challenges.length > 0) {
+      challenges.forEach(c => {
+        if (c.participants && c.participants.length > 0) {
+          studentIds.push(...c.participants.map(p => p.student?.toString()).filter(Boolean));
+        }
+      });
+    }
+
+    // 5. Subcategory Purchasers
+    let fullPath = "";
+    if (categoryId) {
+      const ancestors = [];
+      const pathNames = [];
+      let currentId = categoryId.toString();
+      while (currentId) {
+        const category = await categoryRepository.findById(currentId);
+        if (category) {
+          pathNames.unshift(category.name);
+        }
+        if (category && category.parent) {
+          ancestors.push(currentId);
+          currentId = category.parent._id ? category.parent._id.toString() : category.parent.toString();
+        } else {
+          // This is a root category (pillar), stop traversal
+          currentId = null;
+        }
+      }
+
+      fullPath = pathNames.join(" > ");
+
+      if (ancestors.length > 0) {
+        const subcategoryPurchases = await CategoryPurchase.find({
+          $or: [
+            { categoryId: { $in: ancestors } },
+            { unlockedCategoryIds: { $in: ancestors } }
+          ],
+          paymentStatus: "completed"
+        }).select("student").lean();
+        
+        studentIds.push(...subcategoryPurchases.map(p => p.student.toString()));
+      }
+    }
+
+    // Deduplicate student IDs
+    studentIds = [...new Set(studentIds)];
+
+    if (studentIds.length === 0) return;
+
+    const nameChangeText = (oldTestName && oldTestName !== testName) 
+      ? `'${oldTestName}' (now '${testName}')` 
+      : `'${testName}'`;
+
+    const pathText = fullPath ? ` in ${fullPath}` : "";
+
+    const title = "Test Updated";
+    let body = `The test ${nameChangeText}${pathText} has been updated by the team. Check out the latest changes!`;
+
+    if (changedFieldsList && changedFieldsList.length > 0) {
+      body += ` (Changes: ${changedFieldsList.join(", ")})`;
+    }
+
+    await sendNotificationToMultipleStudents(
+      studentIds,
+      title,
+      body,
+      { type: "system", event: "test_update", testId: testId.toString() },
+      adminId
+    );
+  } catch (error) {
+    console.error("Error in sendTestEditNotification:", error);
   }
 };

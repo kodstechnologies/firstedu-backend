@@ -186,10 +186,13 @@ export const getAggregatedOrderHistory = async (
       date: c.claimedAt || c.createdAt,
       title: c.merchandise?.name || "Merchandise",
       itemName: c.merchandise?.name || "Merchandise",
-      amount: toNumber(c.pointsSpent),
-      paymentMethod: "wallet",
+      amount: c.paymentMethod === "points" ? toNumber(c.pointsSpent) : toNumber(c.moneyPaid),
+      paymentMethod: c.paymentMethod,
+      // Dynamically derive paymentStatus – points are always completed; for wallet/gateway use moneyPaid presence
+      paymentStatus: c.paymentMethod === "points" ? "completed" : (toNumber(c.moneyPaid) > 0 ? "completed" : "pending"),
+      // Preserve original delivery status for backward compatibility
       status: c.status,
-      amountUnit: "points",
+      amountUnit: c.paymentMethod === "points" ? "points" : undefined,
       data: c,
     })),
     ...categoryPurchases.map((p) => {
