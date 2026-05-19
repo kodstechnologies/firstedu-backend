@@ -55,6 +55,17 @@ export const getCourseById = asyncHandler(async (req, res) => {
     .json(ApiResponse.success(courseData, "Course fetched successfully"));
 });
 
+// Get Course Details for Landing Page (no purchase status / student ID required)
+export const getCourseByIdLandingPage = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+
+  const courseData = await marketplaceService.getCourseById(id);
+
+  return res
+    .status(200)
+    .json(ApiResponse.success(courseData, "Course fetched successfully"));
+});
+
 // Initiate course payment (free, wallet, or razorpay - like test/test-bundle)
 export const initiateCoursePayment = asyncHandler(async (req, res) => {
   const { id } = req.params;
@@ -547,6 +558,7 @@ export const getAllResources = asyncHandler(async (req, res) => {
 export default {
   getCourses,
   getCourseById,
+  getCourseByIdLandingPage,
   initiateCoursePayment,
   purchaseCourse,
   getMyCourses,

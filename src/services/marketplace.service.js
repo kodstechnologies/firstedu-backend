@@ -190,11 +190,14 @@ export const getCourseById = async (courseId, studentId) => {
   if (!course) throw new ApiError(404, "Course not found");
   if (!course.isPublished) throw new ApiError(404, "Course not found");
 
-  const purchase = await orderRepository.findCoursePurchase({
-    student: studentId,
-    course: courseId,
-    paymentStatus: "completed",
-  });
+  let purchase = null;
+  if (studentId) {
+    purchase = await orderRepository.findCoursePurchase({
+      student: studentId,
+      course: courseId,
+      paymentStatus: "completed",
+    });
+  }
 
   const courseData = await attachOfferToItem(course, "Course", "price");
   courseData.isPurchased = !!purchase;
