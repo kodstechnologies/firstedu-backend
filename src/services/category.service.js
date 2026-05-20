@@ -54,6 +54,46 @@ const createChildrenRecursive = async (children, parentId, createdBy, rootType, 
  * - Nested: { name: "School", children: [{ name: "Classes", children: [{ name: "Class 1", children: [...] }] }] }
  */
 export const createCategory = async (data, createdBy) => {
+  // --- Validation: Check for duplicate name at the same level ---
+  const escapeRegExp = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const nameRegex = new RegExp(`^${escapeRegExp(data.name.trim())}$`, "i");
+  const duplicateQuery = {
+    parent: data.parent || null,
+    name: nameRegex,
+  };
+  const duplicate = await Category.findOne(duplicateQuery);
+  if (duplicate) {
+    throw new ApiError(
+      400,
+      `A category/subcategory with the name "${data.name}" already exists at this level.`
+    );
+  }
+
+  // Validate nested children payload for duplicates before performing any inserts
+  if (data.children && data.children.length > 0) {
+    const validateNoDuplicatesInPayload = (node) => {
+      if (node.children && node.children.length > 0) {
+        const seen = new Set();
+        for (const child of node.children) {
+          if (!child.name || typeof child.name !== 'string') {
+            throw new ApiError(400, "Child category must have a valid name");
+          }
+          const nameLower = child.name.trim().toLowerCase();
+          if (seen.has(nameLower)) {
+            throw new ApiError(
+              400,
+              `Duplicate subcategory name "${child.name}" found under "${node.name}" in the request payload.`
+            );
+          }
+          seen.add(nameLower);
+          validateNoDuplicatesInPayload(child);
+        }
+      }
+    };
+    validateNoDuplicatesInPayload(data);
+  }
+  // -------------------------------------------------------------
+
   let parentNode = null;
   if (data.parent) {
     parentNode = await categoryRepository.findById(data.parent);
@@ -551,6 +591,38 @@ export const getCategoriesForStudent = async (options = {}) => {
 export const updateCategory = async (id, updateData) => {
   const existing = await categoryRepository.findById(id);
   if (!existing) throw new ApiError(404, "Category not found");
+
+  // --- Validation: Check for duplicate name at the same level ---
+  const newName = updateData.name !== undefined ? updateData.name : existing.name;
+  
+  const existingParentId = existing.parent
+    ? (existing.parent._id?.toString?.() || existing.parent.toString?.())
+    : null;
+    
+  const newParentId = updateData.parent !== undefined
+    ? (updateData.parent === "null" || updateData.parent === "" ? null : updateData.parent)
+    : existingParentId;
+
+  if (updateData.name !== undefined || updateData.parent !== undefined) {
+    const escapeRegExp = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const nameRegex = new RegExp(`^${escapeRegExp(newName.trim())}$`, "i");
+
+    const duplicateQuery = {
+      _id: { $ne: id },
+      parent: newParentId || null,
+      name: nameRegex,
+    };
+
+    const duplicate = await Category.findOne(duplicateQuery);
+    if (duplicate) {
+      throw new ApiError(
+        400,
+        `A category/subcategory with the name "${newName}" already exists at this level.`
+      );
+    }
+  }
+  // --------------------------------------------------------------
+
   // Edit allowed even if purchased.
   // Notification is sent if the name changed.
   if (updateData.parent !== undefined) {
