@@ -10,7 +10,7 @@ const createCoupon = Joi.object({
   usageLimit: Joi.number().integer().positive().allow(null).optional(),
   isActive: Joi.boolean().default(true),
   applicableTo: Joi.string()
-    .valid("all", "Test", "TestSeries", "Course", "Olympiads", "Tournament", "Workshop", "Ecommerce", "LiveCompetition","CompetitionCategory", "School", "Competitive", "Skill Development")
+    .valid("all", "Test", "TestSeries", "Course", "Olympiads", "Tournament", "Workshop", "Ecommerce", "LiveCompetition", "CompetitionCategory", "School", "Competitive", "Skill Development")
     .default("all"),
 });
 
@@ -23,8 +23,10 @@ const applyCoupon = Joi.object({
   code: Joi.string().required().trim(),
   amount: Joi.number().min(0).required(),
   itemType: Joi.string()
-    .valid("test", "testBundle", "course","Olympiads", "tournament", "workshop", "ecommerce", "all", "LiveCompetition", "liveCompetition", "live_competition","competitionCategory", "School", "Competitive", "Skill Development")
+    .valid("test", "testBundle", "course", "Olympiads", "tournament", "workshop", "ecommerce", "all", "LiveCompetition", "liveCompetition", "live_competition", "competitionCategory", "School", "Competitive", "Skill Development")
     .default("all"),
+  // Optional alias for legacy 'module' field
+  module: Joi.string().optional().allow(null, ""),
   categoryId: Joi.string().optional().allow(null, ""),
 });
 
@@ -38,7 +40,7 @@ const updateCoupon = Joi.object({
   usageLimit: Joi.number().integer().positive().allow(null).optional(),
   isActive: Joi.boolean().optional(),
   applicableTo: Joi.string()
-    .valid("all", "Test", "TestSeries", "Course", "Olympiads", "Tournament", "Workshop", "Ecommerce", "LiveCompetition","CompetitionCategory", "School", "Competitive", "Skill Development")
+    .valid("all", "Test", "TestSeries", "Course", "Olympiads", "Tournament", "Workshop", "Ecommerce", "LiveCompetition", "CompetitionCategory", "School", "Competitive", "Skill Development")
     .optional(),
 });
 
