@@ -51,6 +51,7 @@ const couponSchema = new mongoose.Schema(
         "TestSeries",
         "Course",
         "Olympiads",
+        "olympiad",
         "Tournament",
         "Workshop",
         "Ecommerce",

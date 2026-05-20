@@ -6,7 +6,7 @@ const priceSchema = Joi.number().min(0).precision(2);
 const createWorkshop = Joi.object({
   title: Joi.string().trim().required(),
   description: Joi.string().trim().allow("", null).optional(),
-  teacherId: objectId.required(),
+  teacherId: objectId.optional(),
   startTime: Joi.date().required().messages({
     "date.base": "Start time must be a valid date",
     "any.required": "Start time is required"

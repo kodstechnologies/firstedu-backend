@@ -19,7 +19,7 @@ const workshopSchema = new mongoose.Schema(
     teacher: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Teacher",
-      required: true,
+      required: false
     },
     startTime: {
       type: Date,

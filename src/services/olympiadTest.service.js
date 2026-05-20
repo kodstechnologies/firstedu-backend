@@ -5,50 +5,7 @@ import { ApiError } from "../utils/ApiError.js";
 import { assertSubtreeNotPurchased } from "../utils/purchaseGuard.js";
 import {
   sendOlympiadTestEditNotification,
-  sendOlympiadStartNotification,
-  sendOlympiadResultDeclaredNotification,
 } from "./notification.service.js";
-
-// ── Exam-start notification scheduler ────────────────────────────────────────
-// Keeps one pending timeout per Olympiad so re-scheduling cancels the old one.
-const _startTimers = new Map();
-
-/**
- * Schedules sendOlympiadStartNotification to fire at exactly `startTime`.
- * If a timer is already pending for this olympiadId it is cancelled first.
- * Does nothing if startTime is null / already in the past.
- */
-const scheduleOlympiadStartNotification = (olympiadId, olympiadTitle, startTime, adminId) => {
-  if (!startTime) return;
-
-  const id = olympiadId.toString();
-  const delay = new Date(startTime).getTime() - Date.now();
-
-  // Cancel any existing timer for this Olympiad
-  if (_startTimers.has(id)) {
-    clearTimeout(_startTimers.get(id));
-    _startTimers.delete(id);
-  }
-
-  if (delay <= 0) {
-    // startTime is already past — skip (exam already started, no notification needed)
-    console.log(`[OlympiadNotif] startTime already past for "${olympiadTitle}", skipping scheduled notification.`);
-    return;
-  }
-
-  const handle = setTimeout(async () => {
-    _startTimers.delete(id);
-    try {
-      await sendOlympiadStartNotification(olympiadId, olympiadTitle, adminId || null);
-      console.log(`[OlympiadNotif] 🏆 Exam start notification sent for "${olympiadTitle}"`);
-    } catch (err) {
-      console.error(`[OlympiadNotif] Failed to send exam start notification for "${olympiadTitle}":`, err);
-    }
-  }, delay);
-
-  _startTimers.set(id, handle);
-  console.log(`[OlympiadNotif] ⏰ Exam start notification scheduled for "${olympiadTitle}" in ${Math.round(delay / 1000)}s`);
-};
 
 const toISO = (v) => (v ? new Date(v).toISOString() : null);
 const fmtDate = (v) =>
@@ -109,11 +66,6 @@ export const createOlympiadTest = async (data) => {
   validateScheduleOrder(data);
 
   const created = await OlympiadTest.create(data);
-
-  // Schedule exam-start notification if startTime is provided
-  if (data.startTime) {
-    scheduleOlympiadStartNotification(created._id, created.title, data.startTime, null);
-  }
 
   return created;
 };
@@ -231,19 +183,6 @@ export const updateOlympiadTest = async (id, updateData, adminId) => {
         oldTitle,
         changedFields
       );
-    }
-
-    // ── Schedule exam-start notification ──
-    // Re-schedule whenever startTime is set or changed
-    if (updateData.startTime && toISO(updateData.startTime) !== oldStartTime) {
-      scheduleOlympiadStartNotification(id, newTitle, updateData.startTime, adminId || null);
-    }
-
-    // ── Result declared notification ──
-    // Fire when resultDeclarationDate is updated and is now at or before the current time
-    const finalResultDate = updateData.resultDeclarationDate ?? existing.resultDeclarationDate;
-    if (updateData.resultDeclarationDate && finalResultDate && new Date(finalResultDate) <= new Date()) {
-      await sendOlympiadResultDeclaredNotification(id, newTitle, adminId || null);
     }
   } catch (notifyErr) {
     console.error("Olympiad test notification failed:", notifyErr);

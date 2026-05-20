@@ -868,9 +868,38 @@ export const sendOlympiadTestEditNotification = async (olympiadId, olympiadTitle
 };
 
 /**
+ * Notify all registered students that the Olympiad exam starts in 10 mins.
+ */
+export const sendOlympiadStartReminderNotification = async (olympiadId, olympiadTitle, adminId) => {
+  try {
+    const registrations = await EventRegistration.find({
+      eventId: olympiadId,
+      eventType: "olympiad",
+      paymentStatus: "completed",
+    }).select("student").lean();
+
+    const studentIds = [...new Set(registrations.map(r => r.student.toString()))];
+
+    if (studentIds.length === 0) return;
+
+    const title = `${olympiadTitle} starts in 10 mins!`;
+    const body = `The Olympiad "${olympiadTitle}" will start in 10 minutes. Get ready to compete!`;
+
+    await sendNotificationToMultipleStudents(
+      studentIds,
+      title,
+      body,
+      { type: "event", event: "olympiad_start_reminder", olympiadId: olympiadId.toString() },
+      adminId
+    );
+  } catch (error) {
+    console.error("Error in sendOlympiadStartReminderNotification:", error);
+  }
+};
+
+/**
  * Notify all registered students that the Olympiad exam has started.
- * Called from olympiadTest.service.js when the admin sets/updates startTime
- * and that time is now or in the past.
+ * Called from olympiadNotifications.service.js cron when the startTime is reached.
  */
 export const sendOlympiadStartNotification = async (olympiadId, olympiadTitle, adminId) => {
   try {

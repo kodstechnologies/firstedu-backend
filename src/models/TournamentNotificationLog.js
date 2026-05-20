@@ -17,7 +17,7 @@ const tournamentNotificationLogSchema = new mongoose.Schema(
     },
     kind: {
       type: String,
-      enum: ["stage_start", "stage_results"],
+      enum: ["stage_start", "stage_start_reminder", "stage_results"],
       required: true,
     },
   },

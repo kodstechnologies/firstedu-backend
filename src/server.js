@@ -13,6 +13,8 @@ import { setupTeacherCallSocket } from './socket/teacherCallSocket.js';
 import { setIO } from './socket/socketGateway.js';
 import examSessionService from './services/examSession.service.js';
 import tournamentNotificationsService from './services/tournamentNotifications.service.js';
+import olympiadNotificationsService from './services/olympiadNotifications.service.js';
+import workshopNotificationsService from './services/workshopNotifications.service.js';
 
 dotenv.config();
 
@@ -96,8 +98,18 @@ const startServer = async () => {
       } catch (error) {
         console.error('❌ Error in tournament notifications cron:', error);
       }
+      try {
+        await olympiadNotificationsService.runOlympiadNotificationTick();
+      } catch (error) {
+        console.error('❌ Error in olympiad notifications cron:', error);
+      }
+      try {
+        await workshopNotificationsService.runWorkshopNotificationTick();
+      } catch (error) {
+        console.error('❌ Error in workshop notifications cron:', error);
+      }
     });
-    console.log('⏰ Minute cron: auto-submit + tournament notifications');
+    console.log('⏰ Minute cron: auto-submit + tournament + olympiad + workshop notifications');
 
     const port = process.env.PORT || 8000;
 

@@ -26,7 +26,7 @@ export const createWorkshop = async (data, adminId, file) => {
     eventType,
   } = data;
 
-  if (!title || !teacherId || !startTime || !endTime || !meetingLink) {
+  if (!title || !startTime || !endTime || !meetingLink) {
     throw new ApiError(400, "Missing required fields");
   }
 
@@ -34,10 +34,12 @@ export const createWorkshop = async (data, adminId, file) => {
     throw new ApiError(400, "Registration times are required");
   }
 
-  // Validate teacher exists
-  const teacher = await teacherRepository.findById(teacherId);
-  if (!teacher) {
-    throw new ApiError(404, "Teacher not found");
+  // Validate teacher exists if provided
+  if (teacherId) {
+    const teacher = await teacherRepository.findById(teacherId);
+    if (!teacher) {
+      throw new ApiError(404, "Teacher not found");
+    }
   }
 
   // Validate time ranges
@@ -67,7 +69,7 @@ export const createWorkshop = async (data, adminId, file) => {
     title,
     description,
     imageUrl,
-    teacher: teacherId,
+    teacher: teacherId || null,
     startTime,
     endTime,
     meetingLink,
