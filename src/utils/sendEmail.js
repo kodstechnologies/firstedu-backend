@@ -596,9 +596,9 @@ export const sendEventStartReminderEmail = async ({ email, name, eventName, even
 /**
  * Send result declared email for a Tournament or Olympiad.
  * Simple message: results are now live, go check the app/website.
- * @param {Object} payload - { email, name, eventName, eventType }
+ * @param {Object} payload - { email, name, eventName, eventType, score, maxScore, rank }
  */
-export const sendEventResultEmail = async ({ email, name, eventName, eventType }) => {
+export const sendEventResultEmail = async ({ email, name, eventName, eventType, score, maxScore, rank }) => {
   if (!email) return;
   try {
     const eventLabel = eventType ? eventType.charAt(0).toUpperCase() + eventType.slice(1) : "Event";
@@ -611,6 +611,9 @@ export const sendEventResultEmail = async ({ email, name, eventName, eventType }
         name: name || "Student",
         eventName: eventName || eventLabel,
         eventLabel,
+        score: score !== undefined ? String(score) : "",
+        maxScore: maxScore !== undefined ? String(maxScore) : "",
+        rank: rank !== undefined ? String(rank) : "",
       },
       defaultSubject: `📊 Your ${eventLabel} Results Are Live — ${eventName}`,
       defaultHtml: `
@@ -623,8 +626,23 @@ export const sendEventResultEmail = async ({ email, name, eventName, eventType }
             <p style="color: #555; font-size: 15px;">
               The results for your <strong>${eventLabel}</strong> <strong>"${eventName}"</strong> are now officially live!
             </p>
+            ${score !== undefined && rank !== undefined ? `
+            <div style="background: #ffffff; border: 1px solid #eee; border-radius: 8px; padding: 16px; margin: 20px 0; text-align: center;">
+              <h3 style="margin-top: 0; color: #333;">Your Performance</h3>
+              <div style="display: flex; justify-content: space-around; flex-wrap: wrap;">
+                <div style="margin: 10px;">
+                  <span style="display: block; font-size: 13px; color: #888; text-transform: uppercase; letter-spacing: 1px;">Rank</span>
+                  <span style="display: block; font-size: 28px; font-weight: bold; color: #f5576c;">#${rank}</span>
+                </div>
+                <div style="margin: 10px;">
+                  <span style="display: block; font-size: 13px; color: #888; text-transform: uppercase; letter-spacing: 1px;">Score</span>
+                  <span style="display: block; font-size: 28px; font-weight: bold; color: #667eea;">${score}${maxScore !== undefined && maxScore !== null ? `/${maxScore}` : ''}</span>
+                </div>
+              </div>
+            </div>
+            ` : ''}
             <p style="color: #555; font-size: 15px;">
-              You can now visit the app or website to view your result, score, and the full leaderboard.
+              You can now visit the app or website to view your full result and the leaderboard.
             </p>
             <div style="background: #f9f9f9; border-left: 4px solid #f5576c; padding: 16px; border-radius: 4px; margin: 20px 0;">
               <p style="margin: 0; color: #555; font-style: italic;">

@@ -512,6 +512,7 @@ export const getOlympiadLeaderboard = async (olympiadId, limit = 1000) => {
   );
 
   const leaderboard = ranked.map((r, index) => ({
+    student: r.student,
     rank: index + 1,
     name: r.name,
     score: r.score,

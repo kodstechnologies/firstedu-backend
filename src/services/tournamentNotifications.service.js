@@ -182,6 +182,13 @@ const notifyStageResults = async (tournament, stageIndex, stage, orderedStages) 
     // Send simple result emails to ALL registered students — fire-and-forget
     setImmediate(async () => {
       try {
+        const { getTournamentLeaderboard } = await import("./tournament.service.js");
+        const { leaderboard } = await getTournamentLeaderboard(tournament._id, 10000);
+        const lbMap = new Map();
+        leaderboard.forEach(entry => {
+          if (entry.student) lbMap.set(entry.student.toString(), entry);
+        });
+
         const allStudentIds = [...qualified, ...notQualified];
         if (allStudentIds.length === 0) return;
         const studentsData = await studentRepository.findAll(
@@ -190,11 +197,15 @@ const notifyStageResults = async (tournament, stageIndex, stage, orderedStages) 
         );
         for (const s of (studentsData.students || [])) {
           if (!s.email) continue;
+          const lbEntry = lbMap.get(s._id.toString());
           await sendEventResultEmail({
             email: s.email,
             name: s.name,
             eventName: tournament.title,
             eventType: "tournament",
+            score: lbEntry?.score,
+            maxScore: lbEntry?.maxScore,
+            rank: lbEntry?.rank,
           });
         }
         console.log(`[TournamentEmail] 📧 Final result emails sent for "${tournament.title}" to ${allStudentIds.length} students.`);

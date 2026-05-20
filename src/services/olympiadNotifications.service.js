@@ -91,13 +91,24 @@ const notifyResults = async (olympiad) => {
   // Simple result email to all registered students — fire-and-forget
   setImmediate(async () => {
     try {
+      const { getOlympiadLeaderboard } = await import("./studentOlympiad.service.js");
+      const { leaderboard } = await getOlympiadLeaderboard(olympiad._id, 10000);
+      const lbMap = new Map();
+      leaderboard.forEach(entry => {
+        if (entry.student) lbMap.set(entry.student.toString(), entry);
+      });
+
       const students = await getRegisteredStudents(olympiad._id);
       for (const s of students) {
+        const lbEntry = lbMap.get(s._id.toString());
         await sendEventResultEmail({
           email: s.email,
           name: s.name,
           eventName: olympiad.title,
           eventType: "olympiad",
+          score: lbEntry?.score,
+          maxScore: lbEntry?.maxScore,
+          rank: lbEntry?.rank,
         });
       }
       console.log(`[OlympiadEmail] 📧 Result emails sent for "${olympiad.title}" to ${students.length} students.`);
