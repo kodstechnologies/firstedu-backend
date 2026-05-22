@@ -30,6 +30,7 @@ const findAll = async (filter = {}, options = {}) => {
       isPublished,
       type,
       access,
+      isCertification,
     } = options;
 
     const query = { ...filter };
@@ -41,6 +42,10 @@ const findAll = async (filter = {}, options = {}) => {
 
     if (typeof isPublished !== "undefined") {
       query.isPublished = isPublished === "true" || isPublished === true;
+    }
+
+    if (typeof isCertification !== "undefined") {
+      query.isCertification = isCertification === "true" || isCertification === true;
     }
 
     if (type) {

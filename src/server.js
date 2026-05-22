@@ -15,6 +15,7 @@ import examSessionService from './services/examSession.service.js';
 import tournamentNotificationsService from './services/tournamentNotifications.service.js';
 import olympiadNotificationsService from './services/olympiadNotifications.service.js';
 import workshopNotificationsService from './services/workshopNotifications.service.js';
+import liveCompetitionNotificationsService from './services/liveCompetitionNotifications.service.js';
 
 dotenv.config();
 
@@ -108,8 +109,13 @@ const startServer = async () => {
       } catch (error) {
         console.error('❌ Error in workshop notifications cron:', error);
       }
+      try {
+        await liveCompetitionNotificationsService.runLiveCompetitionNotificationTick();
+      } catch (error) {
+        console.error('❌ Error in live competition notifications cron:', error);
+      }
     });
-    console.log('⏰ Minute cron: auto-submit + tournament + olympiad + workshop notifications');
+    console.log('⏰ Minute cron: auto-submit + tournament + olympiad + workshop + live_competition notifications');
 
     const port = process.env.PORT || 8000;
 
