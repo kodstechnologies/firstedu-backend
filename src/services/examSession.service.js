@@ -321,6 +321,8 @@ const sanitizeConnectedQuestionForResponse = (questionObj = {}, subQuestions = [
   difficulty: questionObj.difficulty || null,
   orderInBank:
     questionObj.orderInBank === undefined ? null : questionObj.orderInBank,
+  sectionIndex:
+    questionObj.sectionIndex === undefined ? null : questionObj.sectionIndex,
   subQuestions,
 });
 
@@ -878,8 +880,6 @@ export const getExamInstructions = async (testId, studentId, options = {}) => {
     `Total questions: ${totalQuestions}`,
     `Total marks: ${totalMarks}`,
     `Duration: ${test.durationMinutes} minutes`,
-    `Question bank: ${test.questionBank.name || "N/A"}`,
-    `Proctoring: ${test.proctoringInstructions}`,
   ];
 
   if (totalNegativeMarks > 0) {
