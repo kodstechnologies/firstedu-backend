@@ -4,18 +4,22 @@ const hallOfFameSchema = new mongoose.Schema(
   {
     eventType: {
       type: String,
-      enum: ["tournament", "olympiad"],
+      enum: ["tournament", "olympiad", "general"],
       required: true,
     },
     eventId: {
       type: mongoose.Schema.Types.ObjectId,
-      required: true,
+      required: false,
       refPath: "eventModel",
     },
     eventModel: {
       type: String,
-      enum: ["Tournament", "OlympiadTest"],
-      required: true,
+      enum: ["Tournament", "OlympiadTest", "StaticEvent"],
+      required: false,
+    },
+    title: {
+      type: String,
+      trim: true,
     },
     winners: [
       {
@@ -27,7 +31,18 @@ const hallOfFameSchema = new mongoose.Schema(
         student: {
           type: mongoose.Schema.Types.ObjectId,
           ref: "User",
-          required: true,
+          required: false, // Made optional for manual entries
+        },
+        studentName: {
+          type: String, // For manual entries
+          trim: true,
+        },
+        profileImage: {
+          type: String, // For manual entries
+        },
+        quote: {
+          type: String, // For manual entries
+          trim: true,
         },
         score: {
           type: Number,
@@ -58,7 +73,10 @@ const hallOfFameSchema = new mongoose.Schema(
   }
 );
 
-hallOfFameSchema.index({ eventType: 1, eventId: 1 }, { unique: true });
+hallOfFameSchema.index(
+  { eventType: 1, eventId: 1 },
+  { unique: true, partialFilterExpression: { eventId: { $type: "objectId" } } }
+);
 hallOfFameSchema.index({ eventType: 1, eventDate: -1 });
 hallOfFameSchema.index({ "winners.position": 1 });
 

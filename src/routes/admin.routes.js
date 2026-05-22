@@ -303,6 +303,15 @@ import {
   updateApplicantStatus,
 } from "../controllers/jobApplicant.controller.js";
 
+import {
+  createManualEntry,
+  getManualEntries,
+  getManualEntryById,
+  updateManualEntry,
+  deleteManualEntry,
+  uploadHallOfFameImage,
+} from "../controllers/adminHallOfFame.controller.js";
+
 
 
 
@@ -692,6 +701,14 @@ router.get("/carears/:jobId/applicants", verifyJWT, getApplicantsForJob);
 // ==================== JOB APPLICANTS ====================
 router.get("/applicants/:id", verifyJWT, getApplicantDetails);
 router.put("/applicants/:id/status", verifyJWT, updateApplicantStatus);
+
+// ==================== HALL OF FAME (MANUAL ENTRIES) ====================
+router.post("/hall-of-fame/upload-image", verifyJWT, uploadImage.single("image"), uploadHallOfFameImage);
+router.post("/hall-of-fame", verifyJWT, createManualEntry);
+router.get("/hall-of-fame", verifyJWT, getManualEntries);
+router.get("/hall-of-fame/:id", verifyJWT, getManualEntryById);
+router.put("/hall-of-fame/:id", verifyJWT, updateManualEntry);
+router.delete("/hall-of-fame/:id", verifyJWT, deleteManualEntry);
 
 export default router;
 

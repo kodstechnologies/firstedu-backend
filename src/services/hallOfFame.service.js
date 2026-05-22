@@ -246,17 +246,23 @@ const ensureHallOfFameGeneratedForCompletedEvents = async (eventType) => {
 export const getHallOfFameEntries = async (options = {}) => {
   const { page = 1, limit = 10, eventType } = options;
 
-  const query = { eventModel: { $in: ["Tournament", "OlympiadTest"] } };
+  const query = {};
   if (eventType) {
-    if (eventType !== "tournament" && eventType !== "olympiad") {
-      throw new ApiError(400, "Invalid event type. Only tournament and olympiad are supported.");
+    if (!["tournament", "olympiad", "general"].includes(eventType)) {
+      throw new ApiError(400, "Invalid event type. Only tournament, olympiad, and general are supported.");
     }
     query.eventType = eventType;
+    if (eventType !== "general") {
+      query.eventModel = { $in: ["Tournament", "OlympiadTest"] };
+    }
   } else {
     query.eventType = { $in: ["tournament", "olympiad"] };
+    query.eventModel = { $in: ["Tournament", "OlympiadTest"] };
   }
 
-  await ensureHallOfFameGeneratedForCompletedEvents(eventType);
+  if (eventType !== "general") {
+    await ensureHallOfFameGeneratedForCompletedEvents(eventType);
+  }
 
   const pageNum = parseInt(page);
   const limitNum = parseInt(limit);
@@ -265,7 +271,7 @@ export const getHallOfFameEntries = async (options = {}) => {
   const [entries, total] = await Promise.all([
     hallOfFameRepository.find(query, {
       populate: [
-        { path: "winners.student", select: "name email" },
+        { path: "winners.student", select: "name email profileImage" },
         { path: "eventId", select: "title" },
       ],
       sort: { eventDate: -1 },
