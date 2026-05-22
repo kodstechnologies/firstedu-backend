@@ -1,17 +1,96 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
+import mongoose from "mongoose";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import studentRepository from "../repository/student.repository.js";
 import studentSessionRepository from "../repository/studentSession.repository.js";
 import examSessionRepository from "../repository/examSession.repository.js";
+import categoryRepository from "../repository/category.repository.js";
+import Category from "../models/Category.js";
+import QuestionBank from "../models/QuestionBank.js";
+import Test from "../models/Test.js";
+import TestBundle from "../models/TestBundle.js";
+import Course from "../models/Course.js";
+import TestPurchase from "../models/TestPurchase.js";
+import CoursePurchase from "../models/CoursePurchase.js";
+import CategoryPurchase from "../models/CategoryPurchase.js";
+
+const getStudentIdsByPurchasedCategory = async (categoryId) => {
+  if (!mongoose.isValidObjectId(categoryId)) {
+    throw new ApiError(400, "Invalid categoryId");
+  }
+
+  const categoryExists = await Category.exists({ _id: categoryId });
+  if (!categoryExists) {
+    throw new ApiError(404, "Category not found");
+  }
+
+  const categoryIds = await categoryRepository.findDescendantIds(categoryId);
+  const questionBankIds = await QuestionBank.find({
+    categories: { $in: categoryIds },
+  }).distinct("_id");
+
+  const testIds = await Test.find({
+    $or: [
+      { categoryId: { $in: categoryIds } },
+      { questionBank: { $in: questionBankIds } },
+    ],
+  }).distinct("_id");
+
+  const [bundleIds, courseIds] = await Promise.all([
+    TestBundle.find({ tests: { $in: testIds } }).distinct("_id"),
+    Course.find({ categoryIds: { $in: categoryIds } }).distinct("_id"),
+  ]);
+
+  const testPurchaseOr = [
+    { schoolCategory: { $in: categoryIds } },
+    { skillCategory: { $in: categoryIds } },
+  ];
+  if (testIds.length > 0) testPurchaseOr.push({ test: { $in: testIds } });
+  if (bundleIds.length > 0) {
+    testPurchaseOr.push({ testBundle: { $in: bundleIds } });
+  }
+
+  const [categoryStudents, courseStudents, testStudents] = await Promise.all([
+    CategoryPurchase.distinct("student", {
+      paymentStatus: "completed",
+      $or: [
+        { categoryId: { $in: categoryIds } },
+        { unlockedCategoryIds: { $in: categoryIds } },
+      ],
+    }),
+    courseIds.length > 0
+      ? CoursePurchase.distinct("student", {
+          paymentStatus: "completed",
+          course: { $in: courseIds },
+        })
+      : [],
+    TestPurchase.distinct("student", {
+      paymentStatus: "completed",
+      $or: testPurchaseOr,
+    }),
+  ]);
+
+  return [
+    ...new Set(
+      [...categoryStudents, ...courseStudents, ...testStudents]
+        .map((id) => id?.toString?.())
+        .filter(Boolean)
+    ),
+  ];
+};
 
 // List Students with pagination/search
 export const getStudents = asyncHandler(async (req, res) => {
-  const { page = 1, limit = 10, search, status } = req.query;
+  const { page = 1, limit = 10, search, status, categoryId } = req.query;
 
   const filter = {};
   if (status && ["active", "banned"].includes(status)) {
     filter.status = status;
+  }
+  if (categoryId) {
+    const studentIds = await getStudentIdsByPurchasedCategory(categoryId);
+    filter._id = { $in: studentIds };
   }
 
   const [result, counts] = await Promise.all([

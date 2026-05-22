@@ -5,11 +5,46 @@ import Test from "../models/Test.js";
 import Course from "../models/Course.js";
 import Teacher from "../models/Teacher.js";
 import NeedToImprove from "../models/NeedToImprove.js";
+import Category from "../models/Category.js";
 
 const LOW_SCORE_THRESHOLD = 50; // < 50% = weak
 const MAX_PRACTICE_TESTS = 10;
 const MAX_VIDEOS = 10;
 const MAX_STUDY_MATERIALS = 4;
+
+const buildCategoryPathResolver = async () => {
+  const categories = await Category.find({})
+    .select("name parent")
+    .lean();
+
+  const byId = new Map(
+    categories.map((category) => [
+      category._id.toString(),
+      {
+        name: category.name,
+        parentId:
+          category.parent?._id?.toString?.() ||
+          category.parent?.toString?.() ||
+          null,
+      },
+    ])
+  );
+
+  return (categoryId, fallbackName = "") => {
+    const parts = [];
+    const visited = new Set();
+    let currentId = categoryId?.toString?.() || categoryId;
+
+    while (currentId && byId.has(currentId) && !visited.has(currentId)) {
+      visited.add(currentId);
+      const category = byId.get(currentId);
+      parts.push(category.name);
+      currentId = category.parentId;
+    }
+
+    return parts.length > 0 ? parts.reverse().join(" > ") : fallbackName;
+  };
+};
 
 /**
  * Always recomputes fresh NeedToImprove data for a student.
@@ -98,10 +133,13 @@ export const computeNeedToImprove = async (studentId) => {
       .filter(Boolean)
   );
 
+  const resolveCategoryPath = await buildCategoryPathResolver();
+
   // 5. For each weak category, fetch suggestions
   const builtCategories = await Promise.all(
     weakCategories.map(async (weakCat) => {
       const { categoryId, categoryName, percentageScore } = weakCat;
+      const categoryPath = resolveCategoryPath(categoryId, categoryName);
 
       // a) Practice Tests — all published tests whose questionBank includes this category
       //    (not just purchased, so we can mark isPurchased flag)
@@ -158,7 +196,9 @@ export const computeNeedToImprove = async (studentId) => {
       // d) Teachers — approved teachers whose skills match category name
       return {
         categoryId,
-        categoryName,
+        categoryName: categoryPath,
+        categoryShortName: categoryName,
+        categoryPath,
         percentageScore,
         suggestions: {
           practiceTests,

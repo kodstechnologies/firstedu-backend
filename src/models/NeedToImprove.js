@@ -46,6 +46,8 @@ const weakCategorySchema = new mongoose.Schema(
       required: true,
     },
     categoryName: { type: String, required: true },
+    categoryShortName: { type: String },
+    categoryPath: { type: String },
     percentageScore: { type: Number, default: 0 }, // avg % score across weak sessions
     suggestions: {
       practiceTests: [practiceTestSchema],

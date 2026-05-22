@@ -157,6 +157,8 @@ export const getStudentDashboardStats = async (studentId) => {
     .map((wc) => ({
       categoryId: wc.categoryId,
       categoryName: wc.categoryName,
+      categoryShortName: wc.categoryShortName,
+      categoryPath: wc.categoryPath,
       percentageScore: wc.percentageScore,
     }))
   );
