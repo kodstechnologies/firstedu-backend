@@ -80,7 +80,7 @@ import { getEverydayChallenges } from "../controllers/everydayChallenge.controll
 import { getChallengeYourself } from "../controllers/challengeYourself.controller.js";
 import { getAllEvents } from "../controllers/events.controller.js";
 import { contactUs } from "../controllers/contact.controller.js";
-import { getLeaderboardsForStudent, getPurchasedTestLeaderboards } from "../controllers/leaderboard.controller.js";
+import { getLeaderboardsForStudent } from "../controllers/leaderboard.controller.js";
 import {
   startExam,
   getExamInstructions,
@@ -403,9 +403,8 @@ router.get("/hall-of-fame", verifyJWT, getHallOfFame);
 // All Events (Olympiads, Tournaments) - catalog, no registration filter
 router.get("/events", verifyJWT, getAllEvents);
 
-// Leaderboards (Olympiads & Tournaments - completed events)
+// Leaderboards
 router.get("/leaderboard", verifyJWT, getLeaderboardsForStudent);
-router.get("/my-test-leaderboards", verifyJWT, getPurchasedTestLeaderboards);
 
 // My Events Dashboard
 router.get("/my-events", verifyJWT, getMyEventsDashboard);
