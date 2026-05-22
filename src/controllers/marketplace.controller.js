@@ -4,7 +4,10 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import marketplaceValidator from "../validation/marketplace.validator.js";
 import marketplaceService, {
   initiateCoursePayment as initiateCoursePaymentService,
+  getSubcategoriesByPillarName,
+  getPaginatedFreeMaterials,
 } from "../services/marketplace.service.js";
+
 
 // Get All Published Courses (Marketplace)
 // Query: type (pdf | video | audio), access (free | paid | both), isCertification (true | false)
@@ -128,10 +131,42 @@ export const purchaseCourse = asyncHandler(async (req, res) => {
 
 // Get Student's Purchased Courses
 // Query: page, limit, search (title/description), contentType (pdf | video | audio), isCertification (true | false)
+// Free Material Mode: isFreeMaterial=true&categoryId=...&subCategoryId=...
+// Subcategory Fetch Mode: isFreeMaterial=true&fetchSubcategories=true&pillarName=School
 export const getMyCourses = asyncHandler(async (req, res) => {
   const studentId = req.user._id;
-  const { page = 1, limit = 10, search, contentType, isCertification } =
-    req.query;
+  const {
+    page = 1, limit = 10, search, contentType,
+    isCertification,
+    isFreeMaterial,
+    categoryId, subCategoryId,
+    fetchSubcategories, pillarName,
+  } = req.query;
+
+  // ── Branch 1: Fetch subcategories for a given pillar (lazy-load tab list) ──
+  // Triggered ONLY when: isFreeMaterial=true AND fetchSubcategories=true
+  // No effect on any other existing call to this endpoint.
+  if (isFreeMaterial === 'true' && fetchSubcategories === 'true') {
+    const subcategories = await getSubcategoriesByPillarName(pillarName);
+    return res.status(200).json(ApiResponse.success(subcategories, "Subcategories fetched successfully"));
+  }
+
+  // ── Branch 2: Fetch paginated free materials ──
+  // Triggered ONLY when: isFreeMaterial=true (and fetchSubcategories is NOT true)
+  if (isFreeMaterial === 'true') {
+    const { purchases, pagination } = await getPaginatedFreeMaterials(
+      page,
+      limit,
+      {
+        categoryId,
+        subCategoryId,
+        search,
+        contentType,
+      }
+    );
+    return res.status(200).json(ApiResponse.success(purchases, "Free materials fetched successfully", pagination));
+  }
+
 
   const { purchases, pagination } = await marketplaceService.getMyCourses(
     studentId,

@@ -22,6 +22,7 @@ import Category from "../models/Category.js";
 import OlympiadTest from "../models/OlympiadTest.js";
 import { getOlympiads } from "./studentOlympiad.service.js";
 import { getTournaments } from "./tournament.service.js";
+import FreeMaterial from "../models/FreeMaterial.js";
 
 const buildCategoryPathsMap = async () => {
   const categories = await Category.find({}).select('name parent').lean();
@@ -486,6 +487,106 @@ export const getMyCourses = async (studentId, page = 1, limit = 10, options = {}
       pages: Math.ceil(total / limitNum) || 1,
     },
   };
+};
+
+/**
+ * Get paginated free materials (integrated into my-courses flow).
+ */
+export const getPaginatedFreeMaterials = async (page = 1, limit = 10, options = {}) => {
+  const { categoryId, subCategoryId, search, contentType } = options;
+  const pageNum = parseInt(page);
+  const limitNum = parseInt(limit);
+  const skip = (pageNum - 1) * limitNum;
+
+  const query = {};
+  if (categoryId) query.category = categoryId;
+  if (subCategoryId) query.subCategory = subCategoryId;
+  
+  if (contentType && contentType !== 'all') {
+    query.fileType = String(contentType).toLowerCase();
+  }
+
+  if (search && search.trim()) {
+    const regex = { $regex: search, $options: "i" };
+    query.fileUrl = regex;
+  }
+
+  const materials = await FreeMaterial.find(query)
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limitNum)
+    .lean();
+
+  const total = await FreeMaterial.countDocuments(query);
+
+  const formattedItems = materials.map((m) => {
+    const filename = decodeURIComponent(m.fileUrl || '').split('/').pop() || 'Download File';
+    return {
+      _id: m._id,
+      course: {
+         _id: m._id,
+         title: filename,
+         description: 'Free Material',
+         price: 0,
+         contentType: m.fileType,
+         contents: [
+            {
+               originalName: filename,
+               type: m.fileType,
+               url: m.fileUrl
+            }
+         ],
+         imageUrl: null,
+      }
+    };
+  });
+
+  return {
+    purchases: formattedItems,
+    pagination: {
+      page: pageNum,
+      limit: limitNum,
+      total,
+      pages: Math.ceil(total / limitNum) || 1,
+    },
+  };
+};
+
+/**
+ * Get subcategories for a given pillar name (used for lazy-loading the Free Material filter tabs).
+ * Queries by rootType field (e.g. "School", "Olympiads") so it is fast and index-backed.
+ */
+export const getSubcategoriesByPillarName = async (pillarName) => {
+  if (!pillarName) return [];
+
+  // The 4 valid rootType values stored in the Category model
+  const VALID_ROOT_TYPES = ['School', 'Competitive', 'Olympiads', 'Skill Development'];
+
+  // Case-insensitive match against the rootType enum
+  const normalizedName = VALID_ROOT_TYPES.find(
+    (rt) => rt.toLowerCase() === String(pillarName).toLowerCase()
+  );
+  if (!normalizedName) return [];
+
+  // Find the pillar (parent) category by rootType
+  const pillar = await Category.findOne({
+    rootType: normalizedName,
+    parent: null,       // top-level pillar has no parent
+    isActive: true,
+  }).select('_id name rootType').lean();
+
+  if (!pillar) return [];
+
+  // Fetch its direct children (subcategories) sorted by order then name
+  const subcategories = await Category.find({
+    parent: pillar._id,
+    isActive: true,
+  })
+    .select('_id name')
+    .sort({ order: 1, name: 1 })
+    .lean();
+
+  return subcategories;
 };
 
 /**

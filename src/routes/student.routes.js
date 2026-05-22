@@ -213,6 +213,9 @@ import {
   getQnAById,
   selfQnAs,
 } from "../controllers/qna.controller.js";
+import {
+  getCategories as getFreeMaterialCategories,
+} from "../controllers/studentFreeMaterial.controller.js";
 
 const router = Router();
 
@@ -635,5 +638,8 @@ router.patch(
 
 // ==================== LIVE COMPETITION CATEGORIES (Public) ====================
 router.get("/live-competition-categories", verifyJWT, getActiveCategories);
+
+// ==================== FREE MATERIALS ====================
+router.get("/free-materials/categories", verifyJWT, getFreeMaterialCategories);
 
 export default router;

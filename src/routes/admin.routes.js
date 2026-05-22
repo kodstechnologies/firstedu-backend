@@ -268,7 +268,7 @@ import {
   postAdminApproveWithdrawal,
   postAdminRejectWithdrawal,
 } from "../controllers/teacherWithdrawal.controller.js";
-import { uploadCourseMaterial, uploadImage, uploadAnyImages, uploadPDF, uploadSuccessStory, uploadPDFAndImage } from '../utils/multerConfig.js';
+import { uploadCourseMaterial, uploadImage, uploadAnyImages, uploadPDF, uploadSuccessStory, uploadPDFAndImage, uploadLiveCompetitionContent } from '../utils/multerConfig.js';
 import {
   createEvent as createLiveCompetition,
   getEvents as getLiveCompetitions,
@@ -312,7 +312,11 @@ import {
   uploadHallOfFameImage,
 } from "../controllers/adminHallOfFame.controller.js";
 
-
+import {
+  createMaterial,
+  getMaterials,
+  deleteMaterial,
+} from "../controllers/adminFreeMaterial.controller.js";
 
 
 const router = Router();
@@ -710,6 +714,10 @@ router.get("/hall-of-fame/:id", verifyJWT, getManualEntryById);
 router.put("/hall-of-fame/:id", verifyJWT, updateManualEntry);
 router.delete("/hall-of-fame/:id", verifyJWT, deleteManualEntry);
 
-export default router;
+// ==================== FREE MATERIALS ====================
+router.post("/free-materials", verifyJWT, uploadLiveCompetitionContent.single("file"), createMaterial);
+router.get("/free-materials", verifyJWT, getMaterials);
+router.delete("/free-materials/:id", verifyJWT, deleteMaterial);
 
+export default router;
 

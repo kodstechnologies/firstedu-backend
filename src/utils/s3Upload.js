@@ -205,6 +205,22 @@ export const uploadVideoToCloudinary = async (fileBuffer, originalName, folder =
 };
 
 /**
+ * Upload generic file to S3.
+ * @param {Buffer} fileBuffer - File buffer from multer
+ * @param {String} originalName - Original filename
+ * @param {String} folder - Folder path in S3 bucket
+ * @param {String} contentType - MIME type
+ * @returns {Promise<String>} Public URL of uploaded file
+ */
+export const uploadFileToCloudinary = async (fileBuffer, originalName, folder = "free-materials", contentType) => {
+  return uploadBufferToS3(fileBuffer, {
+    folder,
+    originalName,
+    contentType,
+  });
+};
+
+/**
  * Delete file from S3 by URL.
  * @param {String} fileUrl - Full S3 URL
  * @returns {Promise<Boolean>}
@@ -234,5 +250,6 @@ export default {
   uploadPDFToCloudinary,
   uploadVideoToCloudinary,
   uploadAudioToCloudinary,
+  uploadFileToCloudinary,
   deleteFileFromCloudinary,
 };
