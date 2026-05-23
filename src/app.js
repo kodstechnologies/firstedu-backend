@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import cookieParser from "cookie-parser";
 import dotenv from "dotenv";
 import studentRoutes from "./routes/student.routes.js";
 import landingPageRoutes from "./routes/landingPage.routes.js";
@@ -36,6 +37,8 @@ app.use(
 );
 
 // app.use(cors());
+
+app.use(cookieParser());
 
 // Webhooks: raw body required for signature verification (must be before express.json)
 app.use(

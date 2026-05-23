@@ -176,15 +176,24 @@ export const login = asyncHandler(async (req, res) => {
 
   const loggedInStudent = await studentRepository.findById(student._id);
 
-  const options = {
+  const isProduction = process.env.NODE_ENV === "production";
+  const accessTokenOptions = {
     httpOnly: true,
-    secure: true,
+    secure: isProduction,
+    sameSite: isProduction ? "None" : "Lax",
+    maxAge: 60 * 60 * 1000,
+  };
+  const refreshTokenOptions = {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? "None" : "Lax",
+    maxAge: 7 * 24 * 60 * 60 * 1000,
   };
 
   return res
     .status(200)
-    .cookie("accessToken", accessToken, options)
-    .cookie("refreshToken", refreshToken, options)
+    .cookie("accessToken", accessToken, accessTokenOptions)
+    .cookie("refreshToken", refreshToken, refreshTokenOptions)
     .json(
       ApiResponse.success(
         {
@@ -331,10 +340,11 @@ export const logout = asyncHandler(async (req, res) => {
     await studentSessionRepository.deleteByStudentId(req.user._id);
   }
 
+  const isProduction = process.env.NODE_ENV === "production";
   const options = {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "None",
+    secure: isProduction,
+    sameSite: isProduction ? "None" : "Lax",
   };
 
   return res
