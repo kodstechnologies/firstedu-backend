@@ -20,9 +20,8 @@ const createCourse = Joi.object({
     .optional(),
   categoryIds: Joi.alternatives()
     .try(Joi.array().items(objectId), objectId)
-    .required()
+    .optional()
     .messages({
-      "any.required": "category is required",
       "alternatives.match": "Invalid category",
     }),
 });
@@ -41,9 +40,8 @@ const updateCourse = Joi.object({
     .optional(),
   categoryIds: Joi.alternatives()
     .try(Joi.array().items(objectId), objectId)
-     .required()
+    .optional()
     .messages({
-      "any.required": "category is required",
       "alternatives.match": "Invalid category",
     }),
 });

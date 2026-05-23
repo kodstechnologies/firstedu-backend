@@ -355,6 +355,47 @@ const getConnectedCategoryIds = async (linkedTo, studentId, isCertification) => 
     }
   }
 
+  if (linkedTo === "all" || linkedTo === "olympiad") {
+    const Olympiad = (await import("../models/OlympiadTest.js")).default;
+    const olympiads = await Olympiad.find({}).select("testId categoryId").lean();
+    
+    // Add direct categoryIds from the Olympiad model itself
+    olympiads.forEach(o => {
+      if (o.categoryId) categoryIds.add(o.categoryId.toString());
+    });
+
+    const olympiadTestIds = olympiads.map(o => o.testId).filter(Boolean);
+    if (olympiadTestIds.length > 0) {
+      const tests = await Test.find({ _id: { $in: olympiadTestIds } }).select("questionBank categoryId").lean();
+      
+      const bankIds = [...new Set(tests.map(t => t.questionBank?.toString()).filter(Boolean))];
+      const directTestCategoryIds = [...new Set(tests.map(t => t.categoryId?.toString()).filter(Boolean))];
+      
+      if (bankIds.length > 0) {
+        const fromOlympiads = await QuestionBank.find({ _id: { $in: bankIds } }).distinct("categories");
+        fromOlympiads.forEach((id) => categoryIds.add(id?.toString?.() || id));
+      }
+      directTestCategoryIds.forEach((id) => categoryIds.add(id));
+    }
+  }
+
+  if (linkedTo === "challenge") {
+    const ChallengeTestTypes = ["challenge_yourfriends", "challenge_yourself", "everyday_challenge", "challenge"];
+    const challengeTests = await Test.find({
+      isPublished: true,
+      applicableFor: { $in: ChallengeTestTypes }
+    }).select("questionBank categoryId").lean();
+
+    const bankIds = [...new Set(challengeTests.map(t => t.questionBank?.toString()).filter(Boolean))];
+    const directCategoryIds = [...new Set(challengeTests.map(t => t.categoryId?.toString()).filter(Boolean))];
+
+    if (bankIds.length > 0) {
+      const fromChallenges = await QuestionBank.find({ _id: { $in: bankIds } }).distinct("categories");
+      fromChallenges.forEach((id) => categoryIds.add(id?.toString?.() || id));
+    }
+    directCategoryIds.forEach((id) => categoryIds.add(id));
+  }
+
   if (linkedTo === "examhall") {
     if (!studentId) {
       return new Set();

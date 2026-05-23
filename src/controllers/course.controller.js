@@ -35,6 +35,7 @@ export const getCourses = asyncHandler(async (req, res) => {
     limit,
     search,
     isPublished,
+    isCertification,
     sortBy,
     sortOrder,
   } = req.query;
@@ -44,6 +45,7 @@ export const getCourses = asyncHandler(async (req, res) => {
     limit,
     search,
     isPublished,
+    isCertification,
     sortBy,
     sortOrder,
   });

@@ -540,7 +540,14 @@ export const sendTicketReplyEmail = async (email, name, ticketNumber, message) =
 export const sendEventStartReminderEmail = async ({ email, name, eventName, eventType, startTime }) => {
   if (!email) return;
   try {
-    const eventLabel = eventType ? eventType.charAt(0).toUpperCase() + eventType.slice(1) : "Event";
+    let eventLabel = "Event";
+    if (eventType) {
+      if (eventType === "live_competition") {
+        eventLabel = "Live Competition";
+      } else {
+        eventLabel = eventType.charAt(0).toUpperCase() + eventType.slice(1);
+      }
+    }
     const startStr = startTime
       ? new Date(startTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })
       : "—";
@@ -601,7 +608,14 @@ export const sendEventStartReminderEmail = async ({ email, name, eventName, even
 export const sendEventResultEmail = async ({ email, name, eventName, eventType, score, maxScore, rank }) => {
   if (!email) return;
   try {
-    const eventLabel = eventType ? eventType.charAt(0).toUpperCase() + eventType.slice(1) : "Event";
+    let eventLabel = "Event";
+    if (eventType) {
+      if (eventType === "live_competition") {
+        eventLabel = "Live Competition";
+      } else {
+        eventLabel = eventType.charAt(0).toUpperCase() + eventType.slice(1);
+      }
+    }
 
     await sendEmailWithTemplate({
       to: email,

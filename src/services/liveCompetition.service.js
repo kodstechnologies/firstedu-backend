@@ -15,6 +15,7 @@ import { getAmountToCharge, getApplicableOfferDetails } from "../utils/offerUtil
 import razorpayOrderIntentRepository from "../repository/razorpayOrderIntent.repository.js";
 import { createRazorpayOrder, verifyPaymentSignature } from "../utils/razorpayUtils.js";
 import { sendNotificationToMultipleStudents } from "./notification.service.js";
+import { sendEventResultEmail } from "../utils/sendEmail.js";
 
 /**
  * Generic file upload — routes to the right S3 helper by MIME type.
@@ -349,7 +350,7 @@ export const declareWinner = async (eventId, { winnerId }) => {
     try {
       const allSubmissions = await liveCompetitionRepository.findSubmissions(
         { event: eventId },
-        { limit: 10000 }
+        { limit: 10000, populate: [{ path: "participant", select: "name email" }] }
       );
       
       const participantIds = allSubmissions.map((sub) => 
@@ -358,16 +359,31 @@ export const declareWinner = async (eventId, { winnerId }) => {
       const uniqueParticipantIds = [...new Set(participantIds)];
 
       if (uniqueParticipantIds.length > 0) {
-        const winnerName = winnerSub.participant.name || "A Participant";
-        const winnerIdString = winnerSub.participant._id.toString();
-
         await sendNotificationToMultipleStudents(
           uniqueParticipantIds,
           `Result Declared: ${updatedEvent.title}`,
-          `The winner is ${winnerName} (ID: ${winnerIdString}). Congratulations!`,
+          `The results for the Live Competition '${updatedEvent.title}' have been declared. You can visit the app and web application to check your result!`,
           { type: "live_competition_result", eventId: eventId.toString() },
           null
         );
+
+        // Send email to all registered participants
+        setImmediate(async () => {
+          for (const sub of allSubmissions) {
+            if (sub.participant && sub.participant.email) {
+              try {
+                await sendEventResultEmail({
+                  email: sub.participant.email,
+                  name: sub.participant.name,
+                  eventName: updatedEvent.title,
+                  eventType: "live_competition",
+                });
+              } catch (emailErr) {
+                console.error("Failed to send live comp result email:", emailErr);
+              }
+            }
+          }
+        });
       }
     } catch (err) {
       console.error("Failed to send winner notifications:", err);

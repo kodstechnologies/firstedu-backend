@@ -243,13 +243,19 @@ const getSessionStatusMapByStudent = async (studentId, testIds) => {
   }
 };
 
-const getRankedByTest = async (testId, studentIds = null, limit = 10) => {
+const getRankedByTest = async (testId, studentIds = null, limit = 10, year = null) => {
   try {
     const match = {
       test: testId,
       status: "completed",
       score: { $ne: null, $gte: 0 },
     };
+    if (year) {
+      match.completedAt = {
+        $gte: new Date(`${year}-01-01T00:00:00.000Z`),
+        $lte: new Date(`${year}-12-31T23:59:59.999Z`),
+      };
+    }
     if (Array.isArray(studentIds) && studentIds.length) {
       // Ensure we compare ObjectIds to ObjectIds in aggregation
       const ids = studentIds
@@ -301,13 +307,19 @@ const getRankedByTest = async (testId, studentIds = null, limit = 10) => {
   }
 };
 
-const getRankedByChallenge = async (challengeId, studentIds = null, limit = 100) => {
+const getRankedByChallenge = async (challengeId, studentIds = null, limit = 100, year = null) => {
   try {
     const match = {
       challenge: new mongoose.Types.ObjectId(challengeId),
       status: "completed",
       score: { $ne: null, $gte: 0 },
     };
+    if (year) {
+      match.completedAt = {
+        $gte: new Date(`${year}-01-01T00:00:00.000Z`),
+        $lte: new Date(`${year}-12-31T23:59:59.999Z`),
+      };
+    }
     if (Array.isArray(studentIds) && studentIds.length) {
       const ids = studentIds
         .map((id) => (id?.toString?.() ?? id))

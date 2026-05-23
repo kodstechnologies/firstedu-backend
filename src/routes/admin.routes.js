@@ -268,7 +268,7 @@ import {
   postAdminApproveWithdrawal,
   postAdminRejectWithdrawal,
 } from "../controllers/teacherWithdrawal.controller.js";
-import { uploadCourseMaterial, uploadImage, uploadAnyImages, uploadPDF, uploadSuccessStory, uploadPDFAndImage } from '../utils/multerConfig.js';
+import { uploadCourseMaterial, uploadImage, uploadAnyImages, uploadPDF, uploadSuccessStory, uploadPDFAndImage, uploadLiveCompetitionContent } from '../utils/multerConfig.js';
 import {
   createEvent as createLiveCompetition,
   getEvents as getLiveCompetitions,
@@ -303,7 +303,20 @@ import {
   updateApplicantStatus,
 } from "../controllers/jobApplicant.controller.js";
 
+import {
+  createManualEntry,
+  getManualEntries,
+  getManualEntryById,
+  updateManualEntry,
+  deleteManualEntry,
+  uploadHallOfFameImage,
+} from "../controllers/adminHallOfFame.controller.js";
 
+import {
+  createMaterial,
+  getMaterials,
+  deleteMaterial,
+} from "../controllers/adminFreeMaterial.controller.js";
 
 
 const router = Router();
@@ -693,6 +706,18 @@ router.get("/carears/:jobId/applicants", verifyJWT, getApplicantsForJob);
 router.get("/applicants/:id", verifyJWT, getApplicantDetails);
 router.put("/applicants/:id/status", verifyJWT, updateApplicantStatus);
 
-export default router;
+// ==================== HALL OF FAME (MANUAL ENTRIES) ====================
+router.post("/hall-of-fame/upload-image", verifyJWT, uploadImage.single("image"), uploadHallOfFameImage);
+router.post("/hall-of-fame", verifyJWT, createManualEntry);
+router.get("/hall-of-fame", verifyJWT, getManualEntries);
+router.get("/hall-of-fame/:id", verifyJWT, getManualEntryById);
+router.put("/hall-of-fame/:id", verifyJWT, updateManualEntry);
+router.delete("/hall-of-fame/:id", verifyJWT, deleteManualEntry);
 
+// ==================== FREE MATERIALS ====================
+router.post("/free-materials", verifyJWT, uploadLiveCompetitionContent.single("file"), createMaterial);
+router.get("/free-materials", verifyJWT, getMaterials);
+router.delete("/free-materials/:id", verifyJWT, deleteMaterial);
+
+export default router;
 
