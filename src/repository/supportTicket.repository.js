@@ -164,12 +164,51 @@ const findAllTickets = async (options = {}) => {
           },
         },
       },
-      { $sort: { priorityRank: 1, createdAt: -1 } },
+      { $sort: { lastMessageAt: -1, priorityRank: 1 } },
       {
         $facet: {
           tickets: [
             { $skip: skip },
             { $limit: limitNum },
+            {
+              $lookup: {
+                from: "supportmessages",
+                let: { ticketId: "$_id" },
+                pipeline: [
+                  { 
+                    $match: { 
+                      $expr: { 
+                        $and: [
+                          { $eq: ["$ticket", "$$ticketId"] },
+                          { $eq: ["$isRead", false] },
+                          { $eq: ["$senderType", "User"] }
+                        ] 
+                      } 
+                    } 
+                  },
+                  { $count: "count" }
+                ],
+                as: "unreadData"
+              }
+            },
+            {
+              $lookup: {
+                from: "supportmessages",
+                let: { ticketId: "$_id" },
+                pipeline: [
+                  { $match: { $expr: { $eq: ["$ticket", "$$ticketId"] } } },
+                  { $sort: { createdAt: -1 } },
+                  { $limit: 1 }
+                ],
+                as: "lastMessageData"
+              }
+            },
+            {
+              $addFields: {
+                unreadCount: { $ifNull: [{ $arrayElemAt: ["$unreadData.count", 0] }, 0] },
+                lastMessagePreview: { $arrayElemAt: ["$lastMessageData.message", 0] }
+              }
+            },
             {
               $lookup: {
                 from: "users",
@@ -213,6 +252,8 @@ const findAllTickets = async (options = {}) => {
                 lastMessageAt: 1,
                 createdAt: 1,
                 updatedAt: 1,
+                unreadCount: 1,
+                lastMessagePreview: 1,
               },
             },
           ],

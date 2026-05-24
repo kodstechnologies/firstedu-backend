@@ -65,6 +65,15 @@ export const createTicket = async (studentId, ticketData) => {
     status: 'open',
   });
 
+  // Create the initial message from the ticket description
+  await supportMessageRepository.create({
+    ticket: ticket._id,
+    sender: studentId,
+    senderType: 'User',
+    message: ticketData.description,
+    attachments: [],
+  });
+
   (async () => {
     try {
       const student = await studentRepository.findById(studentId);
