@@ -17,8 +17,8 @@ const createPressAnnouncement = Joi.object({
     "string.empty": "Title is required",
     "any.required": "Title is required",
   }),
-  description: Joi.string().trim().required().messages({
-    "string.empty": "Description is required",
+  description: Joi.array().items(Joi.string().trim()).min(1).required().messages({
+    "array.min": "At least one description point is required",
     "any.required": "Description is required",
   }),
   highlights: Joi.array().items(Joi.string().trim()).default([]).messages({
@@ -39,8 +39,8 @@ const updatePressAnnouncement = Joi.object({
   title: Joi.string().trim().optional().messages({
     "string.empty": "Title cannot be empty",
   }),
-  description: Joi.string().trim().optional().messages({
-    "string.empty": "Description cannot be empty",
+  description: Joi.array().items(Joi.string().trim()).min(1).optional().messages({
+    "array.min": "Description must have at least one point",
   }),
   highlights: Joi.array().items(Joi.string().trim()).optional().messages({
     "array.base": "Highlights must be an array of strings",

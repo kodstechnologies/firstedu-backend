@@ -3,6 +3,7 @@ import TestPurchase from "../models/TestPurchase.js";
 import CoursePurchase from "../models/CoursePurchase.js";
 import EventRegistration from "../models/EventRegistration.js";
 import SupportTicket from "../models/SupportTicket.js";
+import RevenueTransaction from "../models/RevenueTransaction.js";
 import { ApiError } from "../utils/ApiError.js";
 import mongoose from "mongoose";
 
@@ -55,86 +56,45 @@ const computeChange = (currentVal, previousVal, format = "percent") => {
 
 /**
  * Sum revenue from completed purchases/registrations in a date range.
- * This does not depend on webhook logs, so dashboard remains correct even if webhook history is partial.
+ * This utilizes the unified RevenueTransaction collection for perfect synchronization.
  */
 const getRazorpayRevenueInRange = async (start, end) => {
-  const [courseAgg, testAgg, eventAgg] = await Promise.all([
-    CoursePurchase.aggregate([
-      {
-        $match: {
-          paymentStatus: "completed",
-          purchaseDate: { $gte: start, $lte: end },
-          purchasePrice: { $exists: true, $ne: null },
-        },
+  const result = await RevenueTransaction.aggregate([
+    {
+      $match: {
+        paymentStatus: "completed",
+        purchasedAt: { $gte: start, $lte: end },
       },
-      { $group: { _id: null, total: { $sum: "$purchasePrice" } } },
-    ]),
-    TestPurchase.aggregate([
-      {
-        $match: {
-          paymentStatus: "completed",
-          purchaseDate: { $gte: start, $lte: end },
-          purchasePrice: { $exists: true, $ne: null },
-        },
+    },
+    {
+      $group: {
+        _id: null,
+        total: { $sum: "$amount" },
       },
-      { $group: { _id: null, total: { $sum: "$purchasePrice" } } },
-    ]),
-    EventRegistration.aggregate([
-      {
-        $match: {
-          paymentStatus: "completed",
-          registeredAt: { $gte: start, $lte: end },
-          amountPaid: { $exists: true, $ne: null },
-        },
-      },
-      { $group: { _id: null, total: { $sum: "$amountPaid" } } },
-    ]),
+    },
   ]);
-
-  const courseRevenue = courseAgg[0]?.total ?? 0;
-  const testRevenue = testAgg[0]?.total ?? 0;
-  const eventRevenue = eventAgg[0]?.total ?? 0;
-  return Math.round(courseRevenue + testRevenue + eventRevenue);
+  return Math.round(result[0]?.total || 0);
 };
 
 /**
  * Get all-time total revenue from completed purchases/registrations.
+ * This utilizes the unified RevenueTransaction collection for perfect synchronization.
  */
 const getRazorpayTotalRevenue = async () => {
-  const [courseAgg, testAgg, eventAgg] = await Promise.all([
-    CoursePurchase.aggregate([
-      {
-        $match: {
-          paymentStatus: "completed",
-          purchasePrice: { $exists: true, $ne: null },
-        },
+  const result = await RevenueTransaction.aggregate([
+    {
+      $match: {
+        paymentStatus: "completed",
       },
-      { $group: { _id: null, total: { $sum: "$purchasePrice" } } },
-    ]),
-    TestPurchase.aggregate([
-      {
-        $match: {
-          paymentStatus: "completed",
-          purchasePrice: { $exists: true, $ne: null },
-        },
+    },
+    {
+      $group: {
+        _id: null,
+        total: { $sum: "$amount" },
       },
-      { $group: { _id: null, total: { $sum: "$purchasePrice" } } },
-    ]),
-    EventRegistration.aggregate([
-      {
-        $match: {
-          paymentStatus: "completed",
-          amountPaid: { $exists: true, $ne: null },
-        },
-      },
-      { $group: { _id: null, total: { $sum: "$amountPaid" } } },
-    ]),
+    },
   ]);
-
-  const courseRevenue = courseAgg[0]?.total ?? 0;
-  const testRevenue = testAgg[0]?.total ?? 0;
-  const eventRevenue = eventAgg[0]?.total ?? 0;
-  return Math.round(courseRevenue + testRevenue + eventRevenue);
+  return Math.round(result[0]?.total || 0);
 };
 
 /**
@@ -203,31 +163,7 @@ const getUrgentTickets = async (limit = 10) => {
   }));
 };
 
-/**
- * Get revenue by day for last 7 days
- */
-const getRevenueLast7Days = async () => {
-  const now = new Date();
-  const start = new Date(now);
-  start.setDate(start.getDate() - 6);
-  start.setHours(0, 0, 0, 0);
 
-  const dayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  const results = [];
-
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(start);
-    d.setDate(d.getDate() + i);
-    const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
-    const dayEnd = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
-
-    const revenue = await getRazorpayRevenueInRange(dayStart, dayEnd);
-    const label = dayLabels[dayStart.getDay()];
-    results.push({ day: label, revenue: Math.round(revenue), date: dayStart });
-  }
-
-  return results;
-};
 
 /**
  * Admin Dashboard - main aggregation
@@ -248,7 +184,6 @@ export const getDashboardData = async () => {
     ticketsOpenedCurrentMonth,
     ticketsOpenedLastMonth,
     totalRevenueAllTime,
-    revenueChart,
     totalStudents,
     totalTestsSold,
   ] = await Promise.all([
@@ -262,7 +197,6 @@ export const getDashboardData = async () => {
     getTicketsOpenedInRange(currentMonth.start, currentMonth.end),
     getTicketsOpenedInRange(lastMonth.start, lastMonth.end),
     getRazorpayTotalRevenue(),
-    getRevenueLast7Days(),
     User.countDocuments({}),
     TestPurchase.countDocuments({ paymentStatus: "completed" }),
   ]);
@@ -310,18 +244,10 @@ export const getDashboardData = async () => {
   ];
 
   const urgentTickets = await getUrgentTickets(10);
-  const totalRevenue7Days = revenueChart.reduce((s, d) => s + d.revenue, 0);
 
   return {
     stats,
-    // Explicit revenue keys for clients expecting direct fields
     totalRevenue: totalRevenueAllTime,
-    daywiseRevenue: revenueChart,
-    revenueData: revenueChart,
-    revenueSummary: {
-      total: totalRevenue7Days,
-      avgPerDay: Math.round(totalRevenue7Days / 7),
-    },
     needsAttention: urgentTickets,
   };
 };

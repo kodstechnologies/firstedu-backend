@@ -10,6 +10,7 @@ import { createRazorpayOrder, verifyPaymentSignature } from "../utils/razorpayUt
 import { getAmountToCharge } from "../utils/offerUtils.js";
 import Offer from "../models/Offer.js";
 import offerRepository from "../repository/offer.repository.js";
+import { getCategoryRevenueSourceType, logTransaction } from "./adminRevenue.service.js";
 const fetchDescendantIds = async (categoryId) => {
   const children = await categoryRepository.findChildren(categoryId);
   let ids = [];
@@ -103,6 +104,15 @@ export const initiatePurchase = async (categoryId, studentId, paymentMethod, opt
     });
     
     await Category.updateMany({ _id: { $in: [categoryId, ...unlockedIds] } }, { $inc: { purchaseCount: 1 } });
+    await logTransaction({
+      studentId,
+      amount: 0,
+      sourceType: getCategoryRevenueSourceType(category.rootType),
+      itemId: category._id,
+      itemName: category.name,
+      categoryId: category._id,
+      paymentId: "free",
+    });
     try { await pointsService.awardCategoryPurchasePoints(studentId, category._id, category.name); } catch (e) { console.error("Points Error:", e); }
     
     return { purchase, completed: true };
@@ -126,6 +136,15 @@ export const initiatePurchase = async (categoryId, studentId, paymentMethod, opt
     
     if (couponId) await couponService.incrementCouponUsedCount(couponId);
     await Category.updateMany({ _id: { $in: [categoryId, ...unlockedIds] } }, { $inc: { purchaseCount: 1 } });
+    await logTransaction({
+      studentId,
+      amount: amountToCharge,
+      sourceType: getCategoryRevenueSourceType(category.rootType),
+      itemId: category._id,
+      itemName: category.name,
+      categoryId: category._id,
+      paymentId: "wallet",
+    });
     try { await pointsService.awardCategoryPurchasePoints(studentId, category._id, category.name); } catch (e) { console.error("Points Error:", e); }
     
     return { purchase, completed: true };
@@ -201,6 +220,15 @@ export const confirmPurchase = async (categoryId, studentId, { razorpayOrderId, 
   if (intent.couponId) await couponService.incrementCouponUsedCount(intent.couponId);
   
   await Category.updateMany({ _id: { $in: [categoryId, ...unlockedIds] } }, { $inc: { purchaseCount: 1 } });
+  await logTransaction({
+    studentId,
+    amount: purchasePrice,
+    sourceType: getCategoryRevenueSourceType(category.rootType),
+    itemId: category._id,
+    itemName: category.name,
+    categoryId: category._id,
+    paymentId: razorpayPaymentId,
+  });
   try { await pointsService.awardCategoryPurchasePoints(studentId, category._id, category.name); } catch (e) { console.error("Points Error:", e); }
 
   return purchase;
@@ -219,7 +247,14 @@ export const reconcileWebhookPurchase = async (categoryId, studentId, intent) =>
   if (!category) throw new ApiError(404, "Category not found");
 
   const existingAccess = await categoryPurchaseRepository.checkAccess(studentId, categoryId);
-  if (existingAccess) return { reconciled: true, reason: "already_purchased" };
+  if (existingAccess) {
+    return {
+      reconciled: true,
+      reason: "already_purchased",
+      categoryName: category.name,
+      pillarType: category.rootType,
+    };
+  }
 
   const purchasePrice = intent.amountPaise / 100;
   const unlockedIds = await fetchDescendantIds(categoryId);
@@ -240,7 +275,12 @@ export const reconcileWebhookPurchase = async (categoryId, studentId, intent) =>
   await Category.updateMany({ _id: { $in: [categoryId, ...unlockedIds] } }, { $inc: { purchaseCount: 1 } });
   try { await pointsService.awardCategoryPurchasePoints(studentId, category._id, category.name); } catch (e) { console.error("Points Error:", e); }
 
-  return { reconciled: true, reason: "created" };
+  return {
+    reconciled: true,
+    reason: "created",
+    categoryName: category.name,
+    pillarType: category.rootType,
+  };
 };
 
 export default {
