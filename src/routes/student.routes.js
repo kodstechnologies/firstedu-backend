@@ -292,7 +292,7 @@ router.get("/categories/:categoryId/upgrade-cost", verifyJWT, getUpgradeCost);
 router.post("/categories/:categoryId/checkout-upgrade", verifyJWT, processUpgrade);
 router.post("/categories/:categoryId/confirm-upgrade", verifyJWT, confirmUpgrade);
 
-// Coupons - Apply discount code (test, testBundle, course, olympiad, tournament, workshop, ecommerce, all)
+// Coupons - Apply discount code (test, testBundle, course, olympiad, tournament, workshop, all)
 router.post("/coupons/apply", verifyJWT, applyCoupon);
 
 // My Purchases

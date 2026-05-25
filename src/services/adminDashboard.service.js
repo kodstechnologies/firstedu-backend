@@ -226,6 +226,50 @@ const getUrgentTickets = async (limit = 10) => {
 
 
 /**
+ * Get day-wise student registration counts for current month and last month.
+ * Returns an array of objects indexed by day-of-month (1..31).
+ */
+const getStudentRegistrationComparison = async () => {
+  const currentMonth = getMonthRange(0);
+  const lastMonth = getMonthRange(-1);
+
+  const [currentResult, lastResult] = await Promise.all([
+    User.aggregate([
+      { $match: { createdAt: { $gte: currentMonth.start, $lte: currentMonth.end } } },
+      { $group: { _id: { $dayOfMonth: "$createdAt" }, count: { $sum: 1 } } },
+    ]),
+    User.aggregate([
+      { $match: { createdAt: { $gte: lastMonth.start, $lte: lastMonth.end } } },
+      { $group: { _id: { $dayOfMonth: "$createdAt" }, count: { $sum: 1 } } },
+    ]),
+  ]);
+
+  // Build a lookup map { dayOfMonth -> count }
+  const currentMap = {};
+  currentResult.forEach((r) => { currentMap[r._id] = r.count; });
+  const lastMap = {};
+  lastResult.forEach((r) => { lastMap[r._id] = r.count; });
+
+  // Determine how many days to show (max days in either month, capped at today for current)
+  const today = new Date();
+  const daysInCurrentMonth = today.getDate(); // only up to today
+  const daysInLastMonth = new Date(lastMonth.end).getDate();
+  const maxDays = Math.max(daysInCurrentMonth, daysInLastMonth);
+
+  const data = [];
+  for (let day = 1; day <= maxDays; day++) {
+    data.push({
+      day,
+      thisMonth: currentMap[day] ?? 0,
+      lastMonth: lastMap[day] ?? 0,
+    });
+  }
+
+  return data;
+};
+
+
+/**
  * Admin Dashboard - main aggregation
  * KPIs: current month = main value, last month = comparison
  */
@@ -247,6 +291,7 @@ export const getDashboardData = async () => {
     totalStudents,
     totalTestsSold,
     chartData,
+    studentRegistrationData,
   ] = await Promise.all([
     getRazorpayRevenueInRange(currentMonth.start, currentMonth.end),
     getRazorpayRevenueInRange(lastMonth.start, lastMonth.end),
@@ -261,6 +306,7 @@ export const getDashboardData = async () => {
     User.countDocuments({}),
     TestPurchase.countDocuments({ paymentStatus: "completed" }),
     getDailyRevenueLast7Days(),
+    getStudentRegistrationComparison(),
   ]);
 
   const formatCurrency = (n) => `₹${Number(n).toLocaleString("en-IN")}`;
@@ -314,6 +360,7 @@ export const getDashboardData = async () => {
     revenueData: chartData.revenueData,
     revenueSummary: chartData.revenueSummary,
     needsAttention: urgentTickets,
+    studentRegistrationData,
   };
 };
 

@@ -11,7 +11,6 @@ const MODULE_TO_ITEM_TYPE = {
   "Skill Development": "Skill Development",
   Tournament: "tournament",
   Workshop: "workshop",
-  Ecommerce: "ecommerce",
   CompetitionCategory: "competitionCategory",
   LiveCompetition: "live_competition",
 };

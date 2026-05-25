@@ -1,6 +1,7 @@
 import Test from "../models/Test.js";
 import Category from "../models/Category.js";
 import { attachOfferToList } from "../utils/offerUtils.js";
+import categoryRepository from "../repository/category.repository.js";
 
 /**
  * Walk the category tree upward from `startId` and return a
@@ -52,8 +53,11 @@ export const getCompetitiveTests = async (options = {}) => {
   const limitNum = parseInt(limit);
   const skip = (pageNum - 1) * limitNum;
 
-  // Use Test.categoryId as the strict source of truth — tests belong only to the subcategory they were created in
-  const query = { categoryId };
+  const query = {};
+  if (categoryId) {
+    const descendantIds = await categoryRepository.findDescendantIds(categoryId);
+    query.categoryId = { $in: descendantIds };
+  }
   // When isPublished flag is provided, filter by publish status.
   // Student routes pass isPublished: true so draft tests are never exposed.
   // Admin routes omit this flag so all tests (including drafts) are returned.

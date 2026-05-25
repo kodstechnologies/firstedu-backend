@@ -6,9 +6,9 @@ import couponValidator from "../validation/coupon.validator.js";
 
 /**
  * Apply coupon - validate code and get discount for a purchase.
- * Works for: test, testBundle, course, olympiad, tournament, workshop, ecommerce, all.
+ * Works for: test, testBundle, course, olympiad, tournament, workshop, all.
  * - itemType "all": coupon applicableTo must be "all" (works on any amount system)
- * - Pass amount in rupees (or points for ecommerce) to get discounted price.
+ * - Pass amount in rupees to get discounted price.
  */
 export const applyCoupon = asyncHandler(async (req, res) => {
   const { error, value } = couponValidator.applyCoupon.validate(req.body);

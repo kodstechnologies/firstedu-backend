@@ -1,6 +1,7 @@
 import Test from "../models/Test.js";
 import Category from "../models/Category.js";
 import { attachOfferToList } from "../utils/offerUtils.js";
+import categoryRepository from "../repository/category.repository.js";
 
 /**
  * Walk the category tree upward from `startId` and return a
@@ -52,8 +53,11 @@ export const getSkillTests = async (options = {}) => {
   const limitNum = parseInt(limit);
   const skip = (pageNum - 1) * limitNum;
 
-  // Use Test.categoryId as the strict source of truth — tests belong only to the subcategory they were created in
-  const query = { categoryId, applicableFor: { $in: ["Skill Development", "test"] } };
+  const query = { applicableFor: { $in: ["Skill Development", "test"] } };
+  if (categoryId) {
+    const descendantIds = await categoryRepository.findDescendantIds(categoryId);
+    query.categoryId = { $in: descendantIds };
+  }
   // Student routes pass isPublished: true; admin routes omit so drafts remain visible.
   if (isPublished !== undefined) {
     query.isPublished = isPublished;

@@ -46,7 +46,13 @@ export const getOlympiads = async (options = {}) => {
 
   let query = {};
   
-  if (categoryId) query.categoryId = categoryId;
+  if (categoryId) {
+    if (typeof categoryId === 'string' && categoryId.includes(',')) {
+      query.categoryId = { $in: categoryId.split(',') };
+    } else {
+      query.categoryId = categoryId;
+    }
+  }
 
   if (search) {
     query.$or = [

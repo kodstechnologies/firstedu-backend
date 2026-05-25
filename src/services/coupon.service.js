@@ -163,8 +163,6 @@ export const validateCoupon = async (
     tournament: "Tournament",
     workshop: "Workshop",
     workshops: "Workshop",
-    ecommerce: "Ecommerce",
-    merchandise: "Ecommerce",
     competitionCategory: "CompetitionCategory",
     live_competition: "LiveCompetition",
   };

@@ -20,7 +20,6 @@ const offerSchema = new mongoose.Schema(
         "Olympiads",
         "Tournament",
         "Workshop",
-        "Ecommerce",
         "CompetitionCategory",
         "LiveCompetition",
         "School",
