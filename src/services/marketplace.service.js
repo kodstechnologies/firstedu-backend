@@ -23,6 +23,7 @@ import OlympiadTest from "../models/OlympiadTest.js";
 import { getOlympiads } from "./studentOlympiad.service.js";
 import { getTournaments } from "./tournament.service.js";
 import FreeMaterial from "../models/FreeMaterial.js";
+import Certificate from "../models/Certificate.js";
 
 const buildCategoryPathsMap = async () => {
   const categories = await Category.find({}).select('name parent').lean();
@@ -203,6 +204,59 @@ export const getCourseById = async (courseId, studentId) => {
   const courseData = await attachOfferToItem(course, "Course", "price");
   courseData.isPurchased = !!purchase;
   if (!courseData.isPurchased) delete courseData.contentUrl;
+
+  if (courseData.isCertification) {
+    const links = await courseTestLinkRepository.findAll(
+      { course: courseId },
+      { sortBy: "order", sortOrder: "asc" }
+    );
+    const linkedTests = links.map((link) => link.test).filter(Boolean);
+    const testIds = linkedTests.map((test) => test._id || test).filter(Boolean);
+    const statusMap =
+      studentId && testIds.length
+        ? await examSessionRepository.getSessionStatusMapByStudent(
+            studentId,
+            testIds
+          )
+        : {};
+    const completedCount = testIds.filter(
+      (testId) => statusMap[testId.toString()]?.status === "completed"
+    ).length;
+
+    courseData.modules = (courseData.modules || []).map((module, index) => {
+      const testId = module.test?._id || module.test;
+      const test = linkedTests.find(
+        (item) => (item._id || item)?.toString() === testId?.toString()
+      );
+      return {
+        ...module,
+        order: module.order ?? index,
+        test,
+        testStatus: testId
+          ? statusMap[testId.toString()]?.status || "not_started"
+          : "not_started",
+        sessionId: testId ? statusMap[testId.toString()]?.sessionId || null : null,
+      };
+    });
+    courseData.certificationTests = linkedTests.map((test) => ({
+      ...(test.toObject?.() ?? test),
+      status:
+        statusMap[(test._id || test).toString()]?.status || "not_started",
+      sessionId: statusMap[(test._id || test).toString()]?.sessionId || null,
+    }));
+    courseData.certificationTestCount = testIds.length;
+    courseData.completedCertificationTestCount = completedCount;
+    courseData.certificateEligible = testIds.length > 0 && completedCount === testIds.length;
+    const certificate =
+      studentId && courseData.certificateEligible
+        ? await Certificate.findOne({
+            student: studentId,
+            title: `${courseData.title} - Completion`,
+          }).select("_id title issuedAt pdfUrl")
+        : null;
+    courseData.certificate = certificate;
+    courseData.certificateIssued = Boolean(certificate);
+  }
 
   return courseData;
 };

@@ -197,6 +197,15 @@ const courseUploadFileFilter = (req, file, cb) => {
       false
     );
   }
+  if (field.startsWith("moduleFiles_")) {
+    if (courseStudyMaterialTypes.includes(file.mimetype)) {
+      return cb(null, true);
+    }
+    return cb(
+      new Error("Module material must be PDF, video, or audio (MP4, MP3, WAV, etc.)"),
+      false
+    );
+  }
   cb(new Error("Unexpected field"), false);
 };
 
@@ -204,7 +213,4 @@ export const uploadCourseMaterial = multer({
   storage,
   fileFilter: courseUploadFileFilter,
   limits: { fileSize: 500 * 1024 * 1024 }, // 500MB
-}).fields([
-  { name: "image", maxCount: 1 },
-  { name: "pdf", maxCount: 30 },
-]);
+}).any();

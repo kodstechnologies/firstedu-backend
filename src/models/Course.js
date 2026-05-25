@@ -29,6 +29,29 @@ const courseSchema = new mongoose.Schema(
         originalName: { type: String, trim: true },
       },
     ],
+    modules: [
+      {
+        title: { type: String, required: true, trim: true },
+        description: { type: String, trim: true, default: "" },
+        contents: [
+          {
+            url: { type: String, required: true, trim: true },
+            type: {
+              type: String,
+              enum: ["pdf", "video", "audio"],
+              required: true,
+            },
+            originalName: { type: String, trim: true },
+          },
+        ],
+        test: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Test",
+          default: null,
+        },
+        order: { type: Number, default: 0 },
+      },
+    ],
     price: {
       type: Number,
       default: 0,

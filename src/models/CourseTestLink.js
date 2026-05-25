@@ -16,6 +16,15 @@ const courseTestLinkSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    moduleId: {
+      type: mongoose.Schema.Types.ObjectId,
+      default: null,
+    },
+    moduleTitle: {
+      type: String,
+      trim: true,
+      default: "",
+    },
     isRequired: {
       type: Boolean,
       default: true,

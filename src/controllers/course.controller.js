@@ -18,7 +18,12 @@ export const createCourse = asyncHandler(async (req, res) => {
   }
 
   const files = req.files || {};
-  if (!files.pdf || files.pdf.length === 0) {
+  const isCertification =
+    value.isCertification === true || value.isCertification === "true";
+  const hasGlobalStudyMaterial = Array.isArray(files)
+    ? files.some((file) => file.fieldname === "pdf")
+    : Boolean(files.pdf?.length);
+  if (!isCertification && !hasGlobalStudyMaterial) {
     throw new ApiError(400, "At least one study material file is required (PDF, video, or audio). Use field 'pdf'.");
   }
 
