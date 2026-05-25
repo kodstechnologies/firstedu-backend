@@ -24,6 +24,7 @@ import { getOlympiads } from "./studentOlympiad.service.js";
 import { getTournaments } from "./tournament.service.js";
 import FreeMaterial from "../models/FreeMaterial.js";
 import Certificate from "../models/Certificate.js";
+import { logTransaction } from "./adminRevenue.service.js";
 
 const buildCategoryPathsMap = async () => {
   const categories = await Category.find({}).select('name parent').lean();
@@ -300,6 +301,15 @@ export const initiateCoursePayment = async (courseId, studentId, paymentMethod, 
       paymentId: "free",
       paymentStatus: "completed",
     });
+    await logTransaction({
+      studentId,
+      amount: 0,
+      sourceType: "course",
+      itemId: courseId,
+      itemName: course.title || "Course",
+      categoryId: course.categoryIds && course.categoryIds[0] ? course.categoryIds[0] : null,
+      paymentId: "free"
+    });
     try {
       await pointsService.awardCoursePurchasePoints(studentId, courseId, course.title || "Course");
     } catch (error) {
@@ -327,6 +337,15 @@ export const initiateCoursePayment = async (courseId, studentId, paymentMethod, 
       purchasePrice: amountToCharge,
       paymentId: "wallet",
       paymentStatus: "completed",
+    });
+    await logTransaction({
+      studentId,
+      amount: amountToCharge,
+      sourceType: "course",
+      itemId: courseId,
+      itemName: course.title || "Course",
+      categoryId: course.categoryIds && course.categoryIds[0] ? course.categoryIds[0] : null,
+      paymentId: "wallet"
     });
     if (couponId) {
       await couponService.incrementCouponUsedCount(couponId);

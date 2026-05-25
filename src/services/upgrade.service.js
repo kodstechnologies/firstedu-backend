@@ -20,6 +20,7 @@ import walletService from "./wallet.service.js";
 import razorpayOrderIntentRepository from "../repository/razorpayOrderIntent.repository.js";
 import { createRazorpayOrder, verifyPaymentSignature } from "../utils/razorpayUtils.js";
 import { resolveAccessStatus, fetchDescendantIds } from "../utils/categoryAccessUtils.js";
+import { logTransaction } from "./adminRevenue.service.js";
 
 // ─── calculateUpgradeCost ─────────────────────────────────────────────────────
 
@@ -96,6 +97,15 @@ export const processUpgrade = async (studentId, categoryId, paymentMethod = "fre
     }
     // Auto-unlock: push all new IDs into the student's existing purchase doc
     await categoryPurchaseRepository.acknowledgeUpgrade(purchase._id, newCategoryIds);
+    await logTransaction({
+      studentId,
+      amount: 0,
+      sourceType: "category_upgrade",
+      itemId: purchase._id,
+      itemName: "Category Upgrade (Free)",
+      categoryId: categoryId,
+      paymentId: "free"
+    });
     return {
       completed: true,
       message: `Auto-upgrade successful. New items unlocked at no cost.`,
@@ -108,6 +118,15 @@ export const processUpgrade = async (studentId, categoryId, paymentMethod = "fre
     if (upgradeCost <= 0) {
       // Redirect to free if cost is nothing — don't deduct unnecessarily
       await categoryPurchaseRepository.acknowledgeUpgrade(purchase._id, newCategoryIds);
+      await logTransaction({
+        studentId,
+        amount: 0,
+        sourceType: "category_upgrade",
+        itemId: purchase._id,
+        itemName: "Category Upgrade (Wallet-Free)",
+        categoryId: categoryId,
+        paymentId: "wallet"
+      });
       return {
         completed: true,
         message: `Auto-upgrade successful. New items unlocked at no cost.`,
@@ -119,6 +138,15 @@ export const processUpgrade = async (studentId, categoryId, paymentMethod = "fre
     // Push new IDs immediately after payment and record the amount paid
     // so the next upgrade cost calculation uses the updated baseline (prevents infinite loop).
     await categoryPurchaseRepository.acknowledgeUpgrade(purchase._id, newCategoryIds, upgradeCost);
+    await logTransaction({
+      studentId,
+      amount: upgradeCost,
+      sourceType: "category_upgrade",
+      itemId: purchase._id,
+      itemName: "Category Upgrade (Wallet)",
+      categoryId: categoryId,
+      paymentId: "wallet"
+    });
     return {
       completed: true,
       message: `Upgrade successful. ₹${upgradeCost} deducted from wallet. New items unlocked.`,

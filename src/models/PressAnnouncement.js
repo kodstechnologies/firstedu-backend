@@ -24,9 +24,15 @@ const pressAnnouncementSchema = new mongoose.Schema(
       trim: true,
     },
     description: {
-      type: String,
+      type: [String],
       required: [true, "Description is required"],
-      trim: true,
+      validate: {
+        validator: function (v) {
+          return Array.isArray(v) && v.every((item) => typeof item === "string");
+        },
+        message: "Description must be an array of strings",
+      },
+      default: [],
     },
     image: {
       type: String,

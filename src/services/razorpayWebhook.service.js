@@ -9,6 +9,7 @@ import eventRegistrationRepository from "../repository/eventRegistration.reposit
 import walletService from "./wallet.service.js";
 import categoryPurchaseService from "./categoryPurchase.service.js";
 import categoryPurchaseRepository from "../repository/categoryPurchase.repository.js";
+import { getCategoryRevenueSourceType, logTransaction } from "./adminRevenue.service.js";
 
 const LOG_PREFIX = "[Razorpay Webhook]";
 
@@ -98,6 +99,15 @@ async function reconcilePaymentCaptured(orderId, paymentId, amountPaise) {
     } catch (e) {
       console.error(`${LOG_PREFIX} points award failed:`, e.message);
     }
+    await logTransaction({
+      studentId,
+      amount: amountPaise / 100,
+      sourceType: "course",
+      itemId: entityId,
+      itemName: course.title || "Course",
+      categoryId: course.categoryIds && course.categoryIds[0] ? course.categoryIds[0] : null,
+      paymentId
+    });
   } else if (type === "test") {
     const existing = await orderRepository.findTestPurchase({
       student: studentId,
@@ -118,6 +128,15 @@ async function reconcilePaymentCaptured(orderId, paymentId, amountPaise) {
       purchasePrice: test.price,
       paymentId,
       paymentStatus: "completed",
+    });
+    await logTransaction({
+      studentId,
+      amount: amountPaise / 100,
+      sourceType: "test",
+      itemId: entityId,
+      itemName: test.title || "Test",
+      categoryId: test.schoolCategory || test.skillCategory || null,
+      paymentId
     });
   } else if (type === "bundle") {
     const existing = await orderRepository.findTestPurchase({
@@ -140,6 +159,15 @@ async function reconcilePaymentCaptured(orderId, paymentId, amountPaise) {
       paymentId,
       paymentStatus: "completed",
     });
+    await logTransaction({
+      studentId,
+      amount: amountPaise / 100,
+      sourceType: "test_bundle",
+      itemId: entityId,
+      itemName: bundle.name || "Test Bundle",
+      categoryId: bundle.schoolCategory || bundle.skillCategory || null,
+      paymentId
+    });
   } else if (type === "tournament" || type === "workshop") {
     const existing = await eventRegistrationRepository.findOne({
       student: studentId,
@@ -160,9 +188,25 @@ async function reconcilePaymentCaptured(orderId, paymentId, amountPaise) {
       paymentStatus: "completed",
       paymentId,
     });
+    await logTransaction({
+      studentId,
+      amount: amountPaise / 100,
+      sourceType: type,
+      itemId: entityId,
+      itemName: `${type.charAt(0).toUpperCase() + type.slice(1)} Registration`,
+      paymentId
+    });
   } else if (type === "wallet") {
     const amountRupees = Math.round(amountPaise / 100);
     await walletService.addMonetaryBalance(studentId, amountRupees, paymentId, "User");
+    await logTransaction({
+      studentId,
+      amount: amountRupees,
+      sourceType: "wallet",
+      itemId: studentId,
+      itemName: "Wallet Recharge",
+      paymentId
+    });
   } else if (type === "categoryNode" || ["Olympiads", "School", "Competitive", "Skill Development"].includes(type)) {
     try {
       const purchaseResult = await categoryPurchaseService.reconcileWebhookPurchase(entityId, studentId, {
@@ -172,6 +216,15 @@ async function reconcilePaymentCaptured(orderId, paymentId, amountPaise) {
       });
       if (purchaseResult.reconciled) {
         await razorpayOrderIntentRepository.markReconciled(orderId, paymentId);
+        await logTransaction({
+          studentId,
+          amount: amountPaise / 100,
+          sourceType: getCategoryRevenueSourceType(purchaseResult.pillarType),
+          itemId: entityId,
+          itemName: purchaseResult.categoryName || "Category Purchase",
+          categoryId: entityId,
+          paymentId
+        });
         return { reconciled: true, reason: purchaseResult.reason };
       }
     } catch (e) {
@@ -187,6 +240,18 @@ async function reconcilePaymentCaptured(orderId, paymentId, amountPaise) {
         await categoryPurchaseRepository.updateUnlockedIds(entityId, newCategoryIds);
       }
       await razorpayOrderIntentRepository.markReconciled(orderId, paymentId);
+      
+      const categoryIdForUpgrade = intent.metadata?.categoryId || entityId;
+      await logTransaction({
+        studentId,
+        amount: amountPaise / 100,
+        sourceType: "category_upgrade",
+        itemId: entityId,
+        itemName: "Category Upgrade",
+        categoryId: categoryIdForUpgrade,
+        paymentId
+      });
+      
       return { reconciled: true, reason: "upgrade_created" };
     } catch (e) {
       console.error(`${LOG_PREFIX} categoryUpgrade error:`, e.message);

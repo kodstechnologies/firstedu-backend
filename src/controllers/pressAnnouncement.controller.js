@@ -13,6 +13,15 @@ function normalizeBody(body) {
       b.highlights = b.highlights ? b.highlights.split(",").map((s) => s.trim()) : [];
     }
   }
+  if (typeof b.description === "string") {
+    try {
+      b.description = JSON.parse(b.description);
+    } catch {
+      b.description = [b.description];
+    }
+  } else if (!b.description) {
+    b.description = [];
+  }
   return b;
 }
 
