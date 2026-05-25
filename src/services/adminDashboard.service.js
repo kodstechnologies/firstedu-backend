@@ -98,6 +98,66 @@ const getRazorpayTotalRevenue = async () => {
 };
 
 /**
+ * Get daily revenue for the last 7 days
+ */
+const getDailyRevenueLast7Days = async () => {
+  const today = new Date();
+  today.setHours(23, 59, 59, 999);
+  const sevenDaysAgo = new Date(today);
+  sevenDaysAgo.setDate(today.getDate() - 6);
+  sevenDaysAgo.setHours(0, 0, 0, 0);
+
+  const transactions = await RevenueTransaction.aggregate([
+    {
+      $match: {
+        paymentStatus: "completed",
+        purchasedAt: { $gte: sevenDaysAgo, $lte: today },
+      },
+    },
+    {
+      $group: {
+        _id: {
+          $dateToString: { format: "%Y-%m-%d", date: "$purchasedAt" }
+        },
+        revenue: { $sum: "$amount" }
+      }
+    }
+  ]);
+
+  const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const daywiseRevenue = [];
+  let total7Days = 0;
+
+  for (let i = 0; i <= 6; i++) {
+    const d = new Date(sevenDaysAgo);
+    d.setDate(d.getDate() + i);
+    const dateStr = d.toISOString().split("T")[0];
+    const match = transactions.find((t) => t._id === dateStr);
+    const rev = match ? Math.round(match.revenue) : 0;
+    
+    total7Days += rev;
+    
+    // Maintain standard Date format at midnight UTC for consistency if needed by frontend
+    const dUTC = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    
+    daywiseRevenue.push({
+      day: days[d.getDay()],
+      revenue: rev,
+      date: dUTC.toISOString()
+    });
+  }
+
+  return {
+    daywiseRevenue,
+    revenueData: daywiseRevenue,
+    revenueSummary: {
+      total: total7Days,
+      avgPerDay: Math.round(total7Days / 7)
+    }
+  };
+};
+
+/**
  * Get count of test purchases in date range
  */
 const getTestsSoldInRange = async (start, end) => {
@@ -186,6 +246,7 @@ export const getDashboardData = async () => {
     totalRevenueAllTime,
     totalStudents,
     totalTestsSold,
+    chartData,
   ] = await Promise.all([
     getRazorpayRevenueInRange(currentMonth.start, currentMonth.end),
     getRazorpayRevenueInRange(lastMonth.start, lastMonth.end),
@@ -199,6 +260,7 @@ export const getDashboardData = async () => {
     getRazorpayTotalRevenue(),
     User.countDocuments({}),
     TestPurchase.countDocuments({ paymentStatus: "completed" }),
+    getDailyRevenueLast7Days(),
   ]);
 
   const formatCurrency = (n) => `₹${Number(n).toLocaleString("en-IN")}`;
@@ -248,6 +310,9 @@ export const getDashboardData = async () => {
   return {
     stats,
     totalRevenue: totalRevenueAllTime,
+    daywiseRevenue: chartData.daywiseRevenue,
+    revenueData: chartData.revenueData,
+    revenueSummary: chartData.revenueSummary,
     needsAttention: urgentTickets,
   };
 };
