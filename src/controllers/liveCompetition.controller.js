@@ -9,7 +9,7 @@ import liveCompetitionValidator from "../validation/liveCompetition.validator.js
 // ─── Event Management ────────────────────────────────────
 
 export const createEvent = asyncHandler(async (req, res) => {
-  const { error, value } = liveCompetitionValidator.createEvent.validate(req.body);
+  const { error, value } = liveCompetitionValidator.createEvent.validate(req.body, { stripUnknown: true });
   if (error) {
     throw new ApiError(400, "Validation Error", error.details.map((x) => x.message));
   }
@@ -33,7 +33,7 @@ export const getEventById = asyncHandler(async (req, res) => {
 
 export const updateEvent = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { error, value } = liveCompetitionValidator.updateEvent.validate(req.body);
+  const { error, value } = liveCompetitionValidator.updateEvent.validate(req.body, { stripUnknown: true });
   if (error) {
     throw new ApiError(400, "Validation Error", error.details.map((x) => x.message));
   }
@@ -51,8 +51,8 @@ export const deleteEvent = asyncHandler(async (req, res) => {
 
 export const getSubmissionsByEvent = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { page, limit } = req.query;
-  const result = await liveCompetitionService.getSubmissionsByEvent(id, { page, limit });
+  const { page, limit, round } = req.query;
+  const result = await liveCompetitionService.getSubmissionsByEvent(id, { page, limit, round });
   return res.status(200).json(
     ApiResponse.success(
       result.submissions,
@@ -84,7 +84,27 @@ export const deleteSubmission = asyncHandler(async (req, res) => {
   return res.status(200).json(ApiResponse.success(null, "Submission deleted successfully"));
 });
 
-// ─── Winner System ────────────────────────────────────────
+// ─── Qualifier & Winner System ────────────────────────────
+
+export const qualifyStudents = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { error, value } = liveCompetitionValidator.qualifyStudents.validate(req.body);
+  if (error) {
+    throw new ApiError(400, "Validation Error", error.details.map((x) => x.message));
+  }
+  const result = await liveCompetitionService.qualifyStudents(id, req.user._id, value);
+  return res.status(200).json(ApiResponse.success(result, "Students qualified successfully"));
+});
+
+export const declareResult = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { error, value } = liveCompetitionValidator.declareResult.validate(req.body);
+  if (error) {
+    throw new ApiError(400, "Validation Error", error.details.map((x) => x.message));
+  }
+  const result = await liveCompetitionService.declareResult(id, value);
+  return res.status(200).json(ApiResponse.success(result, "Result declared successfully"));
+});
 
 export const declareWinner = asyncHandler(async (req, res) => {
   const { id } = req.params;
@@ -93,14 +113,15 @@ export const declareWinner = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Validation Error", error.details.map((x) => x.message));
   }
   const result = await liveCompetitionService.declareWinner(id, value);
-  return res.status(200).json(ApiResponse.success(result, "Winner declared successfully"));
+  return res.status(200).json(ApiResponse.success(result, "Winners declared successfully"));
 });
 
 // ─── Analytics ────────────────────────────────────────────
 
 export const getEventStats = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const stats = await liveCompetitionService.getEventStats(id);
+  const { round } = req.query;
+  const stats = await liveCompetitionService.getEventStats(id, { round });
   return res.status(200).json(ApiResponse.success(stats, "Event stats fetched successfully"));
 });
 
@@ -129,7 +150,8 @@ export const getPublishedEventById = asyncHandler(async (req, res) => {
 
 export const registerForEvent = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const registration = await liveCompetitionService.registerForEvent(id, req.user._id);
+  const { round } = req.body;
+  const registration = await liveCompetitionService.registerForEvent(id, req.user._id, { round });
   return res
     .status(201)
     .json(ApiResponse.success(registration, "Registered for live competition successfully"));
@@ -148,7 +170,7 @@ export const initiateLiveCompetitionPayment = asyncHandler(async (req, res) => {
     id,
     studentId,
     value.paymentMethod,
-    { couponCode: value?.couponCode }
+    { couponCode: value?.couponCode, round: value?.round }
   );
 
   if (result.completed) {
@@ -203,7 +225,8 @@ export const getMySubmissions = asyncHandler(async (req, res) => {
 
 export const startEssaySession = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const session = await liveCompetitionService.startEssaySession(id, req.user._id);
+  const { round } = req.body;
+  const session = await liveCompetitionService.startEssaySession(id, req.user._id, { round });
   return res
     .status(200)
     .json(ApiResponse.success(session, "Essay session started successfully"));
