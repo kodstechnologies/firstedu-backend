@@ -80,11 +80,9 @@ export const getTests = async (options = {}) => {
   }
 
   if (options.excludeAssigned === 'true' || options.excludeAssigned === true) {
-    if (options.applicableFor === 'testBundle') {
-      const usedIds = await testRepository.findAllUsedBundleTestIds(options.includeBundleId);
-      if (usedIds.length > 0) {
-        query._id = { $nin: usedIds };
-      }
+    const usedIds = await testRepository.findAllUsedBundleTestIds(options.includeBundleId);
+    if (usedIds.length > 0) {
+      query._id = { $nin: usedIds };
     }
   }
   const result = await testRepository.findAllTests(query, options);
