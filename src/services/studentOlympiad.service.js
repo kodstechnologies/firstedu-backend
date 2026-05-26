@@ -10,6 +10,7 @@ import studentRepository from "../repository/student.repository.js";
 import { sendEventRegistrationEmail } from "../utils/sendEmail.js";
 import { attachOfferToList, attachOfferToItem, getAmountToCharge } from "../utils/offerUtils.js";
 import examSessionRepository from "../repository/examSession.repository.js";
+import { logTransaction } from "./adminRevenue.service.js";
 
 const VALID_STATUSES = ["upcoming", "open", "live", "completed", "past", "close"];
 
@@ -275,6 +276,17 @@ export const initiateOlympiadRegistration = async (id, studentId, options) => {
     // Increment purchase count
     await OlympiadTest.findByIdAndUpdate(id, { $inc: { purchaseCount: 1 } });
     
+    await logTransaction({
+      studentId,
+      amount: 0,
+      sourceType: "olympiads",
+      itemId: id,
+      itemName: olympiad.title,
+      categoryId: olympiad.categoryId?._id || olympiad.categoryId,
+      paymentId: "free",
+      paymentStatus: "completed"
+    });
+    
     return { completed: true, registration: reg };
   }
 
@@ -295,6 +307,18 @@ export const initiateOlympiadRegistration = async (id, studentId, options) => {
     });
     
     await OlympiadTest.findByIdAndUpdate(id, { $inc: { purchaseCount: 1 } });
+
+    await logTransaction({
+      studentId,
+      amount: amountToCharge,
+      sourceType: "olympiads",
+      itemId: id,
+      itemName: olympiad.title,
+      categoryId: olympiad.categoryId?._id || olympiad.categoryId,
+      paymentId: "wallet",
+      paymentStatus: "completed"
+    });
+
     return { completed: true, registration: reg };
   }
 
@@ -360,6 +384,17 @@ export const completeOlympiadRegistration = async (id, studentId, paymentData) =
 
   await razorpayOrderIntentRepository.markReconciled(razorpayOrderId, razorpayPaymentId);
   await OlympiadTest.findByIdAndUpdate(id, { $inc: { purchaseCount: 1 } });
+
+  await logTransaction({
+    studentId,
+    amount: intent.amountPaise / 100,
+    sourceType: "olympiads",
+    itemId: id,
+    itemName: olympiad.title,
+    categoryId: olympiad.categoryId?._id || olympiad.categoryId,
+    paymentId: razorpayPaymentId,
+    paymentStatus: "completed"
+  });
 
   (async () => {
     try {

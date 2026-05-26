@@ -6,7 +6,13 @@ import MerchandiseClaim from "../models/MerchandiseClaim.js";
 import EventRegistration from "../models/EventRegistration.js";
 import LiveCompetitionSubmission from "../models/LiveCompetitionSubmission.js";
 import CategoryPurchase from "../models/CategoryPurchase.js";
+import OlympiadTest from "../models/OlympiadTest.js";
 import { ApiError } from "../utils/ApiError.js";
+
+// Register missing Olympiad model alias to prevent Mongoose populate error
+if (!mongoose.models.Olympiad) {
+  mongoose.model("Olympiad", OlympiadTest.schema);
+}
 
 const findOrderById = async (id) => {
   try {
@@ -120,7 +126,7 @@ const findEventRegistrations = async (studentId) => {
   try {
     return await EventRegistration.find({
       student: studentId,
-      eventType: { $in: ["tournament", "workshop"] },
+      eventType: { $in: ["tournament", "workshop", "olympiad"] },
       paymentStatus: "completed",
     })
       .populate("eventId", "title price")

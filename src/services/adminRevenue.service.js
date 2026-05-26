@@ -15,6 +15,21 @@ const CATEGORY_SOURCE_BY_PILLAR = {
 export const getCategoryRevenueSourceType = (pillar) =>
   CATEGORY_SOURCE_BY_PILLAR[pillar] || "competition_category";
 
+import Category from "../models/Category.js";
+
+const getCategoryAndDescendants = async (cid) => {
+  const allIds = [new Category.db.base.Types.ObjectId(cid)];
+  let currentParents = [cid];
+  while (currentParents.length > 0) {
+    const children = await Category.find({ parent: { $in: currentParents } }).select("_id").lean();
+    if (children.length === 0) break;
+    const childIds = children.map((c) => c._id);
+    allIds.push(...childIds);
+    currentParents = childIds;
+  }
+  return allIds;
+};
+
 /**
  * Get revenue history from the dedicated RevenueTransaction model.
  * Supports filtering, pagination, and search.
@@ -138,6 +153,7 @@ export const getRevenueHistory = async ({
   }
 
   if (categoryId && subCategory) {
+    const allDescendantIds = await getCategoryAndDescendants(categoryId);
     const fallback = {
       $and: [
         { categoryId: null },
@@ -152,12 +168,13 @@ export const getRevenueHistory = async ({
     
     andConditions.push({
       $or: [
-        { categoryId: new Category.db.base.Types.ObjectId(categoryId) },
+        { categoryId: { $in: allDescendantIds } },
         fallback
       ]
     });
   } else if (categoryId) {
-    andConditions.push({ categoryId: new Category.db.base.Types.ObjectId(categoryId) });
+    const allDescendantIds = await getCategoryAndDescendants(categoryId);
+    andConditions.push({ categoryId: { $in: allDescendantIds } });
   } else if (subCategory) {
     andConditions.push({ subCategoryName: { $regex: new RegExp(`^${escapeRegex(String(subCategory).trim())}$`, "i") } });
   } else if (pillar) {
@@ -309,7 +326,7 @@ export const getRevenueHistory = async ({
   };
 };
 
-import Category from "../models/Category.js";
+// Category model already imported at top
 
 const resolveCategoryDetails = async (categoryId) => {
   if (!categoryId) return { categoryName: "-", subCategoryName: "-" };

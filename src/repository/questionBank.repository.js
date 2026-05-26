@@ -1,5 +1,6 @@
 import QuestionBank from "../models/QuestionBank.js";
 import Question from "../models/Question.js";
+import Test from "../models/Test.js";
 import mongoose from "mongoose";
 import { ApiError } from "../utils/ApiError.js";
 
@@ -113,8 +114,25 @@ const findAll = async (filter = {}, options = {}) => {
       QuestionBank.countDocuments(query),
     ]);
 
+    // Tag each bank with isUsedInTest / usedInTestTitle (single batched query)
+    const itemIds = items.map((b) => b._id);
+    const usedTests = await Test.find({ questionBank: { $in: itemIds } })
+      .select("title questionBank")
+      .lean();
+    const bankToTest = new Map();
+    usedTests.forEach((t) => {
+      bankToTest.set(t.questionBank.toString(), t.title);
+    });
+    const taggedItems = items.map((bank) => {
+      const plain = bank.toObject ? bank.toObject({ virtuals: true }) : { ...bank };
+      const testTitle = bankToTest.get(plain._id.toString());
+      plain.isUsedInTest = !!testTitle;
+      plain.usedInTestTitle = testTitle || null;
+      return plain;
+    });
+
     return {
-      items,
+      items: taggedItems,
       pagination: {
         page: pageNum,
         limit: limitNum,
