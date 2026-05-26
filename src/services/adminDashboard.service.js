@@ -270,6 +270,58 @@ const getStudentRegistrationComparison = async () => {
 
 
 /**
+ * Get day-wise tests sold counts for current month and last month.
+ * Returns an array of objects indexed by day-of-month (1..31).
+ */
+const getTestSoldComparison = async () => {
+  const currentMonth = getMonthRange(0);
+  const lastMonth = getMonthRange(-1);
+
+  const [currentResult, lastResult] = await Promise.all([
+    TestPurchase.aggregate([
+      {
+        $match: {
+          paymentStatus: "completed",
+          purchaseDate: { $gte: currentMonth.start, $lte: currentMonth.end },
+        },
+      },
+      { $group: { _id: { $dayOfMonth: "$purchaseDate" }, count: { $sum: 1 } } },
+    ]),
+    TestPurchase.aggregate([
+      {
+        $match: {
+          paymentStatus: "completed",
+          purchaseDate: { $gte: lastMonth.start, $lte: lastMonth.end },
+        },
+      },
+      { $group: { _id: { $dayOfMonth: "$purchaseDate" }, count: { $sum: 1 } } },
+    ]),
+  ]);
+
+  const currentMap = {};
+  currentResult.forEach((r) => { currentMap[r._id] = r.count; });
+  const lastMap = {};
+  lastResult.forEach((r) => { lastMap[r._id] = r.count; });
+
+  const today = new Date();
+  const daysInCurrentMonth = today.getDate();
+  const daysInLastMonth = new Date(lastMonth.end).getDate();
+  const maxDays = Math.max(daysInCurrentMonth, daysInLastMonth);
+
+  const data = [];
+  for (let day = 1; day <= maxDays; day++) {
+    data.push({
+      day,
+      thisMonth: currentMap[day] ?? 0,
+      lastMonth: lastMap[day] ?? 0,
+    });
+  }
+
+  return data;
+};
+
+
+/**
  * Admin Dashboard - main aggregation
  * KPIs: current month = main value, last month = comparison
  */
@@ -292,6 +344,7 @@ export const getDashboardData = async () => {
     totalTestsSold,
     chartData,
     studentRegistrationData,
+    testSoldData,
   ] = await Promise.all([
     getRazorpayRevenueInRange(currentMonth.start, currentMonth.end),
     getRazorpayRevenueInRange(lastMonth.start, lastMonth.end),
@@ -307,6 +360,7 @@ export const getDashboardData = async () => {
     TestPurchase.countDocuments({ paymentStatus: "completed" }),
     getDailyRevenueLast7Days(),
     getStudentRegistrationComparison(),
+    getTestSoldComparison(),
   ]);
 
   const formatCurrency = (n) => `₹${Number(n).toLocaleString("en-IN")}`;
@@ -361,6 +415,7 @@ export const getDashboardData = async () => {
     revenueSummary: chartData.revenueSummary,
     needsAttention: urgentTickets,
     studentRegistrationData,
+    testSoldData,
   };
 };
 
