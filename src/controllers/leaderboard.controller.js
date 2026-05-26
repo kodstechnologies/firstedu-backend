@@ -266,6 +266,17 @@ export const getLeaderboardsForStudent = asyncHandler(async (req, res) => {
   }
 
   if (normalizedType === "challenge") {
+    const activeChallenges = await Challenge.find({
+      "participants.student": studentId,
+      roomStatus: "started"
+    });
+    if (activeChallenges.length > 0) {
+      const { syncChallengeCompletionById } = await import("../services/challenge.service.js");
+      for (const c of activeChallenges) {
+        await syncChallengeCompletionById(c._id).catch(() => {});
+      }
+    }
+
     const matchQuery = {
       "participants.student": studentId,
       roomStatus: "completed"

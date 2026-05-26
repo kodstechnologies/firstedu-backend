@@ -1468,6 +1468,15 @@ const autoSubmitExam = async (sessionId, studentId, reason = "time_expired") => 
     console.error("Error recording challenge-yourself progress:", error);
   }
 
+  if (session.challenge) {
+    try {
+      const { syncChallengeCompletionById } = await import("./challenge.service.js");
+      await syncChallengeCompletionById(session.challenge);
+    } catch (error) {
+      console.error("Error syncing challenge completion:", error);
+    }
+  }
+
   console.log(`Exam session ${sessionId} auto-submitted successfully. Reason: ${reason}`);
 };
 
@@ -1612,6 +1621,15 @@ export const submitExam = async (sessionId, studentId) => {
     await challengeYourselfService.recordProgress(studentId, session);
   } catch (error) {
     console.error("Error recording challenge-yourself progress:", error);
+  }
+
+  if (session.challenge) {
+    try {
+      const { syncChallengeCompletionById } = await import("./challenge.service.js");
+      await syncChallengeCompletionById(session.challenge);
+    } catch (error) {
+      console.error("Error syncing challenge completion:", error);
+    }
   }
 
   return await getExamResults(sessionId, studentId);

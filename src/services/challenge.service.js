@@ -118,6 +118,11 @@ const syncChallengeCompletion = async (challenge) => {
   return challenge;
 };
 
+export const syncChallengeCompletionById = async (challengeId) => {
+  const challenge = await challengeRepository.findById(challengeId);
+  return await syncChallengeCompletion(challenge);
+};
+
 export const createChallenge = async (data, userId) => {
   const { title, description, testId } = data;
 
@@ -540,5 +545,6 @@ export default {
   getChallengeYourFriendsTests,
   getCompletedChallenges,
   getCompletedChallengeById,
+  syncChallengeCompletionById,
 };
 
