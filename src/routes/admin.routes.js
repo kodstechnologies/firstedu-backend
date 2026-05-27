@@ -280,6 +280,8 @@ import {
   getSubmissionById,
   reviewSubmission,
   deleteSubmission,
+  qualifyStudents,
+  declareResult,
   declareWinner,
   getEventStats,
 } from "../controllers/liveCompetition.controller.js";
@@ -687,6 +689,12 @@ router.get("/live-competitions/:id/submissions", verifyJWT, getSubmissionsByEven
 router.get("/live-competition-submissions/:id", verifyJWT, getSubmissionById);
 router.patch("/live-competition-submissions/:id/review", verifyJWT, reviewSubmission);
 router.delete("/live-competition-submissions/:id", verifyJWT, deleteSubmission);
+
+// Qualifier System
+router.post("/live-competitions/:id/qualify", verifyJWT, qualifyStudents);
+
+// Result Declaration
+router.post("/live-competitions/:id/declare-result", verifyJWT, declareResult);
 
 // Winner System
 router.put("/live-competitions/:id/winner", verifyJWT, declareWinner);

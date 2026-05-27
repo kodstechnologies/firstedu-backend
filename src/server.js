@@ -110,12 +110,12 @@ const startServer = async () => {
         console.error('❌ Error in workshop notifications cron:', error);
       }
       try {
-        await liveCompetitionNotificationsService.runLiveCompetitionNotificationTick();
+        await liveCompetitionNotificationsService.runLiveCompetitionCronTick();
       } catch (error) {
-        console.error('❌ Error in live competition notifications cron:', error);
+        console.error('❌ Error in live competition cron:', error);
       }
     });
-    console.log('⏰ Minute cron: auto-submit + tournament + olympiad + workshop + live_competition notifications');
+    console.log('⏰ Minute cron: auto-submit + tournament + olympiad + workshop + live-competition notifications');
 
     const port = process.env.PORT || 8000;
 

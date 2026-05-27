@@ -198,6 +198,7 @@ import { getStudentDashboardStats } from "../controllers/studentDashboard.contro
 import {
   getPublishedEvents as getPublishedLiveCompetitions,
   getPublishedEventById as getPublishedLiveCompetitionById,
+  registerForEvent as registerLiveCompetition,
   initiateLiveCompetitionPayment,
   completeLiveCompetitionRegistration,
   submitWork as submitLiveCompetitionWork,
@@ -618,12 +619,17 @@ router.post(
   verifyJWT,
   completeLiveCompetitionRegistration,
 );
+router.post(
+  "/live-competitions/:id/register",
+  verifyJWT,
+  registerLiveCompetition,
+);
 
 // Submission (supports file uploads via uploadLiveCompetitionContent.array("files", 5))
 router.post(
   "/live-competitions/:id/submit",
   verifyJWT,
-  uploadLiveCompetitionContent.array("files", 1),
+  uploadLiveCompetitionContent.array("files", 5),
   submitLiveCompetitionWork,
 );
 router.get("/my-live-submissions", verifyJWT, getMyLiveCompetitionSubmissions);

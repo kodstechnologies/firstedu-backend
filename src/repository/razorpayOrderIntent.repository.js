@@ -46,9 +46,24 @@ const markReconciled = async (orderId, paymentId) => {
   }
 };
 
+const findLatestReconciledByContext = async ({ studentId, type, entityId, amountPaise }) => {
+  try {
+    return await RazorpayOrderIntent.findOne({
+      studentId,
+      type,
+      entityId,
+      amountPaise,
+      reconciled: true,
+    }).sort({ reconciledAt: -1, createdAt: -1 });
+  } catch (error) {
+    throw new ApiError(500, "Failed to find reconciled order intent", error.message);
+  }
+};
+
 export default {
   create,
   findByOrderId,
   findByOrderIdAny,
+  findLatestReconciledByContext,
   markReconciled,
 };

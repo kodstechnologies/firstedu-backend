@@ -2,9 +2,9 @@ import mongoose from "mongoose";
 
 const liveCompetitionSubmissionSchema = new mongoose.Schema(
   {
-    // -------------------------------
+    // -----------------------------------------------------------------------
     // RELATIONS
-    // -------------------------------
+    // -----------------------------------------------------------------------
     event: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "LiveCompetition",
@@ -18,9 +18,21 @@ const liveCompetitionSubmissionSchema = new mongoose.Schema(
       required: true,
     },
 
-    // -------------------------------
+    // -----------------------------------------------------------------------
+    // ROUND
+    // Identifies which round this submission belongs to.
+    // Default "MEGA_AUDITION" ensures existing records remain valid.
+    // -----------------------------------------------------------------------
+    round: {
+      type: String,
+      enum: ["MEGA_AUDITION", "GRAND_FINALE"],
+      required: true,
+      default: "MEGA_AUDITION",
+    },
+
+    // -----------------------------------------------------------------------
     // CONTENT
-    // -------------------------------
+    // -----------------------------------------------------------------------
     content: {
       // TEXT (Essay / Poetry)
       text: {
@@ -34,7 +46,7 @@ const liveCompetitionSubmissionSchema = new mongoose.Schema(
           url:      String,
           fileType: String, // "mp4", "mp3", "pdf"
           fileName: String,
-          fileSize: Number, // bytes — for size validation audit trail
+          fileSize: Number, // bytes — for audit trail
         },
       ],
 
@@ -42,14 +54,14 @@ const liveCompetitionSubmissionSchema = new mongoose.Schema(
       pdfUrl: String,
     },
 
-    // -------------------------------
+    // -----------------------------------------------------------------------
     // LIVE ESSAY SUPPORT
-    // -------------------------------
+    // -----------------------------------------------------------------------
     startedAt: Date,
 
     /**
      * Locks the attempt after startEssaySession is called.
-     * Prevents the student from starting a second session.
+     * Prevents the student from starting a second session for the same round.
      */
     attemptLocked: {
       type: Boolean,
@@ -58,9 +70,9 @@ const liveCompetitionSubmissionSchema = new mongoose.Schema(
 
     submittedAt: Date,
 
-    // -------------------------------
+    // -----------------------------------------------------------------------
     // PAYMENT
-    // -------------------------------
+    // -----------------------------------------------------------------------
     paymentStatus: {
       type: String,
       enum: ["PENDING", "COMPLETED", "FAILED"],
@@ -69,13 +81,13 @@ const liveCompetitionSubmissionSchema = new mongoose.Schema(
 
     transactionId: String,
 
-    // -------------------------------
+    // -----------------------------------------------------------------------
     // ADMIN EVALUATION
-    // -------------------------------
+    // -----------------------------------------------------------------------
 
     /**
      * PENDING = not yet reviewed by admin.
-     * CHECKED = admin has viewed and marked this submission as checked.
+     * CHECKED = admin has viewed and marked this submission.
      */
     evaluationStatus: {
       type: String,
@@ -84,12 +96,29 @@ const liveCompetitionSubmissionSchema = new mongoose.Schema(
     },
 
     /**
-     * Rank within this event — 1 (gold), 2 (silver), 3 (bronze).
-     * Only one submission per rank per event allowed (enforced in service).
+     * Admin marks this true to qualify the student for the Grand Finale.
+     * Only meaningful on MEGA_AUDITION round submissions.
+     */
+    isQualified: {
+      type: Boolean,
+      default: false,
+    },
+
+    qualifiedAt: Date,
+
+    qualifiedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
+
+    /**
+     * Rank within this round — 1 (gold), 2 (silver), 3 (bronze).
+     * For MEGA_AUDITION: informational only (optional).
+     * For GRAND_FINALE: triggers prize payout when declared.
+     * Only one submission per rank per event+round is enforced in service.
      */
     rank: {
       type: Number,
-      enum: [1, 2, 3],
     },
 
     isWinner: {
@@ -97,9 +126,9 @@ const liveCompetitionSubmissionSchema = new mongoose.Schema(
       default: false,
     },
 
-    // -------------------------------
+    // -----------------------------------------------------------------------
     // FLAGS
-    // -------------------------------
+    // -----------------------------------------------------------------------
     isLate: {
       type: Boolean,
       default: false,
@@ -108,17 +137,22 @@ const liveCompetitionSubmissionSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Prevent duplicate submission per user per event
+// ─── Indexes ────────────────────────────────────────────────────────────────
+
+// One submission per student per round per event (prevents double registration)
 liveCompetitionSubmissionSchema.index(
-  { event: 1, participant: 1 },
+  { event: 1, participant: 1, round: 1 },
   { unique: true }
 );
 
-// Fast lookup of winners per event
-liveCompetitionSubmissionSchema.index({ event: 1, isWinner: 1 });
+// Admin qualifier queue — filter qualified students quickly
+liveCompetitionSubmissionSchema.index({ event: 1, round: 1, isQualified: 1 });
 
-// Fast lookup of unreviewed submissions for admin queue
-liveCompetitionSubmissionSchema.index({ event: 1, evaluationStatus: 1 });
+// Winner lookups per round
+liveCompetitionSubmissionSchema.index({ event: 1, round: 1, isWinner: 1 });
+
+// Admin review queue per round
+liveCompetitionSubmissionSchema.index({ event: 1, round: 1, evaluationStatus: 1 });
 
 export const LiveCompetitionSubmission = mongoose.model(
   "LiveCompetitionSubmission",

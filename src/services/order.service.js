@@ -165,15 +165,19 @@ export const getAggregatedOrderHistory = async (
       };
     }),
     ...liveCompRegistrations.map((lc) => {
-      const fallbackAmount = toNumber(lc.event?.fee?.amount);
+      const targetRound = lc.round === "GRAND_FINALE" ? lc.event?.grandFinale : lc.event?.megaAudition;
+      const fallbackAmount = toNumber(targetRound?.fee?.amount);
       const amountPaid = fallbackAmount; // Live competition submission doesn't currently store `amountPaid` directly
       
+      const roundLabel = lc.round === 'GRAND_FINALE' ? 'Grand Finale' : 'Mega Audition';
+      const eventTitle = lc.event?.title || "Live Competition";
+
       return {
         id: lc._id,
         type: "live_competition",
         date: lc.createdAt,
-        title: lc.event?.title || "Live Competition",
-        itemName: lc.event?.title || "Live Competition",
+        title: `${eventTitle} (${roundLabel})`,
+        itemName: `${eventTitle} (${roundLabel})`,
         amount: amountPaid,
         paymentMethod: normalizePaymentMethod("razorpay", amountPaid), // Assuming razorpay or wallet
         status: lc.paymentStatus,

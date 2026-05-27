@@ -71,6 +71,10 @@ const razorpayOrderIntentSchema = new mongoose.Schema(
     reconciled: { type: Boolean, default: false, index: true },
     reconciledAt: { type: Date },
     paymentId: { type: String, trim: true },
+    metadata: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
+    },
   },
   { timestamps: true },
 );

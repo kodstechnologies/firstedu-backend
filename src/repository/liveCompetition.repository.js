@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import LiveCompetition from "../models/LiveCompetition.js";
 import LiveCompetitionSubmission from "../models/LiveCompetitionSubmission.js";
 import { ApiError } from "../utils/ApiError.js";
@@ -41,10 +42,15 @@ const countEvents = async (filter = {}) => {
   return LiveCompetition.countDocuments(filter);
 };
 
-const incrementEventStats = async (id, { participants = 0, submissions = 0 }) => {
+/**
+ * Increment per-round stats on a LiveCompetition document.
+ * round = "MEGA_AUDITION" | "GRAND_FINALE"
+ */
+const incrementEventStats = async (id, { round, participants = 0, submissions = 0 }) => {
   const inc = {};
-  if (participants) inc.totalParticipants = participants;
-  if (submissions) inc.totalSubmissions = submissions;
+  const prefix = round === "GRAND_FINALE" ? "grandFinale" : "megaAudition";
+  if (participants) inc[`${prefix}.totalParticipants`] = participants;
+  if (submissions)  inc[`${prefix}.totalSubmissions`]  = submissions;
   return LiveCompetition.findByIdAndUpdate(id, { $inc: inc }, { new: true });
 };
 
@@ -55,7 +61,7 @@ const createSubmission = async (data) => {
     return await LiveCompetitionSubmission.create(data);
   } catch (error) {
     if (error.code === 11000) {
-      throw new ApiError(409, "You have already submitted for this event");
+      throw new ApiError(409, "You have already registered for this round of the event");
     }
     throw new ApiError(500, "Failed to create submission", error.message);
   }
@@ -98,13 +104,16 @@ const countSubmissions = async (filter = {}) => {
   return LiveCompetitionSubmission.countDocuments(filter);
 };
 
-const getSubmissionAggregateStats = async (eventId) => {
+const getSubmissionAggregateStats = async (eventId, round) => {
+  const matchFilter = { event: new mongoose.Types.ObjectId(eventId) };
+  if (round) matchFilter.round = round;
+
   const result = await LiveCompetitionSubmission.aggregate([
-    { $match: { event: eventId } },
+    { $match: matchFilter },
     {
       $group: {
-        _id: null,
-        total: { $sum: 1 },
+        _id:      null,
+        total:    { $sum: 1 },
         avgScore: { $avg: "$score" },
         maxScore: { $max: "$score" },
         minScore: { $min: "$score" },
@@ -112,6 +121,50 @@ const getSubmissionAggregateStats = async (eventId) => {
     },
   ]);
   return result[0] || { total: 0, avgScore: 0, maxScore: 0, minScore: 0 };
+};
+
+/**
+ * Bulk-qualify a set of submissions for the Grand Finale.
+ */
+const qualifySubmissions = async (submissionIds, adminId) => {
+  return LiveCompetitionSubmission.updateMany(
+    { _id: { $in: submissionIds } },
+    {
+      $set: {
+        isQualified: true,
+        qualifiedAt: new Date(),
+        qualifiedBy: adminId,
+      },
+    }
+  );
+};
+
+/**
+ * Count how many students are already qualified for the Grand Finale of an event.
+ */
+const countQualifiedByEvent = async (eventId) => {
+  return LiveCompetitionSubmission.countDocuments({
+    event:       eventId,
+    round:       "MEGA_AUDITION",
+    isQualified: true,
+  });
+};
+
+/**
+ * Find all winner submissions for a specific round, sorted by rank.
+ */
+const findWinnersByEvent = async (eventId, round, populate = []) => {
+  let query = LiveCompetitionSubmission.find({
+    event:    eventId,
+    round,
+    isWinner: true,
+  }).sort({ rank: 1 });
+
+  populate.forEach((pop) => {
+    query = query.populate(pop.populate ? pop : { path: pop.path, select: pop.select });
+  });
+
+  return query;
 };
 
 export default {
@@ -132,4 +185,8 @@ export default {
   deleteSubmissionById,
   countSubmissions,
   getSubmissionAggregateStats,
+  // Qualifier & Winner
+  qualifySubmissions,
+  countQualifiedByEvent,
+  findWinnersByEvent,
 };
