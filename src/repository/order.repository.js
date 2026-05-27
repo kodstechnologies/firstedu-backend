@@ -212,6 +212,31 @@ const findPurchasedTestIdsForStudent = async (studentId, testIds) => {
   }
 };
 
+/** Completed course purchases for this student, restricted to given course ids. */
+const findPurchasedCourseIdsForStudent = async (studentId, courseIds) => {
+  try {
+    if (!studentId || !courseIds?.length) return [];
+    const objectIds = courseIds
+      .map((id) => {
+        if (id == null) return null;
+        const s = id?.toString?.() ?? String(id);
+        return mongoose.Types.ObjectId.isValid(s) ? new mongoose.Types.ObjectId(s) : null;
+      })
+      .filter(Boolean);
+    if (objectIds.length === 0) return [];
+    const docs = await CoursePurchase.find({
+      student: studentId,
+      course: { $in: objectIds },
+      paymentStatus: "completed",
+    })
+      .select("course")
+      .lean();
+    return [...new Set(docs.map((d) => d.course?.toString?.()).filter(Boolean))];
+  } catch (error) {
+    throw new ApiError(500, "Failed to fetch course purchases by courses", error.message);
+  }
+};
+
 const createTestPurchase = async (purchaseData) => {
   try {
     const purchase = await TestPurchase.create(purchaseData);
@@ -241,6 +266,7 @@ export default {
   createCoursePurchase,
   findTestPurchase,
   findPurchasedTestIdsForStudent,
+  findPurchasedCourseIdsForStudent,
   createTestPurchase,
 };
 

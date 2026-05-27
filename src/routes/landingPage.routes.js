@@ -56,6 +56,7 @@ import {
 import { verifyJWT } from "../middleware/auth.middleware.js";
 import { getWorkshopById } from "../controllers/workshop.controller.js";
 import { getTournamentById } from "../controllers/tournament.controller.js";
+import { getFreeMaterialsLandingPage } from "../controllers/marketplace.controller.js";
 
 const router = Router();
 
@@ -97,6 +98,7 @@ router.get("/events", getAllEvents);
 router.get("/qna", getAllQnAsLandingPage);
 router.post("/qna-request", verifyJWT, createQnA);
 router.get("/categories", getCategoriesForStudent);
+router.get("/free-materials", getFreeMaterialsLandingPage);
 
 // ==================== CAREARS (JOBS) ====================
 

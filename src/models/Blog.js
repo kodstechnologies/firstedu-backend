@@ -26,6 +26,16 @@ const blogSchema = new mongoose.Schema(
       trim: true,
       default: null,
     },
+    document: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    documentName: {
+      type: String,
+      trim: true,
+      default: null,
+    },
     source: {
       type: String,
       enum: {

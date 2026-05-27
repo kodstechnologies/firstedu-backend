@@ -124,6 +124,23 @@ const attachPurchasedFlagToBundles = async (bundles, studentId) => {
   return bundles;
 };
 
+const attachPurchasedFlagToCourses = async (courses, studentId) => {
+  if (!studentId || !courses.length) {
+    courses.forEach((c) => (c.isPurchased = false));
+    return courses;
+  }
+  const courseIds = courses.map((c) => c._id.toString());
+  const purchasedIds = await orderRepository.findPurchasedCourseIdsForStudent(
+    studentId,
+    courseIds
+  );
+  const purchasedSet = new Set(purchasedIds);
+  courses.forEach((c) => {
+    c.isPurchased = purchasedSet.has(c._id.toString());
+  });
+  return courses;
+};
+
 /**
  * Get all published courses (marketplace listing)
  * Filters: type (pdf | video | audio), access (free | paid | both)
@@ -140,6 +157,7 @@ export const getCourses = async (options = {}) => {
     type,
     access,
     isCertification,
+    studentId,
   } = options;
  
   const query = { isPublished: true };
@@ -170,7 +188,8 @@ export const getCourses = async (options = {}) => {
     delete courseObj.contentUrl;
     return courseObj;
   });
-  const courses = await attachOfferToList(coursesRaw, "Course", "price");
+  const coursesWithOffers = await attachOfferToList(coursesRaw, "Course", "price");
+  const courses = await attachPurchasedFlagToCourses(coursesWithOffers, studentId);
   const total = result.pagination.total;
 
   return {

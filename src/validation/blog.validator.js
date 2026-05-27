@@ -16,6 +16,9 @@ const createBlog = Joi.object({
   keyTakeaways: Joi.array().items(Joi.string().trim()).default([]).messages({
     "array.base": "Key takeaways must be an array of strings",
   }),
+  documentName: Joi.string().trim().optional().allow('').messages({
+    "string.empty": "Document name cannot be empty",
+  }),
 });
 
 const updateBlog = Joi.object({
@@ -31,6 +34,10 @@ const updateBlog = Joi.object({
   keyTakeaways: Joi.array().items(Joi.string().trim()).optional().messages({
     "array.base": "Key takeaways must be an array of strings",
   }),
+  documentName: Joi.string().trim().optional().allow('').messages({
+    "string.empty": "Document name cannot be empty",
+  }),
+  removeDocument: Joi.boolean().optional(),
 });
 
 export default { createBlog, updateBlog };

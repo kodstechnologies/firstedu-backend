@@ -37,6 +37,7 @@ export const getCourses = asyncHandler(async (req, res) => {
       typeof isCertification === "string"
         ? isCertification === "true"
         : undefined,
+    studentId: req.user?._id,
   });
 
   return res
@@ -192,6 +193,35 @@ export const getMyCourses = asyncHandler(async (req, res) => {
       ),
     );
 });
+
+// Get Free Materials for Landing Page
+export const getFreeMaterialsLandingPage = asyncHandler(async (req, res) => {
+  const {
+    page = 1, limit = 10, search, contentType,
+    categoryId, subCategoryId,
+    fetchSubcategories, pillarName,
+  } = req.query;
+
+  // Branch 1: Fetch subcategories for a given pillar
+  if (fetchSubcategories === 'true') {
+    const subcategories = await getSubcategoriesByPillarName(pillarName);
+    return res.status(200).json(ApiResponse.success(subcategories, "Subcategories fetched successfully"));
+  }
+
+  // Branch 2: Fetch paginated free materials
+  const { purchases, pagination } = await getPaginatedFreeMaterials(
+    page,
+    limit,
+    {
+      categoryId,
+      subCategoryId,
+      search,
+      contentType,
+    }
+  );
+  return res.status(200).json(ApiResponse.success(purchases, "Free materials fetched successfully", pagination));
+});
+
 
 // Get course content for viewing/download (requires purchase; returns contents[] array)
 // Query: redirect=true — redirects to first content URL for direct download
@@ -609,4 +639,5 @@ export default {
   getMyTests,
   getExamHall,
   getAllResources,
+  getFreeMaterialsLandingPage,
 };

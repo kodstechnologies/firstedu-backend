@@ -32,7 +32,9 @@ export const createBlog = asyncHandler(async (req, res) => {
       error.details.map((x) => x.message),
     );
   }
-  const blog = await blogService.createBlog(value, req.user._id, req.file);
+  const imageFile = req.files?.image?.[0] || null;
+  const documentFile = req.files?.document?.[0] || null;
+  const blog = await blogService.createBlog(value, req.user._id, imageFile, documentFile);
   return res
     .status(201)
     .json(ApiResponse.success(blog, "Blog created successfully"));
@@ -98,14 +100,16 @@ export const updateBlog = asyncHandler(async (req, res) => {
       error.details.map((x) => x.message),
     );
   }
-  if (Object.keys(value).length === 0 && !req.file) {
+  const imageFile = req.files?.image?.[0] || null;
+  const documentFile = req.files?.document?.[0] || null;
+  if (Object.keys(value).length === 0 && !imageFile && !documentFile) {
     throw new ApiError(
       400,
-      "At least one field (title, description, subject, keyTakeaways) or image is required",
+      "At least one field (title, description, subject, keyTakeaways) or image/document is required",
     );
   }
   const { id } = req.params;
-  const blog = await blogService.updateBlog(id, value, req.file);
+  const blog = await blogService.updateBlog(id, value, imageFile, documentFile);
   return res
     .status(200)
     .json(ApiResponse.success(blog, "Blog updated successfully"));

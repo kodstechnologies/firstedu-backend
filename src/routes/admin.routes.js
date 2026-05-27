@@ -269,7 +269,7 @@ import {
   postAdminApproveWithdrawal,
   postAdminRejectWithdrawal,
 } from "../controllers/teacherWithdrawal.controller.js";
-import { uploadCourseMaterial, uploadImage, uploadAnyImages, uploadPDF, uploadSuccessStory, uploadPDFAndImage, uploadLiveCompetitionContent } from '../utils/multerConfig.js';
+import { uploadCourseMaterial, uploadImage, uploadAnyImages, uploadPDF, uploadSuccessStory, uploadPDFAndImage, uploadLiveCompetitionContent, uploadBlogContent } from '../utils/multerConfig.js';
 import {
   createEvent as createLiveCompetition,
   getEvents as getLiveCompetitions,
@@ -537,9 +537,13 @@ router.get('/blog-request/:id', verifyJWT, getBlogRequestById);
 router.patch('/blog-request/:id', verifyJWT, updateBlogRequestStatus);
 
 // Admin-added blogs (create, update, delete - admin-created or approved)
+const blogUploadFields = uploadBlogContent.fields([
+  { name: 'image', maxCount: 1 },
+  { name: 'document', maxCount: 1 },
+]);
 router.get('/blogs',verifyJWT,getAllBlogs)
-router.post('/blogs', verifyJWT, uploadImage.single('image'), createBlog);
-router.put('/blogs/:id', verifyJWT, uploadImage.single('image'), updateBlog);
+router.post('/blogs', verifyJWT, blogUploadFields, createBlog);
+router.put('/blogs/:id', verifyJWT, blogUploadFields, updateBlog);
 router.delete('/blogs/:id', verifyJWT, deleteBlog);
 
 // Ticket Management

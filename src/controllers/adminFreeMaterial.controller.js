@@ -8,13 +8,27 @@ import { uploadFileToCloudinary } from "../utils/s3Upload.js";
 
 // @desc    Create a new free material
 // @route   POST /api/v1/admin/free-materials
+// Derive a fileType key from a MIME type string
+function mimeToFileType(mime = "") {
+  if (mime.startsWith("image/"))                                                      return "image";
+  if (mime === "application/pdf")                                                      return "pdf";
+  if (mime.startsWith("video/"))                                                       return "video";
+  if (mime.startsWith("audio/"))                                                       return "audio";
+  if (/zip|rar|7z|tar|gz|archive/.test(mime))                                         return "archive";
+  if (/word|document|sheet|excel|powerpoint|presentation|opendocument/.test(mime))    return "document";
+  return "other";
+}
+
 export const createMaterial = asyncHandler(async (req, res) => {
-  const { fileType, category, subCategory } = req.body;
+  const { category, subCategory } = req.body;
   let fileUrl = req.body.fileUrl;
 
-  if (!fileType || !category || !subCategory) {
-    return res.status(400).json(ApiResponse.error("Fields fileType, category, subCategory are required", 400));
+  if (!category || !subCategory) {
+    return res.status(400).json(ApiResponse.error("Fields category and subCategory are required", 400));
   }
+
+  // Auto-derive fileType from actual uploaded file MIME; fall back to 'other' for link-only entries
+  const fileType = req.file ? mimeToFileType(req.file.mimetype) : "other";
 
   // If a file was uploaded, upload it to S3/Cloudinary and get the URL
   if (req.file) {

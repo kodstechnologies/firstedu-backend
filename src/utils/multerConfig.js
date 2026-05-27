@@ -214,3 +214,29 @@ export const uploadCourseMaterial = multer({
   fileFilter: courseUploadFileFilter,
   limits: { fileSize: 500 * 1024 * 1024 }, // 500MB
 }).any();
+
+// Blog: image = cover/thumbnail; document = PDF/DOC attachment
+const blogFileFilter = (req, file, cb) => {
+  const field = file.fieldname;
+  if (field === 'image') {
+    const allowedImages = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp'];
+    if (allowedImages.includes(file.mimetype)) return cb(null, true);
+    return cb(new Error('Blog cover must be JPEG, PNG, or WEBP'), false);
+  }
+  if (field === 'document') {
+    const allowedDocs = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ];
+    if (allowedDocs.includes(file.mimetype)) return cb(null, true);
+    return cb(new Error('Blog document must be a PDF or Word document'), false);
+  }
+  cb(new Error('Unexpected field'), false);
+};
+
+export const uploadBlogContent = multer({
+  storage,
+  fileFilter: blogFileFilter,
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
+});
