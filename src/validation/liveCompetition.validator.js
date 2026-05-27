@@ -6,7 +6,7 @@ const objectId = Joi.string().regex(/^[0-9a-fA-F]{24}$/);
 
 const submissionConfigSchema = Joi.object({
   // type is optional — always overridden by category.submissionType in service layer
-  type: Joi.string().valid("TEXT", "FILE").optional(),
+  type: Joi.string().valid("TEXT", "FILE", "EXTERNAL_LINK").optional(),
   text: Joi.object({
     limit: Joi.number().integer().min(1).optional(),
     limitType: Joi.string().valid("WORDS", "CHARACTERS").default("WORDS"),
@@ -23,6 +23,10 @@ const submissionConfigSchema = Joi.object({
     instructions: Joi.array().items(Joi.string().trim()).optional(),
     walletPoints: Joi.number().min(0).default(0).optional(),
   }).optional(),
+  externalLink: Joi.object({
+    url: Joi.string().trim().required(),
+    password: Joi.string().trim().allow("", null).optional(),
+  }).optional(),
 });
 
 const feeSchema = Joi.object({
@@ -38,6 +42,7 @@ const prizeSchema = Joi.object({
 });
 
 const megaAuditionCreateSchema = Joi.object({
+  title: Joi.string().trim().optional(),
   registration: Joi.object({
     start: Joi.date().required(),
     end: Joi.date().required(),
@@ -53,10 +58,13 @@ const megaAuditionCreateSchema = Joi.object({
 });
 
 const grandFinaleCreateSchema = Joi.object({
+  isVisible: Joi.boolean().optional(),
+  title: Joi.string().trim().optional(),
+  category: objectId.optional(),
   paymentWindow: Joi.object({
     start: Joi.date().required(),
     end: Joi.date().required(),
-  }).required(),
+  }).optional(),
   eventWindow: Joi.object({
     start: Joi.date().required(),
     end: Joi.date().required(),
@@ -64,7 +72,6 @@ const grandFinaleCreateSchema = Joi.object({
   resultDeclarationDate: Joi.date().optional(),
   submission: submissionConfigSchema.optional(),
   fee: feeSchema.optional(),
-  prizes: Joi.array().items(prizeSchema).max(3).optional(),
 });
 
 // ─── Admin Validators ──────────────────────────────────────────────────────
@@ -74,6 +81,7 @@ const createEvent = Joi.object({
   description: Joi.string().trim().allow("", null).optional(),
   category: objectId.required(),
   isPublished: Joi.boolean().default(false),
+  prizes: Joi.array().items(prizeSchema).max(3).optional(),
   megaAudition: megaAuditionCreateSchema.required(),
   grandFinale: grandFinaleCreateSchema.required(),
 });
@@ -83,8 +91,10 @@ const updateEvent = Joi.object({
   description: Joi.string().trim().allow("", null).optional(),
   category: objectId.optional(),
   isPublished: Joi.boolean().optional(),
+  prizes: Joi.array().items(prizeSchema).max(3).optional(),
 
   megaAudition: Joi.object({
+    title: Joi.string().trim().optional(),
     registration: Joi.object({
       start: Joi.date().optional(),
       end: Joi.date().optional(),
@@ -100,6 +110,9 @@ const updateEvent = Joi.object({
   }).optional(),
 
   grandFinale: Joi.object({
+    isVisible: Joi.boolean().optional(),
+    title: Joi.string().trim().optional(),
+    category: objectId.optional(),
     paymentWindow: Joi.object({
       start: Joi.date().optional(),
       end: Joi.date().optional(),
@@ -111,12 +124,12 @@ const updateEvent = Joi.object({
     resultDeclarationDate: Joi.date().optional(),
     submission: submissionConfigSchema.optional(),
     fee: feeSchema.optional(),
-    prizes: Joi.array().items(prizeSchema).max(3).optional(),
   }).optional(),
 });
 
 const reviewSubmission = Joi.object({
   isChecked: Joi.boolean().required(),
+  rank: Joi.number().valid(1, 2, 3, null).optional(),
 });
 
 /**
@@ -157,6 +170,7 @@ const completeLiveCompPayment = Joi.object({
   razorpayOrderId: Joi.string().trim().required(),
   razorpayPaymentId: Joi.string().trim().required(),
   razorpaySignature: Joi.string().trim().required(),
+  round: Joi.string().valid("MEGA_AUDITION", "GRAND_FINALE").default("MEGA_AUDITION"),
 });
 
 const submitWork = Joi.object({

@@ -6,7 +6,7 @@ const submissionConfigSchema = new mongoose.Schema(
   {
     type: {
       type: String,
-      enum: ["TEXT", "FILE"],
+      enum: ["TEXT", "FILE", "EXTERNAL_LINK"],
       required: true,
     },
     // TEXT (Essay / Poetry)
@@ -30,6 +30,11 @@ const submissionConfigSchema = new mongoose.Schema(
       maxFiles:      { type: Number, default: 1 },
       instructions:  [String],
       walletPoints:  { type: Number, default: 0 },
+    },
+    // EXTERNAL_LINK (Google Forms, etc.)
+    externalLink: {
+      url: String,
+      password: String,
     },
   },
   { _id: false }
@@ -84,11 +89,19 @@ const liveCompetitionSchema = new mongoose.Schema(
       default: false,
     },
 
+    /**
+     * Prize configuration per rank for the overall competition.
+     * Wallet points are credited automatically when admin declares winners.
+     */
+    prizes: [prizeSchema],
+
     // -----------------------------------------------------------------------
     // ROUND 1 — MEGA AUDITION
     // Open to all registered students.
     // -----------------------------------------------------------------------
     megaAudition: {
+      title: { type: String, trim: true },
+
       // Registration window — students sign up here
       registration: {
         start: { type: Date, required: true },
@@ -132,6 +145,14 @@ const liveCompetitionSchema = new mongoose.Schema(
     // Stays LOCKED until Round 1 RESULT_DECLARED.
     // -----------------------------------------------------------------------
     grandFinale: {
+      isVisible: { type: Boolean, default: true },
+      title: { type: String, trim: true },
+      
+      category: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "LiveCompetitionCategory",
+      },
+
       /**
        * Payment window — qualified students must pay their Round 2 entry fee
        * within this window. Must open AFTER megaAudition.resultDeclarationDate.
@@ -154,12 +175,6 @@ const liveCompetitionSchema = new mongoose.Schema(
 
       submission: submissionConfigSchema,
       fee:        feeSchema,
-
-      /**
-       * Prize configuration per rank.
-       * Wallet points are credited automatically when admin declares winners.
-       */
-      prizes: [prizeSchema],
 
       status: {
         type: String,

@@ -1,7 +1,9 @@
 import mongoose from "mongoose";
 import { ApiError } from "../utils/ApiError.js";
 import liveCompetitionRepository from "../repository/liveCompetition.repository.js";
+import LiveCompetition from "../models/LiveCompetition.js";
 import LiveCompetitionCategory from "../models/LiveCompetitionCategory.js";
+import LiveCompetitionSubmission from "../models/LiveCompetitionSubmission.js";
 import {
   uploadImageToCloudinary,
   uploadPDFToCloudinary,
@@ -42,9 +44,8 @@ const LIVE_COMP_FILES_FOLDER = "live-competition-submissions";
 /**
  * Derives the correct status from a round's date windows.
  */
-const computeRoundStatus = (round, isPublished) => {
+const computeTemporalRoundStatus = (round, isPublished) => {
   if (!isPublished) return "DRAFT";
-  if (round.status === "LOCKED") return "LOCKED";
   if (round.status === "RESULT_DECLARED") return "RESULT_DECLARED";
 
   const now = new Date();
@@ -62,6 +63,29 @@ const computeRoundStatus = (round, isPublished) => {
   return "UPCOMING"; // Catch-all for published but before start dates
 };
 
+const isResultDeclarationDue = (round, now = new Date()) => {
+  if (!round?.resultDeclarationDate || !round?.eventWindow?.end) return false;
+  return now >= new Date(round.resultDeclarationDate) && now > new Date(round.eventWindow.end);
+};
+
+const computeMegaAuditionStatus = (round, isPublished) => {
+  const status = computeTemporalRoundStatus(round, isPublished);
+  if (status === "CLOSED" && isResultDeclarationDue(round)) return "RESULT_DECLARED";
+  return status;
+};
+
+const computeGrandFinaleStatus = (round, isPublished, megaStatus) => {
+  if (!round) return undefined;
+  if (!isPublished) return "DRAFT";
+  if (round.status === "RESULT_DECLARED") return "RESULT_DECLARED";
+  if (megaStatus !== "RESULT_DECLARED") return "LOCKED";
+  const roundData = round.toObject ? round.toObject() : round;
+  return computeTemporalRoundStatus(
+    { ...roundData, status: round.status === "LOCKED" ? "UPCOMING" : round.status },
+    isPublished
+  );
+};
+
 const validateEventDates = (megaAudition, grandFinale) => {
   const mRegStart = new Date(megaAudition.registration.start);
   const mRegEnd = new Date(megaAudition.registration.end);
@@ -72,26 +96,33 @@ const validateEventDates = (megaAudition, grandFinale) => {
   if (mEventStart >= mEventEnd) throw new ApiError(400, "Round 1 event window end must be after start");
   if (mRegEnd > mEventStart) throw new ApiError(400, "Round 1 registration must close before event starts");
 
-  if (grandFinale && grandFinale.paymentWindow) {
+  if (grandFinale) {
     if (!megaAudition.resultDeclarationDate) {
       throw new ApiError(400, "Round 1 must have a result declaration date if Grand Finale is configured");
     }
     const mResultDate = new Date(megaAudition.resultDeclarationDate);
     if (mEventEnd > mResultDate) throw new ApiError(400, "Round 1 event window must end before its result declaration date");
 
-    const gPayStart = new Date(grandFinale.paymentWindow.start);
-    const gPayEnd = new Date(grandFinale.paymentWindow.end);
     const gEventStart = new Date(grandFinale.eventWindow.start);
     const gEventEnd = new Date(grandFinale.eventWindow.end);
-
-    // THE GOLDEN RULE
-    if (gPayStart <= mResultDate) {
-      throw new ApiError(400, "Round 2 payment window MUST start after Round 1 result declaration date");
-    }
-    
-    if (gPayStart >= gPayEnd) throw new ApiError(400, "Round 2 payment window end must be after start");
-    if (gPayEnd > gEventStart) throw new ApiError(400, "Round 2 payment window must close before event starts");
     if (gEventStart >= gEventEnd) throw new ApiError(400, "Round 2 event window end must be after start");
+
+    if (grandFinale.paymentWindow && grandFinale.paymentWindow.start && grandFinale.paymentWindow.end) {
+      const gPayStart = new Date(grandFinale.paymentWindow.start);
+      const gPayEnd = new Date(grandFinale.paymentWindow.end);
+
+      // THE GOLDEN RULE
+      if (gPayStart <= mResultDate) {
+        throw new ApiError(400, "Round 2 payment window MUST start after Round 1 result declaration date");
+      }
+      
+      if (gPayStart >= gPayEnd) throw new ApiError(400, "Round 2 payment window end must be after start");
+      if (gPayEnd > gEventStart) throw new ApiError(400, "Round 2 payment window must close before event starts");
+    } else {
+      if (gEventStart <= mResultDate) {
+        throw new ApiError(400, "Round 2 event window MUST start after Round 1 result declaration date");
+      }
+    }
   }
 };
 
@@ -99,6 +130,48 @@ const createdByPopulate = { path: "createdBy", select: "name email" };
 const categoryPopulate = { path: "category", select: "name submissionType allowedFileTypes description" };
 const participantPopulate = { path: "participant", select: "name email profileImage" };
 const eventPopulate = { path: "event", select: "title category megaAudition grandFinale" };
+
+const enrichEventWithStats = async (eventObj) => {
+  if (!eventObj) return eventObj;
+  
+  const obj = typeof eventObj.toObject === 'function' ? eventObj.toObject() : eventObj;
+
+  const mParticipants = await liveCompetitionRepository.countSubmissions({ 
+    event: obj._id, 
+    round: "MEGA_AUDITION", 
+    paymentStatus: "COMPLETED" 
+  });
+  const mSubmissions = await liveCompetitionRepository.countSubmissions({ 
+    event: obj._id, 
+    round: "MEGA_AUDITION", 
+    submittedAt: { $exists: true, $ne: null } 
+  });
+
+  if (obj.megaAudition) {
+    obj.megaAudition.totalParticipants = mParticipants;
+    obj.megaAudition.totalSubmissions = mSubmissions;
+  }
+
+  if (obj.grandFinale) {
+    const gParticipants = await liveCompetitionRepository.countSubmissions({ 
+      event: obj._id, 
+      round: "GRAND_FINALE", 
+      paymentStatus: "COMPLETED" 
+    });
+    const gSubmissions = await liveCompetitionRepository.countSubmissions({ 
+      event: obj._id, 
+      round: "GRAND_FINALE", 
+      submittedAt: { $exists: true, $ne: null } 
+    });
+    obj.grandFinale.totalParticipants = gParticipants;
+    obj.grandFinale.totalSubmissions = gSubmissions;
+  }
+  
+  obj.totalParticipants = mParticipants + (obj.grandFinale ? obj.grandFinale.totalParticipants : 0);
+  obj.totalSubmissions = mSubmissions + (obj.grandFinale ? obj.grandFinale.totalSubmissions : 0);
+
+  return obj;
+};
 
 // ==================== ADMIN SERVICES ====================
 
@@ -119,28 +192,34 @@ export const createEvent = async (data, adminId, file) => {
   }
 
   // Override submission configs from category
-  const mergeSubmission = (subData) => {
+  const mergeSubmission = (subData, activeCategory) => {
     if (!subData) return undefined;
+    const finalType = subData.type === "EXTERNAL_LINK" ? "EXTERNAL_LINK" : activeCategory.submissionType;
     return {
       ...subData,
-      type: category.submissionType,
-      text: category.submissionType === "TEXT"
+      type: finalType,
+      text: finalType === "TEXT"
         ? (subData.text || { limit: 1000, limitType: "WORDS" })
         : undefined,
-      file: {
+      file: finalType === "FILE" ? {
         ...(subData.file || {}),
         allowedTypes: subData.file?.allowedTypes?.length
           ? subData.file.allowedTypes
-          : category.allowedFileTypes,
-      },
+          : activeCategory.allowedFileTypes,
+      } : undefined,
+      externalLink: finalType === "EXTERNAL_LINK" ? subData.externalLink : undefined
     };
   };
 
-  data.megaAudition.submission = mergeSubmission(data.megaAudition.submission);
-  data.megaAudition.status = computeRoundStatus(data.megaAudition, data.isPublished);
+  data.megaAudition.submission = mergeSubmission(data.megaAudition.submission, category);
+  data.megaAudition.status = computeMegaAuditionStatus(data.megaAudition, data.isPublished);
 
   if (data.grandFinale) {
-    data.grandFinale.submission = mergeSubmission(data.grandFinale.submission);
+    let grandCategory = category;
+    if (data.grandFinale.category) {
+      grandCategory = await LiveCompetitionCategory.findById(data.grandFinale.category) || category;
+    }
+    data.grandFinale.submission = mergeSubmission(data.grandFinale.submission, grandCategory);
     data.grandFinale.status = "LOCKED";
   }
 
@@ -184,25 +263,26 @@ export const getEvents = async (options = {}) => {
   const syncedEvents = await Promise.all(
     events.map(async (e) => {
       let changed = false;
-      const mStatus = computeRoundStatus(e.megaAudition, e.isPublished);
+      const mStatus = computeMegaAuditionStatus(e.megaAudition, e.isPublished);
       if (mStatus !== e.megaAudition.status) {
         e.megaAudition.status = mStatus;
         changed = true;
       }
       if (e.grandFinale) {
-        const gStatus = computeRoundStatus(e.grandFinale, e.isPublished);
+        const gStatus = computeGrandFinaleStatus(e.grandFinale, e.isPublished, mStatus);
         if (gStatus !== e.grandFinale.status) {
           e.grandFinale.status = gStatus;
           changed = true;
         }
       }
+      let updatedE = e;
       if (changed) {
-        return liveCompetitionRepository.updateEventById(e._id, {
+        updatedE = await liveCompetitionRepository.updateEventById(e._id, {
           "megaAudition.status": e.megaAudition.status,
           ...(e.grandFinale ? { "grandFinale.status": e.grandFinale.status } : {})
         });
       }
-      return e;
+      return enrichEventWithStats(updatedE);
     })
   );
 
@@ -220,7 +300,7 @@ export const getEvents = async (options = {}) => {
 export const getEventById = async (id) => {
   const event = await liveCompetitionRepository.findEventById(id, [createdByPopulate, categoryPopulate]);
   if (!event) throw new ApiError(404, "Live competition not found");
-  return event;
+  return enrichEventWithStats(event);
 };
 
 export const updateEvent = async (id, updateData, file) => {
@@ -256,26 +336,27 @@ export const updateEvent = async (id, updateData, file) => {
 
   // Sync statuses
   let changed = false;
-  const mStatus = computeRoundStatus(updated.megaAudition, updated.isPublished);
+  const mStatus = computeMegaAuditionStatus(updated.megaAudition, updated.isPublished);
   if (mStatus !== updated.megaAudition.status) {
     updated.megaAudition.status = mStatus;
     changed = true;
   }
   if (updated.grandFinale) {
-    const gStatus = computeRoundStatus(updated.grandFinale, updated.isPublished);
+    const gStatus = computeGrandFinaleStatus(updated.grandFinale, updated.isPublished, mStatus);
     if (gStatus !== updated.grandFinale.status) {
       updated.grandFinale.status = gStatus;
       changed = true;
     }
   }
 
+  let finalEvent = updated;
   if (changed) {
-    return await liveCompetitionRepository.updateEventById(id, {
+    finalEvent = await liveCompetitionRepository.updateEventById(id, {
       "megaAudition.status": updated.megaAudition.status,
       ...(updated.grandFinale ? { "grandFinale.status": updated.grandFinale.status } : {})
     });
   }
-  return updated;
+  return enrichEventWithStats(finalEvent);
 };
 
 export const deleteEvent = async (id) => {
@@ -329,13 +410,29 @@ export const getSubmissionById = async (id) => {
   return submission;
 };
 
-export const reviewSubmission = async (id, { isChecked }) => {
+export const reviewSubmission = async (id, { isChecked, rank }) => {
   const submission = await liveCompetitionRepository.findSubmissionById(id);
   if (!submission) throw new ApiError(404, "Submission not found");
 
-  return await liveCompetitionRepository.updateSubmissionById(id, {
+  const updateData = {
     evaluationStatus: isChecked ? "CHECKED" : "PENDING",
-  });
+  };
+
+  if (rank !== undefined) {
+    if (rank === null) {
+      updateData.isWinner = false;
+      updateData.rank = null;
+    } else {
+      await LiveCompetitionSubmission.updateMany(
+        { event: submission.event._id || submission.event, round: submission.round, rank },
+        { $set: { isWinner: false, rank: null } }
+      );
+      updateData.isWinner = true;
+      updateData.rank = rank;
+    }
+  }
+
+  return await liveCompetitionRepository.updateSubmissionById(id, updateData);
 };
 
 export const deleteSubmission = async (id) => {
@@ -399,7 +496,8 @@ export const declareResult = async (eventId, { round }) => {
   if (!targetRound) throw new ApiError(400, "Round configuration not found");
 
   if (targetRound.status === "RESULT_DECLARED") return event;
-  if (targetRound.status !== "CLOSED") {
+  const isExternalLink = targetRound?.submission?.type === "EXTERNAL_LINK";
+  if (targetRound.status !== "CLOSED" && !(isExternalLink && targetRound.status === "LIVE")) {
     throw new ApiError(400, "Round must be CLOSED before declaring results");
   }
 
@@ -425,6 +523,29 @@ export const declareResult = async (eventId, { round }) => {
         throw new ApiError(400, "You must select at least Rank 1 winner before declaring Grand Finale results.");
       }
       updatePayload["grandFinale.status"] = "RESULT_DECLARED";
+      
+      // Credit wallets
+      if (event.grandFinale.prizes) {
+        for (const sub of winners) {
+          if (sub.rank) {
+            const prizeConfig = event.grandFinale.prizes.find(p => p.rank === sub.rank);
+            if (prizeConfig && prizeConfig.walletPoints > 0) {
+              try {
+                await walletService.addRewardPoints(
+                  sub.participant._id || sub.participant,
+                  prizeConfig.walletPoints,
+                  "live_competition_win",
+                  `Rank ${sub.rank} - ${event.title}`,
+                  event._id,
+                  "LiveCompetition"
+                );
+              } catch (e) {
+                console.error(`Failed to credit wallet for ${sub.participant}:`, e);
+              }
+            }
+          }
+        }
+      }
     }
 
     const updatedEvent = await liveCompetitionRepository.updateEventById(eventId, updatePayload);
@@ -485,7 +606,12 @@ export const declareWinner = async (eventId, { round, rank1Id, rank2Id, rank3Id 
   if (!event) throw new ApiError(404, "Live competition not found");
 
   const targetRound = round === "GRAND_FINALE" ? event.grandFinale : event.megaAudition;
-  if (targetRound.status !== "CLOSED" && targetRound.status !== "RESULT_DECLARED") {
+  const isExternalLink = targetRound?.submission?.type === "EXTERNAL_LINK";
+  if (
+    targetRound.status !== "CLOSED" &&
+    targetRound.status !== "RESULT_DECLARED" &&
+    !(isExternalLink && targetRound.status === "LIVE")
+  ) {
     throw new ApiError(400, "Round must be CLOSED to declare winners");
   }
 
@@ -500,7 +626,13 @@ export const declareWinner = async (eventId, { round, rank1Id, rank2Id, rank3Id 
     if (sub.event.toString() !== eventId.toString() || sub.round !== round) {
       throw new ApiError(400, `Rank ${rank} submission is invalid for this round`);
     }
-    if (!sub.submittedAt) throw new ApiError(400, `Rank ${rank} submission has not submitted work`);
+    if (sub.paymentStatus !== "COMPLETED") {
+      throw new ApiError(400, `Rank ${rank} participant has not completed payment`);
+    }
+    // For EXTERNAL_LINK rounds, participants submit via external form — no system submittedAt
+    if (!isExternalLink && !sub.submittedAt) {
+      throw new ApiError(400, `Rank ${rank} participant has not submitted their work`);
+    }
     return sub;
   };
 
@@ -530,48 +662,28 @@ export const declareWinner = async (eventId, { round, rank1Id, rank2Id, rank3Id 
         { session }
       );
 
-      // Only credit prizes for Grand Finale
-      if (round === "GRAND_FINALE" && event.grandFinale.prizes) {
-        const prizeConfig = event.grandFinale.prizes.find(p => p.rank === rank);
-        if (prizeConfig && prizeConfig.walletPoints > 0) {
-          // Note: walletService handles its own transaction, which isn't ideal here, 
-          // but we will wrap it tightly.
-          await walletService.addRewardPoints(
-            sub.participant._id,
-            prizeConfig.walletPoints,
-            "live_competition_win",
-            `Rank ${rank} - ${event.title}`,
-            eventId,
-            "LiveCompetition"
-          );
-        }
-      }
-    };
+      };
 
     await applyWinner(rank1Sub, 1);
     await applyWinner(rank2Sub, 2);
     await applyWinner(rank3Sub, 3);
 
+    if (
+      round === "GRAND_FINALE" &&
+      isExternalLink &&
+      targetRound.status !== "RESULT_DECLARED" &&
+      targetRound.resultDeclarationDate &&
+      new Date() >= new Date(targetRound.resultDeclarationDate)
+    ) {
+      await LiveCompetition.updateOne(
+        { _id: eventId },
+        { $set: { "grandFinale.status": "RESULT_DECLARED" } },
+        { session }
+      );
+    }
+
     await session.commitTransaction();
     session.endSession();
-
-    // 3. Send notifications to winners
-    const notify = async (sub, rank) => {
-      if (!sub) return;
-      try {
-        await sendNotificationToMultipleStudents(
-          [sub.participant._id.toString()],
-          `🥇 You Won!`,
-          `Congratulations! You achieved Rank ${rank} in ${event.title}!`,
-          { type: "live_competition_win", eventId: eventId.toString() },
-          null
-        );
-      } catch (e) { console.error(e); }
-    };
-
-    await notify(rank1Sub, 1);
-    await notify(rank2Sub, 2);
-    await notify(rank3Sub, 3);
 
     return { message: "Winners successfully updated." };
   } catch (error) {
@@ -611,19 +723,20 @@ export const getEventStats = async (eventId, options = {}) => {
 const enrichEventForStudent = async (e, studentId, studentWalletBalance) => {
   const now = new Date();
   
-  // Enforce submission.type from category (source of truth)
+  // Enforce submission.type from category as fallback
   if (e.category?.submissionType) {
     if (e.megaAudition) {
       e.megaAudition.submission = e.megaAudition.submission || {};
-      e.megaAudition.submission.type = e.category.submissionType;
+      e.megaAudition.submission.type = e.megaAudition.submission.type || e.category.submissionType;
     }
     if (e.grandFinale) {
       e.grandFinale.submission = e.grandFinale.submission || {};
-      e.grandFinale.submission.type = e.category.submissionType;
+      e.grandFinale.submission.type = e.grandFinale.submission.type || e.category.submissionType;
     }
   }
 
-  const obj = e.toObject ? e.toObject() : e;
+  let obj = e.toObject ? e.toObject() : e;
+  obj = await enrichEventWithStats(obj);
 
   // 1. MEGA AUDITION STATUS
   obj.megaAudition.isRegistrationOpen =
@@ -656,10 +769,15 @@ const enrichEventForStudent = async (e, studentId, studentWalletBalance) => {
     obj.grandFinale.discountedPrice = gFee.discountedPrice;
   }
 
+  // HARD VISIBILITY GUARD: If Grand Finale is explicitly hidden by Admin, remove it entirely from Student API
+  if (obj.grandFinale && obj.grandFinale.isVisible === false) {
+    delete obj.grandFinale;
+  }
+
   // 3. STUDENT SPECIFIC DATA (The 3-Tier Visibility Logic)
   obj.studentStatus = {
     walletBalance: studentWalletBalance || 0,
-    megaAudition: { hasRegistered: false, hasSubmitted: false, isQualified: false },
+    megaAudition: { hasRegistered: false, hasSubmitted: false, isQualified: false, resultStatus: 'PENDING' },
     grandFinale: { hasRegistered: false, hasSubmitted: false }
   };
 
@@ -674,19 +792,69 @@ const enrichEventForStudent = async (e, studentId, studentWalletBalance) => {
     if (mSub) {
       obj.studentStatus.megaAudition.hasRegistered = true;
       obj.studentStatus.megaAudition.hasSubmitted = !!mSub.submittedAt;
-      obj.studentStatus.megaAudition.isQualified = mSub.isQualified;
+      obj.studentStatus.megaAudition.submittedAt = mSub.submittedAt || null;
+      obj.studentStatus.megaAudition.isQualified = mSub.isQualified && e.megaAudition.status === "RESULT_DECLARED";
+      
+      if (e.megaAudition.status === "RESULT_DECLARED") {
+        if (!mSub.submittedAt) {
+          obj.studentStatus.megaAudition.resultStatus = "NOT_SUBMITTED";
+        } else {
+          obj.studentStatus.megaAudition.resultStatus = mSub.isQualified ? "QUALIFIED" : "DISQUALIFIED";
+        }
+      } else {
+        obj.studentStatus.megaAudition.resultStatus = "PENDING";
+      }
+    } else {
+      if (e.megaAudition.status === "RESULT_DECLARED") {
+        obj.studentStatus.megaAudition.resultStatus = "NOT_REGISTERED";
+      } else {
+        obj.studentStatus.megaAudition.resultStatus = "PENDING";
+      }
     }
 
     const gSub = submissions.find(s => s.round === "GRAND_FINALE");
     if (gSub) {
-      obj.studentStatus.grandFinale.hasRegistered = true;
+      let grandFinalePaymentStatus = gSub.paymentStatus;
+
+      if (grandFinalePaymentStatus === "PENDING" && obj.grandFinale) {
+        const expectedAmount = Number(obj.grandFinale.discountedPrice ?? obj.grandFinale.fee?.amount) || 0;
+        if (expectedAmount > 0) {
+          const reconciledIntent = await razorpayOrderIntentRepository.findLatestReconciledByContext({
+            studentId,
+            type: "live_competition",
+            entityId: e._id,
+            amountPaise: Math.round(expectedAmount * 100),
+          });
+
+          if (reconciledIntent) {
+            await liveCompetitionRepository.updateSubmissionById(gSub._id, {
+              paymentStatus: "COMPLETED",
+              transactionId: reconciledIntent.paymentId,
+            });
+            grandFinalePaymentStatus = "COMPLETED";
+          }
+        }
+      }
+
+      obj.studentStatus.grandFinale.hasRegistered = grandFinalePaymentStatus === "COMPLETED";
       obj.studentStatus.grandFinale.hasSubmitted = !!gSub.submittedAt;
+      obj.studentStatus.grandFinale.submittedAt = gSub.submittedAt || null;
+    }
+
+    let isGrandFinaleFreeAndQualified = false;
+
+    if (!gSub && obj.grandFinale && obj.studentStatus.megaAudition.isQualified) {
+      const gfFee = Number(obj.grandFinale.fee?.amount) || 0;
+      if (gfFee === 0) {
+        isGrandFinaleFreeAndQualified = true;
+        obj.studentStatus.grandFinale.hasRegistered = true;
+      }
     }
 
     // VISIBILITY GUARD FOR GRAND FINALE
     if (obj.grandFinale) {
       // If they haven't paid/registered for Grand Finale, hide sensitive topics/rules
-      if (!gSub) {
+      if (!gSub && !isGrandFinaleFreeAndQualified) {
         if (obj.grandFinale.submission?.text) {
           delete obj.grandFinale.submission.text.topic;
           delete obj.grandFinale.submission.text.rules;
@@ -707,30 +875,35 @@ const enrichEventForStudent = async (e, studentId, studentWalletBalance) => {
         delete obj.grandFinale.submission.file.instructions;
       }
     }
+    
+    if (e.megaAudition.status === "RESULT_DECLARED") {
+      obj.studentStatus.megaAudition.resultStatus = "NOT_REGISTERED";
+    }
   }
 
   // Inject Winners
-  const attachWinner = async (roundName) => {
-    const winnerSub = await liveCompetitionRepository.findOneSubmission(
+  const attachWinners = async (roundName) => {
+    const winnerSubs = await liveCompetitionRepository.findSubmissions(
       { event: e._id, round: roundName, isWinner: true },
-      [{ path: "participant", select: "name profilePic email" }]
+      { populate: [{ path: "participant", select: "name profilePic email" }], limit: 3, sort: { rank: 1 } }
     );
-    if (winnerSub?.participant) {
-      return {
-        submissionId: winnerSub._id,
-        name: winnerSub.participant.name || "Winner",
-        email: winnerSub.participant.email || "",
-        profilePic: winnerSub.participant.profilePic || null,
-      };
+    if (winnerSubs && winnerSubs.length > 0) {
+      return winnerSubs.map(sub => ({
+        submissionId: sub._id,
+        rank: sub.rank,
+        name: sub.participant?.name || "Winner",
+        email: sub.participant?.email || "",
+        profilePic: sub.participant?.profilePic || null,
+      })).sort((a, b) => (a.rank || 99) - (b.rank || 99));
     }
-    return null;
+    return [];
   };
 
   if (obj.megaAudition.status === "RESULT_DECLARED") {
-    obj.megaAudition.winner = await attachWinner("MEGA_AUDITION");
+    obj.megaAudition.winners = await attachWinners("MEGA_AUDITION");
   }
   if (obj.grandFinale && obj.grandFinale.status === "RESULT_DECLARED") {
-    obj.grandFinale.winner = await attachWinner("GRAND_FINALE");
+    obj.grandFinale.winners = await attachWinners("GRAND_FINALE");
   }
 
   return obj;
@@ -775,13 +948,13 @@ export const getPublishedEvents = async (options = {}) => {
     events.map(async (e) => {
       let eventObj = e;
       let changed = false;
-      const mStatus = computeRoundStatus(e.megaAudition, true);
+      const mStatus = computeMegaAuditionStatus(e.megaAudition, true);
       if (mStatus !== e.megaAudition.status) {
         e.megaAudition.status = mStatus;
         changed = true;
       }
       if (e.grandFinale) {
-        const gStatus = computeRoundStatus(e.grandFinale, true);
+        const gStatus = computeGrandFinaleStatus(e.grandFinale, true, mStatus);
         if (gStatus !== e.grandFinale.status) {
           e.grandFinale.status = gStatus;
           changed = true;
@@ -811,8 +984,29 @@ export const getPublishedEvents = async (options = {}) => {
 };
 
 export const getPublishedEventById = async (id, studentId = null) => {
-  const event = await liveCompetitionRepository.findEventById(id, [categoryPopulate]);
+  let event = await liveCompetitionRepository.findEventById(id, [categoryPopulate]);
   if (!event || !event.isPublished) throw new ApiError(404, "Live competition not found");
+
+  let changed = false;
+  const mStatus = computeMegaAuditionStatus(event.megaAudition, true);
+  if (mStatus !== event.megaAudition.status) {
+    event.megaAudition.status = mStatus;
+    changed = true;
+  }
+  if (event.grandFinale) {
+    const gStatus = computeGrandFinaleStatus(event.grandFinale, true, mStatus);
+    if (gStatus !== event.grandFinale.status) {
+      event.grandFinale.status = gStatus;
+      changed = true;
+    }
+  }
+  if (changed) {
+    await liveCompetitionRepository.updateEventById(event._id, {
+      "megaAudition.status": event.megaAudition.status,
+      ...(event.grandFinale ? { "grandFinale.status": event.grandFinale.status } : {})
+    });
+    event = await liveCompetitionRepository.findEventById(event._id, [categoryPopulate]);
+  }
 
   let studentWalletBalance = 0;
   if (studentId) {
@@ -835,8 +1029,11 @@ export const registerForEvent = async (eventId, studentId, options = {}) => {
     if (now < new Date(targetRound.registration.start)) throw new ApiError(400, "Registration not open");
     if (now > new Date(targetRound.registration.end)) throw new ApiError(400, "Registration closed");
   } else {
+    if (targetRound.isVisible === false) throw new ApiError(403, "Round 2 is not currently visible or active");
     if (now < new Date(targetRound.paymentWindow.start)) throw new ApiError(400, "Payment not open");
     if (now > new Date(targetRound.paymentWindow.end)) throw new ApiError(400, "Payment closed");
+    const megaStatus = computeMegaAuditionStatus(event.megaAudition, event.isPublished);
+    if (megaStatus !== "RESULT_DECLARED") throw new ApiError(403, "Round 1 results are not declared yet");
     const mSub = await liveCompetitionRepository.findOneSubmission({ event: eventId, participant: studentId, round: "MEGA_AUDITION" });
     if (!mSub || !mSub.isQualified) throw new ApiError(403, "Not qualified");
   }
@@ -869,8 +1066,11 @@ export const initiateLiveCompPayment = async (eventId, studentId, paymentMethod,
     if (now > new Date(targetRound.registration.end)) throw new ApiError(400, "Registration window has closed");
   } else {
     // Grand Finale Payment validations
+    if (targetRound.isVisible === false) throw new ApiError(403, "Round 2 is not currently visible or active");
     if (now < new Date(targetRound.paymentWindow.start)) throw new ApiError(400, "Payment window has not opened yet");
     if (now > new Date(targetRound.paymentWindow.end)) throw new ApiError(400, "Payment window has closed");
+    const megaStatus = computeMegaAuditionStatus(event.megaAudition, event.isPublished);
+    if (megaStatus !== "RESULT_DECLARED") throw new ApiError(403, "Round 1 results are not declared yet");
 
     // Verify qualification
     const mSub = await liveCompetitionRepository.findOneSubmission({ event: eventId, participant: studentId, round: "MEGA_AUDITION" });
@@ -880,12 +1080,30 @@ export const initiateLiveCompPayment = async (eventId, studentId, paymentMethod,
   }
 
   const existing = await liveCompetitionRepository.findOneSubmission({ event: eventId, participant: studentId, round });
-  if (existing && existing.paymentStatus === "COMPLETED") {
-    throw new ApiError(409, "You are already registered for this round");
-  }
 
   const basePrice = Number(targetRound.fee?.amount) || 0;
   const { amountToCharge, couponId, appliedOffer, appliedCoupon } = await getAmountToCharge("LiveCompetition", basePrice, couponCode);
+
+  if (existing && existing.paymentStatus === "COMPLETED") {
+    throw new ApiError(409, "You are already registered for this round of the event");
+  }
+
+  if (existing && existing.paymentStatus === "PENDING" && amountToCharge > 0) {
+    const reconciledIntent = await razorpayOrderIntentRepository.findLatestReconciledByContext({
+      studentId,
+      type: "live_competition",
+      entityId: eventId,
+      amountPaise: Math.round(amountToCharge * 100),
+    });
+
+    if (reconciledIntent) {
+      const updated = await liveCompetitionRepository.updateSubmissionById(existing._id, {
+        paymentStatus: "COMPLETED",
+        transactionId: reconciledIntent.paymentId,
+      });
+      return { completed: true, registration: updated };
+    }
+  }
 
   if (paymentMethod === "free") {
     if (amountToCharge > 0) throw new ApiError(400, "This event is paid. Use paymentMethod: wallet or razorpay.");
@@ -950,7 +1168,7 @@ export const initiateLiveCompPayment = async (eventId, studentId, paymentMethod,
 };
 
 export const completeLiveCompPayment = async (eventId, studentId, data) => {
-  const { razorpayOrderId, razorpayPaymentId, razorpaySignature } = data;
+  const { razorpayOrderId, razorpayPaymentId, razorpaySignature, round: requestedRound } = data;
 
   const isValid = verifyPaymentSignature(razorpayOrderId, razorpayPaymentId, razorpaySignature);
   if (!isValid) throw new ApiError(400, "Invalid payment signature");
@@ -960,16 +1178,22 @@ export const completeLiveCompPayment = async (eventId, studentId, data) => {
     throw new ApiError(400, "Invalid payment intent details");
   }
 
-  const round = intent.metadata?.round || "MEGA_AUDITION";
+  const round = intent.metadata?.round || requestedRound || "MEGA_AUDITION";
 
   const existing = await liveCompetitionRepository.findOneSubmission({ event: eventId, participant: studentId, round });
   if (!existing) throw new ApiError(404, "Submission record not found");
 
-  if (!intent.reconciled) {
-    if (intent.couponId) await couponService.incrementCouponUsedCount(intent.couponId);
-    await liveCompetitionRepository.updateSubmissionById(existing._id, { paymentStatus: "COMPLETED" });
-    await razorpayOrderIntentRepository.markReconciled(razorpayOrderId, razorpayPaymentId);
+  if (existing.paymentStatus !== "COMPLETED") {
+    if (!intent.reconciled && intent.couponId) await couponService.incrementCouponUsedCount(intent.couponId);
+    await liveCompetitionRepository.updateSubmissionById(existing._id, {
+      paymentStatus: "COMPLETED",
+      transactionId: razorpayPaymentId,
+    });
     existing.paymentStatus = "COMPLETED";
+  }
+
+  if (!intent.reconciled) {
+    await razorpayOrderIntentRepository.markReconciled(razorpayOrderId, razorpayPaymentId);
   }
 
   return existing;
@@ -981,7 +1205,7 @@ export const startEssaySession = async (eventId, studentId, options = {}) => {
   if (!event || !event.isPublished) throw new ApiError(404, "Live competition not found");
 
   const targetRound = round === "GRAND_FINALE" ? event.grandFinale : event.megaAudition;
-  const submissionType = event.category?.submissionType || targetRound.submission?.type;
+  const submissionType = targetRound.submission?.type || event.category?.submissionType;
   
   if (submissionType !== "TEXT") throw new ApiError(400, "This event does not support live essay sessions");
 
@@ -989,8 +1213,23 @@ export const startEssaySession = async (eventId, studentId, options = {}) => {
   if (now < new Date(targetRound.eventWindow.start)) throw new ApiError(400, "Event has not started yet");
   if (now > new Date(targetRound.eventWindow.end)) throw new ApiError(400, "Event window has closed");
 
-  const submission = await liveCompetitionRepository.findOneSubmission({ event: eventId, participant: studentId, round });
-  if (!submission) throw new ApiError(403, "You are not registered for this round");
+  let submission = await liveCompetitionRepository.findOneSubmission({ event: eventId, participant: studentId, round });
+  
+  if (!submission) {
+    if (round === "GRAND_FINALE" && (!targetRound.fee || Number(targetRound.fee.amount) === 0)) {
+      const mSub = await liveCompetitionRepository.findOneSubmission({ event: eventId, participant: studentId, round: "MEGA_AUDITION" });
+      if (mSub && mSub.isQualified) {
+        submission = await liveCompetitionRepository.createSubmission({
+          event: eventId, participant: studentId, paymentStatus: "COMPLETED", round
+        });
+      } else {
+        throw new ApiError(403, "You are not qualified for the Grand Finale");
+      }
+    } else {
+      throw new ApiError(403, "You are not registered for this round");
+    }
+  }
+
   if (submission.paymentStatus !== "COMPLETED") throw new ApiError(403, "Payment is required before starting");
 
   if (submission.attemptLocked) return submission;
@@ -1001,8 +1240,23 @@ export const startEssaySession = async (eventId, studentId, options = {}) => {
 };
 
 export const saveDraft = async (eventId, studentId, { text, round = "MEGA_AUDITION" }) => {
-  const submission = await liveCompetitionRepository.findOneSubmission({ event: eventId, participant: studentId, round });
-  if (!submission) throw new ApiError(403, "You are not registered for this event");
+  let submission = await liveCompetitionRepository.findOneSubmission({ event: eventId, participant: studentId, round });
+  if (!submission) {
+    const event = await liveCompetitionRepository.findEventById(eventId);
+    const targetRound = round === "GRAND_FINALE" ? event?.grandFinale : event?.megaAudition;
+    if (round === "GRAND_FINALE" && targetRound && (!targetRound.fee || Number(targetRound.fee.amount) === 0)) {
+      const mSub = await liveCompetitionRepository.findOneSubmission({ event: eventId, participant: studentId, round: "MEGA_AUDITION" });
+      if (mSub && mSub.isQualified) {
+        submission = await liveCompetitionRepository.createSubmission({
+          event: eventId, participant: studentId, paymentStatus: "COMPLETED", round
+        });
+      } else {
+        throw new ApiError(403, "You are not qualified for the Grand Finale");
+      }
+    } else {
+      throw new ApiError(403, "You are not registered for this event");
+    }
+  }
 
   return await liveCompetitionRepository.updateSubmissionById(submission._id, {
     "content.text": text || "",
@@ -1022,12 +1276,26 @@ export const submitWork = async (eventId, studentId, { text, round = "MEGA_AUDIT
   const gracePeriodEnd = new Date(targetRound.eventWindow.end.getTime() + 2 * 60000);
   if (now > gracePeriodEnd) throw new ApiError(400, "Submission deadline has passed");
 
-  const submission = await liveCompetitionRepository.findOneSubmission({ event: eventId, participant: studentId, round });
-  if (!submission) throw new ApiError(403, "You are not registered for this round");
+  let submission = await liveCompetitionRepository.findOneSubmission({ event: eventId, participant: studentId, round });
+  
+  if (!submission) {
+    if (round === "GRAND_FINALE" && (!targetRound.fee || Number(targetRound.fee.amount) === 0)) {
+      const mSub = await liveCompetitionRepository.findOneSubmission({ event: eventId, participant: studentId, round: "MEGA_AUDITION" });
+      if (mSub && mSub.isQualified) {
+        submission = await liveCompetitionRepository.createSubmission({
+          event: eventId, participant: studentId, paymentStatus: "COMPLETED", round
+        });
+      } else {
+        throw new ApiError(403, "You are not qualified for the Grand Finale");
+      }
+    } else {
+      throw new ApiError(403, "You are not registered for this round");
+    }
+  }
   if (submission.submittedAt) throw new ApiError(409, "You have already submitted your work");
   if (targetRound.fee?.isPaid && submission.paymentStatus !== "COMPLETED") throw new ApiError(403, "Payment is required");
 
-  const submissionType = event.category?.submissionType || targetRound.submission?.type;
+  const submissionType = targetRound.submission?.type || event.category?.submissionType;
 
   if (submissionType === "TEXT") {
     const essayText = text || submission.content?.text || "";
@@ -1071,6 +1339,7 @@ export const submitWork = async (eventId, studentId, { text, round = "MEGA_AUDIT
 
   const updateData = { submittedAt: now, isLate: false };
   if (submissionType === "TEXT") updateData["content.text"] = text || submission.content?.text || "";
+  if (submissionType === "EXTERNAL_LINK") updateData["content.text"] = "[Submitted via External Link]";
   if (uploadedFiles.length > 0) updateData["content.files"] = uploadedFiles;
 
   const updated = await liveCompetitionRepository.updateSubmissionById(submission._id, updateData);

@@ -9,6 +9,7 @@ import eventRegistrationRepository from "../repository/eventRegistration.reposit
 import walletService from "./wallet.service.js";
 import categoryPurchaseService from "./categoryPurchase.service.js";
 import categoryPurchaseRepository from "../repository/categoryPurchase.repository.js";
+import liveCompetitionRepository from "../repository/liveCompetition.repository.js";
 import { getCategoryRevenueSourceType, logTransaction } from "./adminRevenue.service.js";
 
 const LOG_PREFIX = "[Razorpay Webhook]";
@@ -205,6 +206,33 @@ async function reconcilePaymentCaptured(orderId, paymentId, amountPaise) {
       sourceType: "wallet",
       itemId: studentId,
       itemName: "Wallet Recharge",
+      paymentId
+    });
+  } else if (type === "live_competition") {
+    const round = intent.metadata?.round || "MEGA_AUDITION";
+    const existing = await liveCompetitionRepository.findOneSubmission({
+      event: entityId,
+      participant: studentId,
+      round,
+    });
+
+    if (!existing) {
+      return { reconciled: false, reason: "live_competition_submission_not_found" };
+    }
+
+    if (existing.paymentStatus !== "COMPLETED") {
+      await liveCompetitionRepository.updateSubmissionById(existing._id, {
+        paymentStatus: "COMPLETED",
+        transactionId: paymentId,
+      });
+    }
+
+    await logTransaction({
+      studentId,
+      amount: amountPaise / 100,
+      sourceType: "live_competition",
+      itemId: entityId,
+      itemName: round === "GRAND_FINALE" ? "Live Competition Round 2" : "Live Competition Round 1",
       paymentId
     });
   } else if (type === "categoryNode" || ["Olympiads", "School", "Competitive", "Skill Development"].includes(type)) {
