@@ -90,7 +90,7 @@ export const getLeaderboardsForStudent = asyncHandler(async (req, res) => {
 
     if (normalizedType === "challenge") {
       const challenge = await Challenge.findById(eventId).populate("test", "title applicableFor");
-      if (!challenge || challenge.test?.applicableFor !== "challenge_yourfriends") {
+      if (!challenge) {
         throw new ApiError(404, "Challenge not found");
       }
 
@@ -288,19 +288,19 @@ export const getLeaderboardsForStudent = asyncHandler(async (req, res) => {
       };
     }
 
-    // Guarantee that ONLY challenge_yourfriends tests are included
-    const Test = (await import("../models/Test.js")).default;
-    const testQuery = { applicableFor: "challenge_yourfriends" };
+    // Category filter for challenges
     if (categoryDescendantIds) {
+      const Test = (await import("../models/Test.js")).default;
+      const testQuery = {};
       const QuestionBank = (await import("../models/QuestionBank.js")).default;
       const bankIds = await QuestionBank.find({ categories: { $in: categoryDescendantIds } }).distinct("_id");
       testQuery.$or = [
         { questionBank: { $in: bankIds } },
         { categoryId: { $in: categoryDescendantIds } }
       ];
+      const testIds = await Test.find(testQuery).distinct("_id");
+      matchQuery.test = { $in: testIds };
     }
-    const testIds = await Test.find(testQuery).distinct("_id");
-    matchQuery.test = { $in: testIds };
 
     const challenges = await Challenge.find(matchQuery)
       .populate("test", "title")

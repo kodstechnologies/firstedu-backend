@@ -46,7 +46,6 @@ const testSchema = new mongoose.Schema(
         "tournament",
         "challenge_yourself",
         "everyday_challenge",
-        "challenge_yourfriends",
         "competition_sector",
         "Olympiads",
         "School",

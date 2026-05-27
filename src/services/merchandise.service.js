@@ -52,9 +52,8 @@ export const getMerchandiseItems = async (page = 1, limit = 10) => {
     sort: { createdAt: -1 },
   });
 
-  const itemsWithOffer = await attachOfferToList(result.items, "Ecommerce", "pointsRequired");
   return {
-    items: itemsWithOffer,
+    items: result.items,
     pagination: result.pagination,
   };
 };
@@ -73,7 +72,7 @@ export const getMerchandiseById = async (itemId) => {
     throw new ApiError(404, "Merchandise item not available");
   }
 
-  return await attachOfferToItem(item, "Ecommerce", "pointsRequired");
+  return item;
 };
 
 /**
@@ -226,12 +225,7 @@ export const claimMerchandise = async (studentId, itemId, payload = {}) => {
   }
 
   // ── POINTS (default — original mobile app flow, untouched) ─────────────────
-  const basePoints = item.discountedPrice != null ? item.discountedPrice : item.pointsRequired;
-  const { amountToCharge: pointsRequired, couponId } = await getAmountToCharge(
-    "Ecommerce",
-    basePoints,
-    couponCode
-  );
+  const pointsRequired = item.pointsRequired;
 
   const wallet = await walletService.getOrCreateWallet(studentId, "User");
   if (wallet.rewardPoints < pointsRequired) {
@@ -259,10 +253,6 @@ export const claimMerchandise = async (studentId, itemId, payload = {}) => {
 
   if (item.stockQuantity !== null) {
     await merchandiseRepository.updateMerchandise(itemId, { stockQuantity: item.stockQuantity - 1 });
-  }
-
-  if (couponId) {
-    await couponService.incrementCouponUsedCount(couponId);
   }
 
   return await merchandiseRepository.findMerchandiseClaimById(claim._id);

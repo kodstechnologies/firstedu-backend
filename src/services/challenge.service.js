@@ -135,11 +135,8 @@ export const createChallenge = async (data, userId) => {
   if (!test) {
     throw new ApiError(404, "Test not found");
   }
-  if (test.applicableFor !== "challenge_yourfriends") {
-    throw new ApiError(400, "Selected test is not applicable for challenge-yourfriends");
-  }
 
-  // Paid `challenge_yourfriends` tests: only allow room creation if the creator purchased.
+  // Paid tests: only allow room creation if the creator purchased.
   if (test.price > 0) {
     const access = await checkStudentAccessForPaidTest(testId, userId);
     if (!access.hasAccess) {
@@ -307,9 +304,9 @@ export const startChallenge = async (id, userId) => {
 
   const participantIds = challenge.participants.map((p) => p.student);
 
-  // Paid `challenge_yourfriends`: prevent partial starts by ensuring all participants purchased.
+  // Paid tests: prevent partial starts by ensuring all participants purchased.
   const test = await testRepository.findTestById(challenge.test);
-  if (test?.applicableFor === "challenge_yourfriends" && test.price > 0) {
+  if (test && test.price > 0) {
     const accessResults = await Promise.all(
       participantIds.map((pid) => checkStudentAccessForPaidTest(challenge.test, pid))
     );
@@ -405,18 +402,22 @@ export const deleteChallenge = async (id, userId) => {
 };
 
 export const getChallengeYourFriendsTests = async (userId = null) => {
-  const result = await testRepository.findAllTests(
-    {},
-    {
-      page: 1,
-      limit: 1000,
-      applicableFor: "challenge_yourfriends",
-      isPublished: true,
-      sortBy: "createdAt",
-      sortOrder: "desc",
+  if (!userId) return [];
+  const purchases = await orderRepository.findTestPurchasesForExamHall(userId);
+
+  const testsMap = new Map();
+  purchases.forEach((p) => {
+    if (p.test) {
+      testsMap.set(p.test._id.toString(), p.test);
     }
-  );
-  const tests = result.tests.map((test) => (test?.toObject ? test.toObject() : { ...test }));
+    if (p.testBundle && p.testBundle.tests?.length) {
+      p.testBundle.tests.forEach((t) => {
+        if (t && t._id) testsMap.set(t._id.toString(), t);
+      });
+    }
+  });
+
+  const tests = Array.from(testsMap.values()).map(test => (test?.toObject ? test.toObject() : { ...test }));
 
   const addPurchaseMeta = (test, purchased) => {
     const price = Number(test?.price) || 0;
@@ -431,20 +432,7 @@ export const getChallengeYourFriendsTests = async (userId = null) => {
     };
   };
 
-  if (!userId) {
-    return tests.map((test) => addPurchaseMeta(test, false));
-  }
-
-  return await Promise.all(
-    tests.map(async (test) => {
-      const purchase = await orderRepository.findTestPurchase({
-        student: userId,
-        test: test._id,
-        paymentStatus: "completed",
-      });
-      return addPurchaseMeta(test, !!purchase);
-    })
-  );
+  return tests.map((test) => addPurchaseMeta(test, true));
 };
 
 export const getCompletedChallenges = async (userId, options = {}) => {

@@ -449,12 +449,7 @@ export const startExamSession = async (testId, studentId, options = {}) => {
     throw new ApiError(400, "Test has no question bank configured");
   }
 
-  if (test.applicableFor === "challenge_yourfriends" && !challengeId) {
-    throw new ApiError(
-      400,
-      "This challenge exam can only be started by the room creator"
-    );
-  }
+
 
   // Get all questions from the question bank
   const questions = await questionBankRepository.getQuestionsByBankId(test.questionBank._id);
@@ -463,26 +458,18 @@ export const startExamSession = async (testId, studentId, options = {}) => {
   }
 
   // Check if student can access paid test.
-  // For `challenge_yourfriends`, every participant must have purchased.
   if (test.price > 0 && test.applicableFor !== "everyday_challenge") {
-    if (test.applicableFor === "challenge_yourfriends") {
-      const access = await checkStudentAccessForPaidTest(testId, studentId, categoryId);
-      if (!access.hasAccess) {
-        throw new ApiError(403, "You need to purchase this test first");
-      }
-    } else {
-      const access =
+    const access =
+      test.applicableFor === "challenge_yourself"
+        ? await checkStudentAccessForPaidChallengeYourselfTest(testId, studentId)
+        : await checkStudentAccessForPaidTest(testId, studentId, categoryId);
+    if (!access.hasAccess) {
+      throw new ApiError(
+        403,
         test.applicableFor === "challenge_yourself"
-          ? await checkStudentAccessForPaidChallengeYourselfTest(testId, studentId)
-          : await checkStudentAccessForPaidTest(testId, studentId, categoryId);
-      if (!access.hasAccess) {
-        throw new ApiError(
-          403,
-          test.applicableFor === "challenge_yourself"
-            ? "You need to purchase this challenge level first"
-            : "You need to purchase this test first"
-        );
-      }
+          ? "You need to purchase this challenge level first"
+          : "You need to purchase this test first"
+      );
     }
   }
 
@@ -558,7 +545,7 @@ export const startExamSession = async (testId, studentId, options = {}) => {
       throw new ApiError(400, "You have already completed today's everyday challenge");
     }
   } else if (
-    test.applicableFor !== "challenge_yourfriends" &&
+    !challengeId &&
     !RETAKEABLE_PILLAR_TESTS.includes(test.applicableFor)
   ) {
     // Non–everyday challenge, non-pillar: prevent retaking the same test
@@ -688,34 +675,21 @@ export const getExamInstructions = async (testId, studentId, options = {}) => {
   let blockReason = null;
   let accessType = test.price > 0 ? "requires_purchase_or_event" : "free_test";
 
-  if (test.applicableFor === "challenge_yourfriends" && !challengeId) {
-    canStart = false;
-    blockReason = "This challenge exam can only be started by the room creator";
-  }
+
 
   if (canStart && test.price > 0 && test.applicableFor !== "everyday_challenge") {
-    if (test.applicableFor === "challenge_yourfriends") {
-      const access = await checkStudentAccessForPaidTest(testId, studentId, categoryId);
-      if (!access.hasAccess) {
-        canStart = false;
-        blockReason = "You need to purchase this test first";
-      } else {
-        accessType = access.accessType;
-      }
-    } else {
-      const access =
+    const access =
+      test.applicableFor === "challenge_yourself"
+        ? await checkStudentAccessForPaidChallengeYourselfTest(testId, studentId)
+        : await checkStudentAccessForPaidTest(testId, studentId, categoryId);
+    if (!access.hasAccess) {
+      canStart = false;
+      blockReason =
         test.applicableFor === "challenge_yourself"
-          ? await checkStudentAccessForPaidChallengeYourselfTest(testId, studentId)
-          : await checkStudentAccessForPaidTest(testId, studentId, categoryId);
-      if (!access.hasAccess) {
-        canStart = false;
-        blockReason =
-          test.applicableFor === "challenge_yourself"
-            ? "You need to purchase this challenge level first"
-            : "You need to purchase this test first";
-      } else {
-        accessType = access.accessType;
-      }
+          ? "You need to purchase this challenge level first"
+          : "You need to purchase this test first";
+    } else {
+      accessType = access.accessType;
     }
   }
 
@@ -772,7 +746,7 @@ export const getExamInstructions = async (testId, studentId, options = {}) => {
         blockReason = "You have already completed today's everyday challenge";
       }
     } else if (
-      test.applicableFor !== "challenge_yourfriends" &&
+      !challengeId &&
       !RETAKEABLE_PILLAR_TESTS.includes(test.applicableFor)
     ) {
       const completedSession = await examSessionRepository.findOne({

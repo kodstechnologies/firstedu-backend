@@ -295,7 +295,6 @@ const getConnectedCategoryIds = async (linkedTo, studentId, isCertification) => 
   const DIRECT_PURCHASABLE_TEST_TYPES = [
     "test",
     "challenge_yourself",
-    "challenge_yourfriends",
     "competitive",
     "school",
     "skill development",
@@ -380,20 +379,27 @@ const getConnectedCategoryIds = async (linkedTo, studentId, isCertification) => 
   }
 
   if (linkedTo === "challenge") {
-    const ChallengeTestTypes = ["challenge_yourfriends", "challenge_yourself", "everyday_challenge", "challenge"];
-    const challengeTests = await Test.find({
-      isPublished: true,
-      applicableFor: { $in: ChallengeTestTypes }
-    }).select("questionBank categoryId").lean();
+    if (!studentId) return categoryIds.size > 0 ? categoryIds : new Set();
+    const Challenge = (await import("../models/Challenge.js")).default;
+    const completedTestIds = await Challenge.find({
+      "participants.student": studentId,
+      roomStatus: "completed"
+    }).distinct("test");
 
-    const bankIds = [...new Set(challengeTests.map(t => t.questionBank?.toString()).filter(Boolean))];
-    const directCategoryIds = [...new Set(challengeTests.map(t => t.categoryId?.toString()).filter(Boolean))];
+    if (completedTestIds.length > 0) {
+      const challengeTests = await Test.find({
+        _id: { $in: completedTestIds }
+      }).select("questionBank categoryId").lean();
 
-    if (bankIds.length > 0) {
-      const fromChallenges = await QuestionBank.find({ _id: { $in: bankIds } }).distinct("categories");
-      fromChallenges.forEach((id) => categoryIds.add(id?.toString?.() || id));
+      const bankIds = [...new Set(challengeTests.map(t => t.questionBank?.toString()).filter(Boolean))];
+      const directCategoryIds = [...new Set(challengeTests.map(t => t.categoryId?.toString()).filter(Boolean))];
+
+      if (bankIds.length > 0) {
+        const fromChallenges = await QuestionBank.find({ _id: { $in: bankIds } }).distinct("categories");
+        fromChallenges.forEach((id) => categoryIds.add(id?.toString?.() || id));
+      }
+      directCategoryIds.forEach((id) => categoryIds.add(id));
     }
-    directCategoryIds.forEach((id) => categoryIds.add(id));
   }
 
   if (linkedTo === "examhall") {
