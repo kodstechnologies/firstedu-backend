@@ -59,7 +59,7 @@ app.get("/test", (req, res) => {
   // Send it in the response
   res.json({
     success: true,
-    message: `Server is working!!! Fine🚀`,
+    message: `Server is working!! Fine🚀`,
     timestamp: new Date().toISOString(),
   });
 });
