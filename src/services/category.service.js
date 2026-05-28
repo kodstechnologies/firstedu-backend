@@ -181,6 +181,17 @@ export const getCategoryTree = async (filter = {}) => {
       const byName = await Category.findOne({ name: pillar.name, parent: null });
       if (byName) {
         await Category.updateOne({ _id: byName._id }, { rootType: pillar.rootType, isPredefined: true });
+      } else {
+        // Automatically recreate the missing pillar category to prevent UI breakage
+        await categoryRepository.create({
+          name: pillar.name,
+          parent: null,
+          order: 0,
+          rootType: pillar.rootType,
+          status: "Public",
+          isPredefined: true,
+          createdBy: null // Ensure a valid payload for creation
+        });
       }
     }
   }
