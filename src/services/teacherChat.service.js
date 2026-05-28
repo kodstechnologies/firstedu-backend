@@ -44,17 +44,6 @@ export async function notifyTeacherDevice(teacherDoc, title, body, data = {}) {
       console.error("Persist teacher notification failed:", err.message);
     }
   }
-
-  const token = teacherDoc?.fcmToken?.trim();
-  if (!token) return;
-  try {
-    await sendNotificationToDevice(token, title, body, {
-      ...data,
-      audience: "teacher",
-    });
-  } catch (err) {
-    console.error("FCM teacher notify failed:", err.message);
-  }
 }
 
 /**

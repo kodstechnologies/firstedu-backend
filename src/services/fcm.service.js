@@ -1,5 +1,35 @@
 import { admin as firebaseAdmin } from "../config/firebase.js";
 
+const DEFAULT_WEB_PUSH_LINK = "https://app.iscorre.com/student/notifications";
+const DEFAULT_WEB_PUSH_ICON = "https://app.iscorre.com/vite.svg";
+
+const getWebPushLink = (data = {}) => {
+  const explicitLink = data.url || data.link || data.clickUrl || data.click_action;
+  if (explicitLink) return String(explicitLink);
+
+  const configuredLink =
+    process.env.FCM_WEB_PUSH_LINK ||
+    process.env.STUDENT_APP_URL ||
+    process.env.APP_FRONTEND_URL;
+  if (configuredLink) return String(configuredLink);
+
+  return DEFAULT_WEB_PUSH_LINK;
+};
+
+const buildWebPushConfig = (data = {}) => {
+  const link = getWebPushLink(data);
+  const icon = String(data.icon || process.env.FCM_WEB_PUSH_ICON || DEFAULT_WEB_PUSH_ICON);
+  return {
+    notification: {
+      icon,
+      badge: icon,
+    },
+    fcmOptions: {
+      link,
+    },
+  };
+};
+
 /**
  * Send FCM notification to a single device
  * @param {string} fcmToken - FCM token of the recipient
@@ -33,11 +63,7 @@ export const sendNotificationToDevice = async (fcmToken, title, body, data = {})
       body,
     },
     data: stringData,
-    webpush: {
-      fcmOptions: {
-        link: process.env.FRONTEND_URL || 'http://localhost:5173/student/notifications',
-      },
-    },
+    webpush: buildWebPushConfig(data),
     android: {
       priority: "high",
       notification: {
@@ -151,11 +177,7 @@ export const sendNotificationToMultipleDevices = async (fcmTokens, title, body, 
       body,
     },
     data: stringData,
-    webpush: {
-      fcmOptions: {
-        link: process.env.FRONTEND_URL || 'http://localhost:5173/student/notifications',
-      },
-    },
+    webpush: buildWebPushConfig(data),
     android: {
       priority: "high",
       notification: {
@@ -216,6 +238,7 @@ export const sendNotificationToTopic = async (topic, title, body, data = {}) => 
       body,
       timestamp: new Date().toISOString(),
     },
+    webpush: buildWebPushConfig(data),
     android: {
       priority: "high",
       notification: {
