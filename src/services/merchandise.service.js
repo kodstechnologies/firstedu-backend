@@ -185,6 +185,7 @@ export const claimMerchandise = async (studentId, itemId, payload = {}) => {
       paymentMethod: "gateway",
       paymentId: razorpayPaymentId,
       status: "pending",
+      paymentStatus: "completed",
       deliveryAddress: item.isPhysical ? deliveryAddress : undefined,
     });
 
@@ -248,6 +249,7 @@ export const claimMerchandise = async (studentId, itemId, payload = {}) => {
     moneyPaid: 0,
     paymentMethod: "points",
     status: "pending",
+    paymentStatus: "completed",
     deliveryAddress: item.isPhysical ? deliveryAddress : undefined,
   });
 

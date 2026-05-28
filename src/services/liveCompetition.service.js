@@ -242,8 +242,22 @@ export const getEvents = async (options = {}) => {
       { description: { $regex: search, $options: "i" } },
     ];
   }
-  // status filtering could be complex now with 2 rounds, keeping simple for now
   if (category) query.category = category;
+
+  if (status && status !== 'all') {
+    const statusQuery = {
+      $or: [
+        { "megaAudition.status": status },
+        { "grandFinale.status": status }
+      ]
+    };
+    if (query.$or) {
+      query.$and = [ { $or: query.$or }, statusQuery ];
+      delete query.$or;
+    } else {
+      query.$or = statusQuery.$or;
+    }
+  }
 
   const pageNum = parseInt(page);
   const limitNum = parseInt(limit);
@@ -910,7 +924,7 @@ const enrichEventForStudent = async (e, studentId, studentWalletBalance) => {
 };
 
 export const getPublishedEvents = async (options = {}) => {
-  const { page = 1, limit = 10, search, category, studentId } = options;
+  const { page = 1, limit = 10, search, category, status, studentId } = options;
 
   const query = { isPublished: true };
 
@@ -921,6 +935,21 @@ export const getPublishedEvents = async (options = {}) => {
     ];
   }
   if (category) query.category = category;
+
+  if (status && status !== 'all') {
+    const statusQuery = {
+      $or: [
+        { "megaAudition.status": status },
+        { "grandFinale.status": status }
+      ]
+    };
+    if (query.$or) {
+      query.$and = [ { $or: query.$or }, statusQuery ];
+      delete query.$or;
+    } else {
+      query.$or = statusQuery.$or;
+    }
+  }
 
   const pageNum = parseInt(page);
   const limitNum = parseInt(limit);
