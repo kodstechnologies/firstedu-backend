@@ -29,6 +29,9 @@ const startServer = async () => {
     const io = new Server(server, {
       pingTimeout: Number(process.env.SOCKET_IO_PING_TIMEOUT_MS || 30000),
       pingInterval: Number(process.env.SOCKET_IO_PING_INTERVAL_MS || 25000),
+      maxHttpBufferSize: Number(
+        process.env.SOCKET_IO_MAX_HTTP_BUFFER_SIZE || 50 * 1024 * 1024
+      ),
       connectionStateRecovery: {
         maxDisconnectionDuration: Number(process.env.SOCKET_IO_RECOVERY_MS || 120000),
         skipMiddlewares: false,

@@ -1,12 +1,16 @@
 import teacherSessionRepository from "../repository/teacherSession.repository.js";
 import teacherRepository from "../repository/teacher.repository.js";
 import teacherChatService from "../services/teacherChat.service.js";
+import { uploadFileToCloudinary } from "../utils/s3Upload.js";
 import {
   authenticateTeacherConnectSocket,
   normalizeSocketAuthToken,
 } from "./socketAuth.util.js";
 
 const CHAT_REQUEST_AUTO_CANCEL_MS = 45_000;
+const TEACHER_CHAT_FILE_MAX_BYTES = Number(
+  process.env.TEACHER_CHAT_FILE_MAX_BYTES || 25 * 1024 * 1024
+);
 const TEACHER_SOCKET_RECONNECT_GRACE_MS = Number(
   process.env.TEACHER_SOCKET_RECONNECT_GRACE_MS || 30_000
 );
@@ -15,6 +19,45 @@ const chatDisconnectCleanupTimers = new Map();
 
 const getChatDisconnectKey = (kind, userId, sessionId) =>
   `${kind}:${userId?.toString?.() ?? userId}:${sessionId?.toString?.() ?? sessionId}`;
+
+const toBuffer = (value) => {
+  if (!value) return null;
+  if (Buffer.isBuffer(value)) return value;
+  if (value instanceof ArrayBuffer) return Buffer.from(value);
+  if (ArrayBuffer.isView(value)) {
+    return Buffer.from(value.buffer, value.byteOffset, value.byteLength);
+  }
+  return null;
+};
+
+const sanitizeChatAttachmentName = (name = "") => {
+  const clean = String(name)
+    .trim()
+    .replace(/[\\/:*?"<>|]/g, "_")
+    .replace(/\s+/g, " ");
+  return clean || "attachment";
+};
+
+const normalizeChatAttachment = (attachment = {}) => {
+  const buffer = toBuffer(attachment.data ?? attachment.buffer);
+  if (!buffer) return null;
+
+  const name = sanitizeChatAttachmentName(
+    attachment.name ?? attachment.fileName ?? attachment.originalName
+  );
+  const type =
+    typeof attachment.type === "string" && attachment.type.trim()
+      ? attachment.type.trim()
+      : "application/octet-stream";
+  const size = Number(attachment.size || buffer.length);
+
+  if (size > TEACHER_CHAT_FILE_MAX_BYTES || buffer.length > TEACHER_CHAT_FILE_MAX_BYTES) {
+    const maxMb = Math.floor(TEACHER_CHAT_FILE_MAX_BYTES / (1024 * 1024));
+    throw new Error(`File is too large. Maximum allowed size is ${maxMb}MB.`);
+  }
+
+  return { buffer, name, type, size: buffer.length };
+};
 
 const clearChatDisconnectCleanup = (kind, userId, sessionId) => {
   const key = getChatDisconnectKey(kind, userId, sessionId);
@@ -408,9 +451,11 @@ export const setupTeacherChatSocket = (io) => {
     });
 
     socket.on("send_chat_message", async (payload = {}) => {
-      const { sessionId, text, sentAt } = payload;
-      if (!sessionId || !text || !String(text).trim()) {
-        socket.emit("chat_error", { message: "sessionId and non-empty text are required" });
+      const { sessionId, text, sentAt, attachment, clientId } = payload;
+      const cleanText = String(text || "").trim();
+      const incomingAttachment = attachment && typeof attachment === "object" ? attachment : null;
+      if (!sessionId || (!cleanText && !incomingAttachment)) {
+        socket.emit("chat_error", { message: "sessionId and message text or file are required" });
         return;
       }
       try {
@@ -425,13 +470,35 @@ export const setupTeacherChatSocket = (io) => {
           return;
         }
         const sid = session._id.toString();
+        let uploadedAttachment = null;
+        if (incomingAttachment) {
+          const normalized = normalizeChatAttachment(incomingAttachment);
+          if (!normalized) {
+            socket.emit("chat_error", { message: "Invalid file attachment" });
+            return;
+          }
+          const url = await uploadFileToCloudinary(
+            normalized.buffer,
+            normalized.name,
+            "teacher-chat",
+            normalized.type
+          );
+          uploadedAttachment = {
+            url,
+            name: normalized.name,
+            type: normalized.type,
+            size: normalized.size,
+          };
+        }
         const messagePayload = {
           sessionId: sid,
-          text: String(text).trim(),
+          text: cleanText,
+          attachment: uploadedAttachment,
           from: user.role,
           senderId: userId,
           senderName: user.name || user.email || user.phone,
           sentAt: sentAt || new Date().toISOString(),
+          clientId,
         };
         ns.to(`session:${sid}`).emit("chat_message", messagePayload);
       } catch (err) {
