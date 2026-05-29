@@ -220,21 +220,29 @@ export const setupTeacherCallSocket = (io) => {
         schedulePendingCallAutoCancel(session._id, teacherId);
         socket.emit("call_request_sent", { session });
 
-        await teacherChatService.notifyTeacherDevice(
-          await teacherRepository.findById(teacherId),
-          "New call request",
-          `${user.name || "A student"} wants to start a paid voice call.`,
-          {
-            type: "teacher_call_request",
-            sessionId: session._id.toString(),
-            studentId: userId,
-          }
-        );
-
         ns.to(`teacher:${teacherId}`).emit("incoming_call_request", {
           session,
           student: { _id: user._id, name: user.name, email: user.email },
         });
+
+        // Do not block socket response on notification providers/DB round-trips.
+        Promise.resolve()
+          .then(async () => {
+            const teacherDoc = await teacherRepository.findById(teacherId);
+            await teacherChatService.notifyTeacherDevice(
+              teacherDoc,
+              "New call request",
+              `${user.name || "A student"} wants to start a paid voice call.`,
+              {
+                type: "teacher_call_request",
+                sessionId: session._id.toString(),
+                studentId: userId,
+              }
+            );
+          })
+          .catch((notifyErr) => {
+            console.error("Teacher call request notification error:", notifyErr);
+          });
       } catch (err) {
         socket.emit("call_error", {
           message: err.message || "Could not send call request",

@@ -315,17 +315,29 @@ export const setupTeacherChatSocket = (io) => {
         schedulePendingChatAutoCancel(session._id, teacherId);
         socket.emit("chat_request_sent", { session });
 
-        await teacherChatService.notifyTeacherDevice(
-          await teacherRepository.findById(teacherId),
-          "New chat request",
-          `${user.name || "A student"} wants to start a paid chat.`,
-          { type: "teacher_chat_request", sessionId: session._id.toString(), studentId: userId }
-        );
-
         ns.to(`teacher:${teacherId}`).emit("incoming_chat_request", {
           session,
           student: { _id: user._id, name: user.name, email: user.email },
         });
+
+        // Keep socket path low-latency: push notification should not block real-time delivery.
+        Promise.resolve()
+          .then(async () => {
+            const teacherDoc = await teacherRepository.findById(teacherId);
+            await teacherChatService.notifyTeacherDevice(
+              teacherDoc,
+              "New chat request",
+              `${user.name || "A student"} wants to start a paid chat.`,
+              {
+                type: "teacher_chat_request",
+                sessionId: session._id.toString(),
+                studentId: userId,
+              }
+            );
+          })
+          .catch((notifyErr) => {
+            console.error("Teacher chat request notification error:", notifyErr);
+          });
       } catch (err) {
         socket.emit("chat_error", {
           message: err.message || "Could not send chat request",
