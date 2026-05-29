@@ -25,6 +25,7 @@ const offerSchema = new mongoose.Schema(
         "School",
         "Competitive",
         "Skill Development",
+        "Merchandise",
       ],
       default: "all",
     },

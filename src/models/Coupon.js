@@ -59,6 +59,7 @@ const couponSchema = new mongoose.Schema(
         "School",
         "Competitive",
         "Skill Development",
+        "Merchandise",
       ],
       default: "all",
     },

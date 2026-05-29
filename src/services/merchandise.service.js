@@ -2,6 +2,7 @@ import { ApiError } from "../utils/ApiError.js";
 import merchandiseRepository from "../repository/merchandise.repository.js";
 import walletService from "./wallet.service.js";
 import { attachOfferToList, attachOfferToItem, getAmountToCharge } from "../utils/offerUtils.js";
+import offerRepository from "../repository/offer.repository.js";
 import couponService from "./coupon.service.js";
 import { createRazorpayOrder, verifyPaymentSignature } from "../utils/razorpayUtils.js";
 import razorpayOrderIntentRepository from "../repository/razorpayOrderIntent.repository.js";
@@ -94,141 +95,20 @@ export const getMerchandiseById = async (itemId) => {
  * @param {object} payload - validated body from controller
  */
 export const claimMerchandise = async (studentId, itemId, payload = {}) => {
-  const {
-    deliveryAddress,
-    couponCode = null,
-    paymentMethod = "points",
-    razorpayOrderId,
-    razorpayPaymentId,
-    razorpaySignature,
-  } = payload;
-
+  const { deliveryAddress } = payload;
   const item = await getMerchandiseById(itemId);
 
-  // Stock check (shared for all methods)
   if (item.stockQuantity !== null && item.stockQuantity <= 0) {
     throw new ApiError(400, "Item is out of stock");
   }
 
-  // Delivery address check (shared for physical items)
   if (item.isPhysical && !deliveryAddress) {
     throw new ApiError(400, "Delivery address is required for physical items");
   }
 
-  // ── GATEWAY (Razorpay) ─────────────────────────────────────────────────────
-  if (paymentMethod === "gateway") {
-    if (!item.price || item.price <= 0) {
-      throw new ApiError(400, "This item is not available for money purchase");
-    }
-
-    // STEP 1: Initiate — no payment receipt yet → create Razorpay order
-    if (!razorpayPaymentId) {
-      const razorpayKeyId = process.env.RAZORPAY_KEY_ID;
-      if (!razorpayKeyId || !process.env.RAZORPAY_KEY_SECRET) {
-        throw new ApiError(500, "Payment gateway not configured");
-      }
-
-      const receipt = `merch_${itemId}_${studentId}_${Date.now()}`.substring(0, 40);
-      let order;
-      try {
-        order = await createRazorpayOrder(item.price, receipt);
-      } catch (err) {
-        throw new ApiError(500, "Payment gateway error. Please try again later.");
-      }
-
-      await razorpayOrderIntentRepository.create({
-        orderId: order.orderId,
-        studentId,
-        type: "merchandise",
-        entityId: itemId,
-        entityModel: "Merchandise",
-        amountPaise: order.amount,
-        currency: order.currency || "INR",
-        receipt,
-      });
-
-      // Tell the frontend to open Razorpay checkout
-      return {
-        requiresAction: true,
-        orderId: order.orderId,
-        amount: order.amount,
-        currency: order.currency || "INR",
-        key: razorpayKeyId,
-        itemName: item.name,
-      };
-    }
-
-    // STEP 2: Verify — payment receipt present → verify and create claim
-    if (!razorpayOrderId || !razorpaySignature) {
-      throw new ApiError(400, "Missing Razorpay payment details");
-    }
-
-    const isValid = verifyPaymentSignature(razorpayOrderId, razorpayPaymentId, razorpaySignature);
-    if (!isValid) {
-      throw new ApiError(400, "Payment verification failed");
-    }
-
-    const intent = await razorpayOrderIntentRepository.findByOrderId(razorpayOrderId);
-    if (!intent) throw new ApiError(400, "Invalid payment session");
-    if (intent.studentId?.toString() !== studentId?.toString()) throw new ApiError(403, "Unauthorized");
-    if (intent.type !== "merchandise" || intent.entityId?.toString() !== itemId?.toString()) {
-      throw new ApiError(400, "Payment does not match this item");
-    }
-
-    const moneyPaid = intent.amountPaise / 100;
-
-    const claim = await merchandiseRepository.createMerchandiseClaim({
-      student: studentId,
-      merchandise: itemId,
-      pointsSpent: 0,
-      moneyPaid,
-      paymentMethod: "gateway",
-      paymentId: razorpayPaymentId,
-      status: "pending",
-      paymentStatus: "completed",
-      deliveryAddress: item.isPhysical ? deliveryAddress : undefined,
-    });
-
-    await razorpayOrderIntentRepository.markReconciled(razorpayOrderId, razorpayPaymentId);
-
-    if (item.stockQuantity !== null) {
-      await merchandiseRepository.updateMerchandise(itemId, { stockQuantity: item.stockQuantity - 1 });
-    }
-
-    return await merchandiseRepository.findMerchandiseClaimById(claim._id);
-  }
-
-  // ── WALLET ─────────────────────────────────────────────────────────────────
-  if (paymentMethod === "wallet") {
-    if (!item.price || item.price <= 0) {
-      throw new ApiError(400, "This item is not available for money purchase");
-    }
-
-    await walletService.deductMonetaryBalance(studentId, item.price, "User");
-
-    const claim = await merchandiseRepository.createMerchandiseClaim({
-      student: studentId,
-      merchandise: itemId,
-      pointsSpent: 0,
-      moneyPaid: item.price,
-      paymentMethod: "wallet",
-      paymentId: "wallet",
-      status: "pending",
-      paymentStatus: "completed",
-      deliveryAddress: item.isPhysical ? deliveryAddress : undefined,
-    });
-
-    if (item.stockQuantity !== null) {
-      await merchandiseRepository.updateMerchandise(itemId, { stockQuantity: item.stockQuantity - 1 });
-    }
-
-    return await merchandiseRepository.findMerchandiseClaimById(claim._id);
-  }
-
-  // ── POINTS (default — original mobile app flow, untouched) ─────────────────
   const pointsRequired = item.pointsRequired;
-
   const wallet = await walletService.getOrCreateWallet(studentId, "User");
+  
   if (wallet.rewardPoints < pointsRequired) {
     throw new ApiError(400, "Insufficient reward points");
   }
@@ -253,6 +133,193 @@ export const claimMerchandise = async (studentId, itemId, payload = {}) => {
     deliveryAddress: item.isPhysical ? deliveryAddress : undefined,
   });
 
+  if (item.stockQuantity !== null) {
+    await merchandiseRepository.updateMerchandise(itemId, { stockQuantity: item.stockQuantity - 1 });
+  }
+
+  return await merchandiseRepository.findMerchandiseClaimById(claim._id);
+};
+
+export const initiateMerchandisePayment = async (itemId, studentId, paymentMethod, options = {}) => {
+  const { couponCode, deliveryAddress } = options;
+
+  const item = await getMerchandiseById(itemId);
+
+  if (item.stockQuantity !== null && item.stockQuantity <= 0) {
+    throw new ApiError(400, "Item is out of stock");
+  }
+
+  if (item.price === undefined || item.price === null) {
+    throw new ApiError(400, "This item cannot be purchased with money.");
+  }
+
+  let amountToCharge = item.price;
+  let appliedOffer = null;
+  let appliedCoupon = null;
+  let couponId = null;
+
+  // Merchandise doesn't currently support global pillar offers directly in model, 
+  // but if Admin creates it, we apply it. We use getAmountToCharge logic.
+  let resolvedOffer = await offerRepository.getActiveOffer("Merchandise");
+  
+  if (resolvedOffer) {
+    const discountAmount = resolvedOffer.discountType === "percentage" 
+      ? (item.price * resolvedOffer.discountValue) / 100 
+      : Math.min(resolvedOffer.discountValue, item.price);
+    amountToCharge = Math.max(0, item.price - discountAmount);
+    appliedOffer = {
+      _id: resolvedOffer._id,
+      offerName: resolvedOffer.offerName,
+      applicableOn: resolvedOffer.applicableOn,
+      discountType: resolvedOffer.discountType,
+      discountValue: resolvedOffer.discountValue,
+      description: resolvedOffer.description,
+      validTill: resolvedOffer.validTill,
+    };
+  }
+
+  if (couponCode && String(couponCode).trim()) {
+    const result = await couponService.validateCoupon(couponCode.trim(), amountToCharge, "Merchandise", itemId);
+    amountToCharge = Math.max(0, amountToCharge - result.discount);
+    appliedCoupon = { _id: result.coupon._id, code: result.coupon.code, discountType: result.coupon.discountType, discountValue: result.coupon.discountValue };
+    couponId = result.coupon._id;
+  }
+
+  if (paymentMethod === "free") {
+    if (amountToCharge > 0) {
+      throw new ApiError(400, "This item is paid. Use paymentMethod: wallet or razorpay.");
+    }
+    if (item.isPhysical && !deliveryAddress) {
+      throw new ApiError(400, "Delivery address is required for physical items");
+    }
+
+    const claim = await merchandiseRepository.createMerchandiseClaim({
+      student: studentId,
+      merchandise: itemId,
+      pointsSpent: 0,
+      moneyPaid: 0,
+      discount: Math.max(0, item.price - amountToCharge),
+      coupon: couponId || null,
+      paymentMethod: "free",
+      paymentId: "free",
+      status: "pending",
+      paymentStatus: "completed",
+      deliveryAddress: item.isPhysical ? deliveryAddress : undefined,
+    });
+    
+    if (couponId) await couponService.incrementCouponUsedCount(couponId);
+    if (item.stockQuantity !== null) {
+      await merchandiseRepository.updateMerchandise(itemId, { stockQuantity: item.stockQuantity - 1 });
+    }
+    
+    return { claim, completed: true };
+  }
+
+  if (paymentMethod === "wallet") {
+    if (amountToCharge < 1) throw new ApiError(400, "This item is free. Use paymentMethod: free.");
+    if (item.isPhysical && !deliveryAddress) {
+      throw new ApiError(400, "Delivery address is required for physical items");
+    }
+    
+    await walletService.deductMonetaryBalance(studentId, amountToCharge, "User");
+    
+    const claim = await merchandiseRepository.createMerchandiseClaim({
+      student: studentId,
+      merchandise: itemId,
+      pointsSpent: 0,
+      moneyPaid: amountToCharge,
+      discount: Math.max(0, item.price - amountToCharge),
+      coupon: couponId || null,
+      paymentMethod: "wallet",
+      paymentId: "wallet",
+      status: "pending",
+      paymentStatus: "completed",
+      deliveryAddress: item.isPhysical ? deliveryAddress : undefined,
+    });
+    
+    if (couponId) await couponService.incrementCouponUsedCount(couponId);
+    if (item.stockQuantity !== null) {
+      await merchandiseRepository.updateMerchandise(itemId, { stockQuantity: item.stockQuantity - 1 });
+    }
+    
+    return { claim, completed: true };
+  }
+
+  if (paymentMethod === "razorpay") {
+    if (amountToCharge < 1) throw new ApiError(400, "This item is free.");
+    
+    const receipt = `merch_${itemId}_${studentId}_${Date.now()}`.substring(0, 40);
+    const order = await createRazorpayOrder(amountToCharge, receipt);
+    
+    await razorpayOrderIntentRepository.create({
+      orderId: order.orderId,
+      studentId,
+      type: "merchandise",
+      entityId: itemId,
+      entityModel: "Merchandise",
+      amountPaise: order.amount,
+      currency: order.currency || "INR",
+      receipt,
+      couponId: couponId || undefined,
+    });
+    
+    return {
+      completed: false,
+      orderId: order.orderId,
+      amount: order.amount,
+      currency: order.currency,
+      key: process.env.RAZORPAY_KEY_ID,
+      itemId,
+      title: item.name,
+      appliedOffer,
+      appliedCoupon,
+      originalPrice: item.price,
+      discountedPrice: amountToCharge,
+    };
+  }
+
+  throw new ApiError(400, "Invalid paymentMethod. Use: free, wallet, or razorpay.");
+};
+
+export const confirmMerchandisePayment = async (itemId, studentId, { razorpayOrderId, razorpayPaymentId, razorpaySignature, deliveryAddress }) => {
+  const item = await getMerchandiseById(itemId);
+
+  if (item.stockQuantity !== null && item.stockQuantity <= 0) {
+    throw new ApiError(400, "Item is out of stock");
+  }
+
+  if (item.isPhysical && !deliveryAddress) {
+    throw new ApiError(400, "Delivery address is required for physical items");
+  }
+
+  const isValid = verifyPaymentSignature(razorpayOrderId, razorpayPaymentId, razorpaySignature);
+  if (!isValid) throw new ApiError(400, "Payment verification failed");
+
+  const intent = await razorpayOrderIntentRepository.findByOrderId(razorpayOrderId);
+  if (!intent) throw new ApiError(400, "Invalid order or payment already used");
+  if (intent.studentId?.toString?.() !== studentId?.toString?.()) throw new ApiError(403, "Payment user mismatch");
+  if (intent.type !== "merchandise" || intent.entityId?.toString?.() !== itemId?.toString?.()) throw new ApiError(400, "Payment entity mismatch");
+
+  const moneyPaid = intent.amountPaise / 100;
+  const discount = Math.max(0, item.price - moneyPaid);
+
+  const claim = await merchandiseRepository.createMerchandiseClaim({
+    student: studentId,
+    merchandise: itemId,
+    pointsSpent: 0,
+    moneyPaid,
+    discount,
+    coupon: intent.couponId || null,
+    paymentId: razorpayPaymentId,
+    paymentMethod: "razorpay",
+    status: "pending",
+    paymentStatus: "completed",
+    deliveryAddress: item.isPhysical ? deliveryAddress : undefined,
+  });
+
+  await razorpayOrderIntentRepository.markReconciled(razorpayOrderId, razorpayPaymentId);
+  if (intent.couponId) await couponService.incrementCouponUsedCount(intent.couponId);
+  
   if (item.stockQuantity !== null) {
     await merchandiseRepository.updateMerchandise(itemId, { stockQuantity: item.stockQuantity - 1 });
   }
@@ -296,6 +363,8 @@ export default {
   getAllMerchandiseForAdmin,
   getMerchandiseByIdForAdmin,
   claimMerchandise,
+  initiateMerchandisePayment,
+  confirmMerchandisePayment,
   getStudentClaims,
   getAllClaims,
 };

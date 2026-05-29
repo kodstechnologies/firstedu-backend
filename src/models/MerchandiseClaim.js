@@ -21,9 +21,19 @@ const merchandiseClaimSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    discount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    coupon: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Coupon",
+      default: null,
+    },
     paymentMethod: {
       type: String,
-      enum: ["points", "wallet", "gateway"],
+      enum: ["points", "free", "wallet", "razorpay"],
       default: "points",
     },
     paymentId: {
