@@ -106,6 +106,8 @@ import {
   getMerchandiseItems,
   getMerchandiseById,
   claimMerchandise,
+  initiateMerchandisePayment,
+  confirmMerchandisePayment,
   getMyClaims,
 } from "../controllers/merchandise.controller.js";
 import { getMyOrders } from "../controllers/order.controller.js";
@@ -497,6 +499,8 @@ router.get("/merchandise", verifyJWT, getMerchandiseItems);
 router.get("/merchandise/my-claims", verifyJWT, getMyClaims);
 router.get("/merchandise/:id", verifyJWT, getMerchandiseById);
 router.post("/merchandise/:id/claim", verifyJWT, claimMerchandise);
+router.post("/merchandise/:id/initiate-payment", verifyJWT, initiateMerchandisePayment);
+router.post("/merchandise/:id/confirm-payment", verifyJWT, confirmMerchandisePayment);
 
 // Order History
 router.get("/orders", verifyJWT, getMyOrders);
@@ -625,11 +629,11 @@ router.post(
   registerLiveCompetition,
 );
 
-// Submission (supports file uploads via uploadLiveCompetitionContent.array("files", 5))
+// Submission (supports file uploads via uploadLiveCompetitionContent.array("files", 1))
 router.post(
   "/live-competitions/:id/submit",
   verifyJWT,
-  uploadLiveCompetitionContent.array("files", 5),
+  uploadLiveCompetitionContent.array("files", 1),
   submitLiveCompetitionWork,
 );
 router.get("/my-live-submissions", verifyJWT, getMyLiveCompetitionSubmissions);

@@ -53,23 +53,13 @@ export const getMerchandiseById = asyncHandler(async (req, res) => {
 });
 
 /**
- * Claim / purchase merchandise — unified endpoint.
- *
- * Supports paymentMethod: "points" (default) | "wallet" | "gateway"
- *
- * Mobile app backward compatibility:
- *   Omitting paymentMethod defaults to "points" — existing app behaviour
- *   is completely unchanged.
- *
- * Gateway two-step:
- *   Call 1 (no razorpayPaymentId) → returns { requiresAction:true, orderId, key, amount }
- *   Call 2 (with razorpay* fields) → creates claim, returns claim object
+ * Claim merchandise via points (Direct Claim)
+ * Supports paymentMethod: "points"
  */
 export const claimMerchandise = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const studentId = req.user._id;
 
-  // Fetch item first so validator knows if it's physical
   const item = await merchandiseService.getMerchandiseById(id);
 
   const { error, value } = merchandiseValidator.claimMerchandise.validate(
@@ -78,26 +68,66 @@ export const claimMerchandise = asyncHandler(async (req, res) => {
   );
 
   if (error) {
-    throw new ApiError(
-      400,
-      "Validation Error",
-      error.details.map((x) => x.message)
-    );
+    const errorMessage = error.details.map(x => x.message).join(", ");
+    throw new ApiError(400, errorMessage);
   }
 
   const result = await merchandiseService.claimMerchandise(studentId, id, value);
 
-  // Gateway Step 1: Razorpay order created, frontend must open checkout
-  if (result?.requiresAction) {
-    return res
-      .status(200)
-      .json(ApiResponse.success(result, "Payment initiation successful"));
+  return res.status(201).json(ApiResponse.success(result, "Merchandise claimed successfully with points"));
+});
+
+/**
+ * Initiate Merchandise Payment (for free, wallet, razorpay)
+ */
+export const initiateMerchandisePayment = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const studentId = req.user._id;
+
+  const item = await merchandiseService.getMerchandiseById(id);
+
+  const { error, value } = merchandiseValidator.initiateMerchandisePayment.validate(
+    req.body,
+    { context: { isPhysical: item.isPhysical } }
+  );
+
+  if (error) {
+    const errorMessage = error.details.map(x => x.message).join(", ");
+    throw new ApiError(400, errorMessage);
   }
 
-  // Points / Wallet / Gateway Step 2: claim created
-  return res
-    .status(201)
-    .json(ApiResponse.success(result, "Merchandise claimed successfully"));
+  const { paymentMethod, ...options } = value;
+  const result = await merchandiseService.initiateMerchandisePayment(id, studentId, paymentMethod, options);
+
+  if (!result.completed) {
+    return res.status(200).json(ApiResponse.success(result, "Payment initiation successful"));
+  }
+
+  return res.status(201).json(ApiResponse.success(result.claim, "Merchandise claimed successfully"));
+});
+
+/**
+ * Confirm Merchandise Payment (for Razorpay)
+ */
+export const confirmMerchandisePayment = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const studentId = req.user._id;
+
+  const item = await merchandiseService.getMerchandiseById(id);
+
+  const { error, value } = merchandiseValidator.confirmMerchandisePayment.validate(
+    req.body,
+    { context: { isPhysical: item.isPhysical } }
+  );
+
+  if (error) {
+    const errorMessage = error.details.map(x => x.message).join(", ");
+    throw new ApiError(400, errorMessage);
+  }
+
+  const result = await merchandiseService.confirmMerchandisePayment(id, studentId, value);
+
+  return res.status(201).json(ApiResponse.success(result, "Merchandise payment verified and claimed successfully"));
 });
 
 /**
@@ -122,5 +152,7 @@ export default {
   getMerchandiseItems,
   getMerchandiseById,
   claimMerchandise,
+  initiateMerchandisePayment,
+  confirmMerchandisePayment,
   getMyClaims,
 };

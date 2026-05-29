@@ -4,8 +4,8 @@ import { getGoesLiveAt } from "../utils/eventStatus.js";
 import { getTournaments } from "../services/tournament.service.js";
 import { getWorkshops } from "../services/workshop.service.js";
 
-/** tournament | workshop | both (both = tournaments + workshops only) */
-const VALID_CATEGORIES = ["tournament", "workshop", "both"];
+/** live-competition | workshop | both (both = live-competitions + workshops only) */
+const VALID_CATEGORIES = ["live-competition", "workshop", "both"];
 
 /** status = "open" (within registration), "close" (before), "completed" (after end); goesLiveAt = countdown target */
 const addRegistrationStatus = (item) => {
@@ -24,7 +24,7 @@ const addRegistrationStatus = (item) => {
  * Get all published events. Response always has data: { olympiads, tournaments, workshops } and meta pagination.
  *
  * Query params:
- * - category: "olympiad" | "tournament" | "workshop" | "both" — filter (both = tournaments + workshops only)
+ * - category: "olympiad" | "live-competition" | "workshop" | "both" — filter (both = live-competitions + workshops only)
  * - status: "close" | "open" | "upcoming" | "live" | "completed" — filter by event status
  * - search: string — search in title/description/subject (case-insensitive)
  * - page, limit: pagination (limit max 50)
@@ -39,7 +39,7 @@ export const getAllEvents = asyncHandler(async (req, res) => {
   if (normalizedCategory && !VALID_CATEGORIES.includes(normalizedCategory)) {
     return res.status(400).json(
       ApiResponse.error(
-        "Invalid category. Use: tournament, workshop, or both",
+        "Invalid category. Use: live-competition, workshop, or both",
         null,
         { validCategories: VALID_CATEGORIES }
       )
@@ -47,7 +47,7 @@ export const getAllEvents = asyncHandler(async (req, res) => {
   }
 
   const fetchTournaments =
-    !normalizedCategory || normalizedCategory === "tournament" || normalizedCategory === "both";
+    !normalizedCategory || normalizedCategory === "live-competition" || normalizedCategory === "both";
   const fetchWorkshops =
     !normalizedCategory || normalizedCategory === "workshop" || normalizedCategory === "both";
 
@@ -71,7 +71,7 @@ export const getAllEvents = asyncHandler(async (req, res) => {
   // ─────────────────────────────────────────────────────────────────────────
 
   const message = !normalizedCategory || normalizedCategory === "both"
-    ? "Tournaments and workshops fetched successfully"
+    ? "Live-competitions and workshops fetched successfully"
     : `${normalizedCategory.replace(/s$/, "")} fetched successfully`;
 
   // Strip meeting link/password from workshops in list – only show on detail for purchased users
@@ -85,12 +85,12 @@ export const getAllEvents = asyncHandler(async (req, res) => {
   return res.status(200).json(
     ApiResponse.success(
       {
-        tournaments: (tournamentResult.tournaments || []).map(addRegistrationStatus),
+        "live-competitions": (tournamentResult.tournaments || []).map(addRegistrationStatus),
         workshops: workshopsSafe,
       },
       message,
       {
-        tournamentsPagination: tournamentResult.pagination,
+        "live-competitionsPagination": tournamentResult.pagination,
         workshopsPagination: workshopResult.pagination,
       }
     )

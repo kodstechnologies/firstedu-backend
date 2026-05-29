@@ -165,6 +165,8 @@ export const validateCoupon = async (
     workshops: "Workshop",
     competitionCategory: "CompetitionCategory",
     live_competition: "LiveCompetition",
+    liveCompetition: "LiveCompetition",
+    merchandise: "Merchandise",
   };
   const normalizedItemType = ITEM_TYPE_MAP[itemType] || itemType;
   if (

@@ -23,14 +23,33 @@ const claimMerchandise = Joi.object({
     then: deliveryAddressSchema.required(),
     otherwise: Joi.optional(),
   }),
-  couponCode: Joi.string().trim().optional().allow("", null),
+});
+
+const initiateMerchandisePayment = Joi.object({
   paymentMethod: Joi.string()
-    .valid("points", "wallet", "gateway")
-    .default("points")
-    .optional(),
-  razorpayPaymentId: Joi.string().optional(),
-  razorpayOrderId: Joi.string().optional(),
-  razorpaySignature: Joi.string().optional(),
+    .valid("free", "wallet", "razorpay")
+    .required(),
+  couponCode: Joi.string().trim().optional().allow("", null),
+  deliveryAddress: Joi.when("paymentMethod", {
+    is: Joi.valid("free", "wallet"),
+    then: Joi.when("$isPhysical", {
+      is: true,
+      then: deliveryAddressSchema.required(),
+      otherwise: Joi.optional()
+    }),
+    otherwise: Joi.optional() // razorpay doesn't need address on init
+  })
+});
+
+const confirmMerchandisePayment = Joi.object({
+  razorpayPaymentId: Joi.string().required(),
+  razorpayOrderId: Joi.string().required(),
+  razorpaySignature: Joi.string().required(),
+  deliveryAddress: Joi.when("$isPhysical", {
+    is: true,
+    then: deliveryAddressSchema.required(),
+    otherwise: Joi.optional(),
+  })
 });
 
 const createMerchandise = Joi.object({
@@ -64,6 +83,8 @@ const updateClaimStatus = Joi.object({
 
 export default {
   claimMerchandise,
+  initiateMerchandisePayment,
+  confirmMerchandisePayment,
   createMerchandise,
   updateMerchandise,
   updateClaimStatus,

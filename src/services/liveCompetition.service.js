@@ -56,10 +56,10 @@ const computeTemporalRoundStatus = (round, isPublished) => {
 
   if (now >= eventStart && now <= eventEnd) return "LIVE";
   if (now > eventEnd) return "CLOSED";
-  
+
   if (regStart && now >= regStart) return "UPCOMING";
   if (payStart && now >= payStart) return "UPCOMING";
-  
+
   return "UPCOMING"; // Catch-all for published but before start dates
 };
 
@@ -115,7 +115,7 @@ const validateEventDates = (megaAudition, grandFinale) => {
       if (gPayStart <= mResultDate) {
         throw new ApiError(400, "Round 2 payment window MUST start after Round 1 result declaration date");
       }
-      
+
       if (gPayStart >= gPayEnd) throw new ApiError(400, "Round 2 payment window end must be after start");
       if (gPayEnd > gEventStart) throw new ApiError(400, "Round 2 payment window must close before event starts");
     } else {
@@ -133,18 +133,18 @@ const eventPopulate = { path: "event", select: "title category megaAudition gran
 
 const enrichEventWithStats = async (eventObj) => {
   if (!eventObj) return eventObj;
-  
+
   const obj = typeof eventObj.toObject === 'function' ? eventObj.toObject() : eventObj;
 
-  const mParticipants = await liveCompetitionRepository.countSubmissions({ 
-    event: obj._id, 
-    round: "MEGA_AUDITION", 
-    paymentStatus: "COMPLETED" 
+  const mParticipants = await liveCompetitionRepository.countSubmissions({
+    event: obj._id,
+    round: "MEGA_AUDITION",
+    paymentStatus: "COMPLETED"
   });
-  const mSubmissions = await liveCompetitionRepository.countSubmissions({ 
-    event: obj._id, 
-    round: "MEGA_AUDITION", 
-    submittedAt: { $exists: true, $ne: null } 
+  const mSubmissions = await liveCompetitionRepository.countSubmissions({
+    event: obj._id,
+    round: "MEGA_AUDITION",
+    submittedAt: { $exists: true, $ne: null }
   });
 
   if (obj.megaAudition) {
@@ -153,20 +153,20 @@ const enrichEventWithStats = async (eventObj) => {
   }
 
   if (obj.grandFinale) {
-    const gParticipants = await liveCompetitionRepository.countSubmissions({ 
-      event: obj._id, 
-      round: "GRAND_FINALE", 
-      paymentStatus: "COMPLETED" 
+    const gParticipants = await liveCompetitionRepository.countSubmissions({
+      event: obj._id,
+      round: "GRAND_FINALE",
+      paymentStatus: "COMPLETED"
     });
-    const gSubmissions = await liveCompetitionRepository.countSubmissions({ 
-      event: obj._id, 
-      round: "GRAND_FINALE", 
-      submittedAt: { $exists: true, $ne: null } 
+    const gSubmissions = await liveCompetitionRepository.countSubmissions({
+      event: obj._id,
+      round: "GRAND_FINALE",
+      submittedAt: { $exists: true, $ne: null }
     });
     obj.grandFinale.totalParticipants = gParticipants;
     obj.grandFinale.totalSubmissions = gSubmissions;
   }
-  
+
   obj.totalParticipants = mParticipants + (obj.grandFinale ? obj.grandFinale.totalParticipants : 0);
   obj.totalSubmissions = mSubmissions + (obj.grandFinale ? obj.grandFinale.totalSubmissions : 0);
 
@@ -207,7 +207,7 @@ export const createEvent = async (data, adminId, file) => {
           ? subData.file.allowedTypes
           : activeCategory.allowedFileTypes,
       } : undefined,
-      externalLink: finalType === "EXTERNAL_LINK" ? subData.externalLink : undefined
+      externalLink: (finalType === "EXTERNAL_LINK" || subData.externalLink?.url) ? subData.externalLink : undefined
     };
   };
 
@@ -242,8 +242,22 @@ export const getEvents = async (options = {}) => {
       { description: { $regex: search, $options: "i" } },
     ];
   }
-  // status filtering could be complex now with 2 rounds, keeping simple for now
   if (category) query.category = category;
+
+  if (status && status !== 'all') {
+    const statusQuery = {
+      $or: [
+        { "megaAudition.status": status },
+        { "grandFinale.status": status }
+      ]
+    };
+    if (query.$or) {
+      query.$and = [{ $or: query.$or }, statusQuery];
+      delete query.$or;
+    } else {
+      query.$or = statusQuery.$or;
+    }
+  }
 
   const pageNum = parseInt(page);
   const limitNum = parseInt(limit);
@@ -308,7 +322,7 @@ export const updateEvent = async (id, updateData, file) => {
   if (!event) throw new ApiError(404, "Live competition not found");
 
   const mergedMega = { ...event.megaAudition.toObject(), ...(updateData.megaAudition || {}) };
-  const mergedGrand = updateData.grandFinale 
+  const mergedGrand = updateData.grandFinale
     ? { ...(event.grandFinale?.toObject() || {}), ...updateData.grandFinale }
     : event.grandFinale?.toObject();
 
@@ -462,7 +476,7 @@ export const qualifyStudents = async (eventId, adminId, { submissionIds }) => {
   // Validate submissions
   const submissions = await liveCompetitionRepository.findSubmissions({ _id: { $in: submissionIds } });
   if (submissions.length !== submissionIds.length) throw new ApiError(400, "Some submissions not found");
-  
+
   for (const sub of submissions) {
     if (sub.event.toString() !== eventId.toString()) throw new ApiError(400, "Submissions must belong to this event");
     if (sub.round !== "MEGA_AUDITION") throw new ApiError(400, "Only MEGA_AUDITION submissions can be qualified");
@@ -523,7 +537,7 @@ export const declareResult = async (eventId, { round }) => {
         throw new ApiError(400, "You must select at least Rank 1 winner before declaring Grand Finale results.");
       }
       updatePayload["grandFinale.status"] = "RESULT_DECLARED";
-      
+
       // Credit wallets
       if (event.grandFinale.prizes) {
         for (const sub of winners) {
@@ -559,9 +573,9 @@ export const declareResult = async (eventId, { round }) => {
         { event: eventId, round },
         { limit: 10000, populate: [{ path: "participant", select: "name email" }] }
       );
-      
+
       const pIds = [...new Set(allSubmissions.map(s => s.participant._id ? s.participant._id.toString() : s.participant.toString()))];
-      
+
       if (pIds.length > 0) {
         await sendNotificationToMultipleStudents(
           pIds,
@@ -662,7 +676,7 @@ export const declareWinner = async (eventId, { round, rank1Id, rank2Id, rank3Id 
         { session }
       );
 
-      };
+    };
 
     await applyWinner(rank1Sub, 1);
     await applyWinner(rank2Sub, 2);
@@ -722,7 +736,7 @@ export const getEventStats = async (eventId, options = {}) => {
 
 const enrichEventForStudent = async (e, studentId, studentWalletBalance) => {
   const now = new Date();
-  
+
   // Enforce submission.type from category as fallback
   if (e.category?.submissionType) {
     if (e.megaAudition) {
@@ -794,7 +808,7 @@ const enrichEventForStudent = async (e, studentId, studentWalletBalance) => {
       obj.studentStatus.megaAudition.hasSubmitted = !!mSub.submittedAt;
       obj.studentStatus.megaAudition.submittedAt = mSub.submittedAt || null;
       obj.studentStatus.megaAudition.isQualified = mSub.isQualified && e.megaAudition.status === "RESULT_DECLARED";
-      
+
       if (e.megaAudition.status === "RESULT_DECLARED") {
         if (!mSub.submittedAt) {
           obj.studentStatus.megaAudition.resultStatus = "NOT_SUBMITTED";
@@ -853,8 +867,11 @@ const enrichEventForStudent = async (e, studentId, studentWalletBalance) => {
 
     // VISIBILITY GUARD FOR GRAND FINALE
     if (obj.grandFinale) {
-      // If they haven't paid/registered for Grand Finale, hide sensitive topics/rules
-      if (!gSub && !isGrandFinaleFreeAndQualified) {
+      const isRegistered = !!gSub || isGrandFinaleFreeAndQualified;
+      const isLive = obj.grandFinale.isEventLive;
+
+      if (!isRegistered) {
+        // Not registered — hide everything
         if (obj.grandFinale.submission?.text) {
           delete obj.grandFinale.submission.text.topic;
           delete obj.grandFinale.submission.text.rules;
@@ -862,7 +879,16 @@ const enrichEventForStudent = async (e, studentId, studentWalletBalance) => {
         if (obj.grandFinale.submission?.file) {
           delete obj.grandFinale.submission.file.instructions;
         }
+        if (obj.grandFinale.submission?.externalLink) {
+          delete obj.grandFinale.submission.externalLink;
+        }
+      } else if (!isLive) {
+        // Registered but event not started yet — hide only the meeting link/password
+        if (obj.grandFinale.submission?.externalLink) {
+          delete obj.grandFinale.submission.externalLink;
+        }
       }
+      // If registered AND live — show everything (no deletions)
     }
   } else {
     // If no student logged in, show skeleton Grand Finale (for marketing)
@@ -875,7 +901,7 @@ const enrichEventForStudent = async (e, studentId, studentWalletBalance) => {
         delete obj.grandFinale.submission.file.instructions;
       }
     }
-    
+
     if (e.megaAudition.status === "RESULT_DECLARED") {
       obj.studentStatus.megaAudition.resultStatus = "NOT_REGISTERED";
     }
@@ -910,7 +936,7 @@ const enrichEventForStudent = async (e, studentId, studentWalletBalance) => {
 };
 
 export const getPublishedEvents = async (options = {}) => {
-  const { page = 1, limit = 10, search, category, studentId } = options;
+  const { page = 1, limit = 10, search, category, status, studentId } = options;
 
   const query = { isPublished: true };
 
@@ -922,6 +948,21 @@ export const getPublishedEvents = async (options = {}) => {
   }
   if (category) query.category = category;
 
+  if (status && status !== 'all') {
+    const statusQuery = {
+      $or: [
+        { "megaAudition.status": status },
+        { "grandFinale.status": status }
+      ]
+    };
+    if (query.$or) {
+      query.$and = [{ $or: query.$or }, statusQuery];
+      delete query.$or;
+    } else {
+      query.$or = statusQuery.$or;
+    }
+  }
+
   const pageNum = parseInt(page);
   const limitNum = parseInt(limit);
   const skip = (pageNum - 1) * limitNum;
@@ -929,7 +970,7 @@ export const getPublishedEvents = async (options = {}) => {
   const [events, total] = await Promise.all([
     liveCompetitionRepository.findEvents(query, {
       populate: [categoryPopulate],
-      sort: { "megaAudition.eventWindow.start": 1 },
+      sort: { createdAt: -1 },
       skip,
       limit: limitNum,
     }),
@@ -967,7 +1008,7 @@ export const getPublishedEvents = async (options = {}) => {
         });
         eventObj = await liveCompetitionRepository.findEventById(eventObj._id, [categoryPopulate]);
       }
-      
+
       return await enrichEventForStudent(eventObj, studentId, studentWalletBalance);
     })
   );
@@ -1018,14 +1059,28 @@ export const getPublishedEventById = async (id, studentId = null) => {
 };
 
 export const registerForEvent = async (eventId, studentId, options = {}) => {
-  const { round = "MEGA_AUDITION" } = options;
   const event = await liveCompetitionRepository.findEventById(eventId);
   if (!event || !event.isPublished) throw new ApiError(404, "Live competition not found");
 
-  const targetRound = round === "GRAND_FINALE" ? event.grandFinale : event.megaAudition;
+  const mSub = await liveCompetitionRepository.findOneSubmission({ event: eventId, participant: studentId, round: "MEGA_AUDITION" });
+  let inferredRound = "MEGA_AUDITION";
+
+  if (mSub) {
+    if (mSub.paymentStatus === "COMPLETED") {
+      if (mSub.isQualified) {
+        const gSub = await liveCompetitionRepository.findOneSubmission({ event: eventId, participant: studentId, round: "GRAND_FINALE" });
+        if (gSub && gSub.paymentStatus === "COMPLETED") throw new ApiError(409, "Already fully registered for all rounds");
+        inferredRound = "GRAND_FINALE";
+      } else {
+        throw new ApiError(403, "Not qualified for Round 2");
+      }
+    }
+  }
+
+  const targetRound = inferredRound === "GRAND_FINALE" ? event.grandFinale : event.megaAudition;
   const now = new Date();
-  
-  if (round === "MEGA_AUDITION") {
+
+  if (inferredRound === "MEGA_AUDITION") {
     if (now < new Date(targetRound.registration.start)) throw new ApiError(400, "Registration not open");
     if (now > new Date(targetRound.registration.end)) throw new ApiError(400, "Registration closed");
   } else {
@@ -1034,19 +1089,17 @@ export const registerForEvent = async (eventId, studentId, options = {}) => {
     if (now > new Date(targetRound.paymentWindow.end)) throw new ApiError(400, "Payment closed");
     const megaStatus = computeMegaAuditionStatus(event.megaAudition, event.isPublished);
     if (megaStatus !== "RESULT_DECLARED") throw new ApiError(403, "Round 1 results are not declared yet");
-    const mSub = await liveCompetitionRepository.findOneSubmission({ event: eventId, participant: studentId, round: "MEGA_AUDITION" });
-    if (!mSub || !mSub.isQualified) throw new ApiError(403, "Not qualified");
   }
 
-  const existing = await liveCompetitionRepository.findOneSubmission({ event: eventId, participant: studentId, round });
-  if (existing) throw new ApiError(409, "Already registered");
+  const existing = await liveCompetitionRepository.findOneSubmission({ event: eventId, participant: studentId, round: inferredRound });
+  if (existing && existing.paymentStatus === "COMPLETED") throw new ApiError(409, "Already registered");
 
   const paymentStatus = targetRound.fee?.isPaid ? "PENDING" : "COMPLETED";
   const submission = await liveCompetitionRepository.createSubmission({
-    event: eventId, participant: studentId, paymentStatus, round
+    event: eventId, participant: studentId, paymentStatus, round: inferredRound
   });
 
-  await liveCompetitionRepository.incrementEventStats(eventId, { round, participants: 1 });
+  await liveCompetitionRepository.incrementEventStats(eventId, { round: inferredRound, participants: 1 });
   return submission;
 };
 
@@ -1054,14 +1107,32 @@ export const initiateLiveCompPayment = async (eventId, studentId, paymentMethod,
   const event = await liveCompetitionRepository.findEventById(eventId);
   if (!event || !event.isPublished) throw new ApiError(404, "Live competition not found");
 
-  const { round = "MEGA_AUDITION", couponCode } = options;
-  const targetRound = round === "GRAND_FINALE" ? event.grandFinale : event.megaAudition;
+  const { couponCode } = options;
+
+  const mSub = await liveCompetitionRepository.findOneSubmission({ event: eventId, participant: studentId, round: "MEGA_AUDITION" });
+  let inferredRound = "MEGA_AUDITION";
+
+  if (mSub) {
+    if (mSub.paymentStatus === "COMPLETED") {
+      if (mSub.isQualified) {
+        const gSub = await liveCompetitionRepository.findOneSubmission({ event: eventId, participant: studentId, round: "GRAND_FINALE" });
+        if (gSub && gSub.paymentStatus === "COMPLETED") {
+          throw new ApiError(409, "You are already fully registered for all rounds of this competition");
+        }
+        inferredRound = "GRAND_FINALE";
+      } else {
+        throw new ApiError(403, "You are already registered for Round 1, but not qualified for Round 2");
+      }
+    }
+  }
+
+  const targetRound = inferredRound === "GRAND_FINALE" ? event.grandFinale : event.megaAudition;
 
   if (!targetRound) throw new ApiError(400, "Round configuration not found");
 
   const now = new Date();
-  
-  if (round === "MEGA_AUDITION") {
+
+  if (inferredRound === "MEGA_AUDITION") {
     if (now < new Date(targetRound.registration.start)) throw new ApiError(400, "Registration has not opened yet");
     if (now > new Date(targetRound.registration.end)) throw new ApiError(400, "Registration window has closed");
   } else {
@@ -1071,15 +1142,9 @@ export const initiateLiveCompPayment = async (eventId, studentId, paymentMethod,
     if (now > new Date(targetRound.paymentWindow.end)) throw new ApiError(400, "Payment window has closed");
     const megaStatus = computeMegaAuditionStatus(event.megaAudition, event.isPublished);
     if (megaStatus !== "RESULT_DECLARED") throw new ApiError(403, "Round 1 results are not declared yet");
-
-    // Verify qualification
-    const mSub = await liveCompetitionRepository.findOneSubmission({ event: eventId, participant: studentId, round: "MEGA_AUDITION" });
-    if (!mSub || !mSub.isQualified) {
-      throw new ApiError(403, "You are not qualified for the Grand Finale");
-    }
   }
 
-  const existing = await liveCompetitionRepository.findOneSubmission({ event: eventId, participant: studentId, round });
+  const existing = await liveCompetitionRepository.findOneSubmission({ event: eventId, participant: studentId, round: inferredRound });
 
   const basePrice = Number(targetRound.fee?.amount) || 0;
   const { amountToCharge, couponId, appliedOffer, appliedCoupon } = await getAmountToCharge("LiveCompetition", basePrice, couponCode);
@@ -1112,9 +1177,9 @@ export const initiateLiveCompPayment = async (eventId, studentId, paymentMethod,
       return { completed: true, registration: updated };
     }
     const submission = await liveCompetitionRepository.createSubmission({
-      event: eventId, participant: studentId, paymentStatus: "COMPLETED", round
+      event: eventId, participant: studentId, paymentStatus: "COMPLETED", round: inferredRound
     });
-    await liveCompetitionRepository.incrementEventStats(eventId, { round, participants: 1 });
+    await liveCompetitionRepository.incrementEventStats(eventId, { round: inferredRound, participants: 1 });
     return { completed: true, registration: submission };
   }
 
@@ -1126,21 +1191,21 @@ export const initiateLiveCompPayment = async (eventId, studentId, paymentMethod,
       return { completed: true, registration: updated };
     }
     const submission = await liveCompetitionRepository.createSubmission({
-      event: eventId, participant: studentId, paymentStatus: "COMPLETED", round
+      event: eventId, participant: studentId, paymentStatus: "COMPLETED", round: inferredRound
     });
-    await liveCompetitionRepository.incrementEventStats(eventId, { round, participants: 1 });
+    await liveCompetitionRepository.incrementEventStats(eventId, { round: inferredRound, participants: 1 });
     return { completed: true, registration: submission };
   }
 
   if (paymentMethod === "razorpay") {
     if (amountToCharge < 1) throw new ApiError(400, "This event is free. Use paymentMethod: free.");
-    
+
     let submission = existing;
     if (!submission) {
       submission = await liveCompetitionRepository.createSubmission({
-        event: eventId, participant: studentId, paymentStatus: "PENDING", round
+        event: eventId, participant: studentId, paymentStatus: "PENDING", round: inferredRound
       });
-      await liveCompetitionRepository.incrementEventStats(eventId, { round, participants: 1 });
+      await liveCompetitionRepository.incrementEventStats(eventId, { round: inferredRound, participants: 1 });
     } else if (submission.paymentStatus !== "PENDING") {
       submission = await liveCompetitionRepository.updateSubmissionById(existing._id, { paymentStatus: "PENDING" });
     }
@@ -1152,7 +1217,7 @@ export const initiateLiveCompPayment = async (eventId, studentId, paymentMethod,
       orderId, studentId, type: "live_competition", entityId: eventId, entityModel: "LiveCompetition",
       amountPaise, currency: "INR", receipt, couponId: couponId || undefined,
       appliedOffer: appliedOffer || undefined, appliedCoupon: appliedCoupon || undefined,
-      metadata: { round }
+      metadata: { round: inferredRound }
     });
 
     const razorpayKeyId = process.env.RAZORPAY_KEY_ID;
@@ -1178,6 +1243,7 @@ export const completeLiveCompPayment = async (eventId, studentId, data) => {
     throw new ApiError(400, "Invalid payment intent details");
   }
 
+  // Use the round securely stored in the intent metadata (fallback to requestedRound for backward compat)
   const round = intent.metadata?.round || requestedRound || "MEGA_AUDITION";
 
   const existing = await liveCompetitionRepository.findOneSubmission({ event: eventId, participant: studentId, round });
@@ -1206,7 +1272,7 @@ export const startEssaySession = async (eventId, studentId, options = {}) => {
 
   const targetRound = round === "GRAND_FINALE" ? event.grandFinale : event.megaAudition;
   const submissionType = targetRound.submission?.type || event.category?.submissionType;
-  
+
   if (submissionType !== "TEXT") throw new ApiError(400, "This event does not support live essay sessions");
 
   const now = new Date();
@@ -1214,7 +1280,7 @@ export const startEssaySession = async (eventId, studentId, options = {}) => {
   if (now > new Date(targetRound.eventWindow.end)) throw new ApiError(400, "Event window has closed");
 
   let submission = await liveCompetitionRepository.findOneSubmission({ event: eventId, participant: studentId, round });
-  
+
   if (!submission) {
     if (round === "GRAND_FINALE" && (!targetRound.fee || Number(targetRound.fee.amount) === 0)) {
       const mSub = await liveCompetitionRepository.findOneSubmission({ event: eventId, participant: studentId, round: "MEGA_AUDITION" });
@@ -1277,7 +1343,7 @@ export const submitWork = async (eventId, studentId, { text, round = "MEGA_AUDIT
   if (now > gracePeriodEnd) throw new ApiError(400, "Submission deadline has passed");
 
   let submission = await liveCompetitionRepository.findOneSubmission({ event: eventId, participant: studentId, round });
-  
+
   if (!submission) {
     if (round === "GRAND_FINALE" && (!targetRound.fee || Number(targetRound.fee.amount) === 0)) {
       const mSub = await liveCompetitionRepository.findOneSubmission({ event: eventId, participant: studentId, round: "MEGA_AUDITION" });
@@ -1313,9 +1379,9 @@ export const submitWork = async (eventId, studentId, { text, round = "MEGA_AUDIT
 
   if (submissionType === "FILE") {
     if (!files || files.length === 0) throw new ApiError(400, "At least one file is required");
-    const maxFiles = targetRound.submission.file?.maxFiles || 5;
+    const maxFiles = 1; // Strict limit of 1 file per round as per requirements
     if (files.length > maxFiles) throw new ApiError(400, `Maximum ${maxFiles} file(s) allowed`);
-    
+
     for (const file of files) {
       const ext = file.originalname.split(".").pop().toLowerCase();
       const allowedTypes = targetRound.submission.file?.allowedTypes || [];
