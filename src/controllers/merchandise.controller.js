@@ -68,7 +68,8 @@ export const claimMerchandise = asyncHandler(async (req, res) => {
   );
 
   if (error) {
-    throw new ApiError(400, "Validation Error", error.details.map(x => x.message));
+    const errorMessage = error.details.map(x => x.message).join(", ");
+    throw new ApiError(400, errorMessage);
   }
 
   const result = await merchandiseService.claimMerchandise(studentId, id, value);
@@ -91,7 +92,8 @@ export const initiateMerchandisePayment = asyncHandler(async (req, res) => {
   );
 
   if (error) {
-    throw new ApiError(400, "Validation Error", error.details.map(x => x.message));
+    const errorMessage = error.details.map(x => x.message).join(", ");
+    throw new ApiError(400, errorMessage);
   }
 
   const { paymentMethod, ...options } = value;
@@ -119,7 +121,8 @@ export const confirmMerchandisePayment = asyncHandler(async (req, res) => {
   );
 
   if (error) {
-    throw new ApiError(400, "Validation Error", error.details.map(x => x.message));
+    const errorMessage = error.details.map(x => x.message).join(", ");
+    throw new ApiError(400, errorMessage);
   }
 
   const result = await merchandiseService.confirmMerchandisePayment(id, studentId, value);

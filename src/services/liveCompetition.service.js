@@ -207,7 +207,7 @@ export const createEvent = async (data, adminId, file) => {
           ? subData.file.allowedTypes
           : activeCategory.allowedFileTypes,
       } : undefined,
-      externalLink: finalType === "EXTERNAL_LINK" ? subData.externalLink : undefined
+      externalLink: (finalType === "EXTERNAL_LINK" || subData.externalLink?.url) ? subData.externalLink : undefined
     };
   };
 
@@ -867,8 +867,11 @@ const enrichEventForStudent = async (e, studentId, studentWalletBalance) => {
 
     // VISIBILITY GUARD FOR GRAND FINALE
     if (obj.grandFinale) {
-      // If they haven't paid/registered for Grand Finale, hide sensitive topics/rules
-      if (!gSub && !isGrandFinaleFreeAndQualified) {
+      const isRegistered = !!gSub || isGrandFinaleFreeAndQualified;
+      const isLive = obj.grandFinale.isEventLive;
+
+      if (!isRegistered) {
+        // Not registered — hide everything
         if (obj.grandFinale.submission?.text) {
           delete obj.grandFinale.submission.text.topic;
           delete obj.grandFinale.submission.text.rules;
@@ -876,7 +879,16 @@ const enrichEventForStudent = async (e, studentId, studentWalletBalance) => {
         if (obj.grandFinale.submission?.file) {
           delete obj.grandFinale.submission.file.instructions;
         }
+        if (obj.grandFinale.submission?.externalLink) {
+          delete obj.grandFinale.submission.externalLink;
+        }
+      } else if (!isLive) {
+        // Registered but event not started yet — hide only the meeting link/password
+        if (obj.grandFinale.submission?.externalLink) {
+          delete obj.grandFinale.submission.externalLink;
+        }
       }
+      // If registered AND live — show everything (no deletions)
     }
   } else {
     // If no student logged in, show skeleton Grand Finale (for marketing)
@@ -958,7 +970,7 @@ export const getPublishedEvents = async (options = {}) => {
   const [events, total] = await Promise.all([
     liveCompetitionRepository.findEvents(query, {
       populate: [categoryPopulate],
-      sort: { "megaAudition.eventWindow.start": 1 },
+      sort: { createdAt: -1 },
       skip,
       limit: limitNum,
     }),
