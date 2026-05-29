@@ -1052,7 +1052,7 @@ export const registerForEvent = async (eventId, studentId, options = {}) => {
 
   const mSub = await liveCompetitionRepository.findOneSubmission({ event: eventId, participant: studentId, round: "MEGA_AUDITION" });
   let inferredRound = "MEGA_AUDITION";
-  
+
   if (mSub) {
     if (mSub.paymentStatus === "COMPLETED") {
       if (mSub.isQualified) {
@@ -1096,10 +1096,10 @@ export const initiateLiveCompPayment = async (eventId, studentId, paymentMethod,
   if (!event || !event.isPublished) throw new ApiError(404, "Live competition not found");
 
   const { couponCode } = options;
-  
+
   const mSub = await liveCompetitionRepository.findOneSubmission({ event: eventId, participant: studentId, round: "MEGA_AUDITION" });
   let inferredRound = "MEGA_AUDITION";
-  
+
   if (mSub) {
     if (mSub.paymentStatus === "COMPLETED") {
       if (mSub.isQualified) {
@@ -1367,7 +1367,7 @@ export const submitWork = async (eventId, studentId, { text, round = "MEGA_AUDIT
 
   if (submissionType === "FILE") {
     if (!files || files.length === 0) throw new ApiError(400, "At least one file is required");
-    const maxFiles = targetRound.submission.file?.maxFiles || 5;
+    const maxFiles = 1; // Strict limit of 1 file per round as per requirements
     if (files.length > maxFiles) throw new ApiError(400, `Maximum ${maxFiles} file(s) allowed`);
 
     for (const file of files) {

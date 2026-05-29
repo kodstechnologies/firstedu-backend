@@ -629,11 +629,11 @@ router.post(
   registerLiveCompetition,
 );
 
-// Submission (supports file uploads via uploadLiveCompetitionContent.array("files", 5))
+// Submission (supports file uploads via uploadLiveCompetitionContent.array("files", 1))
 router.post(
   "/live-competitions/:id/submit",
   verifyJWT,
-  uploadLiveCompetitionContent.array("files", 5),
+  uploadLiveCompetitionContent.array("files", 1),
   submitLiveCompetitionWork,
 );
 router.get("/my-live-submissions", verifyJWT, getMyLiveCompetitionSubmissions);
