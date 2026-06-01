@@ -324,6 +324,8 @@ export const sendTeacherApprovalWithCredentialsEmail = async ({
       throw new ApiError(500, `SMTP configuration incomplete. Missing: ${missingVars.join(", ")}`);
     }
 
+    const loginLink = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/teacher/login`;
+
     const info = await sendEmailWithTemplate({
       to: toEmail,
       category: "teacher_application",
@@ -332,6 +334,7 @@ export const sendTeacherApprovalWithCredentialsEmail = async ({
         name: teacherName || "Teacher",
         email,
         password,
+        loginLink,
       },
       defaultSubject: "Congratulations - You have been selected as a Teacher",
       defaultHtml: `
@@ -342,7 +345,10 @@ export const sendTeacherApprovalWithCredentialsEmail = async ({
             <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Email</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${email}</td></tr>
             <tr><td style="padding: 8px 0;"><strong>Password</strong></td><td style="padding: 8px 0;"><code style="background: #f4f4f4; padding: 4px 8px;">${password}</code></td></tr>
           </table>
-          <p style="color: #666;">Please change your password after first login.</p>
+          <p style="color: #666; margin-top: 20px;">
+            <a href="${loginLink}" style="display: inline-block; background-color: #4F46E5; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;">Login to Teacher Portal</a>
+          </p>
+          <p style="color: #666; margin-top: 15px;">Please change your password after first login.</p>
           <p style="color: #999; font-size: 12px; margin-top: 20px;">Iscorre Teacher Connect</p>
         </div>
       `,

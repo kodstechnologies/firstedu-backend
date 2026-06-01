@@ -819,6 +819,7 @@ export const getExamInstructions = async (testId, studentId, options = {}) => {
       name: section.name || `Section ${index + 1}`,
       count: section.count || 0,
       difficulty: section.difficulty || null,
+      timeMinutes: section.timeMinutes || null,
     }))
     : [];
 
@@ -1122,6 +1123,7 @@ export const getExamSession = async (sessionId, studentId) => {
         name: section.name || `Section ${String.fromCharCode(65 + index)}`,
         count: section.count,
         difficulty: section.difficulty,
+        timeMinutes: section.timeMinutes || null,
       }));
     }
   }
