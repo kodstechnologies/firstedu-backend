@@ -20,11 +20,14 @@ function mimeToFileType(mime = "") {
 }
 
 export const createMaterial = asyncHandler(async (req, res) => {
-  const { category, subCategory } = req.body;
+  const { title, category, subCategory } = req.body;
   let fileUrl = req.body.fileUrl;
 
-  if (!category || !subCategory) {
-    return res.status(400).json(ApiResponse.error("Fields category and subCategory are required", 400));
+  if (!title) {
+    return res.status(400).json(ApiResponse.error("Title is required", 400));
+  }
+  if (!category) {
+    return res.status(400).json(ApiResponse.error("Pillar category is required", 400));
   }
 
   // Auto-derive fileType from actual uploaded file MIME; fall back to 'other' for link-only entries
@@ -45,10 +48,12 @@ export const createMaterial = asyncHandler(async (req, res) => {
   }
 
   const newMaterial = await FreeMaterial.create({
+    title,
     fileType,
     fileUrl,
     category,
-    subCategory,
+    // subCategory is optional — only include if provided
+    ...(subCategory ? { subCategory } : {}),
   });
 
   return res.status(201).json(
@@ -56,21 +61,38 @@ export const createMaterial = asyncHandler(async (req, res) => {
   );
 });
 
-// @desc    Get all free materials (with optional filters)
+// @desc    Get all free materials (with optional filters + pagination + search)
 // @route   GET /api/v1/admin/free-materials
 export const getMaterials = asyncHandler(async (req, res) => {
-  const { category, subCategory } = req.query;
+  const { category, subCategory, search, page = 1, limit = 15 } = req.query;
+  const pageNum = parseInt(page);
+  const limitNum = parseInt(limit);
+  const skip = (pageNum - 1) * limitNum;
+
   const filter = {};
   if (category) filter.category = category;
   if (subCategory) filter.subCategory = subCategory;
+  if (search && search.trim()) {
+    filter.title = { $regex: search.trim(), $options: 'i' };
+  }
 
-  const materials = await FreeMaterial.find(filter)
-    .populate('category', 'name slug')
-    .populate('subCategory', 'name slug')
-    .sort({ createdAt: -1 });
+  const [materials, total] = await Promise.all([
+    FreeMaterial.find(filter)
+      .populate('category', 'name slug')
+      .populate('subCategory', 'name slug')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limitNum),
+    FreeMaterial.countDocuments(filter),
+  ]);
 
   return res.status(200).json(
-    ApiResponse.success(materials, "Free materials fetched successfully")
+    ApiResponse.success(materials, "Free materials fetched successfully", {
+      page: pageNum,
+      limit: limitNum,
+      total,
+      pages: Math.ceil(total / limitNum) || 1,
+    })
   );
 });
 

@@ -19,7 +19,7 @@ import {
   getApplyJobByIdUser,
 } from "../controllers/teacherConnectApply.controller.js";
 import { getAllBlogs, getBlogById } from "../controllers/blog.controller.js";
-import { getAllEvents } from "../controllers/events.controller.js";
+import { getAllEvents, getLiveCompetitionById } from "../controllers/events.controller.js";
 import { getAllStoriesAdmin } from "../controllers/successStory.controller.js";
 import {
   getAllPressAnnouncementsAdmin,
@@ -57,6 +57,7 @@ import { verifyJWT } from "../middleware/auth.middleware.js";
 import { getWorkshopById } from "../controllers/workshop.controller.js";
 import { getTournamentById } from "../controllers/tournament.controller.js";
 import { getFreeMaterialsLandingPage } from "../controllers/marketplace.controller.js";
+import { getActiveHeroSlides } from "../controllers/heroSlide.controller.js";
 
 const router = Router();
 
@@ -94,11 +95,13 @@ router.get("/courses", getCourses);
 router.get("/courses/:id", getCourseByIdLandingPage);
 router.get("/workshops/:id", getWorkshopById);
 router.get("/tournaments/:id", getTournamentById);
+router.get("/live-competitions/:id", getLiveCompetitionById);
 router.get("/events", getAllEvents);
 router.get("/qna", getAllQnAsLandingPage);
 router.post("/qna-request", verifyJWT, createQnA);
 router.get("/categories", getCategoriesForStudent);
 router.get("/free-materials", getFreeMaterialsLandingPage);
+router.get("/hero-slides", getActiveHeroSlides);
 
 // ==================== CAREARS (JOBS) ====================
 

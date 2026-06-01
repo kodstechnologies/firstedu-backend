@@ -308,7 +308,6 @@ import {
   getApplicantDetails,
   updateApplicantStatus,
 } from "../controllers/jobApplicant.controller.js";
-
 import {
   createManualEntry,
   getManualEntries,
@@ -323,6 +322,13 @@ import {
   getMaterials,
   deleteMaterial,
 } from "../controllers/adminFreeMaterial.controller.js";
+
+import {
+  createHeroSlide,
+  getHeroSlidesAdmin,
+  updateHeroSlide,
+  deleteHeroSlide,
+} from "../controllers/heroSlide.controller.js";
 
 
 const router = Router();
@@ -747,5 +753,10 @@ router.post("/free-materials", verifyJWT, uploadLiveCompetitionContent.single("f
 router.get("/free-materials", verifyJWT, getMaterials);
 router.delete("/free-materials/:id", verifyJWT, deleteMaterial);
 
-export default router;
+// ==================== HERO SLIDES (Landing Page) ====================
+router.post("/hero-slides", verifyJWT, uploadSuccessStory.single("media"), createHeroSlide);
+router.get("/hero-slides", verifyJWT, getHeroSlidesAdmin);
+router.put("/hero-slides/:id", verifyJWT, uploadSuccessStory.single("media"), updateHeroSlide);
+router.delete("/hero-slides/:id", verifyJWT, deleteHeroSlide);
 
+export default router;

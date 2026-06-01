@@ -590,8 +590,17 @@ export const getPaginatedFreeMaterials = async (page = 1, limit = 10, options = 
   const skip = (pageNum - 1) * limitNum;
 
   const query = {};
-  if (categoryId) query.category = categoryId;
-  if (subCategoryId) query.subCategory = subCategoryId;
+  if (categoryId && categoryId !== 'null' && categoryId !== 'undefined') {
+    query.category = categoryId;
+  }
+  if (subCategoryId && subCategoryId !== 'null' && subCategoryId !== 'undefined') {
+    const subCatIds = subCategoryId.split(',').map(id => id.trim()).filter(Boolean);
+    if (subCatIds.length > 1) {
+      query.subCategory = { $in: subCatIds };
+    } else if (subCatIds.length === 1) {
+      query.subCategory = subCatIds[0];
+    }
+  }
   
   if (contentType && contentType !== 'all') {
     query.fileType = String(contentType).toLowerCase();
@@ -599,10 +608,11 @@ export const getPaginatedFreeMaterials = async (page = 1, limit = 10, options = 
 
   if (search && search.trim()) {
     const regex = { $regex: search, $options: "i" };
-    query.fileUrl = regex;
+    query.title = regex;
   }
 
   const materials = await FreeMaterial.find(query)
+    .populate("category subCategory", "name")
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(limitNum)
@@ -612,17 +622,27 @@ export const getPaginatedFreeMaterials = async (page = 1, limit = 10, options = 
 
   const formattedItems = materials.map((m) => {
     const filename = decodeURIComponent(m.fileUrl || '').split('/').pop() || 'Download File';
+    const title = m.title || filename;
+    
+    let categoryString = 'Free Material';
+    if (m.category?.name) {
+      categoryString = m.category.name;
+      if (m.subCategory?.name) {
+        categoryString += ` › ${m.subCategory.name}`;
+      }
+    }
+
     return {
       _id: m._id,
       course: {
          _id: m._id,
-         title: filename,
+         title: categoryString,
          description: 'Free Material',
          price: 0,
          contentType: m.fileType,
          contents: [
             {
-               originalName: filename,
+               originalName: title,
                type: m.fileType,
                url: m.fileUrl
             }

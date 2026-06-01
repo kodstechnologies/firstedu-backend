@@ -233,7 +233,7 @@ export const createEvent = async (data, adminId, file) => {
 };
 
 export const getEvents = async (options = {}) => {
-  const { page = 1, limit = 10, search, status, category } = options;
+  const { page = 1, limit = 10, search, status, category, isPublished } = options;
 
   const query = {};
   if (search) {
@@ -243,6 +243,7 @@ export const getEvents = async (options = {}) => {
     ];
   }
   if (category) query.category = category;
+  if (isPublished !== undefined) query.isPublished = isPublished;
 
   if (status && status !== 'all') {
     const statusQuery = {

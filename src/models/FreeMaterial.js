@@ -2,6 +2,11 @@ import mongoose from 'mongoose';
 
 const freeMaterialSchema = new mongoose.Schema(
   {
+    title: {
+      type: String,
+      required: true,
+      trim: true,
+    },
     fileType: {
       type: String,
       enum: ['pdf', 'video', 'image', 'link', 'audio', 'document', 'archive', 'other'],
@@ -19,7 +24,7 @@ const freeMaterialSchema = new mongoose.Schema(
     subCategory: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Category',
-      required: true,
+      // optional — material can be attached directly to a pillar category
     },
   },
   { timestamps: true }
