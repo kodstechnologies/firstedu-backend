@@ -124,6 +124,14 @@ export const createCategory = async (data, createdBy) => {
     status: "Public",
     ...(data.isPredefined !== undefined && { isPredefined: data.isPredefined }),
   };
+
+  // Check discriminator type
+  if (resolvedRootType === "Gamification") {
+    payload.kind = "GamificationNode";
+    // Also we can safely pull any gamification specifics from data
+    if (data.gamificationType) payload.gamificationType = data.gamificationType;
+  }
+
   const created = await categoryRepository.create(payload);
 
   if (data.children && data.children.length > 0) {
@@ -165,33 +173,56 @@ export const getCategoryTree = async (filter = {}) => {
     { name: "Competitive", rootType: "Competitive" },
     { name: "Olympiads", rootType: "Olympiads" },
     { name: "Skill Development", rootType: "Skill Development" },
+    { name: "Gamification", rootType: "Gamification", predefinedChildren: ["Challenge Yourself", "Challenge Your Friend"] }
   ];
 
   for (const pillar of PILLAR_ROOTS) {
-    // Find a root node matching this rootType (top-level: parent null)
+    let parentId = null;
     const existing = await Category.findOne({ rootType: pillar.rootType, parent: null });
     if (existing) {
-      // Always ensure predefined flag is set; sync name if different
       const updates = { isPredefined: true };
       if (existing.name !== pillar.name) updates.name = pillar.name;
       await Category.updateOne({ _id: existing._id }, updates);
-    }
-    // Also mark any that have the correct name but not rootType
-    else {
+      parentId = existing._id;
+    } else {
       const byName = await Category.findOne({ name: pillar.name, parent: null });
       if (byName) {
         await Category.updateOne({ _id: byName._id }, { rootType: pillar.rootType, isPredefined: true });
+        parentId = byName._id;
       } else {
-        // Automatically recreate the missing pillar category to prevent UI breakage
-        await categoryRepository.create({
+        const createdPillar = await categoryRepository.create({
           name: pillar.name,
           parent: null,
           order: 0,
           rootType: pillar.rootType,
           status: "Public",
           isPredefined: true,
-          createdBy: null // Ensure a valid payload for creation
+          createdBy: null
         });
+        parentId = createdPillar._id;
+      }
+    }
+
+    if (pillar.predefinedChildren && parentId) {
+      for (const childName of pillar.predefinedChildren) {
+        const childExist = await Category.findOne({ name: childName, parent: parentId });
+        if (!childExist) {
+          const gamTypeMap = {
+            "Challenge Yourself": "challenge_yourself",
+            "Challenge Your Friend": "challenge_your_friend"
+          };
+          await categoryRepository.create({
+            name: childName,
+            parent: parentId,
+            order: 0,
+            rootType: pillar.rootType,
+            status: "Public",
+            isPredefined: true,
+            createdBy: null,
+            kind: "GamificationNode",
+            gamificationType: gamTypeMap[childName] || "base_pillar"
+          });
+        }
       }
     }
   }
@@ -368,7 +399,7 @@ const getConnectedCategoryIds = async (linkedTo, studentId, isCertification) => 
   if (linkedTo === "all" || linkedTo === "olympiad") {
     const Olympiad = (await import("../models/OlympiadTest.js")).default;
     const olympiads = await Olympiad.find({}).select("testId categoryId").lean();
-    
+
     // Add direct categoryIds from the Olympiad model itself
     olympiads.forEach(o => {
       if (o.categoryId) categoryIds.add(o.categoryId.toString());
@@ -377,10 +408,10 @@ const getConnectedCategoryIds = async (linkedTo, studentId, isCertification) => 
     const olympiadTestIds = olympiads.map(o => o.testId).filter(Boolean);
     if (olympiadTestIds.length > 0) {
       const tests = await Test.find({ _id: { $in: olympiadTestIds } }).select("questionBank categoryId").lean();
-      
+
       const bankIds = [...new Set(tests.map(t => t.questionBank?.toString()).filter(Boolean))];
       const directTestCategoryIds = [...new Set(tests.map(t => t.categoryId?.toString()).filter(Boolean))];
-      
+
       if (bankIds.length > 0) {
         const fromOlympiads = await QuestionBank.find({ _id: { $in: bankIds } }).distinct("categories");
         fromOlympiads.forEach((id) => categoryIds.add(id?.toString?.() || id));
@@ -652,11 +683,11 @@ export const updateCategory = async (id, updateData) => {
 
   // --- Validation: Check for duplicate name at the same level ---
   const newName = updateData.name !== undefined ? updateData.name : existing.name;
-  
+
   const existingParentId = existing.parent
     ? (existing.parent._id?.toString?.() || existing.parent.toString?.())
     : null;
-    
+
   const newParentId = updateData.parent !== undefined
     ? (updateData.parent === "null" || updateData.parent === "" ? null : updateData.parent)
     : existingParentId;

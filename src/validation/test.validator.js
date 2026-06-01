@@ -18,6 +18,7 @@ const createTest = Joi.object({
       "Olympiads",
       "tournament",
       "challenge_yourself",
+      "challenge_your_friend",
       "competition_sector",
       "everyday_challenge",
       "skill",
@@ -31,6 +32,8 @@ const createTest = Joi.object({
   isPublished: Joi.boolean().optional(),
   categoryId: objectId.optional().allow(null),
   rewardPoints: Joi.number().min(0).optional(),
+  gamificationLevel: Joi.number().integer().min(1).optional(),
+  passingPercentage: Joi.number().integer().min(0).max(100).optional(),
 });
 
 const updateTest = Joi.object({
@@ -47,6 +50,7 @@ const updateTest = Joi.object({
       "Olympiads",
       "tournament",
       "challenge_yourself",
+      "challenge_your_friend",
       "competition_sector",
       "everyday_challenge",
       "skill",
@@ -60,6 +64,8 @@ const updateTest = Joi.object({
   isPublished: Joi.boolean().optional(),
   categoryId: objectId.optional().allow(null),
   rewardPoints: Joi.number().min(0).optional(),
+  gamificationLevel: Joi.number().integer().min(1).optional(),
+  passingPercentage: Joi.number().integer().min(0).max(100).optional(),
 });
 
 // Test Bundle

@@ -6,7 +6,10 @@ const createCategorySchema = Joi.object({
   parent: Joi.string().optional().allow(null, ""),
   order: Joi.number().min(0).optional(),
   rootType: Joi.string()
-    .valid("School", "Competitive", "Olympiads", "Skill Development", "custom")
+    .valid("School", "Competitive", "Olympiads", "Skill Development", "Gamification", "custom")
+    .optional(),
+  gamificationType: Joi.string()
+    .valid("challenge_yourself", "challenge_your_friend", "base_pillar")
     .optional(),
   isPredefined: Joi.boolean().optional(),
   children: Joi.array().items(Joi.link("#category")).optional(),
@@ -20,7 +23,10 @@ const updateCategory = Joi.object({
   order: Joi.number().min(0).optional(),
   isActive: Joi.boolean().optional(),
   rootType: Joi.string()
-    .valid("School", "Competitive", "Olympiads", "Skill Development", "custom")
+    .valid("School", "Competitive", "Olympiads", "Skill Development", "Gamification", "custom")
+    .optional(),
+  gamificationType: Joi.string()
+    .valid("challenge_yourself", "challenge_your_friend", "base_pillar")
     .optional(),
   isPredefined: Joi.boolean().optional(),
 });

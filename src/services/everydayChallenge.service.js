@@ -1,20 +1,23 @@
 import testRepository from "../repository/test.repository.js";
 import everydayChallengeCompletionRepository from "../repository/everydayChallengeCompletion.repository.js";
+import everydayChallengeScheduleRepository from "../repository/EverydayChallengeSchedule.repository.js";
 import walletService from "./wallet.service.js";
 import questionBankRepository from "../repository/questionBank.repository.js";
 
 const STREAK_DAYS_CYCLE = 7;
-const POINTS_PER_DAY = 10;
+const POINTS_PER_DAY = 10; // Fallback if no test reward points specified
 
 /**
- * Build the 7-day streak cycle for UI: each day has points and whether it's completed in current streak.
+ * Build the 7-day streak cycle for UI dynamically based on the schedule
  */
-const buildStreakCycle = (streakDays) => {
+const buildDynamicStreakCycle = (streakDays, schedule) => {
   return Array.from({ length: STREAK_DAYS_CYCLE }, (_, i) => {
     const day = i + 1;
+    const scheduledDay = schedule.find((s) => s.day === day);
+    const points = scheduledDay?.testId?.rewardPoints || day * POINTS_PER_DAY;
     return {
       day,
-      points: day * POINTS_PER_DAY,
+      points,
       completed: day <= streakDays,
     };
   });
@@ -30,53 +33,13 @@ export const getStartOfDayUTC = (date = new Date()) => {
 };
 
 /**
- * Simple string hash for deterministic daily challenge selection
- */
-const hashDateString = (dateStr) => {
-  let hash = 0;
-  for (let i = 0; i < dateStr.length; i++) {
-    const char = dateStr.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash = hash & hash;
-  }
-  return Math.abs(hash);
-};
-
-/**
- * Get today's challenge (one random test from everyday challenge pool, same for all users for the day)
- * and student's streak info.
+ * Get today's challenge (the scheduled test for the student's streak day)
  */
 export const getTodaysChallenge = async (studentId) => {
-  const testIds = await testRepository.findEverydayChallengeTestIds();
-  if (!testIds || testIds.length === 0) {
-    return {
-      challenge: null,
-      streakDays: 0,
-      completedToday: false,
-      nextPoints: POINTS_PER_DAY,
-      nextStreakDay: 1,
-      streakCycle: buildStreakCycle(0),
-    };
-  }
-
+  const schedule = await everydayChallengeScheduleRepository.getSchedule();
+  
   const today = getStartOfDayUTC();
   const dateStr = today.toISOString().slice(0, 10);
-  const index = hashDateString(dateStr) % testIds.length;
-  const selectedTestId = testIds[index];
-
-  const test = await testRepository.findTestById(selectedTestId, {
-    questionBank: "name categories",
-  });
-  if (!test) {
-    return {
-      challenge: null,
-      streakDays: 0,
-      completedToday: false,
-      nextPoints: POINTS_PER_DAY,
-      nextStreakDay: 1,
-      streakCycle: buildStreakCycle(0),
-    };
-  }
 
   const completions = await everydayChallengeCompletionRepository.findLatestByStudent(
     studentId,
@@ -106,20 +69,32 @@ export const getTodaysChallenge = async (studentId) => {
     }
   }
 
-  const nextPoints = nextStreakDay * POINTS_PER_DAY;
+  // Determine target day for UI based on streak state
+  const targetDay = completedToday ? (streakDays > 0 ? streakDays : 1) : nextStreakDay;
+  const scheduledItem = schedule.find((s) => s.day === targetDay);
+  
+  let challenge = null;
+  const nextPoints = scheduledItem?.testId?.rewardPoints || nextStreakDay * POINTS_PER_DAY;
 
-  if (test.questionBank?._id) {
-    const statsMap = await questionBankRepository.getBanksStatsBatch([
-      test.questionBank._id.toString(),
-    ]);
-    const key = test.questionBank._id.toString();
-    const stats = statsMap.get(key) || { totalQuestions: 0, totalMarks: 0 };
-    test.questionBank.totalQuestions = stats.totalQuestions;
-    test.questionBank.totalMarks = stats.totalMarks;
+  if (scheduledItem && scheduledItem.testId) {
+    let test = await testRepository.findTestById(scheduledItem.testId._id || scheduledItem.testId.id, {
+      questionBank: "name categories",
+    });
+
+    if (test) {
+      if (test.questionBank?._id) {
+        const statsMap = await questionBankRepository.getBanksStatsBatch([
+          test.questionBank._id.toString(),
+        ]);
+        const key = test.questionBank._id.toString();
+        const stats = statsMap.get(key) || { totalQuestions: 0, totalMarks: 0 };
+        test.questionBank.totalQuestions = stats.totalQuestions;
+        test.questionBank.totalMarks = stats.totalMarks;
+      }
+      challenge = test.toObject ? test.toObject() : { ...test };
+      delete challenge.createdBy;
+    }
   }
-
-  const challenge = test.toObject ? test.toObject() : { ...test };
-  delete challenge.createdBy;
 
   return {
     challenge,
@@ -127,7 +102,7 @@ export const getTodaysChallenge = async (studentId) => {
     completedToday,
     nextPoints,
     nextStreakDay,
-    streakCycle: buildStreakCycle(streakDays),
+    streakCycle: buildDynamicStreakCycle(streakDays, schedule),
   };
 };
 
@@ -150,9 +125,9 @@ const getNextStreakState = (lastCompletion, today) => {
   }
   if (lastDayStr === yesterdayStr) {
     const nextDay = lastCompletion.streakDay === 7 ? 1 : lastCompletion.streakDay + 1;
-    return { streakDay: nextDay, points: nextDay * POINTS_PER_DAY };
+    return { streakDay: nextDay };
   }
-  return { streakDay: 1, points: POINTS_PER_DAY };
+  return { streakDay: 1 };
 };
 
 /**
@@ -190,20 +165,20 @@ export const recordCompletion = async (studentId, session) => {
     date: today,
     test: testId,
     examSession: session._id,
-    pointsEarned: state.points,
+    pointsEarned: test.rewardPoints || (state.streakDay * POINTS_PER_DAY),
     streakDay: state.streakDay,
   });
 
   await walletService.addRewardPoints(
     studentId,
-    state.points,
+    completion.pointsEarned,
     "everyday_challenge",
     `Everyday challenge completed (Day ${state.streakDay} streak)`,
     completion._id,
     "EverydayChallenge"
   );
 
-  return { completion, pointsEarned: state.points, streakDay: state.streakDay };
+  return { completion, pointsEarned: completion.pointsEarned, streakDay: state.streakDay };
 };
 
 export default {

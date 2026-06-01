@@ -16,6 +16,7 @@ import tournamentNotificationsService from './services/tournamentNotifications.s
 import olympiadNotificationsService from './services/olympiadNotifications.service.js';
 import workshopNotificationsService from './services/workshopNotifications.service.js';
 import liveCompetitionNotificationsService from './services/liveCompetitionNotifications.service.js';
+import everydayChallengeCronService from './services/everydayChallengeCron.service.js';
 
 dotenv.config();
 
@@ -119,6 +120,16 @@ const startServer = async () => {
       }
     });
     console.log('⏰ Minute cron: auto-submit + tournament + olympiad + workshop + live-competition notifications');
+
+    // Setup daily cron for Everyday Challenge (Runs every day at 9:00 AM)
+    cron.schedule('0 9 * * *', async () => {
+      try {
+        await everydayChallengeCronService.runEverydayChallengeCronTick();
+      } catch (error) {
+        console.error('❌ Error in everyday challenge cron:', error);
+      }
+    });
+    console.log('⏰ Daily cron (9 AM): everyday challenge notifications');
 
     const port = process.env.PORT || 8000;
 

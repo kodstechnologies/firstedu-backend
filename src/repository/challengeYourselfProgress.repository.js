@@ -17,11 +17,14 @@ const findByStudent = async (studentId) => {
   }
 };
 
-const upsert = async (studentId, stage, level, data) => {
+const upsert = async (studentId, stage, level, data = {}) => {
   try {
+    const filter = data.stageId
+      ? { student: studentId, stageId: data.stageId, level }
+      : { student: studentId, stage, level };
     return await ChallengeYourselfProgress.findOneAndUpdate(
-      { student: studentId, stage, level },
-      { $set: data },
+      filter,
+      { $set: { ...data, stage, level } },
       { new: true, upsert: true, runValidators: true }
     );
   } catch (error) {

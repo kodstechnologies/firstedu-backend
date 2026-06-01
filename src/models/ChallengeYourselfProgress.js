@@ -10,7 +10,11 @@ const challengeYourselfProgressSchema = new mongoose.Schema(
     stage: {
       type: String,
       required: true,
-      enum: ["Bronze", "Silver", "Gold", "Platinum", "Diamond", "Heroic"],
+    },
+    stageId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Category",
+      default: null,
     },
     level: {
       type: Number,
@@ -41,7 +45,11 @@ const challengeYourselfProgressSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-challengeYourselfProgressSchema.index({ student: 1, stage: 1, level: 1 }, { unique: true });
+challengeYourselfProgressSchema.index(
+  { student: 1, stageId: 1, level: 1 },
+  { unique: true, partialFilterExpression: { stageId: { $type: "objectId" } } }
+);
+challengeYourselfProgressSchema.index({ student: 1, stage: 1, level: 1 });
 challengeYourselfProgressSchema.index({ student: 1 });
 
 export default mongoose.models.ChallengeYourselfProgress ||

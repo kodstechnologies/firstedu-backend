@@ -67,9 +67,16 @@ export const deleteChallenge = asyncHandler(async (req, res) => {
 });
 
 export const getChallengeYourFriendsTests = asyncHandler(async (req, res) => {
-  const tests = await challengeService.getChallengeYourFriendsTests(req.user?._id || null);
+  const { page, limit, search, categoryIds } = req.query;
+  const cats = categoryIds ? (Array.isArray(categoryIds) ? categoryIds : categoryIds.split(',')) : [];
+  const result = await challengeService.getChallengeYourFriendsTests(req.user?._id || null, { 
+    page, 
+    limit, 
+    search, 
+    categoryIds: cats 
+  });
   return res.status(200).json(
-    ApiResponse.success(tests, "Challenge-yourfriends tests fetched successfully")
+    ApiResponse.success(result.tests, "Challenge-yourfriends tests fetched successfully", result.pagination)
   );
 });
 

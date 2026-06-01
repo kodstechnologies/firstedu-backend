@@ -45,6 +45,7 @@ const testSchema = new mongoose.Schema(
         "testBundle",
         "tournament",
         "challenge_yourself",
+        "challenge_your_friend",
         "everyday_challenge",
         "competition_sector",
         "Olympiads",
@@ -78,6 +79,16 @@ const testSchema = new mongoose.Schema(
     rewardPoints: {
       type: Number,
       default: 0,
+    },
+    gamificationLevel: {
+      type: Number,
+      default: null,
+    },
+    passingPercentage: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100,
     },
   },
   {

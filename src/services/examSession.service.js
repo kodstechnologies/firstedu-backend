@@ -522,9 +522,13 @@ export const startExamSession = async (testId, studentId, options = {}) => {
   // Challenge-yourself layout: check level unlock and allow retakes (full marks required to unlock next; can retake anytime)
   const challengeSlot = await challengeYourselfService.getSlotForTest(testId);
   if (challengeSlot) {
+    const { stagesWithLevels } = await challengeYourselfService.getLayoutFromDB(
+      challengeSlot.parentCategoryId || challengeSlot.stageId
+    );
     const unlocked = await challengeYourselfService.isLevelUnlocked(
       studentId,
-      challengeSlot.stage,
+      stagesWithLevels,
+      challengeSlot,
       challengeSlot.level
     );
     if (!unlocked) {
@@ -725,9 +729,13 @@ export const getExamInstructions = async (testId, studentId, options = {}) => {
   if (canStart) {
     const challengeSlot = await challengeYourselfService.getSlotForTest(testId);
     if (challengeSlot) {
+      const { stagesWithLevels } = await challengeYourselfService.getLayoutFromDB(
+        challengeSlot.parentCategoryId || challengeSlot.stageId
+      );
       const unlocked = await challengeYourselfService.isLevelUnlocked(
         studentId,
-        challengeSlot.stage,
+        stagesWithLevels,
+        challengeSlot,
         challengeSlot.level
       );
       if (!unlocked) {

@@ -2,6 +2,7 @@ import notificationRepository from "../repository/notification.repository.js";
 import studentRepository from "../repository/student.repository.js";
 import teacherRepository from "../repository/teacher.repository.js";
 import studentSessionRepository from "../repository/studentSession.repository.js";
+import Admin from "../models/Admin.js";
 import CoursePurchase from "../models/CoursePurchase.js";
 import TestPurchase from "../models/TestPurchase.js";
 import EventRegistration from "../models/EventRegistration.js";
@@ -957,6 +958,29 @@ export const sendOlympiadResultDeclaredNotification = async (olympiadId, olympia
     );
   } catch (error) {
     console.error("Error in sendOlympiadResultDeclaredNotification:", error);
+  }
+};
+
+/**
+ * Notify all admins
+ */
+export const sendNotificationToAllAdmins = async (title, body, data = {}) => {
+  try {
+    const admins = await Admin.find({}).select("_id").lean();
+    if (admins.length === 0) return;
+
+    const notifications = admins.map((admin) => ({
+      title,
+      body,
+      recipient: admin._id,
+      sentBy: null, // System
+      data,
+      type: data.type || "system",
+    }));
+
+    await notificationRepository.createMany(notifications);
+  } catch (error) {
+    console.error("Error in sendNotificationToAllAdmins:", error);
   }
 };
 

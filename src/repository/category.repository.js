@@ -1,13 +1,14 @@
 import Category, { Subcategory } from "../models/Category.js";
+import "../models/GamificationSubcategory.js";
 import { ApiError } from "../utils/ApiError.js";
 
 const create = async (data) => {
   try {
-    // Structural pillars are base Categories. Anything else is a Subcategory discriminator.
-    if (data.isPredefined) {
-      return await Category.create(data);
+    // If it's a non-predefined node without an explicit discriminator, default to Subcategory
+    if (!data.isPredefined && !data.kind) {
+      data.kind = "Subcategory";
     }
-    return await Subcategory.create(data);
+    return await Category.create(data);
   } catch (error) {
     if (error instanceof ApiError) throw error;
     throw new ApiError(500, "Failed to create category", error.message);
