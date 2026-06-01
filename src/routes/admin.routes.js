@@ -1,3 +1,5 @@
+import { getEverydayChallengeSchedule, upsertEverydayChallengeSchedule } from "../controllers/adminEverydayChallenge.controller.js";
+import { updateGamificationSubcategory } from "../controllers/gamificationCategory.controller.js";
 import { Router } from "express";
 
 import {
@@ -157,7 +159,8 @@ import {
   removeCategoryOffer,
   createCategoryCoupon,
   getCategoryCoupons,
-  deleteCategoryCoupon
+  deleteCategoryCoupon,
+  getGamificationCategoryByType
 } from "../controllers/category.controller.js";
 import {
   createSchoolTest,
@@ -351,6 +354,16 @@ router.delete("/categories/:id/offer", verifyJWT, removeCategoryOffer);
 router.post("/categories/:id/coupons", verifyJWT, createCategoryCoupon);
 router.get("/categories/:id/coupons", verifyJWT, getCategoryCoupons);
 router.delete("/categories/:id/coupons/:couponId", verifyJWT, deleteCategoryCoupon);
+
+// Gamification - Everyday Challenge Schedule
+router.get("/gamification/everyday-challenge", verifyJWT, getEverydayChallengeSchedule);
+router.post("/gamification/everyday-challenge", verifyJWT, upsertEverydayChallengeSchedule);
+
+// Gamification - Categories
+router.get("/gamification-categories/:type", verifyJWT, getGamificationCategoryByType);
+
+// Gamification - Categories
+router.get("/gamification-categories/:type", verifyJWT, getGamificationCategoryByType);
 
 // School & Skill Tests Management
 router.post("/school-tests", verifyJWT, createSchoolTest);

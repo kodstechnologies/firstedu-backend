@@ -18,7 +18,7 @@ const createTest = async (testData) => {
 const populateQuestionBankWithCategories = (query) => {
   return query.populate({
     path: "questionBank",
-    select: "name categories overallDifficulty",
+    select: "name categories",
     populate: { path: "categories", select: "name _id" },
   });
 };
@@ -403,6 +403,34 @@ const findChallengeYourselfTestsByDifficulty = async () => {
   }
 };
 
+/** Find all published tests for a gamification stage, keyed by gamificationLevel */
+const findTestsByStageCategory = async (categoryId) => {
+  try {
+    const tests = await Test.find({
+      categoryId: categoryId,
+      applicableFor: "challenge_yourself",
+      isPublished: true,
+    })
+      .populate({
+        path: "questionBank",
+        select: "name categories",
+        populate: { path: "categories", select: "name _id" },
+      })
+      .lean();
+      
+    // Build map: gamificationLevel → test
+    const map = new Map();
+    tests.forEach((t) => {
+      if (t.gamificationLevel != null) {
+        map.set(Number(t.gamificationLevel), t);
+      }
+    });
+    return map;
+  } catch (error) {
+    throw new ApiError(500, "Failed to fetch stage tests", error.message);
+  }
+};
+
 const findAllUsedBundleTestIds = async (excludeBundleId) => {
   try {
     const query = {};
@@ -430,6 +458,7 @@ export default {
   findEverydayChallengeTestIds,
   findEverydayChallengeTestsByDifficulty,
   findChallengeYourselfTestsByDifficulty,
+  findTestsByStageCategory,
   updateTestById,
   deleteTestById,
   // Bundle methods

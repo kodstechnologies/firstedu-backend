@@ -88,20 +88,6 @@ export const getTests = async (options = {}) => {
   const result = await testRepository.findAllTests(query, options);
   await enrichTestsWithBankStats(result.tests);
 
-  // Batch-check: attach isPurchased (boolean) to each test — no count needed
-  if (result.tests && result.tests.length > 0) {
-    const testIds = result.tests.map((t) => t?._id).filter(Boolean);
-    const purchasedIds = await TestPurchase.distinct("test", {
-      test: { $in: testIds },
-      paymentStatus: "completed",
-    });
-    const purchasedSet = new Set(purchasedIds.map((id) => id.toString()));
-    result.tests.forEach((t) => {
-      const isPurchased = purchasedSet.has(t._id?.toString());
-      t.isPurchased = isPurchased;
-      if (t._doc) t._doc.isPurchased = isPurchased;
-    });
-  }
 
   return result;
 };

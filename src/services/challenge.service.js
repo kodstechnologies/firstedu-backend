@@ -401,8 +401,10 @@ export const deleteChallenge = async (id, userId) => {
   return { challengeId: id, deleted: true };
 };
 
-export const getChallengeYourFriendsTests = async (userId = null) => {
-  if (!userId) return [];
+export const getChallengeYourFriendsTests = async (userId = null, options = {}) => {
+  const { page = 1, limit = 10, search = "", categoryIds = [] } = options;
+  if (!userId) return { tests: [], pagination: { total: 0, page: 1, limit: 10, pages: 1 } };
+  
   const purchases = await orderRepository.findTestPurchasesForExamHall(userId);
 
   const testsMap = new Map();
@@ -417,7 +419,31 @@ export const getChallengeYourFriendsTests = async (userId = null) => {
     }
   });
 
-  const tests = Array.from(testsMap.values()).map(test => (test?.toObject ? test.toObject() : { ...test }));
+  let tests = Array.from(testsMap.values()).map(test => (test?.toObject ? test.toObject() : { ...test }));
+
+  if (search) {
+    const s = search.toLowerCase();
+    tests = tests.filter(t => t.title?.toLowerCase().includes(s) || t.description?.toLowerCase().includes(s));
+  }
+
+  if (categoryIds && categoryIds.length > 0) {
+    const activeCats = Array.isArray(categoryIds) ? categoryIds : [categoryIds];
+    tests = tests.filter(t => {
+      const testCatIds = [
+        ...(Array.isArray(t.questionBank?.categories) ? t.questionBank.categories : []),
+        t.categoryId,
+        t.category,
+      ].filter(Boolean).map(c => typeof c === 'object' ? String(c._id ?? c.id ?? c) : String(c));
+      return testCatIds.some(id => activeCats.includes(id));
+    });
+  }
+
+  const total = tests.length;
+  const pageNum = parseInt(page, 10) || 1;
+  const limitNum = parseInt(limit, 10) || 10;
+  const skip = (pageNum - 1) * limitNum;
+
+  const pagedTests = tests.slice(skip, skip + limitNum);
 
   const addPurchaseMeta = (test, purchased) => {
     const price = Number(test?.price) || 0;
@@ -432,7 +458,15 @@ export const getChallengeYourFriendsTests = async (userId = null) => {
     };
   };
 
-  return tests.map((test) => addPurchaseMeta(test, true));
+  return {
+    tests: pagedTests.map((test) => addPurchaseMeta(test, true)),
+    pagination: {
+      total,
+      page: pageNum,
+      limit: limitNum,
+      pages: Math.ceil(total / limitNum) || 1,
+    }
+  };
 };
 
 export const getCompletedChallenges = async (userId, options = {}) => {
