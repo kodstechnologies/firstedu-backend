@@ -2107,6 +2107,8 @@ export const getExamResults = async (sessionId, studentId) => {
         null
       );
     }
+
+
     top3 = rankedByTest.slice(0, 3).map((entry, index) => ({
       rank: index + 1,
       student: entry.student,
