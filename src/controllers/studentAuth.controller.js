@@ -9,6 +9,7 @@ import studentSessionRepository from "../repository/studentSession.repository.js
 import userValidator from "../validation/student.validator.js";
 import studentService from "../services/student.service.js";
 import { sendDataOnlyToDevice } from "../services/fcm.service.js";
+import Otp from "../models/Otp.js";
 
 
 // Student Signup
@@ -203,6 +204,119 @@ export const login = asyncHandler(async (req, res) => {
           fcmTokenRegistered: !!fcmTokenValue,
         },
         "Student logged in successfully"
+      )
+    );
+});
+
+// Phone Login - Send OTP
+export const sendLoginOtp = asyncHandler(async (req, res) => {
+  const { error, value } = userValidator.sendLoginOtp.validate(req.body);
+  if (error) {
+    throw new ApiError(400, "Validation Error", error.details.map(x => x.message));
+  }
+
+  const { phone } = value;
+
+  const student = await studentRepository.findOne({ phone });
+  if (!student) {
+    throw new ApiError(404, "No account found with this phone number.");
+  }
+
+  // STATIC OTP FOR TESTING (replace with `generateOTP()` later)
+  const otpValue = "1234";
+
+  // Create or update OTP document
+  await Otp.findOneAndUpdate(
+    { phone },
+    { otp: otpValue },
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  );
+
+  // TODO: Integrate actual SMS gateway API here
+
+  return res.status(200).json(
+    ApiResponse.success({ success: true }, "OTP sent successfully")
+  );
+});
+
+// Phone Login - Verify OTP
+export const verifyLoginOtp = asyncHandler(async (req, res) => {
+  const { error, value } = userValidator.verifyLoginOtp.validate(req.body);
+  if (error) {
+    throw new ApiError(400, "Validation Error", error.details.map(x => x.message));
+  }
+
+  const { phone, otp, fcmToken, deviceId } = value;
+
+  // 1. Verify the OTP in the separate Otp schema
+  const otpRecord = await Otp.findOne({ phone, otp });
+  if (!otpRecord) {
+    throw new ApiError(400, "Invalid OTP or OTP has expired.");
+  }
+
+  // 2. OTP is valid -> delete it so it can't be reused
+  await Otp.deleteOne({ _id: otpRecord._id });
+
+  // 3. Find the student
+  const student = await studentRepository.findOne({ phone }, true);
+  if (!student) {
+    throw new ApiError(404, "Student not found");
+  }
+  
+  if (student.status === "banned") {
+    throw new ApiError(403, "You are banned by the admin");
+  }
+
+  // 4. Session management (same as regular login)
+  await studentSessionRepository.deleteByStudentId(student._id);
+
+  const userAgent = req.get("user-agent") || null;
+  const fcmTokenValue = (fcmToken && fcmToken.trim()) ? fcmToken.trim() : null;
+
+  const session = await studentSessionRepository.create({
+    student: student._id,
+    refreshToken: student.generateRefreshToken(),
+    fcmToken: fcmTokenValue,
+    deviceId: (deviceId && deviceId.trim()) ? deviceId.trim() : null,
+    userAgent,
+  });
+
+  const accessToken = student.generateAccessToken(session._id);
+  const refreshToken = student.generateRefreshToken(session._id);
+  await studentSessionRepository.updateRefreshToken(session._id, refreshToken);
+
+  await studentRepository.updateById(student._id, { lastLogin: new Date() });
+
+  const loggedInStudent = await studentRepository.findById(student._id);
+
+  const isProduction = process.env.NODE_ENV === "production";
+  const accessTokenOptions = {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? "None" : "Lax",
+    maxAge: 60 * 60 * 1000,
+  };
+  const refreshTokenOptions = {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? "None" : "Lax",
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  };
+
+  return res
+    .status(200)
+    .cookie("accessToken", accessToken, accessTokenOptions)
+    .cookie("refreshToken", refreshToken, refreshTokenOptions)
+    .json(
+      ApiResponse.success(
+        {
+          success: true,
+          user: loggedInStudent,
+          accessToken,
+          refreshToken,
+          fcmTokenRegistered: !!fcmTokenValue,
+        },
+        "Student logged in successfully via OTP"
       )
     );
 });

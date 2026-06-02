@@ -13,6 +13,8 @@ import {
   getReferralInfo,
   getMyReferrals,
   deleteAccount,
+  sendLoginOtp,
+  verifyLoginOtp,
 } from "../controllers/studentAuth.controller.js";
 import {
   getCourses,
@@ -225,6 +227,8 @@ const router = Router();
 // Student Authentication Routes
 router.post("/signup", uploadImage.single("profileImage"), signup);
 router.post("/login", login);
+router.post("/send-otp", sendLoginOtp);
+router.post("/verify-otp", verifyLoginOtp);
 
 // Contact Us (no JWT)
 router.post("/contact-us", contactUs);

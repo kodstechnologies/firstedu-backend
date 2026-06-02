@@ -2093,11 +2093,20 @@ export const getExamResults = async (sessionId, studentId) => {
     myRank = tournamentLb.myRank;
     totalParticipants = tournamentLb.totalParticipants;
   } else {
-    const rankedByTest = await examSessionRepository.getRankedByTest(
-      session.test?._id || session.test,
-      null,
-      null
-    );
+    let rankedByTest;
+    if (session.challenge) {
+      rankedByTest = await examSessionRepository.getRankedByChallenge(
+        session.challenge,
+        null,
+        null
+      );
+    } else {
+      rankedByTest = await examSessionRepository.getRankedByTest(
+        session.test?._id || session.test,
+        null,
+        null
+      );
+    }
     top3 = rankedByTest.slice(0, 3).map((entry, index) => ({
       rank: index + 1,
       student: entry.student,

@@ -11,12 +11,24 @@ const studentSignup = Joi.object({
   referralCode: Joi.string().optional(),
 });
 
-// For student login
 const studentLogin = Joi.object({
   email: Joi.string().email().required(),
   password: Joi.string().required(),
   fcmToken: Joi.string().trim().allow("").optional(),
   forceLogin: Joi.boolean().optional(),
+  deviceId: Joi.string().trim().allow("").optional(),
+});
+
+// For Phone OTP Login - Send
+const sendLoginOtp = Joi.object({
+  phone: Joi.string().required(),
+});
+
+// For Phone OTP Login - Verify
+const verifyLoginOtp = Joi.object({
+  phone: Joi.string().required(),
+  otp: Joi.string().required(),
+  fcmToken: Joi.string().trim().allow("").optional(),
   deviceId: Joi.string().trim().allow("").optional(),
 });
 
@@ -55,6 +67,8 @@ const contactUs = Joi.object({
 export default {
   studentSignup,
   studentLogin,
+  sendLoginOtp,
+  verifyLoginOtp,
   requestPasswordChange,
   verifyPasswordChange,
   confirmNewPassword,
