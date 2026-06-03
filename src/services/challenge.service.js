@@ -410,16 +410,65 @@ export const getChallengeYourFriendsTests = async (userId = null, options = {}) 
   const testsMap = new Map();
   purchases.forEach((p) => {
     if (p.test) {
-      testsMap.set(p.test._id.toString(), p.test);
+      testsMap.set(p.test._id.toString(), { test: p.test, purchased: true });
     }
     if (p.testBundle && p.testBundle.tests?.length) {
       p.testBundle.tests.forEach((t) => {
-        if (t && t._id) testsMap.set(t._id.toString(), t);
+        if (t && t._id) testsMap.set(t._id.toString(), { test: t, purchased: true });
       });
     }
   });
 
-  let tests = Array.from(testsMap.values()).map(test => (test?.toObject ? test.toObject() : { ...test }));
+  // Also include all tests added to Gamification -> "Challenge Your Friend"
+  const gamificationTestsResult = await testRepository.findAllTests(
+    { applicableFor: "challenge_your_friend", isPublished: true },
+    { limit: 1000 }
+  );
+
+  if (gamificationTestsResult && gamificationTestsResult.tests) {
+    gamificationTestsResult.tests.forEach((t) => {
+      const idStr = t._id.toString();
+      if (!testsMap.has(idStr)) {
+        testsMap.set(idStr, { test: t, purchased: false });
+      }
+    });
+  }
+
+  let tests = Array.from(testsMap.values()).map(item => {
+    const t = item.test?.toObject ? item.test.toObject() : { ...item.test };
+    t._isPurchasedByStudent = item.purchased; // Temporarily store purchase status
+    return t;
+  });
+
+  // Fetch full details (applicableFor and categoryId) for all these tests
+  const testIds = tests.map(t => t._id);
+  const fullTestsData = await (await import("../models/Test.js")).default.find({ _id: { $in: testIds } })
+    .select("applicableFor categoryId")
+    .populate("categoryId", "rootType name gamificationType")
+    .lean();
+
+  const fullTestsMap = new Map(fullTestsData.map(t => [t._id.toString(), t]));
+
+  // Filter out tests that shouldn't appear in "Challenge Your Friend"
+  tests = tests.filter(t => {
+    const fullTest = fullTestsMap.get(t._id.toString());
+    if (!fullTest) return true;
+
+    // 1. Exclude Gamification -> Challenge Yourself (by applicableFor, gamificationType, or name)
+    if (fullTest.applicableFor === "challenge_yourself") return false;
+    if (fullTest.categoryId && typeof fullTest.categoryId === 'object') {
+      if (fullTest.categoryId.gamificationType === "challenge_yourself") return false;
+      if (fullTest.categoryId.name === "Challenge Yourself") return false;
+    }
+
+    // 2. Exclude Olympiads
+    if (fullTest.applicableFor === "Olympiads") return false;
+
+    // 3. Exclude if the test belongs to an Olympiad category or subcategory
+    if (fullTest.categoryId && typeof fullTest.categoryId === 'object' && fullTest.categoryId.rootType === "Olympiads") return false;
+    
+    return true;
+  });
 
   if (search) {
     const s = search.toLowerCase();
@@ -445,7 +494,10 @@ export const getChallengeYourFriendsTests = async (userId = null, options = {}) 
 
   const pagedTests = tests.slice(skip, skip + limitNum);
 
-  const addPurchaseMeta = (test, purchased) => {
+  const addPurchaseMeta = (test) => {
+    const purchased = test._isPurchasedByStudent;
+    delete test._isPurchasedByStudent;
+    
     const price = Number(test?.price) || 0;
     const requiresPurchase = price > 0 && !purchased;
     return {
@@ -459,7 +511,7 @@ export const getChallengeYourFriendsTests = async (userId = null, options = {}) 
   };
 
   return {
-    tests: pagedTests.map((test) => addPurchaseMeta(test, true)),
+    tests: pagedTests.map((test) => addPurchaseMeta(test)),
     pagination: {
       total,
       page: pageNum,
@@ -476,11 +528,15 @@ export const getCompletedChallenges = async (userId, options = {}) => {
   const skip = (pageNum - 1) * limitNum;
 
   const challenges = await challengeRepository.find(
-    { createdBy: userId, isActive: true },
+    {
+      $or: [{ createdBy: userId }, { "participants.student": userId }],
+      isActive: true,
+    },
     {
       populate: [
         { path: "test", select: "title durationMinutes" },
         { path: "participants.student", select: "name email" },
+        { path: "createdBy", select: "name email" },
       ],
       sort: { updatedAt: -1 },
       skip: 0,
@@ -494,12 +550,17 @@ export const getCompletedChallenges = async (userId, options = {}) => {
     if (updated.roomStatus !== "completed") continue;
 
     const stats = await getParticipantStats(updated, userId);
+    
+    const creatorId = updated.createdBy?._id ?? updated.createdBy;
+    const isCreator = creatorId?.toString() === userId.toString();
+
     completed.push({
       challengeId: updated._id,
       challengeName: updated.title,
       roomCode: updated.roomCode,
       test: updated.test,
       completedAt: updated.completedAt,
+      isCreator,
       ...stats,
     });
   }
@@ -530,18 +591,25 @@ export const getCompletedChallengeById = async (challengeId, userId) => {
     throw new ApiError(404, "Completed challenge not found");
   }
   const creatorId = challenge.createdBy?._id ?? challenge.createdBy;
-  if (creatorId?.toString() !== userId.toString()) {
+  const isParticipant = challenge.participants.some(
+    (p) => p.student?._id?.toString() === userId.toString() || p.student?.toString() === userId.toString()
+  );
+
+  if (creatorId?.toString() !== userId.toString() && !isParticipant) {
     throw new ApiError(404, "Completed challenge not found");
   }
 
   const updated = await syncChallengeCompletion(challenge);
-  if (updated.roomStatus !== "completed") {
-    throw new ApiError(404, "Completed challenge not found");
+  
+  if (updated.roomStatus === "waiting") {
+    throw new ApiError(404, "Challenge has not started yet");
   }
 
   const stats = await getParticipantStats(updated, userId);
 
   const c = updated.toObject ? updated.toObject() : updated;
+  const isCreator = creatorId?.toString() === userId.toString();
+
   return {
     challengeId: c._id,
     challengeName: c.title,
@@ -554,6 +622,7 @@ export const getCompletedChallengeById = async (challengeId, userId) => {
     updatedAt: c.updatedAt,
     test: c.test,
     createdBy: c.createdBy,
+    isCreator,
     ...stats,
   };
 };

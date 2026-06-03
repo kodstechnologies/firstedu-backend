@@ -368,8 +368,8 @@ router.post("/gamification/everyday-challenge", verifyJWT, upsertEverydayChallen
 // Gamification - Categories
 router.get("/gamification-categories/:type", verifyJWT, getGamificationCategoryByType);
 
-// Gamification - Categories
-router.get("/gamification-categories/:type", verifyJWT, getGamificationCategoryByType);
+// Gamification - Subcategories
+router.put("/gamification-subcategories/:id", verifyJWT, updateGamificationSubcategory);
 
 // School & Skill Tests Management
 router.post("/school-tests", verifyJWT, createSchoolTest);

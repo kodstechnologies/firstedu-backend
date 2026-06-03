@@ -2193,6 +2193,7 @@ export const getExamResults = async (sessionId, studentId) => {
     session: {
       id: session._id,
       test: session.test,
+      challengeId: session.challenge || null,
       startTime: session.startTime,
       endTime: session.endTime,
       completedAt: session.completedAt,
