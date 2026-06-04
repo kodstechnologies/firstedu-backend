@@ -18,6 +18,7 @@ import razorpayOrderIntentRepository from "../repository/razorpayOrderIntent.rep
 import { createRazorpayOrder, verifyPaymentSignature } from "../utils/razorpayUtils.js";
 import { sendNotificationToMultipleStudents } from "./notification.service.js";
 import { sendEventResultEmail } from "../utils/sendEmail.js";
+import { ensureUniqueTestTitle } from "../utils/testValidationUtils.js";
 
 /**
  * Generic file upload — routes to the right S3 helper by MIME type.
@@ -176,6 +177,10 @@ const enrichEventWithStats = async (eventObj) => {
 // ==================== ADMIN SERVICES ====================
 
 export const createEvent = async (data, adminId, file) => {
+  if (data.title) {
+    await ensureUniqueTestTitle(data.title);
+  }
+
   validateEventDates(data.megaAudition, data.grandFinale);
 
   const category = await LiveCompetitionCategory.findById(data.category);
@@ -319,6 +324,10 @@ export const getEventById = async (id) => {
 };
 
 export const updateEvent = async (id, updateData, file) => {
+  if (updateData.title) {
+    await ensureUniqueTestTitle(updateData.title, id, "LiveCompetition");
+  }
+
   const event = await liveCompetitionRepository.findEventById(id);
   if (!event) throw new ApiError(404, "Live competition not found");
 
@@ -1385,9 +1394,24 @@ export const submitWork = async (eventId, studentId, { text, round = "MEGA_AUDIT
 
     for (const file of files) {
       const ext = file.originalname.split(".").pop().toLowerCase();
-      const allowedTypes = targetRound.submission.file?.allowedTypes || [];
-      if (allowedTypes.length > 0 && !allowedTypes.includes(ext)) {
-        throw new ApiError(400, `File type '.${ext}' not allowed.`);
+      let allowedTypes = targetRound.submission.file?.allowedTypes || [];
+      allowedTypes = allowedTypes.filter(t => typeof t === 'string' && t.trim() !== '');
+      
+      if (allowedTypes.length > 0) {
+        const isAllowed = allowedTypes.some((type) => {
+          const t = type.toLowerCase().trim();
+          return (
+            t === ext ||
+            t === `.${ext}` ||
+            t === file.mimetype?.toLowerCase() ||
+            t.endsWith(`/${ext}`) ||
+            (ext === "jpg" && t.includes("jpeg")) ||
+            (ext === "jpeg" && t.includes("jpg"))
+          );
+        });
+        if (!isAllowed) {
+          throw new ApiError(400, `File type '.${ext}' not allowed.`);
+        }
       }
       const maxSize = targetRound.submission.file?.maxSize;
       if (maxSize && file.size > maxSize * 1024 * 1024) {

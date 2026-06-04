@@ -11,12 +11,17 @@ import {
   sendUpgradeNotificationForCategory,
   sendTestEditNotification,
 } from "./notification.service.js";
+import { ensureUniqueTestTitle } from "../utils/testValidationUtils.js";
 
 const TESTS_IMAGE_FOLDER = "tests";
 
 // ------- Tests / Test Builder -------
 
 export const createTest = async (data, adminId, file) => {
+  if (data.title) {
+    await ensureUniqueTestTitle(data.title);
+  }
+
   const bank = await questionBankRepository.findById(data.questionBank);
   if (!bank) throw new ApiError(404, "Question bank not found");
 
@@ -113,6 +118,10 @@ export const getTestById = async (id) => {
 };
 
 export const updateTest = async (id, data, file) => {
+  if (data.title) {
+    await ensureUniqueTestTitle(data.title, id, "Test");
+  }
+
   const existing = await testRepository.findTestById(id);
   if (!existing) throw new ApiError(404, "Test not found");
 
@@ -256,6 +265,10 @@ const enrichBundlesTests = async (bundles) => {
 };
 
 export const createBundle = async (data, adminId, file) => {
+  if (data.name) {
+    await ensureUniqueTestTitle(data.name);
+  }
+
   let imageUrl = null;
   if (file) {
     imageUrl = await uploadImageToCloudinary(
@@ -292,6 +305,10 @@ export const getBundleById = async (id) => {
 };
 
 export const updateBundle = async (id, data, file) => {
+  if (data.name) {
+    await ensureUniqueTestTitle(data.name, id, "TestBundle");
+  }
+
   const existing = await testRepository.findBundleById(id);
   if (!existing) throw new ApiError(404, "Bundle not found");
   if (file) {

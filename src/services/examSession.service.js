@@ -196,12 +196,62 @@ const buildPerQuestionTimePlan = (questions, sectionConfig, durationMinutes) => 
     };
   }
 
-  // Normal banks: equal split across all questions.
+  const isParentQuestionAtIndex = (index) => {
+    const q = questions[index]?.question || questions[index];
+    return Boolean(q?.isParent);
+  };
+
+  const getQuestionIdAtIndex = (index) => {
+    const q = questions[index]?.question || questions[index];
+    return getNormalizedId(q?._id || q?.id || q?.questionId);
+  };
+
+  const getParentQuestionIdAtIndex = (index) => {
+    const q = questions[index]?.question || questions[index];
+    return getNormalizedId(q?.parentQuestionId);
+  };
+
+  const applyParentDisplayTimes = (questionTimesMs) => {
+    questions.forEach((entry, index) => {
+      const q = entry?.question || entry;
+      if (!q?.isParent) return;
+
+      const parentId = getQuestionIdAtIndex(index);
+      if (!parentId) return;
+
+      const childTimes = questions
+        .map((_, childIndex) =>
+          getParentQuestionIdAtIndex(childIndex) === parentId
+            ? questionTimesMs[childIndex] || 0
+            : null
+        )
+        .filter((value) => value !== null && value > 0);
+
+      if (childTimes.length > 0) {
+        questionTimesMs[index] = Math.round(
+          childTimes.reduce((sum, value) => sum + value, 0) / childTimes.length
+        );
+      }
+    });
+
+    return questionTimesMs;
+  };
+
+  const timedQuestionIndexes = questions
+    .map((_, index) => index)
+    .filter((index) => !isParentQuestionAtIndex(index));
+
+  // Normal banks: equal split across answerable questions. Connected parents are display-only.
   if (!Array.isArray(sectionConfig) || sectionConfig.length === 0) {
-    const questionTimesMs = allocateIntegerShares(
+    const timedShares = allocateIntegerShares(
       totalDurationMs,
-      new Array(questionCount).fill(1)
+      new Array(timedQuestionIndexes.length).fill(1)
     );
+    const questionTimesMs = new Array(questionCount).fill(0);
+    timedQuestionIndexes.forEach((questionIndex, shareIndex) => {
+      questionTimesMs[questionIndex] = timedShares[shareIndex] || 0;
+    });
+    applyParentDisplayTimes(questionTimesMs);
     return { questionTimesMs, sectionTimesMs: {}, strategy: "equal" };
   }
 
@@ -225,10 +275,15 @@ const buildPerQuestionTimePlan = (questions, sectionConfig, durationMinutes) => 
 
   // Fallback to equal split if section indexes are missing on questions.
   if (activeSectionEntries.length === 0) {
-    const questionTimesMs = allocateIntegerShares(
+    const timedShares = allocateIntegerShares(
       totalDurationMs,
-      new Array(questionCount).fill(1)
+      new Array(timedQuestionIndexes.length).fill(1)
     );
+    const questionTimesMs = new Array(questionCount).fill(0);
+    timedQuestionIndexes.forEach((questionIndex, shareIndex) => {
+      questionTimesMs[questionIndex] = timedShares[shareIndex] || 0;
+    });
+    applyParentDisplayTimes(questionTimesMs);
     return { questionTimesMs, sectionTimesMs: {}, strategy: "equal" };
   }
 
@@ -254,15 +309,20 @@ const buildPerQuestionTimePlan = (questions, sectionConfig, durationMinutes) => 
 
   activeSectionEntries.forEach((entry, activeIndex) => {
     const sectionBudgetMs = sectionBudgets[activeIndex] || 0;
+    const timedIndexes = entry.questionIndexes.filter(
+      (questionIndex) => !isParentQuestionAtIndex(questionIndex)
+    );
     const perQuestionShares = allocateIntegerShares(
       sectionBudgetMs,
-      new Array(entry.questionIndexes.length).fill(1)
+      new Array(timedIndexes.length).fill(1)
     );
     sectionTimesMs[entry.section.index] = sectionBudgetMs;
-    entry.questionIndexes.forEach((questionIndex, i) => {
+    timedIndexes.forEach((questionIndex, i) => {
       questionTimesMs[questionIndex] = perQuestionShares[i] || 0;
     });
   });
+
+  applyParentDisplayTimes(questionTimesMs);
 
   return {
     questionTimesMs,
@@ -1057,17 +1117,31 @@ export const getExamSession = async (sessionId, studentId) => {
             delete childObj.correctAnswer;
             childObj.options = sanitizeOptionsForExamResponse(childObj.options);
             const childAnswer = answerMetaByQuestionId.get(childId);
+            const childRemainingTimeMs = childAnswer
+              ? getAnswerRemainingTimeMs(childAnswer, now)
+              : 0;
+            const childRecommendedTimeMs = Number(childAnswer?.questionTimeLimitMs || 0);
             return {
               _id: childObj._id,
+              questionId: childObj._id,
               questionText: childObj.questionText || "",
               questionType: childObj.questionType || "single",
               options: sanitizeOptionsForExamResponse(childObj.options),
               explanation: childObj.explanation,
               marks: childObj.marks ?? 1,
               negativeMarks: childObj.negativeMarks ?? 0,
+              sectionIndex: childObj.sectionIndex ?? questionObj.sectionIndex ?? null,
               studentAnswer: childAnswer?.answer ?? null,
               status: childAnswer?.status ?? "not_visited",
               answeredAt: childAnswer?.answeredAt ?? null,
+              recommendedTimeMs: childRecommendedTimeMs,
+              recommendedTimeSeconds: Math.round(childRecommendedTimeMs / 1000),
+              recommendedTimeFormatted: formatTime(childRecommendedTimeMs),
+              remainingQuestionTimeMs: childRemainingTimeMs,
+              remainingQuestionTimeSeconds: Math.round(childRemainingTimeMs / 1000),
+              remainingQuestionTimeFormatted: formatTime(childRemainingTimeMs),
+              questionTimeExpired:
+                Boolean(childAnswer?.timeExpiredAt) || childRemainingTimeMs <= 0,
             };
           })
           .filter(Boolean)
@@ -1203,17 +1277,23 @@ export const getExamSession = async (sessionId, studentId) => {
         const sectionQuestions = questionsWithTime.filter(
           (q) => q?.question?.sectionIndex === section.index
         );
+        const timedQuestionCount = session.answers.filter((answer) => {
+          const question = answer?.questionId;
+          if (!question || question.isParent) return false;
+          const sectionIndex = question?.sectionIndex;
+          return sectionIndex === section.index;
+        }).length;
         return {
           ...section,
           recommendedTotalTimeMs: sectionTotalMs,
           recommendedTotalTimeFormatted: formatTime(sectionTotalMs),
           recommendedPerQuestionMs:
-            sectionQuestions.length > 0
-              ? Math.round(sectionTotalMs / sectionQuestions.length)
+            timedQuestionCount > 0
+              ? Math.round(sectionTotalMs / timedQuestionCount)
               : 0,
           recommendedPerQuestionFormatted:
-            sectionQuestions.length > 0
-              ? formatTime(Math.round(sectionTotalMs / sectionQuestions.length))
+            timedQuestionCount > 0
+              ? formatTime(Math.round(sectionTotalMs / timedQuestionCount))
               : formatTime(0),
           questions: sectionQuestions,
         };
@@ -1279,8 +1359,6 @@ export const saveAnswer = async (sessionId, questionId, answer, studentId, statu
     throw new ApiError(400, "Exam session has expired");
   }
 
-  pauseActiveQuestionTimer(session, now);
-
   // Find the answer entry
   const answerEntry = session.answers.find(
     (a) => a.questionId.toString() === questionId.toString()
@@ -1290,6 +1368,7 @@ export const saveAnswer = async (sessionId, questionId, answer, studentId, statu
     throw new ApiError(404, "Question not found in this exam session");
   }
 
+  pauseActiveQuestionTimer(session, now);
   startOrResumeQuestionTimer(session, questionId, now);
 
   // Store the answer. If the frontend sends an option _id (24-char hex), keep it as-is so
@@ -2107,6 +2186,8 @@ export const getExamResults = async (sessionId, studentId) => {
         null
       );
     }
+
+
     top3 = rankedByTest.slice(0, 3).map((entry, index) => ({
       rank: index + 1,
       student: entry.student,
@@ -2191,6 +2272,7 @@ export const getExamResults = async (sessionId, studentId) => {
     session: {
       id: session._id,
       test: session.test,
+      challengeId: session.challenge || null,
       startTime: session.startTime,
       endTime: session.endTime,
       completedAt: session.completedAt,

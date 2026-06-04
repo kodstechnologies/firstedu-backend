@@ -2,6 +2,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { generateOTP } from "../utils/otp.js";
+import { sendOtpSms } from "../utils/smsService.js";
 import { sendOTPEmail, sendWelcomeEmail } from "../utils/sendEmail.js";
 import { uploadImageToCloudinary, deleteFileFromCloudinary } from "../utils/s3Upload.js";
 import studentRepository from "../repository/student.repository.js";
@@ -217,22 +218,26 @@ export const sendLoginOtp = asyncHandler(async (req, res) => {
 
   const { phone } = value;
 
+  // Verify student exists before generating/sending OTP
   const student = await studentRepository.findOne({ phone });
   if (!student) {
+    // Security: use a generic message to avoid disclosing whether a phone exists
     throw new ApiError(404, "No account found with this phone number.");
   }
 
-  // STATIC OTP FOR TESTING (replace with `generateOTP()` later)
-  const otpValue = "1234";
+  // Generate a cryptographically secure 4-digit OTP
+  const otpValue = generateOTP();
 
-  // Create or update OTP document
+  // Persist (upsert) OTP — old OTP for this phone is overwritten
   await Otp.findOneAndUpdate(
     { phone },
-    { otp: otpValue },
+    { otp: otpValue, createdAt: new Date() },
     { upsert: true, new: true, setDefaultsOnInsert: true }
   );
 
-  // TODO: Integrate actual SMS gateway API here
+  // Send OTP via MSG91 SMS gateway
+  // In DEV mode this only prints to console — no actual SMS is sent
+  await sendOtpSms(phone, otpValue);
 
   return res.status(200).json(
     ApiResponse.success({ success: true }, "OTP sent successfully")

@@ -169,11 +169,18 @@ export const getCategoryTree = async (filter = {}) => {
   // Ensure the 4 predefined pillar roots are always marked correctly.
   // This is a lightweight idempotent upsert that runs on every tree fetch.
   const PILLAR_ROOTS = [
-    { name: "School", rootType: "School" },
-    { name: "Competitive", rootType: "Competitive" },
-    { name: "Olympiads", rootType: "Olympiads" },
-    { name: "Skill Development", rootType: "Skill Development" },
-    { name: "Gamification", rootType: "Gamification", predefinedChildren: ["Challenge Yourself", "Challenge Your Friend"] }
+    { name: "Competitive", rootType: "Competitive", order: 1 },
+    { name: "School", rootType: "School", order: 2 },
+    { name: "Skill Development", rootType: "Skill Development", order: 3 },
+    { name: "Olympiads", rootType: "Olympiads", order: 4 },
+    {
+      name: "Gamification", rootType: "Gamification", order: 5, predefinedChildren: [
+        { name: "Tournaments", order: 1 },
+        { name: "Challenge Your Friend", order: 2 },
+        { name: "Challenge Yourself", order: 3 },
+        { name: "Everyday Challenge", order: 4 }
+      ]
+    }
   ];
 
   for (const pillar of PILLAR_ROOTS) {
@@ -182,18 +189,19 @@ export const getCategoryTree = async (filter = {}) => {
     if (existing) {
       const updates = { isPredefined: true };
       if (existing.name !== pillar.name) updates.name = pillar.name;
+      if (existing.order !== pillar.order) updates.order = pillar.order;
       await Category.updateOne({ _id: existing._id }, updates);
       parentId = existing._id;
     } else {
       const byName = await Category.findOne({ name: pillar.name, parent: null });
       if (byName) {
-        await Category.updateOne({ _id: byName._id }, { rootType: pillar.rootType, isPredefined: true });
+        await Category.updateOne({ _id: byName._id }, { rootType: pillar.rootType, isPredefined: true, order: pillar.order });
         parentId = byName._id;
       } else {
         const createdPillar = await categoryRepository.create({
           name: pillar.name,
           parent: null,
-          order: 0,
+          order: pillar.order,
           rootType: pillar.rootType,
           status: "Public",
           isPredefined: true,
@@ -204,24 +212,30 @@ export const getCategoryTree = async (filter = {}) => {
     }
 
     if (pillar.predefinedChildren && parentId) {
-      for (const childName of pillar.predefinedChildren) {
-        const childExist = await Category.findOne({ name: childName, parent: parentId });
+      for (const childObj of pillar.predefinedChildren) {
+        const childExist = await Category.findOne({ name: childObj.name, parent: parentId });
         if (!childExist) {
           const gamTypeMap = {
             "Challenge Yourself": "challenge_yourself",
             "Challenge Your Friend": "challenge_your_friend"
           };
           await categoryRepository.create({
-            name: childName,
+            name: childObj.name,
             parent: parentId,
-            order: 0,
+            order: childObj.order,
             rootType: pillar.rootType,
             status: "Public",
             isPredefined: true,
             createdBy: null,
             kind: "GamificationNode",
-            gamificationType: gamTypeMap[childName] || "base_pillar"
+            gamificationType: gamTypeMap[childObj.name] || "base_pillar"
           });
+        } else {
+          const childUpdates = {};
+          if (childExist.order !== childObj.order) childUpdates.order = childObj.order;
+          if (Object.keys(childUpdates).length > 0) {
+            await Category.updateOne({ _id: childExist._id }, childUpdates);
+          }
         }
       }
     }
