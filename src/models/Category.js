@@ -28,7 +28,7 @@ const categorySchema = new mongoose.Schema(
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Admin",
-      required: function() { return !this.isPredefined; },
+      required: function () { return !this.isPredefined; },
     },
     isPredefined: {
       type: Boolean,
@@ -36,7 +36,7 @@ const categorySchema = new mongoose.Schema(
     },
     rootType: {
       type: String,
-      enum: ["School", "Competitive", "Olympiads", "Skill Development", "Gamification", "custom"],
+      enum: ["Competitive", "School", "Skill Development", "Olympiads", "Gamification", "custom"],
       default: "custom",
     },
   },

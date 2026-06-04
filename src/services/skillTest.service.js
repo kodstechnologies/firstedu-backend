@@ -117,8 +117,7 @@ export const updateSkillTest = async (id, updateData) => {
 };
 
 export const deleteSkillTest = async (id) => {
-  // Deleting from the folder just unlinks the explicit categoryId
-  return await Test.findByIdAndUpdate(id, { $unset: { categoryId: 1 } });
+  return await Test.findByIdAndDelete(id);
 };
 
 export default {

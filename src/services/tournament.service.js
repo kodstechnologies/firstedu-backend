@@ -14,6 +14,7 @@ import {
 import { attachOfferToList, attachOfferToItem } from "../utils/offerUtils.js";
 import { getStageStatus, getGoesLiveAt } from "../utils/eventStatus.js";
 import { sendNotificationToStudent, sendTournamentEditNotification } from "./notification.service.js";
+import { ensureUniqueTestTitle } from "../utils/testValidationUtils.js";
 
 const TOURNAMENTS_IMAGE_FOLDER = "tournaments";
 
@@ -441,6 +442,10 @@ export const createTournament = async (data, adminId, file) => {
     thirdPlacePoints,
   } = data;
 
+  if (title) {
+    await ensureUniqueTestTitle(title);
+  }
+
   let imageUrl = null;
   if (file) {
     imageUrl = await uploadImageToCloudinary(
@@ -630,6 +635,10 @@ const fmtDate = (v) =>
     : "—";
 
 export const updateTournament = async (id, updateData, file, adminId) => {
+  if (updateData.title) {
+    await ensureUniqueTestTitle(updateData.title, id, "Tournament");
+  }
+
   const tournament = await tournamentRepository.findById(id);
   if (!tournament) {
     throw new ApiError(404, "Tournament not found");

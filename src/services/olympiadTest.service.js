@@ -6,6 +6,7 @@ import { assertSubtreeNotPurchased } from "../utils/purchaseGuard.js";
 import {
   sendOlympiadTestEditNotification,
 } from "./notification.service.js";
+import { ensureUniqueTestTitle } from "../utils/testValidationUtils.js";
 
 const toISO = (v) => (v ? new Date(v).toISOString() : null);
 const fmtDate = (v) =>
@@ -46,6 +47,10 @@ export const createOlympiadTest = async (data) => {
   const category = await Category.findById(data.categoryId);
   if (!category) throw new ApiError(404, "Category not found");
   await assertSubtreeNotPurchased(data.categoryId, "add tests to");
+
+  if (data.title) {
+    await ensureUniqueTestTitle(data.title);
+  }
 
   const existing = await OlympiadTest.findOne({
     categoryId: data.categoryId,
@@ -109,6 +114,10 @@ export const getOlympiadTestById = async (id) => {
 };
 
 export const updateOlympiadTest = async (id, updateData, adminId) => {
+  if (updateData.title) {
+    await ensureUniqueTestTitle(updateData.title, id, "OlympiadTest");
+  }
+
   const existing = await OlympiadTest.findById(id);
   if (!existing) throw new ApiError(404, "Olympiad Test not found");
   await assertSubtreeNotPurchased(existing.categoryId, "edit tests in");
@@ -195,6 +204,10 @@ export const deleteOlympiadTest = async (id) => {
   const existing = await OlympiadTest.findById(id);
   if (!existing) throw new ApiError(404, "Olympiad Test not found");
   await assertSubtreeNotPurchased(existing.categoryId, "delete tests from");
+
+  if (existing.testId) {
+    await Test.findByIdAndDelete(existing.testId);
+  }
 
   return await OlympiadTest.findByIdAndDelete(id);
 };

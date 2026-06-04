@@ -18,6 +18,7 @@ import razorpayOrderIntentRepository from "../repository/razorpayOrderIntent.rep
 import { createRazorpayOrder, verifyPaymentSignature } from "../utils/razorpayUtils.js";
 import { sendNotificationToMultipleStudents } from "./notification.service.js";
 import { sendEventResultEmail } from "../utils/sendEmail.js";
+import { ensureUniqueTestTitle } from "../utils/testValidationUtils.js";
 
 /**
  * Generic file upload — routes to the right S3 helper by MIME type.
@@ -176,6 +177,10 @@ const enrichEventWithStats = async (eventObj) => {
 // ==================== ADMIN SERVICES ====================
 
 export const createEvent = async (data, adminId, file) => {
+  if (data.title) {
+    await ensureUniqueTestTitle(data.title);
+  }
+
   validateEventDates(data.megaAudition, data.grandFinale);
 
   const category = await LiveCompetitionCategory.findById(data.category);
@@ -319,6 +324,10 @@ export const getEventById = async (id) => {
 };
 
 export const updateEvent = async (id, updateData, file) => {
+  if (updateData.title) {
+    await ensureUniqueTestTitle(updateData.title, id, "LiveCompetition");
+  }
+
   const event = await liveCompetitionRepository.findEventById(id);
   if (!event) throw new ApiError(404, "Live competition not found");
 
