@@ -51,7 +51,7 @@ jobs:
             pm2 delete firstedu-backend || true
 
             echo "Starting new PM2 process..."
-            pm2 start src/server.js --name firstedu-backend
+            pm2 start src/server.js --name backend
 
             pm2 save
 
