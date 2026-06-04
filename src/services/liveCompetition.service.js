@@ -1394,9 +1394,24 @@ export const submitWork = async (eventId, studentId, { text, round = "MEGA_AUDIT
 
     for (const file of files) {
       const ext = file.originalname.split(".").pop().toLowerCase();
-      const allowedTypes = targetRound.submission.file?.allowedTypes || [];
-      if (allowedTypes.length > 0 && !allowedTypes.includes(ext)) {
-        throw new ApiError(400, `File type '.${ext}' not allowed.`);
+      let allowedTypes = targetRound.submission.file?.allowedTypes || [];
+      allowedTypes = allowedTypes.filter(t => typeof t === 'string' && t.trim() !== '');
+      
+      if (allowedTypes.length > 0) {
+        const isAllowed = allowedTypes.some((type) => {
+          const t = type.toLowerCase().trim();
+          return (
+            t === ext ||
+            t === `.${ext}` ||
+            t === file.mimetype?.toLowerCase() ||
+            t.endsWith(`/${ext}`) ||
+            (ext === "jpg" && t.includes("jpeg")) ||
+            (ext === "jpeg" && t.includes("jpg"))
+          );
+        });
+        if (!isAllowed) {
+          throw new ApiError(400, `File type '.${ext}' not allowed.`);
+        }
       }
       const maxSize = targetRound.submission.file?.maxSize;
       if (maxSize && file.size > maxSize * 1024 * 1024) {
