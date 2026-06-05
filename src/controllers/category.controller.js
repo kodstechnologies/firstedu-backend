@@ -314,19 +314,24 @@ export const getCategoryDetailForStudent = asyncHandler(async (req, res) => {
     const basePrice = Number(result.price) || 0;
 
     if (applicableOn) {
-      const globalOffer = await Offer.findOne({ applicableOn, status: "active", entityId: null }).lean();
-
-      let customOffer = null;
-      if (result.offerOverrideId) {
-        customOffer = await Offer.findOne({ _id: result.offerOverrideId, status: "active" }).lean();
+      let activeOffer = null;
+      if (result.offerPolicy !== "none") {
+        const globalOffer = await offerRepository.getActiveOffer(applicableOn);
+        let customOffer = null;
+        if (result.offerOverrideId) {
+          customOffer = await Offer.findOne({ _id: result.offerOverrideId, status: "active" }).lean();
+        }
+        activeOffer = customOffer || globalOffer;
       }
-
-      const activeOffer = customOffer || globalOffer;
 
       if (result.isFree || basePrice === 0) {
         result.originalPrice = basePrice;
         result.effectivePrice = 0;
         result.discountedPrice = 0;
+      } else if (result.discountedPrice !== null && result.discountedPrice !== undefined) {
+        // Admin set a specific node-level discount. It overrides global offer completely.
+        result.originalPrice = basePrice;
+        result.effectivePrice = result.discountedPrice;
       } else if (activeOffer) {
         let discountAmount = 0;
         if (activeOffer.discountType === "percentage") {

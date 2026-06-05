@@ -81,7 +81,7 @@ export const initiatePurchase = async (categoryId, studentId, paymentMethod, opt
 
   // Apply Coupon (if not blocked)
   if (couponCode && String(couponCode).trim() && category.couponPolicy !== "none") {
-    const result = await couponService.validateCoupon(couponCode.trim(), amountToCharge, "all", categoryId);
+    const result = await couponService.validateCoupon(couponCode.trim(), amountToCharge, moduleName, categoryId);
     amountToCharge = Math.max(0, amountToCharge - result.discount);
     appliedCoupon = { _id: result.coupon._id, code: result.coupon.code, discountType: result.coupon.discountType, discountValue: result.coupon.discountValue };
     couponId = result.coupon._id;

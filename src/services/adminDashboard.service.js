@@ -323,6 +323,26 @@ const getTestSoldComparison = async () => {
 
 
 /**
+ * Get category breakdown of tests sold.
+ */
+const getCategoryBreakdown = async () => {
+  const result = await RevenueTransaction.aggregate([
+    {
+      $match: {
+        paymentStatus: "completed",
+        sourceType: { $nin: ["course", "wallet", "category_upgrade", "other"] },
+      },
+    },
+    { $group: { _id: "$sourceType", count: { $sum: 1 } } },
+  ]);
+
+  return result.map((item) => ({
+    category: item._id,
+    count: item.count,
+  }));
+};
+
+/**
  * Admin Dashboard - main aggregation
  * KPIs: current month = main value, last month = comparison
  */
@@ -346,6 +366,7 @@ export const getDashboardData = async () => {
     chartData,
     studentRegistrationData,
     testSoldData,
+    categoryBreakdown,
   ] = await Promise.all([
     getRazorpayRevenueInRange(currentMonth.start, currentMonth.end),
     getRazorpayRevenueInRange(lastMonth.start, lastMonth.end),
@@ -362,6 +383,7 @@ export const getDashboardData = async () => {
     getDailyRevenueLast7Days(),
     getStudentRegistrationComparison(),
     getTestSoldComparison(),
+    getCategoryBreakdown(),
   ]);
 
   const formatCurrency = (n) => `₹${Number(n).toLocaleString("en-IN")}`;
@@ -417,6 +439,7 @@ export const getDashboardData = async () => {
     needsAttention: urgentTickets,
     studentRegistrationData,
     testSoldData,
+    categoryBreakdown,
   };
 };
 

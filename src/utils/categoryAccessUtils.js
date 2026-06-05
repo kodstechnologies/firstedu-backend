@@ -21,6 +21,7 @@ import categoryRepository from "../repository/category.repository.js";
 import Test from "../models/Test.js";
 import TestPurchase from "../models/TestPurchase.js";
 import Offer from "../models/Offer.js";
+import offerRepository from "../repository/offer.repository.js";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -61,7 +62,7 @@ const getEffectivePrice = async (category) => {
   }
 
   if (!activeOffer && applicableOn) {
-    activeOffer = await Offer.findOne({ applicableOn, status: "active", entityId: null }).lean();
+    activeOffer = await offerRepository.getActiveOffer(applicableOn);
   }
 
   if (activeOffer) {

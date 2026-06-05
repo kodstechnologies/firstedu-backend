@@ -10,6 +10,7 @@ import eventRegistrationRepository from "../repository/eventRegistration.reposit
 import tournamentRepository from "../repository/tournament.repository.js";
 import { getApplicableOfferDetails } from "../utils/offerUtils.js";
 import Offer from "../models/Offer.js";
+import offerRepository from "../repository/offer.repository.js";
 import { assertSubtreeNotPurchased } from "../utils/purchaseGuard.js";
 import { sendUpgradeNotificationForCategory, sendRenameNotificationForCategory } from "./notification.service.js";
 
@@ -616,7 +617,7 @@ export const getCategoriesForStudent = async (options = {}) => {
 
   if (applicableOn) {
     // Fetch the single active global offer for this pillar once (1 DB query for ALL nodes)
-    const globalOffer = await Offer.findOne({ applicableOn, status: "active", entityId: null }).lean();
+    const globalOffer = await offerRepository.getActiveOffer(applicableOn);
 
     // Fetch any custom override offers used by nodes in the tree efficiently
     const overrideIds = new Set();
@@ -635,14 +636,22 @@ export const getCategoriesForStudent = async (options = {}) => {
     const enrichNode = (node) => {
       if (node.price != null) {
         const basePrice = Number(node.price) || 0;
-        const activeOffer = (node.offerOverrideId && overrideMap[node.offerOverrideId.toString()])
-          ? overrideMap[node.offerOverrideId.toString()]
-          : globalOffer;
+        
+        let activeOffer = null;
+        if (node.offerPolicy !== "none") {
+          activeOffer = (node.offerOverrideId && overrideMap[node.offerOverrideId.toString()])
+            ? overrideMap[node.offerOverrideId.toString()]
+            : globalOffer;
+        }
 
         if (node.isFree || basePrice === 0) {
           node.originalPrice = basePrice;
           node.effectivePrice = 0;
           node.discountedPrice = 0;
+        } else if (node.discountedPrice !== null && node.discountedPrice !== undefined) {
+          // Admin set a specific node-level discount. It overrides global offer completely.
+          node.originalPrice = basePrice;
+          node.effectivePrice = node.discountedPrice;
         } else if (activeOffer) {
           let discountAmount = 0;
           if (activeOffer.discountType === "percentage") {
