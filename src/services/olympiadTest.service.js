@@ -49,7 +49,7 @@ export const createOlympiadTest = async (data) => {
   await assertSubtreeNotPurchased(data.categoryId, "add tests to");
 
   if (data.title) {
-    await ensureUniqueTestTitle(data.title);
+    await ensureUniqueTestTitle(data.title, null, null, data.testId);
   }
 
   const existing = await OlympiadTest.findOne({
@@ -114,13 +114,13 @@ export const getOlympiadTestById = async (id) => {
 };
 
 export const updateOlympiadTest = async (id, updateData, adminId) => {
-  if (updateData.title) {
-    await ensureUniqueTestTitle(updateData.title, id, "OlympiadTest");
-  }
-
   const existing = await OlympiadTest.findById(id);
   if (!existing) throw new ApiError(404, "Olympiad Test not found");
   await assertSubtreeNotPurchased(existing.categoryId, "edit tests in");
+
+  if (updateData.title) {
+    await ensureUniqueTestTitle(updateData.title, id, "OlympiadTest", existing.testId);
+  }
 
   // ── Snapshot old values for change-detection ──
   const oldTitle = existing.title;

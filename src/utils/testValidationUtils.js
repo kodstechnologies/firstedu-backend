@@ -8,7 +8,7 @@ import TestBundle from "../models/TestBundle.js";
 import LiveCompetition from "../models/LiveCompetition.js";
 import { ApiError } from "./ApiError.js";
 
-export const ensureUniqueTestTitle = async (title, excludeId = null, excludeModelName = null) => {
+export const ensureUniqueTestTitle = async (title, excludeId = null, excludeModelName = null, excludeTestId = null) => {
   if (!title) return;
 
   // We do case-insensitive checks
@@ -27,8 +27,18 @@ export const ensureUniqueTestTitle = async (title, excludeId = null, excludeMode
 
   for (const { model, field, modelName } of queries) {
     const query = { [field]: regexTitle };
+    const exclusions = [];
     if (excludeId && excludeModelName === modelName) {
-      query._id = { $ne: excludeId };
+      exclusions.push(excludeId);
+    }
+    if (excludeTestId && modelName === "Test") {
+      exclusions.push(excludeTestId);
+    }
+
+    if (exclusions.length === 1) {
+      query._id = { $ne: exclusions[0] };
+    } else if (exclusions.length > 1) {
+      query._id = { $nin: exclusions };
     }
 
     const exists = await model.exists(query);
