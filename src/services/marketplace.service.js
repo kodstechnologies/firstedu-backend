@@ -61,6 +61,7 @@ const buildCategoryPathsMap = async () => {
 const DIRECT_PURCHASABLE_TEST_TYPES = [
   "test",
   "challenge_yourself",
+  "challenge_your_friend",
   "competition_sector",
   "Olympiads",
   "School",
@@ -802,7 +803,7 @@ export const getTestsAndBundles = async (options = {}) => {
       questionBank,
       sortBy,
       sortOrder,
-      applicableFor: "challenge_yourself",
+      applicableFor: ["challenge_yourself", "challenge_your_friend"],
       studentId,
     });
     return {

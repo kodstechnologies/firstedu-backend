@@ -352,6 +352,7 @@ const getConnectedCategoryIds = async (linkedTo, studentId, isCertification) => 
   const DIRECT_PURCHASABLE_TEST_TYPES = [
     "test",
     "challenge_yourself",
+    "challenge_your_friend",
     "competitive",
     "school",
     "skill development",
