@@ -90,10 +90,10 @@ app.use((err, req, res, next) => {
 
   // Handle multer "Unexpected field" error (wrong field name)
   if (err.code === "LIMIT_UNEXPECTED_FILE") {
+    const fieldInfo = err.field ? ` (received '${err.field}')` : '';
     return res.status(400).json({
       success: false,
-      message:
-        "Invalid field name. Use 'video' as the field name for file upload.",
+      message: `Invalid file upload field name${fieldInfo}. Please verify the correct field key expected by this API endpoint.`,
       data: null,
     });
   }
