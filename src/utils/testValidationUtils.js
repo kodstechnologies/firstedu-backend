@@ -41,6 +41,10 @@ export const ensureUniqueTestTitle = async (title, excludeId = null, excludeMode
       query._id = { $nin: exclusions };
     }
 
+    if (excludeId && excludeModelName === "Test" && ["OlympiadTest", "CompetitiveTest", "SchoolTest", "SkillTest"].includes(modelName)) {
+      query.testId = { $ne: excludeId };
+    }
+
     const exists = await model.exists(query);
     if (exists) {
       throw new ApiError(
