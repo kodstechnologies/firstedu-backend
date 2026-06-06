@@ -103,7 +103,7 @@ export const getAggregatedOrderHistory = async (
 
   const toNumber = (value, fallback = 0) => {
     const num = Number(value);
-    return Number.isFinite(num) ? num : fallback;
+    return Number.isFinite(num) ? Math.round(num) : fallback;
   };
 
   // Get all purchases, registrations and claims

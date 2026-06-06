@@ -96,9 +96,9 @@ export const getApplicableOfferDetails = async (moduleType, originalPrice) => {
 
   return {
     appliedOffer,
-    originalPrice: price,
-    discountedPrice,
-    discountAmount,
+    originalPrice: Math.round(price),
+    discountedPrice: Math.round(discountedPrice),
+    discountAmount: Math.round(discountAmount),
   };
 };
 
@@ -132,9 +132,9 @@ export const attachOfferToList = async (items, moduleType, priceField = "price")
     return items.map((item) => {
       const obj = typeof item.toObject === "function" ? item.toObject() : { ...item };
       const p = obj[priceField] != null ? obj[priceField] : 0;
-      obj.originalPrice = Number(p);
-      obj.discountedPrice = Number(p);
-      obj.effectivePrice = Number(p);
+      obj.originalPrice = Math.round(p);
+      obj.discountedPrice = Math.round(p);
+      obj.effectivePrice = Math.round(p);
       return obj;
     });
   }
@@ -150,9 +150,9 @@ export const attachOfferToList = async (items, moduleType, priceField = "price")
       else d = Math.min(offer.discountValue, p);
       return {
         appliedOffer: { _id: offer._id, offerName: offer.offerName, applicableOn: offer.applicableOn, discountType: offer.discountType, discountValue: offer.discountValue, description: offer.description, validTill: offer.validTill },
-        originalPrice: p,
-        discountedPrice: Math.max(0, p - d),
-        discountAmount: d,
+        originalPrice: Math.round(p),
+        discountedPrice: Math.round(Math.max(0, p - d)),
+        discountAmount: Math.round(d),
       };
     })();
     obj.appliedOffer = appliedOffer;
