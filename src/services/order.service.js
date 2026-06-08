@@ -1,5 +1,6 @@
 import { ApiError } from "../utils/ApiError.js";
 import orderRepository from "../repository/order.repository.js";
+import categoryRepository from "../repository/category.repository.js";
 
 /**
  * Get student's order history
@@ -93,7 +94,7 @@ export const getAggregatedOrderHistory = async (
   const pageNum = parseInt(page);
   const limitNum = parseInt(limit);
   const skip = (pageNum - 1) * limitNum;
-  const { type, from, to } = filters;
+  const { type, from, to, categoryId } = filters;
 
   const normalizePaymentMethod = (paymentId, fallbackAmount = 0) => {
     if (!paymentId || paymentId === "free" || Number(fallbackAmount) === 0) return "free";
@@ -129,17 +130,35 @@ export const getAggregatedOrderHistory = async (
       status: p.paymentStatus,
       data: p,
     })),
-    ...testPurchases.map((p) => ({
-      id: p._id,
-      type: p.test ? "test" : "testbundle",
-      date: p.purchaseDate || p.createdAt,
-      title: p.test?.title || p.competitionCategory?.title || p.testBundle?.name || "Test/Bundle",
-      itemName: p.test?.title || p.competitionCategory?.title || p.testBundle?.name || "Test/Bundle",
-      amount: toNumber(p.purchasePrice),
-      paymentMethod: normalizePaymentMethod(p.paymentId, p.purchasePrice),
-      status: p.paymentStatus,
-      data: p,
-    })),
+    ...testPurchases.map((p) => {
+      let resolvedType = "testbundle";
+      if (p.test) {
+        const appFor = p.test.applicableFor;
+        if (appFor === "challenge_yourself" || appFor === "challenge_your_friend") {
+          resolvedType = "gamification";
+        } else if (appFor === "competition_sector" || appFor === "competitive") {
+          resolvedType = "competitive";
+        } else if (appFor === "school") {
+          resolvedType = "school";
+        } else if (appFor === "skill development" || appFor === "skill") {
+          resolvedType = "skill development";
+        } else {
+          resolvedType = "test";
+        }
+      }
+
+      return {
+        id: p._id,
+        type: resolvedType,
+        date: p.purchaseDate || p.createdAt,
+        title: p.test?.title || p.competitionCategory?.title || p.testBundle?.name || "Test/Bundle",
+        itemName: p.test?.title || p.competitionCategory?.title || p.testBundle?.name || "Test/Bundle",
+        amount: toNumber(p.purchasePrice),
+        paymentMethod: normalizePaymentMethod(p.paymentId, p.purchasePrice),
+        status: p.paymentStatus,
+        data: p,
+      };
+    }),
     ...eventRegistrations.map((r) => {
       const fallbackAmount = toNumber(r.eventId?.price);
       const amountPaid =
@@ -243,6 +262,44 @@ export const getAggregatedOrderHistory = async (
         requestedTypes.includes(normalizeType(t.type))
       );
     }
+  }
+
+  // Category ID filter (?categoryId=64a2f9...)
+  if (categoryId) {
+    let descendantIds = [categoryId.toString()];
+    try {
+      descendantIds = await categoryRepository.findDescendantIds(categoryId);
+    } catch (err) {
+      // Fallback to exact match if categoryId is an invalid ObjectId
+      console.warn(`[OrderService] Invalid categoryId passed to filter: ${categoryId}`);
+    }
+
+    allTransactions = allTransactions.filter((t) => {
+      if (t.type === "course") {
+        return t.data?.course?.categoryIds?.some((id) =>
+          descendantIds.includes(id.toString()) || descendantIds.includes(id._id?.toString())
+        );
+      }
+      
+      const testTypes = ["test", "testbundle", "competitive", "school", "skill development", "gamification"];
+      if (testTypes.includes(t.type)) {
+        const catId = t.data?.test?.categoryId?.toString() || t.data?.test?.categoryId?._id?.toString();
+        return descendantIds.includes(catId);
+      }
+      
+      const eventTypes = ["olympiad", "olympiads", "tournament", "workshop", "live_competition"];
+      if (eventTypes.includes(t.type)) {
+        const eventCatId = t.data?.eventId?.categoryId?.toString() || t.data?.eventId?.categoryId?._id?.toString();
+        return descendantIds.includes(eventCatId);
+      }
+      
+      if (t.data?.categoryId) {
+        const catId = t.data?.categoryId?._id?.toString() || t.data?.categoryId?.toString();
+        return descendantIds.includes(catId);
+      }
+      
+      return false;
+    });
   }
 
   // Date filters (?from=2026-01-01&to=2026-01-31)

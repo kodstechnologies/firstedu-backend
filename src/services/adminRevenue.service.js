@@ -417,79 +417,9 @@ export const logTransaction = async ({
   }
 };
 
-/**
- * Returns two sets of names that appear in completed revenue transactions:
- *  - names:       distinct subCategoryName values (the purchased node's name)
- *  - parentNames: distinct categoryName values (the intermediate ancestor name)
- *
- * Both sets are returned WITHOUT strict pillar filtering because old records
- * stored intermediate node names (e.g. "CBSE") as categoryName instead of
- * the pillar root ("School"). The frontend checks both sets to decide
- * which category tree buttons should be active.
- */
-export const getActiveSubcategoryNames = async (pillar) => {
-  const normalizedPillar = String(pillar || "").trim();
-  const categories = normalizedPillar
-    ? await Category.find({ rootType: normalizedPillar })
-      .select("_id parent")
-      .lean()
-    : [];
-  const categoryIds = categories.map((category) => category._id);
-  const categoryIdSet = new Set(categoryIds.map((id) => String(id)));
-  const categoryById = new Map(
-    categories.map((category) => [String(category._id), category])
-  );
-  const base = normalizedPillar
-    ? {
-      paymentStatus: "completed",
-      $or: [
-        { categoryId: { $in: categoryIds } },
-        {
-          categoryName: {
-            $regex: new RegExp(`^${escapeRegex(normalizedPillar)}$`, "i"),
-          },
-        },
-      ],
-    }
-    : { paymentStatus: "completed" };
 
-  const [storedCategoryIds, subCatNames, catNames] = await Promise.all([
-    RevenueTransaction.distinct("categoryId", base),
-    RevenueTransaction.distinct("subCategoryName", {
-      ...base,
-      categoryId: null,
-      subCategoryName: { $nin: ["-", null, ""] },
-    }),
-    RevenueTransaction.distinct("categoryName", {
-      ...base,
-      categoryId: null,
-      categoryName: { $nin: ["-", null, ""] },
-    }),
-  ]);
-
-  const directCategoryIds = storedCategoryIds
-    .map((id) => String(id))
-    .filter((id) => !normalizedPillar || categoryIdSet.has(id));
-  const ancestorCategoryIds = new Set();
-  directCategoryIds.forEach((id) => {
-    let current = categoryById.get(id);
-    while (current?.parent) {
-      const parentId = String(current.parent);
-      ancestorCategoryIds.add(parentId);
-      current = categoryById.get(parentId);
-    }
-  });
-
-  return {
-    directCategoryIds,
-    ancestorCategoryIds: [...ancestorCategoryIds],
-    names: subCatNames.filter(Boolean),
-    parentNames: catNames.filter(Boolean),
-  };
-};
 
 export default {
   getRevenueHistory,
   logTransaction,
-  getActiveSubcategoryNames,
 };

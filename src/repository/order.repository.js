@@ -77,7 +77,7 @@ const findCoursePurchases = async (studentId) => {
 const findTestPurchases = async (studentId) => {
   try {
     return await TestPurchase.find({ student: studentId, paymentStatus: "completed" })
-      .populate("test", "title description price")
+      .populate("test", "title description price categoryId applicableFor")
       .populate("testBundle", "name description price")
       .populate("schoolCategory", "name description price")
       .populate("skillCategory", "name description price")
@@ -129,7 +129,7 @@ const findEventRegistrations = async (studentId) => {
       eventType: { $in: ["tournament", "workshop", "olympiad"] },
       paymentStatus: "completed",
     })
-      .populate("eventId", "title price")
+      .populate("eventId", "title price categoryId")
       .sort({ registeredAt: -1 });
   } catch (error) {
     throw new ApiError(500, "Failed to fetch event registrations", error.message);

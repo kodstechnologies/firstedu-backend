@@ -13,13 +13,3 @@ export const getRevenueTransactions = asyncHandler(async (req, res) => {
   );
 });
 
-/**
- * Returns the list of distinct subcategory names that have ≥1 revenue transaction.
- * Route: GET /api/v1/admin/revenue-active-subcategories?pillar=School
- */
-export const getActiveSubcategoryNames = asyncHandler(async (req, res) => {
-  const result = await adminRevenueService.getActiveSubcategoryNames(req.query.pillar);
-  res.status(200).json(
-    ApiResponse.success(result, "Active revenue categories fetched")
-  );
-});

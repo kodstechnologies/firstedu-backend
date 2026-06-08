@@ -11,6 +11,23 @@ import categoryPurchaseService from "./categoryPurchase.service.js";
 import categoryPurchaseRepository from "../repository/categoryPurchase.repository.js";
 import liveCompetitionRepository from "../repository/liveCompetition.repository.js";
 import { getCategoryRevenueSourceType, logTransaction } from "./adminRevenue.service.js";
+import QuestionBank from "../models/QuestionBank.js";
+
+/**
+ * Resolves the effective categoryId for a test,
+ * falling back to the questionBank's first category when test.categoryId is null.
+ */
+const resolveTestCategoryId = async (test) => {
+  if (test.categoryId) return test.categoryId;
+  if (test.schoolCategory) return test.schoolCategory;
+  if (test.skillCategory) return test.skillCategory;
+  if (test.questionBank) {
+    const qbId = test.questionBank._id || test.questionBank;
+    const qb = await QuestionBank.findById(qbId).select("categories").lean();
+    if (qb?.categories?.length > 0) return qb.categories[0];
+  }
+  return null;
+};
 
 const LOG_PREFIX = "[Razorpay Webhook]";
 
@@ -130,13 +147,14 @@ async function reconcilePaymentCaptured(orderId, paymentId, amountPaise) {
       paymentId,
       paymentStatus: "completed",
     });
+    const webhookCategoryId = await resolveTestCategoryId(test);
     await logTransaction({
       studentId,
       amount: amountPaise / 100,
       sourceType: "test",
       itemId: entityId,
       itemName: test.title || "Test",
-      categoryId: test.schoolCategory || test.skillCategory || null,
+      categoryId: webhookCategoryId,
       paymentId
     });
   } else if (type === "bundle") {
@@ -166,7 +184,7 @@ async function reconcilePaymentCaptured(orderId, paymentId, amountPaise) {
       sourceType: "test_bundle",
       itemId: entityId,
       itemName: bundle.name || "Test Bundle",
-      categoryId: bundle.schoolCategory || bundle.skillCategory || null,
+      categoryId: null, // TestBundle has no category field; bundles are cross-category by design
       paymentId
     });
   } else if (type === "tournament" || type === "workshop") {

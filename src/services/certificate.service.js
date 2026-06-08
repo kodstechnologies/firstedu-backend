@@ -335,8 +335,8 @@ export const issueCourseCompletionCertificate = async (studentId, testId) => {
     try {
       await sendNotificationToStudent(
         studentId,
-        "Certificate issued",
-        `Your certificate for ${course.title} is now available.`,
+        "Course Completed! 🎉",
+        `Congratulations! You have successfully completed the course "${course.title}". We respect your efforts and dedication. Please head to the certification section and get your certificate!`,
         {
           type: "certificate",
           courseId: courseId.toString(),

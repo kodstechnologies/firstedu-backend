@@ -25,6 +25,26 @@ import { getTournaments } from "./tournament.service.js";
 import FreeMaterial from "../models/FreeMaterial.js";
 import Certificate from "../models/Certificate.js";
 import { logTransaction } from "./adminRevenue.service.js";
+import QuestionBank from "../models/QuestionBank.js";
+
+/**
+ * Resolves the effective categoryId for a test.
+ * - Prefers test.categoryId (explicitly assigned on the test)
+ * - Falls back to the first category on the test's QuestionBank (set via Test Builder)
+ * - Also checks test.schoolCategory / test.skillCategory for legacy tests
+ */
+const resolveTestCategoryId = async (test) => {
+  if (test.categoryId) return test.categoryId;
+  if (test.schoolCategory) return test.schoolCategory;
+  if (test.skillCategory) return test.skillCategory;
+  // Fallback: fetch questionBank categories
+  if (test.questionBank) {
+    const qbId = test.questionBank._id || test.questionBank;
+    const qb = await QuestionBank.findById(qbId).select("categories").lean();
+    if (qb?.categories?.length > 0) return qb.categories[0];
+  }
+  return null;
+};
 
 const buildCategoryPathsMap = async () => {
   const categories = await Category.find({}).select('name parent').lean();
@@ -95,15 +115,56 @@ export const attachPurchasedFlagToTests = async (tests, studentId) => {
     tests.forEach((t) => (t.purchased = false));
     return tests;
   }
+  
+  // 1. Direct Test Purchases
   const testIds = tests.map((t) => t._id.toString());
   const purchasedIds = await orderRepository.findPurchasedTestIdsForStudent(
     studentId,
     testIds
   );
   const purchasedSet = new Set(purchasedIds);
-  tests.forEach((t) => {
-    t.purchased = purchasedSet.has(t._id.toString());
+  
+  // 2. Category Purchases (for tests inside owned folders)
+  const categoryPurchases = await orderRepository.findCategoryPurchases(studentId);
+  const unlockedCategoryMap = new Map();
+  // categoryPurchases is sorted newest first. We only want to keep the newest purchase per category.
+  categoryPurchases.forEach(p => {
+    if (p.categoryId) {
+      const catIdStr = p.categoryId._id?.toString() || p.categoryId.toString();
+      if (!unlockedCategoryMap.has(catIdStr)) {
+        unlockedCategoryMap.set(catIdStr, p);
+      }
+    }
+    if (p.unlockedCategoryIds && Array.isArray(p.unlockedCategoryIds)) {
+      p.unlockedCategoryIds.forEach(cat => {
+        const catIdStr = cat._id?.toString() || cat.toString();
+        if (!unlockedCategoryMap.has(catIdStr)) {
+          unlockedCategoryMap.set(catIdStr, p);
+        }
+      });
+    }
   });
+
+  tests.forEach((t) => {
+    let isPurchased = purchasedSet.has(t._id.toString());
+    
+    // If not bought directly, check if the student owns the parent category
+    if (!isPurchased && t.categoryId) {
+      const catIdStr = t.categoryId.toString();
+      const purchase = unlockedCategoryMap.get(catIdStr);
+      
+      if (purchase) {
+        // Ensure test isn't newly added after their purchase date (unless upgraded)
+        const purchaseDate = purchase.lastUpgradedAt || purchase.createdAt;
+        if (new Date(t.createdAt) <= new Date(purchaseDate)) {
+          isPurchased = true;
+        }
+      }
+    }
+    
+    t.purchased = isPurchased;
+  });
+  
   return tests;
 };
 
@@ -932,7 +993,7 @@ export const getTestsAndBundles = async (options = {}) => {
 
   // type === "both" or "all" — single merged list + one pagination
   const fetchSize = pageNum * limitNum;
-  const [testsResult, bundlesResult, olympiadsResult, tournamentsResult] = await Promise.all([
+  const [testsResult, bundlesResult] = await Promise.all([
     getTests({
       page: 1,
       limit: fetchSize,
@@ -942,6 +1003,9 @@ export const getTestsAndBundles = async (options = {}) => {
       sortBy,
       sortOrder,
       studentId,
+      applicableFor: DIRECT_PURCHASABLE_TEST_TYPES.filter(
+        (type) => !["certificate", "Olympiads", "olympiads", "tournament", "tournaments"].includes(type)
+      ),
     }),
     getTestBundles({
       page: 1,
@@ -952,28 +1016,11 @@ export const getTestsAndBundles = async (options = {}) => {
       sortOrder,
       studentId,
     }),
-    getOlympiads({
-      page: 1,
-      limit: fetchSize,
-      search,
-      categoryId: category,
-      studentId,
-    }),
-    getTournaments({
-      page: 1,
-      limit: fetchSize,
-      search,
-      category,
-      isPublished: true,
-      studentId,
-    }),
   ]);
 
   const testsTotal = testsResult.pagination.total;
   const bundlesTotal = bundlesResult.pagination.total;
-  const olympiadsTotal = olympiadsResult.pagination.total;
-  const tournamentsTotal = tournamentsResult.pagination.total;
-  const total = testsTotal + bundlesTotal + olympiadsTotal + tournamentsTotal;
+  const total = testsTotal + bundlesTotal;
   const sortDesc = sortOrder === "desc";
 
   const testItems = testsResult.tests.map((t) => ({
@@ -984,14 +1031,8 @@ export const getTestsAndBundles = async (options = {}) => {
     ...toBundleItem(b),
     itemType: "testBundle",
   }));
-  const olympiadItems = olympiadsResult.olympiads.map((o) => ({
-    ...toOlympiadItem(o),
-  }));
-  const tournamentItems = tournamentsResult.tournaments.map((t) => ({
-    ...toTournamentItem(t),
-  }));
 
-  const merged = [...testItems, ...bundleItems, ...olympiadItems, ...tournamentItems].sort((a, b) => {
+  const merged = [...testItems, ...bundleItems].sort((a, b) => {
     const dateA = new Date(a.createdAt || 0).getTime();
     const dateB = new Date(b.createdAt || 0).getTime();
     return sortDesc ? dateB - dateA : dateA - dateB;
@@ -1188,6 +1229,16 @@ export const initiateTestPayment = async (testId, studentId, paymentMethod, opti
     if (test.rewardPoints > 0) {
       await pointsService.awardTestPurchasePoints(studentId, testId, test.title, test.rewardPoints);
     }
+    const freeCategoryId = await resolveTestCategoryId(test);
+    await logTransaction({
+      studentId,
+      amount: 0,
+      sourceType: "test",
+      itemId: testId,
+      itemName: test.title || "Test",
+      categoryId: freeCategoryId,
+      paymentId: "free"
+    });
     return { purchase, completed: true };
   }
 
@@ -1210,6 +1261,16 @@ export const initiateTestPayment = async (testId, studentId, paymentMethod, opti
     if (couponId) {
       await couponService.incrementCouponUsedCount(couponId);
     }
+    const walletCategoryId = await resolveTestCategoryId(test);
+    await logTransaction({
+      studentId,
+      amount: amountToCharge,
+      sourceType: "test",
+      itemId: testId,
+      itemName: test.title || "Test",
+      categoryId: walletCategoryId,
+      paymentId: "wallet"
+    });
     return { purchase, completed: true };
   }
 
@@ -1373,6 +1434,16 @@ export const purchaseTest = async (
   if (intent.couponId) {
     await couponService.incrementCouponUsedCount(intent.couponId);
   }
+  const razorpayCategoryId = await resolveTestCategoryId(test);
+  await logTransaction({
+    studentId,
+    amount: purchasePrice,
+    sourceType: "test",
+    itemId: testId,
+    itemName: test.title || "Test",
+    categoryId: razorpayCategoryId,
+    paymentId: razorpayPaymentId
+  });
   return purchase;
 };
 
