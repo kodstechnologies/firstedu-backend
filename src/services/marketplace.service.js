@@ -24,7 +24,7 @@ import { getOlympiads } from "./studentOlympiad.service.js";
 import { getTournaments } from "./tournament.service.js";
 import FreeMaterial from "../models/FreeMaterial.js";
 import Certificate from "../models/Certificate.js";
-import { logTransaction } from "./adminRevenue.service.js";
+import { logTransaction, resolveTestSourceType } from "./adminRevenue.service.js";
 import QuestionBank from "../models/QuestionBank.js";
 
 /**
@@ -1148,7 +1148,14 @@ export const getTests = async (options = {}) => {
     return testObj;
   });
 
-  const tests = await attachOfferToList(testsRaw, "Test", "price");
+  const tests = await Promise.all(
+    testsRaw.map(async (test) => {
+      const moduleTypeForOffer = test.applicableFor && test.applicableFor !== "test" 
+        ? test.applicableFor 
+        : "Test";
+      return await attachOfferToItem(test, moduleTypeForOffer, "price");
+    })
+  );
   await attachPurchasedFlagToTests(tests, studentId);
 
   const total = result.pagination.total;
@@ -1233,7 +1240,7 @@ export const initiateTestPayment = async (testId, studentId, paymentMethod, opti
     await logTransaction({
       studentId,
       amount: 0,
-      sourceType: "test",
+      sourceType: resolveTestSourceType(test),
       itemId: testId,
       itemName: test.title || "Test",
       categoryId: freeCategoryId,
@@ -1265,7 +1272,7 @@ export const initiateTestPayment = async (testId, studentId, paymentMethod, opti
     await logTransaction({
       studentId,
       amount: amountToCharge,
-      sourceType: "test",
+      sourceType: resolveTestSourceType(test),
       itemId: testId,
       itemName: test.title || "Test",
       categoryId: walletCategoryId,

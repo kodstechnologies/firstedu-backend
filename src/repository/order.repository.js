@@ -77,7 +77,11 @@ const findCoursePurchases = async (studentId) => {
 const findTestPurchases = async (studentId) => {
   try {
     return await TestPurchase.find({ student: studentId, paymentStatus: "completed" })
-      .populate("test", "title description price categoryId applicableFor")
+      .populate({
+        path: "test",
+        select: "title description price categoryId applicableFor questionBank",
+        populate: { path: "questionBank", select: "categories" },
+      })
       .populate("testBundle", "name description price")
       .populate("schoolCategory", "name description price")
       .populate("skillCategory", "name description price")

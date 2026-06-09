@@ -134,8 +134,12 @@ export const getAggregatedOrderHistory = async (
       let resolvedType = "testbundle";
       if (p.test) {
         const appFor = p.test.applicableFor;
-        if (appFor === "challenge_yourself" || appFor === "challenge_your_friend") {
-          resolvedType = "gamification";
+        if (appFor === "challenge_yourself") {
+          resolvedType = "challenge_yourself";
+        } else if (appFor === "challenge_your_friend") {
+          resolvedType = "challenge_your_friend";
+        } else if (appFor === "everyday_challenge") {
+          resolvedType = "everyday_challenge";
         } else if (appFor === "competition_sector" || appFor === "competitive") {
           resolvedType = "competitive";
         } else if (appFor === "school") {
@@ -190,6 +194,7 @@ export const getAggregatedOrderHistory = async (
       
       const roundLabel = lc.round === 'GRAND_FINALE' ? 'Grand Finale' : 'Mega Audition';
       const eventTitle = lc.event?.title || "Live Competition";
+      const derivedMethod = lc.transactionId ? "razorpay" : (amountPaid === 0 ? "free" : "wallet");
 
       return {
         id: lc._id,
@@ -198,7 +203,7 @@ export const getAggregatedOrderHistory = async (
         title: `${eventTitle} (${roundLabel})`,
         itemName: `${eventTitle} (${roundLabel})`,
         amount: amountPaid,
-        paymentMethod: normalizePaymentMethod("razorpay", amountPaid), // Assuming razorpay or wallet
+        paymentMethod: normalizePaymentMethod(derivedMethod, amountPaid),
         status: lc.paymentStatus,
         data: lc,
       };
@@ -257,9 +262,14 @@ export const getAggregatedOrderHistory = async (
       .map((item) => normalizeType(item))
       .filter(Boolean);
 
-    if (requestedTypes.length > 0) {
+    let expandedTypes = [...requestedTypes];
+    if (expandedTypes.includes("gamification")) {
+      expandedTypes.push("challenge_yourself", "challenge_your_friend", "everyday_challenge");
+    }
+
+    if (expandedTypes.length > 0) {
       allTransactions = allTransactions.filter((t) =>
-        requestedTypes.includes(normalizeType(t.type))
+        expandedTypes.includes(normalizeType(t.type))
       );
     }
   }
@@ -267,14 +277,27 @@ export const getAggregatedOrderHistory = async (
   // Category ID filter (?categoryId=64a2f9...)
   if (categoryId) {
     let descendantIds = [categoryId.toString()];
+    let includesTournamentCategory = false;
     try {
       descendantIds = await categoryRepository.findDescendantIds(categoryId);
+      // Check if the selected category or any descendant is named "tournament"
+      for (const id of descendantIds) {
+        const cat = await categoryRepository.findById(id);
+        if (cat?.name && cat.name.toLowerCase().includes("tournament")) {
+          includesTournamentCategory = true;
+          break;
+        }
+      }
     } catch (err) {
       // Fallback to exact match if categoryId is an invalid ObjectId
       console.warn(`[OrderService] Invalid categoryId passed to filter: ${categoryId}`);
     }
 
     allTransactions = allTransactions.filter((t) => {
+      // Force include global tournaments if a tournament category is selected
+      if (includesTournamentCategory && t.type === "tournament") {
+        return true;
+      }
       if (t.type === "course") {
         return t.data?.course?.categoryIds?.some((id) =>
           descendantIds.includes(id.toString()) || descendantIds.includes(id._id?.toString())
@@ -283,8 +306,9 @@ export const getAggregatedOrderHistory = async (
       
       const testTypes = ["test", "testbundle", "competitive", "school", "skill development", "gamification"];
       if (testTypes.includes(t.type)) {
-        const catId = t.data?.test?.categoryId?.toString() || t.data?.test?.categoryId?._id?.toString();
-        return descendantIds.includes(catId);
+        const testCatId = t.data?.test?.categoryId?.toString() || t.data?.test?.categoryId?._id?.toString();
+        const qbCatId = t.data?.test?.questionBank?.categories?.[0]?.toString() || t.data?.test?.questionBank?.categories?.[0]?._id?.toString();
+        return descendantIds.includes(testCatId) || descendantIds.includes(qbCatId);
       }
       
       const eventTypes = ["olympiad", "olympiads", "tournament", "workshop", "live_competition"];

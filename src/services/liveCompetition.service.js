@@ -19,6 +19,7 @@ import { createRazorpayOrder, verifyPaymentSignature } from "../utils/razorpayUt
 import { sendNotificationToMultipleStudents } from "./notification.service.js";
 import { sendEventResultEmail } from "../utils/sendEmail.js";
 import { ensureUniqueTestTitle } from "../utils/testValidationUtils.js";
+import { logTransaction } from "./adminRevenue.service.js";
 
 /**
  * Generic file upload — routes to the right S3 helper by MIME type.
@@ -1184,12 +1185,28 @@ export const initiateLiveCompPayment = async (eventId, studentId, paymentMethod,
     if (amountToCharge > 0) throw new ApiError(400, "This event is paid. Use paymentMethod: wallet or razorpay.");
     if (existing) {
       const updated = await liveCompetitionRepository.updateSubmissionById(existing._id, { paymentStatus: "COMPLETED" });
+      await logTransaction({
+        studentId,
+        amount: 0,
+        sourceType: "live_competition",
+        itemId: eventId,
+        itemName: event.title || "Live Competition",
+        paymentId: "free"
+      });
       return { completed: true, registration: updated };
     }
     const submission = await liveCompetitionRepository.createSubmission({
       event: eventId, participant: studentId, paymentStatus: "COMPLETED", round: inferredRound
     });
     await liveCompetitionRepository.incrementEventStats(eventId, { round: inferredRound, participants: 1 });
+    await logTransaction({
+      studentId,
+      amount: 0,
+      sourceType: "live_competition",
+      itemId: eventId,
+      itemName: event.title || "Live Competition",
+      paymentId: "free"
+    });
     return { completed: true, registration: submission };
   }
 
@@ -1198,12 +1215,28 @@ export const initiateLiveCompPayment = async (eventId, studentId, paymentMethod,
     await walletService.deductMonetaryBalance(studentId, amountToCharge, "User");
     if (existing) {
       const updated = await liveCompetitionRepository.updateSubmissionById(existing._id, { paymentStatus: "COMPLETED" });
+      await logTransaction({
+        studentId,
+        amount: amountToCharge,
+        sourceType: "live_competition",
+        itemId: eventId,
+        itemName: event.title || "Live Competition",
+        paymentId: "wallet"
+      });
       return { completed: true, registration: updated };
     }
     const submission = await liveCompetitionRepository.createSubmission({
       event: eventId, participant: studentId, paymentStatus: "COMPLETED", round: inferredRound
     });
     await liveCompetitionRepository.incrementEventStats(eventId, { round: inferredRound, participants: 1 });
+    await logTransaction({
+      studentId,
+      amount: amountToCharge,
+      sourceType: "live_competition",
+      itemId: eventId,
+      itemName: event.title || "Live Competition",
+      paymentId: "wallet"
+    });
     return { completed: true, registration: submission };
   }
 

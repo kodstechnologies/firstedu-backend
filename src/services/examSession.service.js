@@ -1016,8 +1016,22 @@ export const getExamSession = async (sessionId, studentId) => {
     throw new ApiError(404, "Exam session not found");
   }
 
-  // Check if session has expired and auto-submit if needed
   const now = new Date();
+
+  // Auto-resume paused sessions when accessed via getExamSession
+  if (session.status === "paused") {
+    if (session.challenge) {
+      throw new ApiError(400, "You can't pause or resume challenge exams");
+    }
+    const remainingMs = session.remainingTimeAtPause ?? 0;
+    session.status = "in_progress";
+    session.endTime = new Date(now.getTime() + remainingMs);
+    session.pausedAt = null;
+    session.remainingTimeAtPause = null;
+    await examSessionRepository.save(session);
+  }
+
+  // Check if session has expired and auto-submit if needed
   if (session.status === "in_progress" && new Date(session.endTime) < now) {
     // Auto-submit expired session
     try {
