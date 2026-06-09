@@ -15,6 +15,15 @@ const CATEGORY_SOURCE_BY_PILLAR = {
 export const getCategoryRevenueSourceType = (pillar) =>
   CATEGORY_SOURCE_BY_PILLAR[pillar] || "competition_category";
 
+export const resolveTestSourceType = (test) => {
+  if (!test) return "test";
+  const appFor = (test.applicableFor || "").trim();
+  if (appFor === "challenge_yourself") return "challenge_yourself";
+  if (appFor === "challenge_your_friend") return "challenge_your_friend";
+  if (appFor === "everyday_challenge") return "everyday_challenge";
+  return "test";
+};
+
 import Category from "../models/Category.js";
 
 const getCategoryAndDescendants = async (cid) => {
@@ -78,10 +87,16 @@ export const getRevenueHistory = async ({
 
   // Source Type filter
   if (type) {
-    const requestedTypes = String(type)
+    const rawTypes = String(type)
       .split(",")
       .map((t) => t.trim().toLowerCase())
       .filter(Boolean);
+      
+    let requestedTypes = [...rawTypes];
+    if (requestedTypes.includes("gamification")) {
+      requestedTypes.push("challenge_yourself", "challenge_your_friend", "everyday_challenge");
+    }
+
     if (requestedTypes.length > 0) {
       const pillarBySourceType = {
         school: "School",

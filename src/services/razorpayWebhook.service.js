@@ -10,7 +10,7 @@ import walletService from "./wallet.service.js";
 import categoryPurchaseService from "./categoryPurchase.service.js";
 import categoryPurchaseRepository from "../repository/categoryPurchase.repository.js";
 import liveCompetitionRepository from "../repository/liveCompetition.repository.js";
-import { getCategoryRevenueSourceType, logTransaction } from "./adminRevenue.service.js";
+import { getCategoryRevenueSourceType, logTransaction, resolveTestSourceType } from "./adminRevenue.service.js";
 import QuestionBank from "../models/QuestionBank.js";
 
 /**
@@ -151,7 +151,7 @@ async function reconcilePaymentCaptured(orderId, paymentId, amountPaise) {
     await logTransaction({
       studentId,
       amount: amountPaise / 100,
-      sourceType: "test",
+      sourceType: resolveTestSourceType(test),
       itemId: entityId,
       itemName: test.title || "Test",
       categoryId: webhookCategoryId,

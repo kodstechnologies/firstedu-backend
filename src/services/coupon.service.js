@@ -167,6 +167,12 @@ export const validateCoupon = async (
     live_competition: "LiveCompetition",
     liveCompetition: "LiveCompetition",
     merchandise: "Merchandise",
+    school: "School",
+    competitive: "Competitive",
+    skill: "Skill Development",
+    "skill development": "Skill Development",
+    olympiad: "Olympiads",
+    olympiads: "Olympiads",
   };
   const normalizedItemType = ITEM_TYPE_MAP[itemType] || itemType;
   if (
