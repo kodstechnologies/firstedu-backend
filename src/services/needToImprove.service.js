@@ -73,7 +73,7 @@ export const computeNeedToImprove = async (studentId) => {
       select: "categories",
       populate: {
         path: "categories",
-        select: "name",
+        select: "name rootType",
       },
     },
   });
@@ -92,6 +92,9 @@ export const computeNeedToImprove = async (studentId) => {
         : 0;
 
     for (const cat of categories) {
+      if (cat.rootType === "Gamification" || cat.rootType === "Olympiads") {
+        continue;
+      }
       const catId = cat._id.toString();
       if (!categoryMap.has(catId)) {
         categoryMap.set(catId, {
@@ -126,12 +129,25 @@ export const computeNeedToImprove = async (studentId) => {
   const testPurchases = await TestPurchase.find({
     student: studentId,
     paymentStatus: "completed",
-  }).select("test");
-  const purchasedTestIds = new Set(
-    testPurchases
-      .map((p) => p.test?.toString())
-      .filter(Boolean)
-  );
+  })
+    .select("test testBundle")
+    .populate({
+      path: "testBundle",
+      select: "tests",
+    });
+
+  const purchasedTestIds = new Set();
+  
+  testPurchases.forEach((p) => {
+    if (p.test) {
+      purchasedTestIds.add(p.test.toString());
+    }
+    if (p.testBundle && p.testBundle.tests) {
+      p.testBundle.tests.forEach((testId) => {
+        purchasedTestIds.add(testId.toString());
+      });
+    }
+  });
 
   const resolveCategoryPath = await buildCategoryPathResolver();
 
@@ -151,7 +167,16 @@ export const computeNeedToImprove = async (studentId) => {
       const allTests = await Test.find({
         questionBank: { $in: qbIds },
         isPublished: true,
-        applicableFor: { $in: ["test", "testBundle"] },
+        applicableFor: { 
+          $nin: [
+            "tournament", 
+            "challenge_yourself", 
+            "challenge_your_friend", 
+            "everyday_challenge", 
+            "competition_sector",
+            "certificate"
+          ] 
+        },
       })
         .select("title price")
         .limit(MAX_PRACTICE_TESTS);
