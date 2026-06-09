@@ -1,8 +1,27 @@
 import Joi from "joi";
 
 const optionSchema = Joi.object({
-  text: Joi.string().required(),
+  text: Joi.string().allow(null, "").optional(),
+  imageUrl: Joi.alternatives().try(
+    Joi.string().trim().uri().allow(null, ""),
+    Joi.array().items(Joi.string().trim().uri().allow(null, ""))
+  ).optional(),
   isCorrect: Joi.boolean().default(false),
+}).custom((value, helpers) => {
+  const hasText = value.text && value.text.trim().length > 0;
+  const imgVal = value.imageUrl;
+  const hasImage = imgVal && (
+    (typeof imgVal === 'string' && imgVal.trim().length > 0) ||
+    (Array.isArray(imgVal) && imgVal.length > 0)
+  );
+
+  if (hasText && hasImage) {
+    return helpers.message("An option must contain EITHER text OR an image, but not both.");
+  }
+  if (!hasText && !hasImage) {
+    return helpers.message("An option must contain EITHER text OR an image. Both cannot be empty.");
+  }
+  return value;
 });
 
 const connectedSubQuestionSchema = Joi.object({
@@ -28,6 +47,7 @@ const connectedSubQuestionSchema = Joi.object({
   explanation: Joi.string().trim().required(),
   marks: Joi.number().min(0).optional(),
   negativeMarks: Joi.number().min(0).optional(),
+  imageUrl: Joi.array().items(Joi.string().trim().uri().allow(null, "")).optional(),
 });
 
 const sectionSchema = Joi.object({
@@ -55,7 +75,7 @@ const questionItemSchema = Joi.object({
   paragraph: Joi.string().trim().allow("").optional(),
   /** Short label for lists / navigation (connected only). */
   title: Joi.string().trim().allow("").optional(),
-  imageUrl: Joi.string().trim().uri().optional(),
+  imageUrl: Joi.array().items(Joi.string().trim().uri().allow(null, "")).optional(),
   options: Joi.when("questionType", {
     is: Joi.string().valid("single", "multiple"),
     then: Joi.array().items(optionSchema).min(2).required(),

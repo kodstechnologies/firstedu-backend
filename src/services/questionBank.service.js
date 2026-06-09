@@ -104,6 +104,8 @@ const buildQuestionBankQuestionsResponse = (flatDocs) => {
           explanation: child.explanation,
           marks: child.marks ?? 1,
           negativeMarks: child.negativeMarks ?? 0,
+          imageUrl: child.imageUrl || null,
+          id: child.id || child._id,
         }));
 
       return {
@@ -351,7 +353,7 @@ export const createQuestionBankWithQuestions = async (data, createdBy) => {
           marks,
           negativeMarks,
           tags: questionData.tags,
-          imageUrl: null,
+          imageUrl: sub.imageUrl || null,
           questionBank: bank._id,
           sectionIndex,
           orderInBank: orderInBank + childIds.length + 1,

@@ -89,6 +89,8 @@ const formatConnectedQuestionForEdit = (parentDoc, childDocs = []) => {
       explanation: child.explanation,
       marks: child.marks ?? 1,
       negativeMarks: child.negativeMarks ?? 0,
+      imageUrl: child.imageUrl || null,
+      id: child.id || child._id,
     })),
   };
 };
@@ -192,7 +194,7 @@ export const createQuestion = async (questionData, createdBy) => {
         marks,
         negativeMarks,
         tags: questionData.tags,
-        imageUrl: null,
+        imageUrl: sub.imageUrl || null,
         questionBank: questionData.questionBank,
         sectionIndex: questionData.sectionIndex,
         orderInBank: questionData.orderInBank,
@@ -438,7 +440,7 @@ export const updateQuestion = async (id, updateData) => {
         marks,
         negativeMarks,
         tags: parentUpdate.tags,
-        imageUrl: null,
+        imageUrl: sub.imageUrl || null,
         questionBank: existingQuestion.questionBank?._id || existingQuestion.questionBank,
         sectionIndex: existingQuestion.sectionIndex,
         orderInBank: existingQuestion.orderInBank,

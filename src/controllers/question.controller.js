@@ -129,7 +129,7 @@ const normalizeQuestionPayload = (body = {}) => {
   // File comes via multer as req.file; ignore any body "image" placeholder/object.
   delete payload.image;
 
-  ["options", "connectedQuestions", "subQuestions", "tags", "correctAnswer"].forEach((key) => {
+  ["options", "connectedQuestions", "subQuestions", "tags", "correctAnswer", "imageUrl"].forEach((key) => {
     if (Object.prototype.hasOwnProperty.call(payload, key)) {
       payload[key] = parseMaybeJSON(payload[key]);
     }
@@ -160,24 +160,103 @@ const normalizeQuestionPayload = (body = {}) => {
   return payload;
 };
 
+const processQuestionFiles = async (req, normalizedPayload) => {
+  const allFiles = Array.isArray(req.files) ? req.files : [];
+  if (allFiles.length > 0) {
+    const uploads = [];
+
+    for (const f of allFiles) {
+      // 1. Top-Level Question Images (image)
+      if (f.fieldname.match(/^image(\[\d+\]|_\d+)?$/)) {
+        uploads.push(
+          uploadImageToCloudinary(f.buffer, f.originalname, "question-images", f.mimetype)
+            .then(url => ({ type: 'q', url }))
+        );
+        continue;
+      }
+
+      // 2. Top-Level Option Images (optionImage_O)
+      let match = f.fieldname.match(/^optionImage_(\d+)$/);
+      if (match) {
+        const oIndex = Number(match[1]);
+        if (normalizedPayload.options && normalizedPayload.options[oIndex]) {
+          uploads.push(
+            uploadImageToCloudinary(f.buffer, f.originalname, "question-images", f.mimetype)
+              .then(url => ({ type: 'opt', oIndex, url }))
+          );
+        }
+        continue;
+      }
+
+      // 3. Subquestion Images (subQuestionImage_S)
+      match = f.fieldname.match(/^subQuestionImage_(\d+)$/);
+      if (match) {
+        const sIndex = Number(match[1]);
+        const subs = normalizedPayload.subQuestions || normalizedPayload.connectedQuestions;
+        if (subs && subs[sIndex]) {
+          uploads.push(
+            uploadImageToCloudinary(f.buffer, f.originalname, "question-images", f.mimetype)
+              .then(url => ({ type: 'sub', sIndex, url }))
+          );
+        }
+        continue;
+      }
+
+      // 4. Subquestion Option Images (subQuestionOptionImage_S_O)
+      match = f.fieldname.match(/^subQuestionOptionImage_(\d+)_(\d+)$/);
+      if (match) {
+        const sIndex = Number(match[1]);
+        const oIndex = Number(match[2]);
+        const subs = normalizedPayload.subQuestions || normalizedPayload.connectedQuestions;
+        if (subs && subs[sIndex] && subs[sIndex].options && subs[sIndex].options[oIndex]) {
+          uploads.push(
+            uploadImageToCloudinary(f.buffer, f.originalname, "question-images", f.mimetype)
+              .then(url => ({ type: 'subOpt', sIndex, oIndex, url }))
+          );
+        }
+        continue;
+      }
+    }
+
+    const results = await Promise.all(uploads);
+    for (const res of results) {
+      if (res.type === 'q') {
+        if (!normalizedPayload.imageUrl) normalizedPayload.imageUrl = [];
+        normalizedPayload.imageUrl.push(res.url);
+      } else if (res.type === 'opt') {
+        normalizedPayload.options[res.oIndex].imageUrl = res.url;
+      } else if (res.type === 'sub') {
+        const subs = normalizedPayload.subQuestions || normalizedPayload.connectedQuestions;
+        if (!subs[res.sIndex].imageUrl) subs[res.sIndex].imageUrl = [];
+        subs[res.sIndex].imageUrl.push(res.url);
+      } else if (res.type === 'subOpt') {
+        const subs = normalizedPayload.subQuestions || normalizedPayload.connectedQuestions;
+        subs[res.sIndex].options[res.oIndex].imageUrl = res.url;
+      }
+    }
+  } else if (req.file) { // fallback for single image
+    const url = await uploadImageToCloudinary(req.file.buffer, req.file.originalname, "question-images", req.file.mimetype);
+    if (!normalizedPayload.imageUrl) normalizedPayload.imageUrl = [];
+    normalizedPayload.imageUrl.push(url);
+  }
+
+  // Base64 fallback handling (only if no images uploaded via file for main question)
+  if (!normalizedPayload.imageUrl || normalizedPayload.imageUrl.length === 0) {
+    const fallbackBase64Source = typeof req.body?.image === "string" ? req.body.image : undefined;
+    const uploadedUrl = await uploadBase64ImageIfPresent(fallbackBase64Source);
+    if (uploadedUrl) {
+      if (!normalizedPayload.imageUrl) normalizedPayload.imageUrl = [];
+      normalizedPayload.imageUrl.push(uploadedUrl);
+    }
+  }
+};
+
 // Create Question
 export const createQuestion = asyncHandler(async (req, res) => {
   const rawPayload = buildQuestionPayload(req);
   const normalizedPayload = normalizeQuestionPayload(rawPayload);
 
-  if (req.file) {
-    normalizedPayload.imageUrl = await uploadImageToCloudinary(
-      req.file.buffer,
-      req.file.originalname,
-      "question-images",
-      req.file.mimetype
-    );
-  } else {
-    const fallbackBase64Source =
-      typeof rawPayload?.image === "string" ? rawPayload.image : normalizedPayload.imageUrl;
-    const uploadedUrl = await uploadBase64ImageIfPresent(fallbackBase64Source);
-    if (uploadedUrl) normalizedPayload.imageUrl = uploadedUrl;
-  }
+  await processQuestionFiles(req, normalizedPayload);
 
   const { error, value } = questionValidator.createQuestion.validate(normalizedPayload);
 
@@ -264,19 +343,7 @@ export const updateQuestion = asyncHandler(async (req, res) => {
   const rawPayload = buildQuestionPayload(req);
   const normalizedPayload = normalizeQuestionPayload(rawPayload);
 
-  if (req.file) {
-    normalizedPayload.imageUrl = await uploadImageToCloudinary(
-      req.file.buffer,
-      req.file.originalname,
-      "question-images",
-      req.file.mimetype
-    );
-  } else {
-    const fallbackBase64Source =
-      typeof rawPayload?.image === "string" ? rawPayload.image : normalizedPayload.imageUrl;
-    const uploadedUrl = await uploadBase64ImageIfPresent(fallbackBase64Source);
-    if (uploadedUrl) normalizedPayload.imageUrl = uploadedUrl;
-  }
+  await processQuestionFiles(req, normalizedPayload);
 
   const { error, value } = questionValidator.updateQuestion.validate(normalizedPayload);
 

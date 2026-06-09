@@ -1,7 +1,8 @@
 import mongoose from "mongoose";
 
 const optionSchema = new mongoose.Schema({
-  text: { type: String, required: true },
+  text: { type: String, trim: true },
+  imageUrl: { type: String, trim: true },
   isCorrect: { type: Boolean, default: false },
 });
 
@@ -25,6 +26,7 @@ const connectedSubQuestionSchema = new mongoose.Schema(
     },
     marks: { type: Number, default: 1 },
     negativeMarks: { type: Number, default: 0 },
+    imageUrl: [{ type: String, trim: true }],
   },
   { _id: false }
 );
@@ -34,7 +36,7 @@ const questionSchema = new mongoose.Schema(
     // Basic question fields
     questionText: { type: String, required: true, trim: true },
     answer: { type: String },
-    imageUrl: { type: String, trim: true, default: null },
+    imageUrl: [{ type: String, trim: true }],
     questionType: {
       type: String,
       enum: ["single", "multiple", "true_false", "connected"],

@@ -415,10 +415,10 @@ router.patch(
 router.delete("/question-banks/:id", verifyJWT, deleteQuestionBank);
 
 // Question Bank Management Routes (individual questions - create, list all, get, update, delete)
-router.post("/questions", verifyJWT, uploadImage.single("image"), createQuestion);
+router.post("/questions", verifyJWT, uploadAnyImages, createQuestion);
 router.get("/questions", verifyJWT, getAllQuestions);
 router.get("/questions/:id", verifyJWT, getQuestionById);
-router.put("/questions/:id", verifyJWT, uploadImage.single("image"), updateQuestion);
+router.put("/questions/:id", verifyJWT, uploadAnyImages, updateQuestion);
 router.delete("/questions/:id", verifyJWT, deleteQuestion);
 
 // Connected Questions Routes

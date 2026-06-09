@@ -82,7 +82,7 @@ const normalizeQuestionItem = (question = {}) => {
   const normalized = { ...question };
   // Ignore UI file placeholders. Actual files are handled via req.files.
   delete normalized.image;
-  ["options", "connectedQuestions", "subQuestions", "tags", "correctAnswer"].forEach(
+  ["options", "connectedQuestions", "subQuestions", "tags", "correctAnswer", "imageUrl"].forEach(
     (key) => {
       if (Object.prototype.hasOwnProperty.call(normalized, key)) {
         normalized[key] = parseMaybeJSON(normalized[key]);
@@ -104,16 +104,20 @@ const normalizeQuestionItem = (question = {}) => {
     );
   }
 
-  // Joi expects URI string; sanitize invalid payload values early.
+  // Joi expects an array of strings. Remove if it's not an array or string.
   if (
     Object.prototype.hasOwnProperty.call(normalized, "imageUrl") &&
     normalized.imageUrl !== null &&
     normalized.imageUrl !== undefined &&
-    typeof normalized.imageUrl !== "string"
+    typeof normalized.imageUrl !== "string" &&
+    !Array.isArray(normalized.imageUrl)
   ) {
     delete normalized.imageUrl;
   }
   if (typeof normalized.imageUrl === "string" && !normalized.imageUrl.trim()) {
+    delete normalized.imageUrl;
+  }
+  if (Array.isArray(normalized.imageUrl) && normalized.imageUrl.length === 0) {
     delete normalized.imageUrl;
   }
 
@@ -188,81 +192,95 @@ const buildQuestionBankWithQuestionsPayload = async (req) => {
   payload = normalizeQuestionBankPayload(payload);
 
   const allFiles = Array.isArray(req.files) ? req.files : [];
-  const files = allFiles.filter(
-    (f) =>
-      f.fieldname === "questionImages" ||
-      f.fieldname === "image" ||
-      /^questionImage_\d+$/.test(f.fieldname) ||
-      /^image_\d+$/.test(f.fieldname) ||
-      /^questionImage\[\d+\]$/.test(f.fieldname) ||
-      /^image\[\d+\]$/.test(f.fieldname)
-  );
-  if (files.length > 500) {
-    throw new ApiError(400, "Too many question image files (max 500)");
+  if (allFiles.length > 500) {
+    throw new ApiError(400, "Too many image files (max 500)");
   }
-  if (files.length > 0 && Array.isArray(payload.questions)) {
-    const named = [];
-    const sequential = [];
-    for (const f of files) {
-      if (
-        /^questionImage_\d+$/.test(f.fieldname) ||
-        /^image_\d+$/.test(f.fieldname) ||
-        /^questionImage\[\d+\]$/.test(f.fieldname) ||
-        /^image\[\d+\]$/.test(f.fieldname)
-      ) {
-        const index = Number(
-          f.fieldname
-            .replace(/^questionImage_/, "")
-            .replace(/^image_/, "")
-            .replace(/^questionImage\[/, "")
-            .replace(/^image\[/, "")
-            .replace(/\]$/, "")
-        );
-        if (!Number.isNaN(index)) named.push({ index, file: f });
-      } else if (f.fieldname === "questionImages" || f.fieldname === "image") {
-        sequential.push(f);
-      }
-    }
 
+  if (allFiles.length > 0 && Array.isArray(payload.questions)) {
     const uploads = [];
-    if (named.length > 0) {
-      for (const { index, file } of named) {
-        if (index < 0 || index >= payload.questions.length) continue;
-        uploads.push(
-          uploadImageToCloudinary(
-            file.buffer,
-            file.originalname,
-            "question-images",
-            file.mimetype
-          ).then((url) => ({ i: index, url }))
-        );
+
+    for (const f of allFiles) {
+      // 1. Top-Level Question Images (image_Q)
+      let match = f.fieldname.match(/^image_(\d+)$/);
+      if (match) {
+        const qIndex = Number(match[1]);
+        if (payload.questions[qIndex]) {
+          uploads.push(
+            uploadImageToCloudinary(f.buffer, f.originalname, "question-images", f.mimetype)
+              .then(url => ({ type: 'q', qIndex, url }))
+          );
+        }
+        continue;
       }
-    } else if (sequential.length > 0) {
-      const n = Math.min(sequential.length, payload.questions.length);
-      for (let i = 0; i < n; i++) {
-        const file = sequential[i];
-        if (!file) continue;
-        uploads.push(
-          uploadImageToCloudinary(
-            file.buffer,
-            file.originalname,
-            "question-images",
-            file.mimetype
-          ).then((url) => ({ i, url }))
-        );
+
+      // 2. Top-Level Option Images (optionImage_Q_O)
+      match = f.fieldname.match(/^optionImage_(\d+)_(\d+)$/);
+      if (match) {
+        const qIndex = Number(match[1]);
+        const oIndex = Number(match[2]);
+        if (payload.questions[qIndex] && payload.questions[qIndex].options && payload.questions[qIndex].options[oIndex]) {
+          uploads.push(
+            uploadImageToCloudinary(f.buffer, f.originalname, "question-images", f.mimetype)
+              .then(url => ({ type: 'opt', qIndex, oIndex, url }))
+          );
+        }
+        continue;
+      }
+
+      // 3. Subquestion Images (subQuestionImage_Q_S)
+      match = f.fieldname.match(/^subQuestionImage_(\d+)_(\d+)$/);
+      if (match) {
+        const qIndex = Number(match[1]);
+        const sIndex = Number(match[2]);
+        const subs = payload.questions[qIndex]?.subQuestions || payload.questions[qIndex]?.connectedQuestions;
+        if (subs && subs[sIndex]) {
+          uploads.push(
+            uploadImageToCloudinary(f.buffer, f.originalname, "question-images", f.mimetype)
+              .then(url => ({ type: 'sub', qIndex, sIndex, url }))
+          );
+        }
+        continue;
+      }
+
+      // 4. Subquestion Option Images (subQuestionOptionImage_Q_S_O)
+      match = f.fieldname.match(/^subQuestionOptionImage_(\d+)_(\d+)_(\d+)$/);
+      if (match) {
+        const qIndex = Number(match[1]);
+        const sIndex = Number(match[2]);
+        const oIndex = Number(match[3]);
+        const subs = payload.questions[qIndex]?.subQuestions || payload.questions[qIndex]?.connectedQuestions;
+        if (subs && subs[sIndex] && subs[sIndex].options && subs[sIndex].options[oIndex]) {
+          uploads.push(
+            uploadImageToCloudinary(f.buffer, f.originalname, "question-images", f.mimetype)
+              .then(url => ({ type: 'subOpt', qIndex, sIndex, oIndex, url }))
+          );
+        }
+        continue;
       }
     }
 
     const results = await Promise.all(uploads);
-    for (const { i, url } of results) {
-      payload.questions[i].imageUrl = url;
+    for (const res of results) {
+      if (res.type === 'q') {
+        if (!payload.questions[res.qIndex].imageUrl) payload.questions[res.qIndex].imageUrl = [];
+        payload.questions[res.qIndex].imageUrl.push(res.url);
+      } else if (res.type === 'opt') {
+        payload.questions[res.qIndex].options[res.oIndex].imageUrl = res.url;
+      } else if (res.type === 'sub') {
+        const subs = payload.questions[res.qIndex].subQuestions || payload.questions[res.qIndex].connectedQuestions;
+        if (!subs[res.sIndex].imageUrl) subs[res.sIndex].imageUrl = [];
+        subs[res.sIndex].imageUrl.push(res.url);
+      } else if (res.type === 'subOpt') {
+        const subs = payload.questions[res.qIndex].subQuestions || payload.questions[res.qIndex].connectedQuestions;
+        subs[res.sIndex].options[res.oIndex].imageUrl = res.url;
+      }
     }
   }
 
   if (Array.isArray(payload.questions)) {
     payload.questions = payload.questions.map((q) => {
       const normalizedQuestion = { ...q };
-      if (!normalizedQuestion.imageUrl) {
+      if (!normalizedQuestion.imageUrl || normalizedQuestion.imageUrl.length === 0) {
         delete normalizedQuestion.imageUrl;
       }
       return normalizedQuestion;
@@ -368,8 +386,7 @@ export const toggleSectionWiseQuestions = asyncHandler(async (req, res) => {
   return res.status(200).json(
     ApiResponse.success(
       updated,
-      `Section-wise questions ${
-        value.useSectionWiseQuestions ? "enabled" : "disabled"
+      `Section-wise questions ${value.useSectionWiseQuestions ? "enabled" : "disabled"
       } successfully`
     )
   );
