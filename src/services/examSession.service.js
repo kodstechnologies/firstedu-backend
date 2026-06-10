@@ -1144,6 +1144,7 @@ export const getExamSession = async (sessionId, studentId) => {
               explanation: childObj.explanation,
               marks: childObj.marks ?? 1,
               negativeMarks: childObj.negativeMarks ?? 0,
+              imageUrl: childObj.imageUrl || null,
               sectionIndex: childObj.sectionIndex ?? questionObj.sectionIndex ?? null,
               studentAnswer: childAnswer?.answer ?? null,
               status: childAnswer?.status ?? "not_visited",
@@ -2106,6 +2107,7 @@ export const getExamResults = async (sessionId, studentId) => {
             explanation: childObj.explanation,
             marks: childObj.marks,
             negativeMarks: childObj.negativeMarks,
+            imageUrl: childObj.imageUrl || null,
           };
         })
         .filter(Boolean);

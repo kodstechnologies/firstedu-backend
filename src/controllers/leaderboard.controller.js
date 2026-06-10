@@ -188,10 +188,11 @@ export const getLeaderboardsForStudent = asyncHandler(async (req, res) => {
     }
 
     const Tournament = (await import("../models/Tournament.js")).default;
+    const now = new Date();
     let tournaments = await Tournament.find({
       _id: { $in: registeredTournamentIds },
       isPublished: true,
-      status: "completed"
+      $expr: { $gt: [now, { $max: "$stages.endTime" }] }
     }).lean();
 
     if (year) {

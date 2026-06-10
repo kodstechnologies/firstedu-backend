@@ -107,6 +107,7 @@ const updateSuccessStory = async (id, data, files) => {
   if (data.description !== undefined) updateData.description = data.description;
   if (data.achievement !== undefined) updateData.achievement = data.achievement;
   if (data.achieveIn !== undefined) updateData.achieveIn = data.achieveIn;
+  if (data.status !== undefined) updateData.status = data.status;
 
   const oldMediaUrl = story.mediaUrl;
   const oldThumbnailUrl = story.thumbnailUrl;

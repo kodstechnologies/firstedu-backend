@@ -607,13 +607,19 @@ export const getMyCourses = async (studentId, page = 1, limit = 10, options = {}
     );
   }
 
-  // Filter by contentType (pdf, video, audio)
-  if (contentType) {
+  // Filter by contentType (pdf, video, audio, image)
+  if (contentType && contentType !== 'all') {
     const type = String(contentType).toLowerCase();
-    if (["pdf", "video", "audio"].includes(type)) {
-      purchases = purchases.filter(
-        (p) => p.course && String(p.course.contentType || "").toLowerCase() === type
-      );
+    if (["pdf", "video", "audio", "image"].includes(type)) {
+      purchases = purchases.filter((p) => {
+        if (!p.course) return false;
+        const hasContent = p.course.contents?.some(c => String(c.type || "").toLowerCase() === type);
+        if (hasContent) return true;
+        const hasModuleContent = p.course.modules?.some(m => 
+          m.contents?.some(c => String(c.type || "").toLowerCase() === type)
+        );
+        return hasModuleContent;
+      });
     }
   }
 
