@@ -224,6 +224,20 @@ export const setupTeacherChatSocket = (io) => {
         }
       }
 
+      if (user.role === "teacher") {
+        const pending = await teacherSessionRepository.findOne({
+          teacher: userId,
+          sessionKind: "chat",
+          status: "pending",
+        });
+        if (pending) {
+          socket.emit("incoming_chat_request", {
+            session: pending,
+            student: pending.student,
+          });
+        }
+      }
+
       const ongoing =
         user.role === "teacher"
           ? await teacherSessionRepository.findTeacherActiveChatSession(userId)
@@ -377,12 +391,13 @@ export const setupTeacherChatSocket = (io) => {
         ns.to(`student:${studentId}`).emit("chat_accepted", acceptedPayload);
         socket.emit("chat_accepted", acceptedPayload);
 
-        await teacherChatService.notifyStudentDevices(
+        // Non-blocking notification emission
+        teacherChatService.notifyStudentDevices(
           studentId,
           "Chat request accepted",
           "Your teacher accepted. You can start chatting now.",
           { type: "teacher_chat_accepted", sessionId: sid }
-        );
+        ).catch((err) => console.error("Student chat accepted notification error:", err));
       } catch (err) {
         socket.emit("chat_error", {
           message: err.message || "Could not accept chat",
@@ -413,12 +428,13 @@ export const setupTeacherChatSocket = (io) => {
         ns.to(`student:${studentId}`).emit("chat_rejected", endedPayload);
         socket.emit("chat_rejected_ack", endedPayload);
 
-        await teacherChatService.notifyStudentDevices(
+        // Non-blocking notification emission
+        teacherChatService.notifyStudentDevices(
           studentId,
           "Chat request declined",
           endedPayload.reason,
           { type: "teacher_chat_rejected", sessionId: endedPayload.sessionId }
-        );
+        ).catch((err) => console.error("Student chat rejected notification error:", err));
       } catch (err) {
         socket.emit("chat_error", {
           message: err.message || "Could not reject chat",
