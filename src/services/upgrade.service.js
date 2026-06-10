@@ -21,6 +21,41 @@ import razorpayOrderIntentRepository from "../repository/razorpayOrderIntent.rep
 import { createRazorpayOrder, verifyPaymentSignature } from "../utils/razorpayUtils.js";
 import { resolveAccessStatus, fetchDescendantIds } from "../utils/categoryAccessUtils.js";
 import { logTransaction } from "./adminRevenue.service.js";
+import pointsService from "./points.service.js";
+import Category from "../models/Category.js";
+import Test from "../models/Test.js";
+import TestPurchase from "../models/TestPurchase.js";
+
+const awardUpgradePoints = async (studentId, newCategoryIds, purchase, categoryId) => {
+  try {
+    if (newCategoryIds && newCategoryIds.length > 0) {
+      const categories = await Category.find({ _id: { $in: newCategoryIds } }).select("name");
+      await Promise.all(
+        categories.map(cat => pointsService.awardCategoryPurchasePoints(studentId, cat._id, cat.name))
+      );
+    }
+
+    const purchaseDate = purchase.lastUpgradedAt || purchase.createdAt;
+    const allCurrentDescendants = await fetchDescendantIds(categoryId);
+    const allCatIds = [categoryId.toString(), ...allCurrentDescendants];
+    
+    const boughtTests = await TestPurchase.find({ student: studentId, paymentStatus: "completed" }).select("test").lean();
+    const boughtTestIds = boughtTests.filter(p => p && p.test).map(p => p.test.toString());
+
+    const newTests = await Test.find({
+      categoryId: { $in: allCatIds },
+      isPublished: true,
+      createdAt: { $gt: purchaseDate },
+      _id: { $nin: boughtTestIds }
+    }).select("title");
+    
+    await Promise.all(
+      newTests.map(t => pointsService.awardTestPurchasePoints(studentId, t._id, t.title, 50))
+    );
+  } catch (e) {
+    console.error("Upgrade Points Error:", e);
+  }
+};
 
 // ─── calculateUpgradeCost ─────────────────────────────────────────────────────
 
@@ -96,6 +131,7 @@ export const processUpgrade = async (studentId, categoryId, paymentMethod = "fre
       );
     }
     // Auto-unlock: push all new IDs into the student's existing purchase doc
+    await awardUpgradePoints(studentId, newCategoryIds, purchase, categoryId);
     await categoryPurchaseRepository.acknowledgeUpgrade(purchase._id, newCategoryIds);
     await logTransaction({
       studentId,
@@ -117,6 +153,7 @@ export const processUpgrade = async (studentId, categoryId, paymentMethod = "fre
   if (paymentMethod === "wallet") {
     if (upgradeCost <= 0) {
       // Redirect to free if cost is nothing — don't deduct unnecessarily
+      await awardUpgradePoints(studentId, newCategoryIds, purchase, categoryId);
       await categoryPurchaseRepository.acknowledgeUpgrade(purchase._id, newCategoryIds);
       await logTransaction({
         studentId,
@@ -137,6 +174,7 @@ export const processUpgrade = async (studentId, categoryId, paymentMethod = "fre
     await walletService.deductMonetaryBalance(studentId, upgradeCost, "User");
     // Push new IDs immediately after payment and record the amount paid
     // so the next upgrade cost calculation uses the updated baseline (prevents infinite loop).
+    await awardUpgradePoints(studentId, newCategoryIds, purchase, categoryId);
     await categoryPurchaseRepository.acknowledgeUpgrade(purchase._id, newCategoryIds, upgradeCost);
     await logTransaction({
       studentId,
@@ -159,6 +197,7 @@ export const processUpgrade = async (studentId, categoryId, paymentMethod = "fre
   if (paymentMethod === "razorpay") {
     if (upgradeCost <= 0) {
       // Free — no point going to Razorpay; auto-unlock
+      await awardUpgradePoints(studentId, newCategoryIds, purchase, categoryId);
       await categoryPurchaseRepository.acknowledgeUpgrade(purchase._id, newCategoryIds);
       return {
         completed: true,
@@ -241,6 +280,12 @@ export const confirmUpgrade = async (
   // Record the amount paid so the next upgrade cost calculation uses the updated
   // baseline and never asks the student to pay the same difference twice.
   const paidAmount = (intent.amountPaise || 0) / 100;
+  
+  const purchase = await categoryPurchaseRepository.findByStudentAndCategory(studentId, intent.metadata?.categoryId || basePurchaseId);
+  if (purchase) {
+    await awardUpgradePoints(studentId, newCategoryIds, purchase, intent.metadata?.categoryId || basePurchaseId);
+  }
+
   await categoryPurchaseRepository.acknowledgeUpgrade(basePurchaseId, newCategoryIds, paidAmount);
   await razorpayOrderIntentRepository.markReconciled(razorpayOrderId, razorpayPaymentId);
 

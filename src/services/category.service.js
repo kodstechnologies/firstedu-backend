@@ -163,6 +163,8 @@ export const createCategory = async (data, createdBy) => {
 };
 
 export const getCategories = async (options = {}) => {
+  options.sortBy = options.sortBy || "createdAt";
+  options.sortOrder = options.sortOrder || "asc";
   return await categoryRepository.findAll({}, options);
 };
 
