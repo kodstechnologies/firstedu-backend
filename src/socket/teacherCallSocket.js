@@ -126,6 +126,20 @@ export const setupTeacherCallSocket = (io) => {
         }
       }
 
+      if (user.role === "teacher") {
+        const pending = await teacherSessionRepository.findOne({
+          teacher: userId,
+          sessionKind: "call",
+          status: "pending",
+        });
+        if (pending) {
+          socket.emit("incoming_call_request", {
+            session: pending,
+            student: pending.student,
+          });
+        }
+      }
+
       const ongoing =
         user.role === "teacher"
           ? await teacherSessionRepository.findTeacherActiveCallSession(userId)
@@ -286,12 +300,13 @@ export const setupTeacherCallSocket = (io) => {
         ns.to(`student:${studentId}`).emit("call_accepted", acceptedPayload);
         socket.emit("call_accepted", acceptedPayload);
 
-        await teacherChatService.notifyStudentDevices(
+        // Non-blocking notification emission
+        teacherChatService.notifyStudentDevices(
           studentId,
           "Call request accepted",
           "Your teacher accepted. You can join the call now.",
           { type: "teacher_call_accepted", sessionId: sid }
-        );
+        ).catch((err) => console.error("Student call accepted notification error:", err));
       } catch (err) {
         socket.emit("call_error", {
           message: err.message || "Could not accept call",
@@ -327,12 +342,13 @@ export const setupTeacherCallSocket = (io) => {
         ns.to(`student:${studentId}`).emit("call_rejected", endedPayload);
         socket.emit("call_rejected_ack", endedPayload);
 
-        await teacherChatService.notifyStudentDevices(
+        // Non-blocking notification emission
+        teacherChatService.notifyStudentDevices(
           studentId,
           "Call request declined",
           endedPayload.reason || "The teacher declined your call.",
           { type: "teacher_call_rejected", sessionId: endedPayload.sessionId }
-        );
+        ).catch((err) => console.error("Student call rejected notification error:", err));
       } catch (err) {
         socket.emit("call_error", {
           message: err.message || "Could not reject call",

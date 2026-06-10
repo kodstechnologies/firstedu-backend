@@ -33,7 +33,7 @@ export async function notifyStudentDevices(studentId, title, body, data = {}) {
 export async function notifyTeacherDevice(teacherDoc, title, body, data = {}) {
   if (teacherDoc?._id) {
     try {
-      await notificationService.createNotificationForTeacher(
+      await notificationService.sendNotificationToTeacher(
         teacherDoc._id,
         title,
         body,
@@ -41,7 +41,7 @@ export async function notifyTeacherDevice(teacherDoc, title, body, data = {}) {
         "system"
       );
     } catch (err) {
-      console.error("Persist teacher notification failed:", err.message);
+      console.error("Send teacher notification failed:", err.message);
     }
   }
 }
