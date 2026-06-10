@@ -48,6 +48,7 @@ export const sendNotificationToStudent = async (studentId, title, body, data = {
         body,
         {
           ...data,
+          audience: "student",
           notificationId: notification._id.toString(),
         }
       );
@@ -102,6 +103,7 @@ export const sendNotificationToTeacher = async (teacherId, title, body, data = {
         body,
         {
           ...data,
+          audience: "teacher",
           notificationId: notification._id.toString(),
         }
       );
@@ -182,6 +184,7 @@ export const sendNotificationToMultipleStudents = async (
         body,
         {
           ...data,
+          audience: "student",
         }
       );
 
@@ -260,6 +263,7 @@ export const sendNotificationToMultipleTeachers = async (
     try {
       fcmResult = await sendNotificationToMultipleDevices(fcmTokens, title, body, {
         ...data,
+        audience: "teacher",
       });
 
       if (fcmResult.success && fcmResult.responses) {

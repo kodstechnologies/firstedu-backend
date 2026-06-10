@@ -16,19 +16,15 @@ const getWebPushLink = (data = {}) => {
   return DEFAULT_WEB_PUSH_LINK;
 };
 
-const buildWebPushConfig = (data = {}) => {
+const buildWebPushConfig = (title, body, data = {}) => {
   const link = getWebPushLink(data);
-  const icon = String(data.icon || process.env.FCM_WEB_PUSH_ICON || DEFAULT_WEB_PUSH_ICON);
   return {
-    notification: {
-      icon,
-      badge: icon,
-    },
     fcmOptions: {
       link,
     },
   };
 };
+
 
 /**
  * Send FCM notification to a single device
@@ -63,7 +59,7 @@ export const sendNotificationToDevice = async (fcmToken, title, body, data = {})
       body,
     },
     data: stringData,
-    webpush: buildWebPushConfig(data),
+    webpush: buildWebPushConfig(title, body, data),
     android: {
       priority: "high",
       notification: {
@@ -177,7 +173,7 @@ export const sendNotificationToMultipleDevices = async (fcmTokens, title, body, 
       body,
     },
     data: stringData,
-    webpush: buildWebPushConfig(data),
+    webpush: buildWebPushConfig(title, body, data),
     android: {
       priority: "high",
       notification: {
@@ -238,7 +234,7 @@ export const sendNotificationToTopic = async (topic, title, body, data = {}) => 
       body,
       timestamp: new Date().toISOString(),
     },
-    webpush: buildWebPushConfig(data),
+    webpush: buildWebPushConfig(title, body, data),
     android: {
       priority: "high",
       notification: {
