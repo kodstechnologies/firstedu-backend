@@ -298,8 +298,10 @@ export const getTestsAndBundles = asyncHandler(async (req, res) => {
     questionBank,
     sortBy = "createdAt",
     sortOrder = "desc",
+    applicableFor,
   } = req.query;
   const studentId = req.user?._id;
+  const isLandingPage = req.originalUrl.includes("/landing-page");
 
   const result = await marketplaceService.getTestsAndBundles({
     type: ["test", "testBundle", "both", "challenges", "olympiad", "tournament", "school", "competitive", "skill", "all"].includes(type) ? type : "both",
@@ -311,6 +313,8 @@ export const getTestsAndBundles = asyncHandler(async (req, res) => {
     sortBy,
     sortOrder,
     studentId,
+    isLandingPage,
+    applicableFor,
   });
 
   return res
