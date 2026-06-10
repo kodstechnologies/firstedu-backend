@@ -7,6 +7,11 @@ const getWebPushLink = (data = {}) => {
   const explicitLink = data.url || data.link || data.clickUrl || data.click_action;
   if (explicitLink) return String(explicitLink);
 
+  const audience = data.audience;
+  if (audience === 'teacher') {
+    return process.env.TEACHER_APP_URL || 'https://app.iscorre.com/teacher/dashboard';
+  }
+
   const configuredLink =
     process.env.FCM_WEB_PUSH_LINK ||
     process.env.STUDENT_APP_URL ||
@@ -18,7 +23,14 @@ const getWebPushLink = (data = {}) => {
 
 const buildWebPushConfig = (title, body, data = {}) => {
   const link = getWebPushLink(data);
+  const icon = String(data.icon || process.env.FCM_WEB_PUSH_ICON || DEFAULT_WEB_PUSH_ICON);
   return {
+    notification: {
+      title,
+      body,
+      icon,
+      badge: icon,
+    },
     fcmOptions: {
       link,
     },
