@@ -9,6 +9,7 @@ import {
 } from "./notification.service.js";
 import {
   sendEventStartReminderEmail,
+  sendEventStartEmail,
   sendEventResultEmail,
 } from "../utils/sendEmail.js";
 import walletService from "./wallet.service.js";
@@ -80,6 +81,25 @@ const notifyStart = async (olympiad) => {
   if (!logged) return;
 
   await sendOlympiadStartNotification(olympiad._id, olympiad.title, null);
+
+  // Email notification (fire-and-forget, does NOT block the cron tick)
+  setImmediate(async () => {
+    try {
+      const students = await getRegisteredStudents(olympiad._id);
+      for (const s of students) {
+        await sendEventStartEmail({
+          email: s.email,
+          name: s.name,
+          eventName: olympiad.title,
+          eventType: "olympiad",
+          startTime: olympiad.startTime,
+        });
+      }
+      console.log(`[OlympiadEmail] 📧 Exact start emails sent for "${olympiad.title}" to ${students.length} students.`);
+    } catch (err) {
+      console.error(`[OlympiadEmail] Error sending exact start emails for "${olympiad.title}":`, err);
+    }
+  });
 };
 
 const notifyResults = async (olympiad) => {

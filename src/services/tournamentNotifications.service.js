@@ -4,7 +4,7 @@ import eventRegistrationRepository from "../repository/eventRegistration.reposit
 import studentRepository from "../repository/student.repository.js";
 import { sendNotificationToMultipleStudents } from "./notification.service.js";
 import { isStudentQualifiedAfterStage } from "./tournament.service.js";
-import { sendEventStartReminderEmail, sendEventResultEmail } from "../utils/sendEmail.js";
+import { sendEventStartReminderEmail, sendEventStartEmail, sendEventResultEmail } from "../utils/sendEmail.js";
 
 // Cron runs every minute; keep a small grace window so messages are near real-time
 // but still sent if one tick is slightly late.
@@ -78,6 +78,29 @@ const notifyStageStart = async (tournament, stage) => {
     stageName: stage.name,
     notificationKind: "tournament_stage_start",
   }, null);
+
+  // Send emails in background — does NOT block cron tick
+  setImmediate(async () => {
+    try {
+      const studentsData = await studentRepository.findAll(
+        { _id: { $in: studentIds } },
+        { limit: 5000 }
+      );
+      for (const s of (studentsData.students || [])) {
+        if (!s.email) continue;
+        await sendEventStartEmail({
+          email: s.email,
+          name: s.name,
+          eventName: `${tournament.title} (${stage.name})`,
+          eventType: "tournament",
+          startTime: stage.startTime,
+        });
+      }
+      console.log(`[TournamentEmail] 📧 Exact start emails sent for "${tournament.title} - ${stage.name}" to ${studentIds.length} students.`);
+    } catch (err) {
+      console.error(`[TournamentEmail] Error sending exact start emails for "${tournament.title}":`, err);
+    }
+  });
 };
 
 const notifyStageReminder = async (tournament, stage) => {

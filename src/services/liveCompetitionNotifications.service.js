@@ -7,6 +7,7 @@ import studentRepository from "../repository/student.repository.js";
 import { sendNotificationToMultipleStudents } from "./notification.service.js";
 import {
   sendEventStartReminderEmail,
+  sendEventStartEmail,
   sendEmailWithTemplate,
 } from "../utils/sendEmail.js";
 import walletService from "./wallet.service.js";
@@ -156,7 +157,7 @@ const notifyStart = async (event) => {
   setImmediate(async () => {
     try {
       for (const s of students) {
-        await sendEventStartReminderEmail({
+        await sendEventStartEmail({
           email:     s.email,
           name:      s.name,
           eventName: event.megaAudition?.title || event.title,
@@ -236,7 +237,7 @@ const notifyGrandFinaleStart = async (event) => {
   setImmediate(async () => {
     try {
       for (const s of students) {
-        await sendEventStartReminderEmail({
+        await sendEventStartEmail({
           email:     s.email,
           name:      s.name,
           eventName: `${event.title} — ${event.grandFinale?.title || "Grand Finale"}`,

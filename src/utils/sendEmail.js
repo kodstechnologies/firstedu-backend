@@ -606,6 +606,72 @@ export const sendEventStartReminderEmail = async ({ email, name, eventName, even
 };
 
 /**
+ * Send exact start time email for a Tournament, Live Competition, or Olympiad.
+ * @param {Object} payload - { email, name, eventName, eventType, startTime }
+ */
+export const sendEventStartEmail = async ({ email, name, eventName, eventType, startTime }) => {
+  if (!email) return;
+  try {
+    let eventLabel = "Event";
+    if (eventType) {
+      if (eventType === "live_competition") {
+        eventLabel = "Live Competition";
+      } else {
+        eventLabel = eventType.charAt(0).toUpperCase() + eventType.slice(1);
+      }
+    }
+    const startStr = startTime
+      ? new Date(startTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })
+      : "—";
+
+    await sendEmailWithTemplate({
+      to: email,
+      category: "event_notifications",
+      slug: `${eventType}_start`,
+      variables: {
+        name: name || "Student",
+        eventName: eventName || eventLabel,
+        eventLabel,
+        startTime: startStr,
+      },
+      defaultSubject: `🚀 ${eventName} is LIVE NOW!`,
+      defaultHtml: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
+          <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 30px 24px; text-align: center;">
+            <h1 style="color: #fff; margin: 0; font-size: 24px;">🚀 Event is Live!</h1>
+          </div>
+          <div style="padding: 28px 24px;">
+            <p style="color: #333; font-size: 16px; margin-top: 0;">Hi <strong>${name || "Student"}</strong>,</p>
+            <p style="color: #555; font-size: 15px;">Your ${eventLabel} has officially started! Open the app to begin:</p>
+            <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+              <tr>
+                <td style="padding: 10px 0; border-bottom: 1px solid #f0f0f0; color: #888; width: 40%;"><strong>Event</strong></td>
+                <td style="padding: 10px 0; border-bottom: 1px solid #f0f0f0; color: #333; font-weight: bold;">${eventName}</td>
+              </tr>
+              <tr>
+                <td style="padding: 10px 0; color: #888;"><strong>Started At</strong></td>
+                <td style="padding: 10px 0; color: #333;">${startStr}</td>
+              </tr>
+            </table>
+            <div style="background: #f9f9f9; border-left: 4px solid #10b981; padding: 16px; border-radius: 4px; margin: 20px 0;">
+              <p style="margin: 0; color: #555; font-style: italic;">
+                "This is your moment. Give it your best shot and shine! Good luck! 🌟"
+              </p>
+            </div>
+            <p style="color: #888; font-size: 13px; margin-top: 24px;">Open the app now to enter the exam window.</p>
+          </div>
+          <div style="background: #f5f5f5; padding: 16px 24px; text-align: center;">
+            <p style="color: #aaa; font-size: 12px; margin: 0;">Iscorre — Empowering Every Learner</p>
+          </div>
+        </div>
+      `,
+    });
+  } catch (err) {
+    console.error(`❌ Error sending event start email to ${email}:`, err.message);
+  }
+};
+
+/**
 /**
  * Send result declared email for a Tournament or Olympiad.
  * Simple message: results are now live, go check the app/website.
