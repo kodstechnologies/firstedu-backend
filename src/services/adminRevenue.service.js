@@ -211,12 +211,27 @@ export const getRevenueHistory = async ({
     const q = String(search).trim();
     const amountSearch = Number(q);
     
+    // First find any students matching the search query by name or email
+    const matchingStudents = await User.find({
+      $or: [
+        { name: { $regex: q, $options: "i" } },
+        { email: { $regex: q, $options: "i" } }
+      ]
+    }).select("_id").lean();
+    
+    const studentIds = matchingStudents.map(s => s._id);
+    
     const searchConditions = [
       { itemName: { $regex: q, $options: "i" } },
       { paymentId: { $regex: q, $options: "i" } },
       { categoryName: { $regex: q, $options: "i" } },
-      { subCategoryName: { $regex: q, $options: "i" } }
+      { subCategoryName: { $regex: q, $options: "i" } },
+      { sourceType: { $regex: q, $options: "i" } }
     ];
+
+    if (studentIds.length > 0) {
+      searchConditions.push({ student: { $in: studentIds } });
+    }
 
     if (!Number.isNaN(amountSearch)) {
       searchConditions.push({ amount: amountSearch });
