@@ -835,12 +835,16 @@ export const getTestsAndBundles = async (options = {}) => {
     sortOrder = "desc",
     questionBank,
     studentId,
+    isLandingPage,
+    applicableFor,
   } = options;
 
   const pageNum = parseInt(page);
   const limitNum = parseInt(limit);
 
   if (type === "test") {
+    const defaultTestApplicableFor = isLandingPage ? ["test", "trending_test"] : ["test"];
+    const finalApplicableFor = applicableFor ? applicableFor : defaultTestApplicableFor;
     const result = await getTests({
       page: pageNum,
       limit: limitNum,
@@ -849,7 +853,7 @@ export const getTestsAndBundles = async (options = {}) => {
       questionBank,
       sortBy,
       sortOrder,
-      applicableFor: ["test", "trending_test"],
+      applicableFor: finalApplicableFor,
       studentId,
     });
     return {
@@ -999,6 +1003,15 @@ export const getTestsAndBundles = async (options = {}) => {
 
   // type === "both" or "all" — single merged list + one pagination
   const fetchSize = pageNum * limitNum;
+  const baseTestTypes = DIRECT_PURCHASABLE_TEST_TYPES.filter(
+    (type) => !["certificate", "Olympiads", "olympiads", "tournament", "tournaments"].includes(type)
+  );
+  if (isLandingPage) {
+    baseTestTypes.push("trending_test");
+  }
+  
+  const finalApplicableFor = applicableFor ? applicableFor : baseTestTypes;
+
   const [testsResult, bundlesResult] = await Promise.all([
     getTests({
       page: 1,
@@ -1009,9 +1022,7 @@ export const getTestsAndBundles = async (options = {}) => {
       sortBy,
       sortOrder,
       studentId,
-      applicableFor: DIRECT_PURCHASABLE_TEST_TYPES.filter(
-        (type) => !["certificate", "Olympiads", "olympiads", "tournament", "tournaments"].includes(type)
-      ),
+      applicableFor: finalApplicableFor,
     }),
     getTestBundles({
       page: 1,
