@@ -11,6 +11,7 @@ import {
   sendEventStartReminderEmail,
   sendEventResultEmail,
 } from "../utils/sendEmail.js";
+import walletService from "./wallet.service.js";
 
 const START_WINDOW_MS = 70 * 1000;
 const RESULTS_WINDOW_MS = 70 * 1000;
@@ -97,6 +98,32 @@ const notifyResults = async (olympiad) => {
       leaderboard.forEach(entry => {
         if (entry.student) lbMap.set(entry.student.toString(), entry);
       });
+
+      // Credit wallet points for top 3 winners
+      const places = [
+        { rank: 1, points: olympiad.firstPlacePoints || 0, key: "1st" },
+        { rank: 2, points: olympiad.secondPlacePoints || 0, key: "2nd" },
+        { rank: 3, points: olympiad.thirdPlacePoints || 0, key: "3rd" },
+      ];
+
+      for (const place of places) {
+        if (place.points < 1) continue;
+        const winner = leaderboard.find(entry => entry.rank === place.rank);
+        if (winner && winner.student) {
+          try {
+            await walletService.addRewardPoints(
+              winner.student.toString(),
+              place.points,
+              "olympiad_win",
+              `Winner (${place.key} place) - ${olympiad.title}`,
+              olympiad._id.toString(),
+              "Olympiad"
+            );
+          } catch (e) {
+            console.error(`[OlympiadWallet] Failed to credit points to ${winner.student}:`, e);
+          }
+        }
+      }
 
       const students = await getRegisteredStudents(olympiad._id);
       for (const s of students) {

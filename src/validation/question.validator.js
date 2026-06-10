@@ -2,7 +2,7 @@ import Joi from "joi";
 
 const optionSchema = Joi.object({
   text: Joi.string().allow(null, "").optional(),
-  imageUrl: Joi.array().items(Joi.string().trim().uri().allow(null, "")).optional(),
+  imageUrl: Joi.string().trim().uri().allow(null, "").optional(),
   isCorrect: Joi.boolean().default(false),
 }).custom((value, helpers) => {
   const hasText = value.text && value.text.trim().length > 0;

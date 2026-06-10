@@ -11,6 +11,8 @@ import { getAmountToCharge } from "../utils/offerUtils.js";
 import Offer from "../models/Offer.js";
 import offerRepository from "../repository/offer.repository.js";
 import { getCategoryRevenueSourceType, logTransaction } from "./adminRevenue.service.js";
+import Test from "../models/Test.js";
+
 const fetchDescendantIds = async (categoryId) => {
   const children = await categoryRepository.findChildren(categoryId);
   let ids = [];
@@ -20,6 +22,26 @@ const fetchDescendantIds = async (categoryId) => {
     ids = ids.concat(subIds);
   }
   return ids;
+};
+
+const awardPointsForUnlockedItems = async (studentId, categoryId, unlockedIds) => {
+  try {
+    const allCategoryIds = [categoryId, ...unlockedIds];
+    const categories = await Category.find({ _id: { $in: allCategoryIds } }).select("name");
+    const tests = await Test.find({ categoryId: { $in: allCategoryIds }, isPublished: true }).select("title");
+    
+    // Award points for all categories concurrently
+    await Promise.all(
+      categories.map(cat => pointsService.awardCategoryPurchasePoints(studentId, cat._id, cat.name))
+    );
+    
+    // Award points for all tests (50 points per test as requested) concurrently
+    await Promise.all(
+      tests.map(t => pointsService.awardTestPurchasePoints(studentId, t._id, t.title, 50))
+    );
+  } catch (e) {
+    console.error("Points Error:", e);
+  }
 };
 
 export const initiatePurchase = async (categoryId, studentId, paymentMethod, options = {}) => {
@@ -113,7 +135,7 @@ export const initiatePurchase = async (categoryId, studentId, paymentMethod, opt
       categoryId: category._id,
       paymentId: "free",
     });
-    try { await pointsService.awardCategoryPurchasePoints(studentId, category._id, category.name); } catch (e) { console.error("Points Error:", e); }
+    await awardPointsForUnlockedItems(studentId, category._id, unlockedIds);
     
     return { purchase, completed: true };
   }
@@ -145,7 +167,7 @@ export const initiatePurchase = async (categoryId, studentId, paymentMethod, opt
       categoryId: category._id,
       paymentId: "wallet",
     });
-    try { await pointsService.awardCategoryPurchasePoints(studentId, category._id, category.name); } catch (e) { console.error("Points Error:", e); }
+    await awardPointsForUnlockedItems(studentId, category._id, unlockedIds);
     
     return { purchase, completed: true };
   }
@@ -229,7 +251,7 @@ export const confirmPurchase = async (categoryId, studentId, { razorpayOrderId, 
     categoryId: category._id,
     paymentId: razorpayPaymentId,
   });
-  try { await pointsService.awardCategoryPurchasePoints(studentId, category._id, category.name); } catch (e) { console.error("Points Error:", e); }
+  await awardPointsForUnlockedItems(studentId, category._id, unlockedIds);
 
   return purchase;
 };
@@ -273,7 +295,7 @@ export const reconcileWebhookPurchase = async (categoryId, studentId, intent) =>
   if (intent.couponId) await couponService.incrementCouponUsedCount(intent.couponId);
   
   await Category.updateMany({ _id: { $in: [categoryId, ...unlockedIds] } }, { $inc: { purchaseCount: 1 } });
-  try { await pointsService.awardCategoryPurchasePoints(studentId, category._id, category.name); } catch (e) { console.error("Points Error:", e); }
+  await awardPointsForUnlockedItems(studentId, category._id, unlockedIds);
 
   return {
     reconciled: true,

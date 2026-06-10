@@ -81,7 +81,6 @@ const findAll = async (filter = {}, options = {}) => {
 const findTree = async (filter = {}) => {
   try {
     const all = await Category.find({ ...filter, isActive: true })
-      .sort({ order: 1, createdAt: 1 })
       .populate("parent", "name order")
       .lean();
 
@@ -106,6 +105,28 @@ const findTree = async (filter = {}) => {
       }
     });
 
+    // Custom sorting function:
+    // Predefined nodes respect their strict order.
+    // Everything else is sorted chronologically (oldest first).
+    const sortTree = (nodes) => {
+      nodes.sort((a, b) => {
+        if (a.isPredefined && b.isPredefined) {
+          return (a.order || 0) - (b.order || 0);
+        }
+        if (a.isPredefined && !b.isPredefined) return -1;
+        if (!a.isPredefined && b.isPredefined) return 1;
+        const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return timeA - timeB;
+      });
+      for (const node of nodes) {
+        if (node.children && node.children.length > 0) {
+          sortTree(node.children);
+        }
+      }
+    };
+    sortTree(roots);
+
     return roots;
   } catch (error) {
     throw new ApiError(500, "Failed to fetch category tree", error.message);
@@ -115,10 +136,22 @@ const findTree = async (filter = {}) => {
 const findChildren = async (parentId) => {
   try {
     const query = parentId ? { parent: parentId } : { parent: null };
-    return await Category.find(query)
+    const children = await Category.find(query)
       .populate("parent", "name order")
-      .sort({ order: 1, createdAt: 1 })
       .lean();
+
+    children.sort((a, b) => {
+      if (a.isPredefined && b.isPredefined) {
+        return (a.order || 0) - (b.order || 0);
+      }
+      if (a.isPredefined && !b.isPredefined) return -1;
+      if (!a.isPredefined && b.isPredefined) return 1;
+      const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return timeA - timeB;
+    });
+
+    return children;
   } catch (error) {
     throw new ApiError(500, "Failed to fetch child categories", error.message);
   }

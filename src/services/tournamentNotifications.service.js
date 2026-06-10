@@ -49,9 +49,24 @@ const notifyStageStart = async (tournament, stage) => {
     },
     { limit: 5000 }
   );
-  const studentIds = [
+  let studentIds = [
     ...new Set(regs.map((r) => r.student?._id?.toString?.() || r.student?.toString?.()).filter(Boolean)),
   ];
+  if (studentIds.length === 0) return;
+
+  const orderedStages = sortStages(tournament.stages);
+  const stageIndex = orderedStages.findIndex(s => s._id.toString() === stageId.toString());
+  if (stageIndex > 0) {
+    const prevStage = orderedStages[stageIndex - 1];
+    const qualifiedIds = [];
+    for (const sid of studentIds) {
+      if (await hasQualifiedStage(tournament._id, sid, prevStage)) {
+        qualifiedIds.push(sid);
+      }
+    }
+    studentIds = qualifiedIds;
+  }
+
   if (studentIds.length === 0) return;
 
   const title = `${tournament.title} - ${stage.name} is now live`;
@@ -80,9 +95,24 @@ const notifyStageReminder = async (tournament, stage) => {
     },
     { limit: 5000 }
   );
-  const studentIds = [
+  let studentIds = [
     ...new Set(regs.map((r) => r.student?._id?.toString?.() || r.student?.toString?.()).filter(Boolean)),
   ];
+  if (studentIds.length === 0) return;
+
+  const orderedStages = sortStages(tournament.stages);
+  const stageIndex = orderedStages.findIndex(s => s._id.toString() === stageId.toString());
+  if (stageIndex > 0) {
+    const prevStage = orderedStages[stageIndex - 1];
+    const qualifiedIds = [];
+    for (const sid of studentIds) {
+      if (await hasQualifiedStage(tournament._id, sid, prevStage)) {
+        qualifiedIds.push(sid);
+      }
+    }
+    studentIds = qualifiedIds;
+  }
+
   if (studentIds.length === 0) return;
 
   const title = `${tournament.title} - ${stage.name} starts in 10 mins!`;
