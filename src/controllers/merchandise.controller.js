@@ -4,6 +4,7 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import merchandiseService from "../services/merchandise.service.js";
 import merchandiseValidator from "../validation/merchandise.validator.js";
 import walletService from "../services/wallet.service.js";
+import { attachOfferToList, attachOfferToItem } from "../utils/offerUtils.js";
 
 /**
  * Get all merchandise items
@@ -13,6 +14,7 @@ export const getMerchandiseItems = asyncHandler(async (req, res) => {
   const studentId = req.user._id;
 
   const result = await merchandiseService.getMerchandiseItems(page, limit);
+  const itemsWithOffers = await attachOfferToList(result.items, "Merchandise");
 
   const wallet = await walletService.getOrCreateWallet(studentId, "User");
   const meta = {
@@ -23,7 +25,7 @@ export const getMerchandiseItems = asyncHandler(async (req, res) => {
 
   return res.status(200).json(
     ApiResponse.success(
-      result.items,
+      itemsWithOffers,
       "Merchandise items fetched successfully",
       meta
     )
@@ -38,9 +40,10 @@ export const getMerchandiseById = asyncHandler(async (req, res) => {
   const studentId = req.user._id;
 
   const item = await merchandiseService.getMerchandiseById(id);
+  const itemWithOffer = await attachOfferToItem(item, "Merchandise");
 
   const wallet = await walletService.getOrCreateWallet(studentId, "User");
-  const plainItem = item?.toObject ? item.toObject() : { ...item };
+  const plainItem = itemWithOffer?.toObject ? itemWithOffer.toObject() : { ...itemWithOffer };
   const data = {
     ...plainItem,
     totalPoints: wallet.rewardPoints ?? 0,

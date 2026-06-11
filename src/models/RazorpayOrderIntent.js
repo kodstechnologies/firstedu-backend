@@ -50,6 +50,7 @@ const razorpayOrderIntentSchema = new mongoose.Schema(
         "Test",
         "TestBundle",
         "Olympiad",
+        "OlympiadTest",
         "Tournament",
         "Workshop",
         "User",

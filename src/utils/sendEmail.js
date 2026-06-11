@@ -747,5 +747,63 @@ export const sendEventResultEmail = async ({ email, name, eventName, eventType, 
     console.error(`❌ Error sending event result email to ${email}:`, err.message);
   }
 };
+/**
+ * Send event update email when an admin edits a Tournament, Live Competition, or Olympiad.
+ * @param {Object} payload - { email, name, eventName, eventType, changedFieldsList }
+ */
+export const sendEventUpdateEmail = async ({ email, name, eventName, eventType, changedFieldsList }) => {
+  if (!email) return;
+  try {
+    let eventLabel = "Event";
+    if (eventType) {
+      if (eventType === "live_competition") {
+        eventLabel = "Live Competition";
+      } else {
+        eventLabel = eventType.charAt(0).toUpperCase() + eventType.slice(1);
+      }
+    }
+    
+    let changesHtml = "";
+    if (changedFieldsList && changedFieldsList.length > 0) {
+      changesHtml = `<p style="color: #555; font-size: 15px;"><strong>Recent Updates:</strong> ${changedFieldsList.join(", ")}</p>`;
+    }
+
+    await sendEmailWithTemplate({
+      to: email,
+      category: "event_notifications",
+      slug: `${eventType}_update`,
+      variables: {
+        name: name || "Student",
+        eventName: eventName || eventLabel,
+        eventLabel,
+        changes: changedFieldsList ? changedFieldsList.join(", ") : ""
+      },
+      defaultSubject: `📢 Important Update: ${eventName} has been modified`,
+      defaultHtml: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
+          <div style="background: linear-gradient(135deg, #f6d365 0%, #fda085 100%); padding: 30px 24px; text-align: center;">
+            <h1 style="color: #fff; margin: 0; font-size: 24px;">📢 Event Updated</h1>
+          </div>
+          <div style="padding: 28px 24px;">
+            <p style="color: #333; font-size: 16px; margin-top: 0;">Hi <strong>${name || "Student"}</strong>,</p>
+            <p style="color: #555; font-size: 15px;">
+              The admins have recently updated the details for your registered ${eventLabel}, <strong>"${eventName}"</strong>.
+            </p>
+            ${changesHtml}
+            <p style="color: #555; font-size: 15px;">
+              Please review these changes in the app or website to ensure you're fully prepared.
+            </p>
+            <p style="color: #888; font-size: 13px; margin-top: 24px;">Thank you for participating!</p>
+          </div>
+          <div style="background: #f5f5f5; padding: 16px 24px; text-align: center;">
+            <p style="color: #aaa; font-size: 12px; margin: 0;">Iscorre — Empowering Every Learner</p>
+          </div>
+        </div>
+      `,
+    });
+  } catch (err) {
+    console.error(`❌ Error sending event update email to ${email}:`, err.message);
+  }
+};
 
 

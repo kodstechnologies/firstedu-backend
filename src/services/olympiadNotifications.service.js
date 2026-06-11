@@ -14,9 +14,7 @@ import {
 } from "../utils/sendEmail.js";
 import walletService from "./wallet.service.js";
 
-const START_WINDOW_MS = 70 * 1000;
-const RESULTS_WINDOW_MS = 70 * 1000;
-const REMINDER_MINUTES = 10;
+const WINDOW_MS = 3 * 60 * 1000; // 3 minutes grace period for cron delays
 
 const tryLogNotification = async (olympiadId, kind) => {
   try {
@@ -170,33 +168,39 @@ const notifyResults = async (olympiad) => {
  */
 export const runOlympiadNotificationTick = async () => {
   const now = new Date();
-  const startWindowStart = new Date(now.getTime() - START_WINDOW_MS);
-  const resultsWindowStart = new Date(now.getTime() - RESULTS_WINDOW_MS);
 
-  const reminderWindowEnd = new Date(now.getTime() + REMINDER_MINUTES * 60 * 1000);
-  const reminderWindowStart = new Date(reminderWindowEnd.getTime() - START_WINDOW_MS);
-
+  // Wide search window: tests starting within next 15 mins or results declared within last 3 mins
   const olympiads = await OlympiadTest.find({
     $or: [
-      { startTime: { $gte: startWindowStart, $lte: reminderWindowEnd } },
-      { resultDeclarationDate: { $gte: resultsWindowStart, $lte: now } },
+      { startTime: { $gte: new Date(now.getTime() - WINDOW_MS), $lte: new Date(now.getTime() + 15 * 60 * 1000) } },
+      { resultDeclarationDate: { $gte: new Date(now.getTime() - WINDOW_MS), $lte: now } },
     ],
   }).lean();
 
   for (const o of olympiads) {
     if (o.startTime) {
       const start = new Date(o.startTime);
-      if (start >= reminderWindowStart && start <= reminderWindowEnd) {
+      const timeToStartMs = start.getTime() - now.getTime();
+
+      // Reminder: ~11 minutes before
+      const elevenMinsMs = 11 * 60 * 1000;
+      if (timeToStartMs <= elevenMinsMs && timeToStartMs >= elevenMinsMs - WINDOW_MS) {
         await notifyReminder(o);
       }
-      if (start >= startWindowStart && start <= now) {
+
+      // Start: ~1 minute before
+      const oneMinMs = 1 * 60 * 1000;
+      if (timeToStartMs <= oneMinMs && timeToStartMs >= oneMinMs - WINDOW_MS) {
         await notifyStart(o);
       }
     }
 
     if (o.resultDeclarationDate) {
       const resultDate = new Date(o.resultDeclarationDate);
-      if (resultDate >= resultsWindowStart && resultDate <= now) {
+      const timeSinceResultMs = now.getTime() - resultDate.getTime();
+
+      // Results: Within 3 minutes after the declaration date
+      if (timeSinceResultMs >= 0 && timeSinceResultMs <= WINDOW_MS) {
         await notifyResults(o);
       }
     }

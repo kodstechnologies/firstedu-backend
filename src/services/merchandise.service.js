@@ -1,7 +1,7 @@
 import { ApiError } from "../utils/ApiError.js";
 import merchandiseRepository from "../repository/merchandise.repository.js";
 import walletService from "./wallet.service.js";
-import { attachOfferToList, attachOfferToItem, getAmountToCharge } from "../utils/offerUtils.js";
+import { attachOfferToList, attachOfferToItem, getAmountToCharge, getApplicableOfferDetails } from "../utils/offerUtils.js";
 import offerRepository from "../repository/offer.repository.js";
 import couponService from "./coupon.service.js";
 import { createRazorpayOrder, verifyPaymentSignature } from "../utils/razorpayUtils.js";
@@ -106,7 +106,9 @@ export const claimMerchandise = async (studentId, itemId, payload = {}) => {
     throw new ApiError(400, "Delivery address is required for physical items");
   }
 
-  const pointsRequired = item.pointsRequired;
+  const offerDetails = await getApplicableOfferDetails("Merchandise", item.pointsRequired);
+  const pointsRequired = offerDetails.discountedPrice;
+
   const wallet = await walletService.getOrCreateWallet(studentId, "User");
   
   if (wallet.rewardPoints < pointsRequired) {

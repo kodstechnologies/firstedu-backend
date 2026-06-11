@@ -6,10 +6,7 @@ import { sendNotificationToMultipleStudents } from "./notification.service.js";
 import { isStudentQualifiedAfterStage } from "./tournament.service.js";
 import { sendEventStartReminderEmail, sendEventStartEmail, sendEventResultEmail } from "../utils/sendEmail.js";
 
-// Cron runs every minute; keep a small grace window so messages are near real-time
-// but still sent if one tick is slightly late.
-const START_WINDOW_MS = 70 * 1000;
-const RESULTS_WINDOW_MS = 70 * 1000;
+const WINDOW_MS = 4 * 60 * 1000; // 4-minute grace period
 
 const sortStages = (stages) =>
   [...(stages || [])].sort((a, b) => (a.order || 0) - (b.order || 0));
@@ -107,7 +104,7 @@ const notifyStageReminder = async (tournament, stage) => {
   const stageId = stage._id;
   if (!stageId) return;
 
-  const logged = await tryLogNotification(tournament._id, stageId, "stage_start_reminder");
+  const logged = await tryLogNotification(tournament._id, stageId, "stage_start_reminder_11");
   if (!logged) return;
 
   const regs = await eventRegistrationRepository.find(
@@ -165,7 +162,7 @@ const notifyStageReminder = async (tournament, stage) => {
           startTime: stage.startTime,
         });
       }
-      console.log(`[TournamentEmail] 📧 Reminder emails sent for "${tournament.title} - ${stage.name}" to ${studentIds.length} students.`);
+      console.log(`[TournamentEmail] 📧 11-min reminder emails sent for "${tournament.title} - ${stage.name}" to ${studentIds.length} students.`);
     } catch (err) {
       console.error(`[TournamentEmail] Error sending reminder emails for "${tournament.title}":`, err);
     }
@@ -326,23 +323,17 @@ const notifyStageResults = async (tournament, stageIndex, stage, orderedStages) 
 };
 
 /**
- * Run from cron (e.g. every minute): stage-start reminders and post-stage qualification notices.
+ * Run from cron (e.g. every minute): stage-start reminders, starts, and post-stage qualification notices.
  */
 export const runTournamentNotificationTick = async () => {
   const now = new Date();
-  const startWindowStart = new Date(now.getTime() - START_WINDOW_MS);
-  const resultsWindowStart = new Date(now.getTime() - RESULTS_WINDOW_MS);
 
-  // 10 minute reminder
-  const REMINDER_MINUTES = 10;
-  const reminderWindowEnd = new Date(now.getTime() + REMINDER_MINUTES * 60 * 1000);
-  const reminderWindowStart = new Date(reminderWindowEnd.getTime() - START_WINDOW_MS);
-
+  // Broad window query: fetch tournaments that have stages starting within the next 15 mins or ending within the last 4 mins
   const tournaments = await Tournament.find({
     isPublished: true,
     $or: [
-      { stages: { $elemMatch: { startTime: { $gte: startWindowStart, $lte: reminderWindowEnd } } } },
-      { stages: { $elemMatch: { endTime: { $gte: resultsWindowStart, $lte: now } } } },
+      { stages: { $elemMatch: { startTime: { $gte: new Date(now.getTime() - WINDOW_MS), $lte: new Date(now.getTime() + 15 * 60 * 1000) } } } },
+      { stages: { $elemMatch: { endTime: { $gte: new Date(now.getTime() - WINDOW_MS), $lte: now } } } },
     ],
   }).lean();
 
@@ -354,13 +345,23 @@ export const runTournamentNotificationTick = async () => {
       const end = new Date(stage.endTime);
       if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) continue;
 
-      if (start >= reminderWindowStart && start <= reminderWindowEnd) {
+      const timeToStartMs = start.getTime() - now.getTime();
+      const timeSinceResultMs = now.getTime() - end.getTime();
+
+      // Reminder: ~11 minutes before
+      const elevenMinsMs = 11 * 60 * 1000;
+      if (timeToStartMs <= elevenMinsMs && timeToStartMs >= elevenMinsMs - WINDOW_MS) {
         await notifyStageReminder(t, stage);
       }
-      if (start >= startWindowStart && start <= now) {
+
+      // Start: ~1 minute before
+      const oneMinMs = 1 * 60 * 1000;
+      if (timeToStartMs <= oneMinMs && timeToStartMs >= oneMinMs - WINDOW_MS) {
         await notifyStageStart(t, stage);
       }
-      if (end >= resultsWindowStart && end <= now) {
+
+      // Results: Within WINDOW_MS after the stage ends
+      if (timeSinceResultMs >= 0 && timeSinceResultMs <= WINDOW_MS) {
         await notifyStageResults(t, i, stage, ordered);
       }
     }

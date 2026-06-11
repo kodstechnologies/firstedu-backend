@@ -867,6 +867,32 @@ export const sendOlympiadTestEditNotification = async (olympiadId, olympiadTitle
       { type: "system", event: "olympiad_update", olympiadId: olympiadId.toString() },
       adminId
     );
+
+    // Fetch students with their emails
+    const studentsResult = await studentRepository.findAll(
+      { _id: { $in: studentIds } },
+      { limit: 5000 }
+    );
+    const students = (studentsResult.students || []).filter(s => s.email);
+
+    // Email trigger (fire-and-forget)
+    setImmediate(async () => {
+      try {
+        const { sendEventUpdateEmail } = await import("../utils/sendEmail.js");
+        for (const s of students) {
+          await sendEventUpdateEmail({
+            email: s.email,
+            name: s.name,
+            eventName: olympiadTitle,
+            eventType: "olympiad",
+            changedFieldsList,
+          });
+        }
+        console.log(`[OlympiadEmail] Update emails sent for "${olympiadTitle}" to ${students.length} students.`);
+      } catch (err) {
+        console.error("Error sending olympiad update emails:", err);
+      }
+    });
   } catch (error) {
     console.error("Error in sendOlympiadTestEditNotification:", error);
   }

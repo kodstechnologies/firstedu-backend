@@ -256,8 +256,7 @@ export const getHallOfFameEntries = async (options = {}) => {
       query.eventModel = { $in: ["Tournament", "OlympiadTest"] };
     }
   } else {
-    query.eventType = { $in: ["tournament", "olympiad"] };
-    query.eventModel = { $in: ["Tournament", "OlympiadTest"] };
+    query.eventType = { $in: ["tournament", "olympiad", "general"] };
   }
 
   if (eventType !== "general") {

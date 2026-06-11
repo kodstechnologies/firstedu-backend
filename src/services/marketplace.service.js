@@ -566,6 +566,16 @@ export const purchaseCourse = async (
     await couponService.incrementCouponUsedCount(intent.couponId);
   }
 
+  await logTransaction({
+    studentId,
+    amount: purchasePrice,
+    sourceType: "course",
+    itemId: courseId,
+    itemName: course.title || "Course",
+    categoryId: course.categoryIds && course.categoryIds[0] ? course.categoryIds[0] : null,
+    paymentId: razorpayPaymentId
+  });
+
   try {
     await pointsService.awardCoursePurchasePoints(
       studentId,
@@ -1566,6 +1576,17 @@ export const initiateTestBundlePayment = async (bundleId, studentId, paymentMeth
       paymentId: "free",
       paymentStatus: "completed",
     });
+
+    await logTransaction({
+      studentId,
+      amount: 0,
+      sourceType: "test_bundle",
+      itemId: bundleId,
+      itemName: bundle.name || "Test Bundle",
+      categoryId: null,
+      paymentId: "free"
+    });
+
     (async () => {
       try {
         const student = await studentRepository.findById(studentId);
@@ -1592,6 +1613,17 @@ export const initiateTestBundlePayment = async (bundleId, studentId, paymentMeth
     if (couponId) {
       await couponService.incrementCouponUsedCount(couponId);
     }
+
+    await logTransaction({
+      studentId,
+      amount: amountToCharge,
+      sourceType: "test_bundle",
+      itemId: bundleId,
+      itemName: bundle.name || "Test Bundle",
+      categoryId: null,
+      paymentId: "wallet"
+    });
+
     (async () => {
       try {
         const student = await studentRepository.findById(studentId);
@@ -1725,6 +1757,17 @@ export const purchaseTestBundle = async (
   if (intent.couponId) {
     await couponService.incrementCouponUsedCount(intent.couponId);
   }
+
+  await logTransaction({
+    studentId,
+    amount: purchasePrice,
+    sourceType: "test_bundle",
+    itemId: bundleId,
+    itemName: bundle.name || "Test Bundle",
+    categoryId: null,
+    paymentId: razorpayPaymentId
+  });
+
   (async () => {
     try {
       const student = await studentRepository.findById(studentId);

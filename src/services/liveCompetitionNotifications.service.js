@@ -14,8 +14,7 @@ import walletService from "./wallet.service.js";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const START_WINDOW_MS   = 70 * 1000; // 70-second window around cron tick
-const REMINDER_MINUTES  = 30;        // 30-minute pre-start reminder
+const WINDOW_MS   = 4 * 60 * 1000; // 4-minute grace period around cron tick
 
 // ─── DB-persisted deduplication (replaces unreliable in-memory Set) ──────────
 
@@ -97,15 +96,15 @@ const getRound2Submissions = async (eventId) => {
 // ─── 30-min Reminder ─────────────────────────────────────────────────────────
 
 const notifyReminder = async (event) => {
-  const logged = await tryLogNotification(event._id.toString(), "start_reminder_30");
+  const logged = await tryLogNotification(event._id.toString(), "start_reminder_11");
   if (!logged) return;
 
   const students = await getRound1Students(event._id);
   const studentIds = students.map((s) => s._id?.toString() || s._id).filter(Boolean);
 
   if (studentIds.length > 0) {
-    const title = `${event.title} starts in 30 mins! ⏰`;
-    const body  = `The Live Competition "${event.megaAudition?.title || event.title}" starts in 30 minutes. Get ready!`;
+    const title = `${event.title} starts in 10 mins! ⏰`;
+    const body  = `The Live Competition "${event.megaAudition?.title || event.title}" starts in 10 minutes. Get ready!`;
     await sendNotificationToMultipleStudents(studentIds, title, body, {
       type:             "event",
       eventId:          event._id.toString(),
@@ -126,7 +125,7 @@ const notifyReminder = async (event) => {
         });
       }
       console.log(
-        `[LiveCompEmail] 📧 30-min reminder emails sent for "${event.title}" to ${students.length} students.`
+        `[LiveCompEmail] 📧 11-min reminder emails sent for "${event.title}" to ${students.length} students.`
       );
     } catch (err) {
       console.error(`[LiveCompEmail] Error sending reminder emails for "${event.title}":`, err);
@@ -177,15 +176,15 @@ const notifyStart = async (event) => {
 // ─── Grand Finale (Round 2) — 30-min Reminder ─────────────────────────────────
 
 const notifyGrandFinaleReminder = async (event) => {
-  const logged = await tryLogNotification(event._id.toString(), "gf_start_reminder_30");
+  const logged = await tryLogNotification(event._id.toString(), "gf_start_reminder_11");
   if (!logged) return;
 
   const students   = await getRound2Students(event._id);
   const studentIds = students.map((s) => s._id?.toString() || s._id).filter(Boolean);
 
   if (studentIds.length > 0) {
-    const title = `${event.title} — Grand Finale starts in 30 mins! ⏰`;
-    const body  = `Round 2 "${event.grandFinale?.title || "Grand Finale"}" starts in 30 minutes. Get ready to compete!`;
+    const title = `${event.title} — Grand Finale starts in 10 mins! ⏰`;
+    const body  = `Round 2 "${event.grandFinale?.title || "Grand Finale"}" starts in 10 minutes. Get ready to compete!`;
     await sendNotificationToMultipleStudents(studentIds, title, body, {
       type:             "event",
       eventId:          event._id.toString(),
@@ -206,7 +205,7 @@ const notifyGrandFinaleReminder = async (event) => {
         });
       }
       console.log(
-        `[LiveCompEmail] 📧 Grand Finale 30-min reminder emails sent for "${event.title}" to ${students.length} students.`
+        `[LiveCompEmail] 📧 Grand Finale 11-min reminder emails sent for "${event.title}" to ${students.length} students.`
       );
     } catch (err) {
       console.error(`[LiveCompEmail] Error sending Grand Finale reminder emails for "${event.title}":`, err);
@@ -257,24 +256,15 @@ const notifyGrandFinaleStart = async (event) => {
 // ─── Round 1 Result ──────────────────────────────────────────────────────────
 
 /**
- * Send a rich HTML email to a qualified student listing *all* qualifiers
- * (name + display ID) so they can see who made it to Round 2.
+ * Send a personalized HTML email to a qualified student.
  */
 const sendRound1QualifiedEmail = async ({
   student,
   event,
-  qualifiersList, // [{ name, displayId }]
 }) => {
-  const qualifiersRows = qualifiersList
-    .map(
-      (q, i) =>
-        `<tr>
-          <td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;color:#555;">${i + 1}</td>
-          <td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;color:#333;font-weight:600;">${q.name}</td>
-          <td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;color:#888;font-family:monospace;">${q.displayId}</td>
-        </tr>`
-    )
-    .join("");
+  const displayId = student.phone || student._id.toString().slice(-8).toUpperCase();
+  const round1Title = event.megaAudition?.title || event.title;
+  const round2Title = event.grandFinale?.title || "Grand Finale";
 
   await sendEmailWithTemplate({
     to:       student.email,
@@ -282,8 +272,9 @@ const sendRound1QualifiedEmail = async ({
     slug:     "live_competition_round1_qualified",
     variables: {
       name:         student.name || "Student",
-      eventName:    event.megaAudition?.title || event.title,
-      totalQualifiers: String(qualifiersList.length),
+      eventName:    round1Title,
+      round2Title:  round2Title,
+      displayId:    displayId,
     },
     defaultSubject: `🎉 You Qualified for Round 2 — ${event.title}`,
     defaultHtml: `
@@ -292,31 +283,17 @@ const sendRound1QualifiedEmail = async ({
           <h1 style="color:#fff;margin:0;font-size:26px;">🎉 Congratulations! You Qualified!</h1>
         </div>
         <div style="padding:28px 24px;">
-          <p style="color:#333;font-size:16px;margin-top:0;">Hi <strong>${student.name || "Student"}</strong>,</p>
+          <p style="color:#333;font-size:16px;margin-top:0;">Congratulations <strong>${student.name || "Student"}</strong> (ID: <strong>${displayId}</strong>)!</p>
           <p style="color:#555;font-size:15px;">
-            You have successfully qualified for <strong>Round 2 (Grand Finale)</strong> of
-            <strong>${event.title}</strong>!
+            You have successfully passed <strong>${round1Title}</strong> and are officially invited to <strong>${round2Title}</strong> of <strong>${event.title}</strong>!
           </p>
-          <p style="color:#555;font-size:15px;">
-            Here are all the students who qualified for Round 2:
-          </p>
-          <table style="width:100%;border-collapse:collapse;margin:16px 0;border:1px solid #e0e0e0;border-radius:6px;overflow:hidden;">
-            <thead>
-              <tr style="background:#f5f5f5;">
-                <th style="padding:10px 12px;text-align:left;color:#888;font-size:13px;">#</th>
-                <th style="padding:10px 12px;text-align:left;color:#888;font-size:13px;">Name</th>
-                <th style="padding:10px 12px;text-align:left;color:#888;font-size:13px;">Student ID</th>
-              </tr>
-            </thead>
-            <tbody>${qualifiersRows}</tbody>
-          </table>
           <div style="background:#f0fdf4;border-left:4px solid #22c55e;padding:16px;border-radius:4px;margin:20px 0;">
-            <p style="margin:0;color:#166534;font-weight:600;">Next Step: Grand Finale Registration</p>
+            <p style="margin:0;color:#166534;font-weight:600;">Next Step: ${round2Title} Registration</p>
             <p style="margin:8px 0 0;color:#15803d;font-size:14px;">
-              Please open the app to complete your Round 2 registration within the payment window.
+              Please open the app to complete your registration within the payment window.
             </p>
           </div>
-          <p style="color:#888;font-size:13px;margin-top:24px;">Best of luck in the Grand Finale! 🌟</p>
+          <p style="color:#888;font-size:13px;margin-top:24px;">Best of luck! 🌟</p>
         </div>
         <div style="background:#f5f5f5;padding:16px 24px;text-align:center;">
           <p style="color:#aaa;font-size:12px;margin:0;">Iscorre — Empowering Every Learner</p>
@@ -491,24 +468,12 @@ const autoDeclareMegaAuditionResult = async (event) => {
 
         const studentMap = new Map(allStudents.map((s) => [s._id.toString(), s]));
 
-        // Build qualifiers list for the email table (name + phone as ID)
-        const qualifiersList = qualifiedIds
-          .map((id) => {
-            const s = studentMap.get(id);
-            if (!s) return null;
-            return {
-              name:      s.name || "Student",
-              displayId: s.phone || s._id.toString().slice(-8).toUpperCase(),
-            };
-          })
-          .filter(Boolean);
-
-        // Send to qualifiers (rich email with full qualifier table)
+        // Send to qualifiers (personalized email)
         for (const id of qualifiedIds) {
           const s = studentMap.get(id);
           if (!s?.email) continue;
           try {
-            await sendRound1QualifiedEmail({ student: s, event, qualifiersList });
+            await sendRound1QualifiedEmail({ student: s, event });
           } catch (e) {
             console.error(`[LiveCompEmail] Failed qualified email to ${s.email}:`, e.message);
           }
@@ -648,38 +613,26 @@ const autoDeclareFinalResult = async (event) => {
 //   • R1 result declaration    • GF result declaration
 // Mirrors the pattern used by tournamentNotifications and olympiadNotifications.
 
-const RESULT_WINDOW_MS = 70 * 1000; // same window for result checks
-
 export const runLiveCompetitionCronTick = async () => {
   const now = new Date();
-
-  // ── Time windows ──────────────────────────────────────────────────────────
-  const startWindowStart    = new Date(now.getTime() - START_WINDOW_MS);
-  const reminderWindowEnd   = new Date(now.getTime() + REMINDER_MINUTES * 60 * 1000);
-  const reminderWindowStart = new Date(reminderWindowEnd.getTime() - START_WINDOW_MS);
-  const resultWindowStart   = new Date(now.getTime() - RESULT_WINDOW_MS);
 
   // ── Single DB query — all relevant events ─────────────────────────────────
   const events = await LiveCompetition.find({
     isPublished: true,
     $or: [
-      // R1 — 30-min reminder
-      { "megaAudition.eventWindow.start": { $gte: reminderWindowStart, $lte: reminderWindowEnd } },
-      // R1 — just started
-      { "megaAudition.eventWindow.start": { $gte: startWindowStart, $lte: now } },
-      // GF — 30-min reminder
-      { "grandFinale.eventWindow.start": { $gte: reminderWindowStart, $lte: reminderWindowEnd } },
-      // GF — just started
-      { "grandFinale.eventWindow.start": { $gte: startWindowStart, $lte: now } },
+      // R1 
+      { "megaAudition.eventWindow.start": { $gte: new Date(now.getTime() - WINDOW_MS), $lte: new Date(now.getTime() + 15 * 60 * 1000) } },
+      // GF 
+      { "grandFinale.eventWindow.start": { $gte: new Date(now.getTime() - WINDOW_MS), $lte: new Date(now.getTime() + 15 * 60 * 1000) } },
       // R1 — result declaration due
-      { "megaAudition.status": "CLOSED", "megaAudition.resultDeclarationDate": { $lte: now } },
+      { "megaAudition.status": "CLOSED", "megaAudition.resultDeclarationDate": { $gte: new Date(now.getTime() - WINDOW_MS), $lte: now } },
       // GF — result declaration due
-      { "grandFinale.status": "CLOSED", "grandFinale.resultDeclarationDate": { $lte: now } },
+      { "grandFinale.status": "CLOSED", "grandFinale.resultDeclarationDate": { $gte: new Date(now.getTime() - WINDOW_MS), $lte: now } },
       // External-link GF rounds can remain LIVE while results become due
       {
         "grandFinale.status": "LIVE",
         "grandFinale.submission.type": "EXTERNAL_LINK",
-        "grandFinale.resultDeclarationDate": { $lte: now },
+        "grandFinale.resultDeclarationDate": { $gte: new Date(now.getTime() - WINDOW_MS), $lte: now },
       },
     ],
   }).lean();
@@ -690,10 +643,17 @@ export const runLiveCompetitionCronTick = async () => {
     if (r1Start) {
       const r1Date = new Date(r1Start);
       if (!isNaN(r1Date.getTime())) {
-        if (r1Date >= reminderWindowStart && r1Date <= reminderWindowEnd) {
+        const timeToStartMs = r1Date.getTime() - now.getTime();
+        
+        // Reminder: ~11 minutes before
+        const elevenMinsMs = 11 * 60 * 1000;
+        if (timeToStartMs <= elevenMinsMs && timeToStartMs >= elevenMinsMs - WINDOW_MS) {
           await notifyReminder(e);
         }
-        if (r1Date >= startWindowStart && r1Date <= now) {
+        
+        // Start: ~1 minute before
+        const oneMinMs = 1 * 60 * 1000;
+        if (timeToStartMs <= oneMinMs && timeToStartMs >= oneMinMs - WINDOW_MS) {
           await notifyStart(e);
         }
       }
@@ -702,7 +662,8 @@ export const runLiveCompetitionCronTick = async () => {
     // R1 result declaration
     if (e.megaAudition?.status === "CLOSED" && e.megaAudition?.resultDeclarationDate) {
       const rdDate = new Date(e.megaAudition.resultDeclarationDate);
-      if (rdDate <= now) {
+      const timeSinceResultMs = now.getTime() - rdDate.getTime();
+      if (timeSinceResultMs >= 0 && timeSinceResultMs <= WINDOW_MS) {
         await autoDeclareMegaAuditionResult(e);
       }
     }
@@ -715,10 +676,17 @@ export const runLiveCompetitionCronTick = async () => {
     if (gfStart && gfStatus && gfStatus !== "LOCKED") {
       const gfDate = new Date(gfStart);
       if (!isNaN(gfDate.getTime())) {
-        if (gfDate >= reminderWindowStart && gfDate <= reminderWindowEnd) {
+        const timeToStartMs = gfDate.getTime() - now.getTime();
+        
+        // Reminder: ~11 minutes before
+        const elevenMinsMs = 11 * 60 * 1000;
+        if (timeToStartMs <= elevenMinsMs && timeToStartMs >= elevenMinsMs - WINDOW_MS) {
           await notifyGrandFinaleReminder(e);
         }
-        if (gfDate >= startWindowStart && gfDate <= now) {
+        
+        // Start: ~1 minute before
+        const oneMinMs = 1 * 60 * 1000;
+        if (timeToStartMs <= oneMinMs && timeToStartMs >= oneMinMs - WINDOW_MS) {
           await notifyGrandFinaleStart(e);
         }
       }
@@ -731,7 +699,8 @@ export const runLiveCompetitionCronTick = async () => {
       e.grandFinale?.resultDeclarationDate
     ) {
       const rdDate = new Date(e.grandFinale.resultDeclarationDate);
-      if (rdDate <= now) {
+      const timeSinceResultMs = now.getTime() - rdDate.getTime();
+      if (timeSinceResultMs >= 0 && timeSinceResultMs <= WINDOW_MS) {
         await autoDeclareFinalResult(e);
       }
     }
