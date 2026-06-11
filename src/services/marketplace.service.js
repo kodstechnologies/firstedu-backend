@@ -300,31 +300,74 @@ export const getCourseById = async (courseId, studentId) => {
             testIds
           )
         : {};
-    const completedCount = testIds.filter(
-      (testId) => statusMap[testId.toString()]?.status === "completed"
-    ).length;
+    let completedCount = 0;
+    for (const testId of testIds) {
+      const testIdStr = testId.toString();
+      const testStatusInfo = statusMap[testIdStr];
+      if (testStatusInfo?.status === "completed") {
+        const testObj = linkedTests.find(t => (t._id || t).toString() === testIdStr);
+        if (testObj?.passingPercentage) {
+          const score = testStatusInfo.score || 0;
+          const maxScore = testStatusInfo.maxScore || 1;
+          if ((score / maxScore) * 100 >= testObj.passingPercentage) {
+            completedCount++;
+          }
+        } else {
+          completedCount++;
+        }
+      }
+    }
 
     courseData.modules = (courseData.modules || []).map((module, index) => {
       const testId = module.test?._id || module.test;
       const test = linkedTests.find(
         (item) => (item._id || item)?.toString() === testId?.toString()
       );
+      let testStatus = "not_started";
+      let sessionId = null;
+      if (testId) {
+        const testStatusInfo = statusMap[testId.toString()];
+        if (testStatusInfo) {
+          testStatus = testStatusInfo.status;
+          sessionId = testStatusInfo.sessionId || null;
+          
+          if (testStatus === "completed" && test?.passingPercentage) {
+            const score = testStatusInfo.score || 0;
+            const maxScore = testStatusInfo.maxScore || 1;
+            const currentPercentage = (score / maxScore) * 100;
+            if (currentPercentage < test.passingPercentage) {
+              testStatus = "failed";
+            }
+          }
+        }
+      }
+
       return {
         ...module,
         order: module.order ?? index,
         test,
-        testStatus: testId
-          ? statusMap[testId.toString()]?.status || "not_started"
-          : "not_started",
-        sessionId: testId ? statusMap[testId.toString()]?.sessionId || null : null,
+        testStatus,
+        sessionId,
       };
     });
-    courseData.certificationTests = linkedTests.map((test) => ({
-      ...(test.toObject?.() ?? test),
-      status:
-        statusMap[(test._id || test).toString()]?.status || "not_started",
-      sessionId: statusMap[(test._id || test).toString()]?.sessionId || null,
-    }));
+    courseData.certificationTests = linkedTests.map((test) => {
+      const testIdStr = (test._id || test).toString();
+      let status = statusMap[testIdStr]?.status || "not_started";
+      
+      if (status === "completed" && test.passingPercentage) {
+        const info = statusMap[testIdStr];
+        const currentPercentage = ((info.score || 0) / (info.maxScore || 1)) * 100;
+        if (currentPercentage < test.passingPercentage) {
+          status = "failed";
+        }
+      }
+
+      return {
+        ...(test.toObject?.() ?? test),
+        status,
+        sessionId: statusMap[testIdStr]?.sessionId || null,
+      };
+    });
     courseData.certificationTestCount = testIds.length;
     courseData.completedCertificationTestCount = completedCount;
     courseData.certificateEligible = testIds.length > 0 && completedCount === testIds.length;

@@ -77,8 +77,22 @@ function normaliseCertTestIds(raw) {
   return Array.isArray(raw) ? raw : [raw];
 }
 
-async function validateCertificationTests(testIds) {
-  const uniqueIds = [...new Set(testIds.map((id) => id?.toString?.() ?? id).filter(Boolean))];
+async function validateCertificationTests(testIds, courseId = null) {
+  const validTestIds = testIds.map((id) => id?.toString?.() ?? id).filter(Boolean);
+  const uniqueIds = [...new Set(validTestIds)];
+
+  if (uniqueIds.length !== validTestIds.length) {
+    throw new ApiError(400, "A test cannot be assigned to multiple modules within the same course.");
+  }
+
+  const usedCourseIds = await testRepository.findAllUsedCourseTestIds(courseId);
+  const usedSet = new Set(usedCourseIds);
+  for (const id of uniqueIds) {
+    if (usedSet.has(id)) {
+      throw new ApiError(400, "One or more selected tests are already assigned to another course.");
+    }
+  }
+
   const tests = await Promise.all(uniqueIds.map((id) => testRepository.findTestById(id)));
 
   for (let i = 0; i < uniqueIds.length; i++) {
@@ -196,7 +210,7 @@ export const createCourse = async (data, adminId, files) => {
     if (modules.some((module) => !module.contents?.length)) {
       throw new ApiError(400, "Each certification module must include study material");
     }
-    await validateCertificationTests(moduleTestIds);
+    await validateCertificationTests(moduleTestIds, null);
   }
 
   const course = await courseRepository.create({
@@ -322,7 +336,7 @@ export const updateCourse = async (id, data, files) => {
     if (modules.some((module) => !module.contents?.length)) {
       throw new ApiError(400, "Each certification module must include study material");
     }
-    await validateCertificationTests(moduleTestIds);
+    await validateCertificationTests(moduleTestIds, id);
     const retainedUrls = new Set(
       modules
         .flatMap((module) => module.contents || [])
@@ -392,7 +406,7 @@ const syncCertificationTestsForCourse = async (
   adminId,
   modules = []
 ) => {
-  const uniqueIds = await validateCertificationTests(testIds);
+  const uniqueIds = await validateCertificationTests(testIds, courseId);
   const moduleByTestId = new Map(
     modules
       .filter((module) => module.test)
@@ -476,6 +490,7 @@ export const deleteCourse = async (id) => {
     }
   }
 
+  await courseTestLinkRepository.deleteMany?.({ course: id });
   await courseRepository.deleteById(id);
   return true;
 };

@@ -221,6 +221,8 @@ const getSessionStatusMapByStudent = async (studentId, testIds) => {
           _id: "$test",
           status: { $first: "$status" },
           sessionId: { $first: "$_id" },
+          score: { $first: "$score" },
+          maxScore: { $first: "$maxScore" },
         },
       },
     ]);
@@ -235,6 +237,8 @@ const getSessionStatusMapByStudent = async (studentId, testIds) => {
       map[testIdStr] = {
         status,
         sessionId: row.sessionId ?? null,
+        score: row.score ?? 0,
+        maxScore: row.maxScore ?? 0,
       };
     }
     return map;

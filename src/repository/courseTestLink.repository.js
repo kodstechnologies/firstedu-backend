@@ -52,7 +52,7 @@ const findAll = async (filter = {}, options = {}) => {
     return await CourseTestLink.find(filter)
       .populate({
         path: "test",
-        select: "title description durationMinutes questionBank",
+        select: "title description durationMinutes questionBank passingPercentage",
         populate: { path: "questionBank", select: "name categories" }
       })
       .sort(sort);

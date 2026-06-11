@@ -4,6 +4,7 @@ import Question from "../models/Question.js";
 import QuestionBank from "../models/QuestionBank.js";
 import { ApiError } from "../utils/ApiError.js";
 import categoryRepository from "./category.repository.js";
+import CourseTestLink from "../models/CourseTestLink.js";
 
 // ========== Test Repository ==========
 const createTest = async (testData) => {
@@ -74,6 +75,18 @@ const findAllTests = async (filter = {}, options = {}) => {
 
     if (applicableFor) {
       query.applicableFor = applicableFor;
+    }
+
+    if (options.excludeCourseAssigned === "true" || options.excludeCourseAssigned === true) {
+      const usedCourseIds = await findAllUsedCourseTestIds(options.includeCourseId);
+      if (usedCourseIds.length > 0) {
+        query._id = query._id || {};
+        if (query._id.$nin) {
+          query._id.$nin = [...new Set([...query._id.$nin, ...usedCourseIds])];
+        } else {
+          query._id.$nin = usedCourseIds;
+        }
+      }
     }
 
     if (search) {
@@ -450,6 +463,19 @@ const findAllUsedBundleTestIds = async (excludeBundleId) => {
   }
 };
 
+const findAllUsedCourseTestIds = async (excludeCourseId) => {
+  try {
+    const query = {};
+    if (excludeCourseId) {
+      query.course = { $ne: excludeCourseId };
+    }
+    const links = await CourseTestLink.find(query).select("test").lean();
+    return links.map((l) => l.test.toString());
+  } catch (error) {
+    throw new ApiError(500, "Failed to fetch used course test IDs", error.message);
+  }
+};
+
 export default {
   // Test methods
   createTest,
@@ -469,6 +495,7 @@ export default {
   updateBundleById,
   deleteBundleById,
   findAllUsedBundleTestIds,
+  findAllUsedCourseTestIds,
   // Question helper methods
   findQuestionsByIds,
   sampleRandomQuestions,

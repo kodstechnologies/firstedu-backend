@@ -38,6 +38,8 @@ export const getTests = asyncHandler(async (req, res) => {
     includeTestId,
     includeBundleId,
     category,
+    excludeCourseAssigned,
+    includeCourseId,
   } = req.query;
 
   const result = await testService.getTests({
@@ -53,6 +55,8 @@ export const getTests = asyncHandler(async (req, res) => {
     includeTestId,
     includeBundleId,
     category,
+    excludeCourseAssigned,
+    includeCourseId,
   });
 
   return res

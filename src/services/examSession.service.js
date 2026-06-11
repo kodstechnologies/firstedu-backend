@@ -613,14 +613,30 @@ export const startExamSession = async (testId, studentId, options = {}) => {
     !RETAKEABLE_PILLAR_TESTS.includes(test.applicableFor)
   ) {
     // Non–everyday challenge, non-pillar: prevent retaking the same test
-    const completedSession = await examSessionRepository.findOne({
+    const completedSessionsResult = await examSessionRepository.findAll({
       student: studentId,
       test: testId,
       status: "completed",
       ...sessionScopeFilter,
-    });
-    if (completedSession) {
-      throw new ApiError(400, "You have already completed this test");
+    }, { limit: 50 });
+    
+    const completedSessions = completedSessionsResult.sessions || [];
+
+    if (completedSessions.length > 0) {
+      if (test.applicableFor === "certificate" && test.passingPercentage != null) {
+        const hasPassed = completedSessions.some(session => {
+          const score = session.score || 0;
+          const maxScore = session.maxScore || 1;
+          return (score / maxScore) * 100 >= test.passingPercentage;
+        });
+
+        if (hasPassed) {
+          throw new ApiError(400, "You have already passed this certification test");
+        }
+        // If hasPassed is false, we naturally bypass the error and allow the retake.
+      } else {
+        throw new ApiError(400, "You have already completed this test");
+      }
     }
   }
 
@@ -817,15 +833,31 @@ export const getExamInstructions = async (testId, studentId, options = {}) => {
       !challengeId &&
       !RETAKEABLE_PILLAR_TESTS.includes(test.applicableFor)
     ) {
-      const completedSession = await examSessionRepository.findOne({
+      const completedSessionsResult = await examSessionRepository.findAll({
         student: studentId,
         test: testId,
         status: "completed",
         ...sessionScopeFilter,
-      });
-      if (completedSession) {
-        canStart = false;
-        blockReason = "You have already completed this test";
+      }, { limit: 50 });
+      
+      const completedSessions = completedSessionsResult.sessions || [];
+
+      if (completedSessions.length > 0) {
+        if (test.applicableFor === "certificate" && test.passingPercentage != null) {
+          const hasPassed = completedSessions.some(session => {
+            const score = session.score || 0;
+            const maxScore = session.maxScore || 1;
+            return (score / maxScore) * 100 >= test.passingPercentage;
+          });
+
+          if (hasPassed) {
+            canStart = false;
+            blockReason = "You have already passed this certification test";
+          }
+        } else {
+          canStart = false;
+          blockReason = "You have already completed this test";
+        }
       }
     }
   }
@@ -2309,6 +2341,10 @@ export const getExamResults = async (sessionId, studentId) => {
         ? Math.round((session.score / session.maxScore) * 100 * 100) / 100
         : 0,
       rank: myRank,
+      isCertificationFailed: 
+        testDoc?.applicableFor === "certificate" && 
+        testDoc?.passingPercentage != null && 
+        (session.maxScore > 0 ? Math.round((session.score / session.maxScore) * 100 * 100) / 100 : 0) < testDoc.passingPercentage,
     },
     palette: logicalSummary,
     leaderboard: {
