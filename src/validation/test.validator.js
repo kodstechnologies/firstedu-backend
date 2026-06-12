@@ -4,10 +4,23 @@ const objectId = Joi.string().regex(/^[0-9a-fA-F]{24}$/);
 const priceSchema = Joi.number().min(0).precision(2);
 
 // Test
-const createTest = Joi.object({
+const bankLinkSchema = Joi.object({
+  questionBank: objectId.optional(),
+  aiQuestionBank: objectId.optional(),
+}).custom((value, helpers) => {
+  const hasManual = !!value.questionBank;
+  const hasAi = !!value.aiQuestionBank;
+  if (hasManual === hasAi) {
+    return helpers.message(
+      "Exactly one of questionBank or aiQuestionBank is required"
+    );
+  }
+  return value;
+});
+
+const createTest = bankLinkSchema.keys({
   title: Joi.string().trim().required(),
   description: Joi.string().trim().allow("", null),
-  questionBank: objectId.required(),
   durationMinutes: Joi.number().integer().min(1).required(),
   proctoringInstructions: Joi.string().trim().optional(),
   price: priceSchema.default(0),
@@ -39,7 +52,8 @@ const createTest = Joi.object({
 const updateTest = Joi.object({
   title: Joi.string().trim().optional(),
   description: Joi.string().trim().allow("", null).optional(),
-  questionBank: objectId.optional(),
+  questionBank: objectId.optional().allow(null),
+  aiQuestionBank: objectId.optional().allow(null),
   durationMinutes: Joi.number().integer().min(1).optional(),
   proctoringInstructions: Joi.string().trim().optional(),
   price: priceSchema.optional(),

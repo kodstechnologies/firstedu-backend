@@ -7,6 +7,17 @@ import tournamentRepository from "../repository/tournament.repository.js";
 import eventRegistrationRepository from "../repository/eventRegistration.repository.js";
 import questionBankRepository from "../repository/questionBank.repository.js";
 import questionRepository from "../repository/question.repository.js";
+import {
+  getQuestionsForTest,
+  getSectionConfigForTiming,
+  getBankDisplayName,
+  getBankCategories,
+  getTestBankType,
+} from "../utils/testBankResolver.js";
+import {
+  findQuestionsByIds,
+  findQuestionById,
+} from "../utils/questionLookup.js";
 import categoryRepository from "../repository/category.repository.js";
 import categoryPurchaseRepository from "../repository/categoryPurchase.repository.js";
 import examAnalysisService from "./examAnalysis.service.js";
@@ -495,7 +506,9 @@ export const startExamSession = async (testId, studentId, options = {}) => {
   const { challengeId = null, categoryId = null } = options;
   // Check if test exists and is published
   const test = await examSessionRepository.findTestById(testId, {
-    questionBank: "name sections useSectionWiseQuestions useSectionWiseDifficulty",
+    questionBank:
+      "name sections useSectionWiseQuestions useSectionWiseDifficulty",
+    aiQuestionBank: "name overallDifficulty categories",
   });
   if (!test) {
     throw new ApiError(404, "Test not found");
@@ -505,17 +518,17 @@ export const startExamSession = async (testId, studentId, options = {}) => {
     throw new ApiError(403, "Test is not published");
   }
 
-  if (!test.questionBank) {
+  const bankType = getTestBankType(test);
+  if (!bankType) {
     throw new ApiError(400, "Test has no question bank configured");
   }
 
-
-
-  // Get all questions from the question bank
-  const questions = await questionBankRepository.getQuestionsByBankId(test.questionBank._id);
+  const questions = await getQuestionsForTest(test);
   if (!questions || questions.length === 0) {
     throw new ApiError(400, "Question bank has no questions");
   }
+
+  const questionModel = bankType === "ai" ? "AiQuestion" : "Question";
 
   // Check if student can access paid test (bypass if it's a challenge room).
   if (test.price > 0 && test.applicableFor !== "everyday_challenge" && !challengeId) {
@@ -658,16 +671,7 @@ export const startExamSession = async (testId, studentId, options = {}) => {
     endTime = new Date(now.getTime() + durationMs);
   }
 
-  const sectionConfigForTiming =
-    test?.questionBank?.useSectionWiseQuestions &&
-      Array.isArray(test?.questionBank?.sections)
-      ? test.questionBank.sections.map((section, index) => ({
-        index,
-        count: section.count,
-        difficulty: section.difficulty,
-        timeMinutes: section.timeMinutes || 0,
-      }))
-      : [];
+  const sectionConfigForTiming = getSectionConfigForTiming(test);
 
   // If section-wise times are configured, sum them for total duration
   const sectionTimesSum = sectionConfigForTiming.reduce(
@@ -691,6 +695,7 @@ export const startExamSession = async (testId, studentId, options = {}) => {
   // Initialize answers array for all questions from the bank
   const answers = questions.map((question, index) => ({
     questionId: question._id,
+    questionModel,
     answer: null,
     status: "not_visited",
     answeredAt: null,
@@ -728,6 +733,7 @@ export const getExamInstructions = async (testId, studentId, options = {}) => {
   const test = await examSessionRepository.findTestById(testId, {
     questionBank:
       "name sections useSectionWiseQuestions useSectionWiseDifficulty overallDifficulty categories",
+    aiQuestionBank: "name overallDifficulty categories",
   });
   if (!test) {
     throw new ApiError(404, "Test not found");
@@ -737,11 +743,11 @@ export const getExamInstructions = async (testId, studentId, options = {}) => {
     throw new ApiError(403, "Test is not published");
   }
 
-  if (!test.questionBank) {
+  if (!getTestBankType(test)) {
     throw new ApiError(400, "Test has no question bank configured");
   }
 
-  const questions = await questionBankRepository.getQuestionsByBankId(test.questionBank._id);
+  const questions = await getQuestionsForTest(test);
   if (!questions || questions.length === 0) {
     throw new ApiError(400, "Question bank has no questions");
   }
@@ -862,7 +868,7 @@ export const getExamInstructions = async (testId, studentId, options = {}) => {
     }
   }
 
-  const categoryIds = (test?.questionBank?.categories || [])
+  const categoryIds = getBankCategories(test)
     .map((category) => {
       if (!category) return null;
       return category?._id?.toString?.() || category?.toString?.() || null;
@@ -904,6 +910,7 @@ export const getExamInstructions = async (testId, studentId, options = {}) => {
     .filter(Boolean);
 
   const hasSectionsConfigured =
+    getTestBankType(test) === "manual" &&
     Array.isArray(test?.questionBank?.sections) &&
     test.questionBank.sections.length > 0;
   const sectionWiseEnabled =
@@ -987,7 +994,8 @@ export const getExamInstructions = async (testId, studentId, options = {}) => {
       isFree: test.price <= 0,
       durationMinutes: test.durationMinutes,
       proctoringInstructions: test.proctoringInstructions,
-      questionBankName: test.questionBank.name || null,
+      questionBankName: getBankDisplayName(test),
+      paperSource: test.paperSource || getTestBankType(test),
       categories,
     },
     stats: {
@@ -1432,7 +1440,8 @@ export const saveAnswer = async (sessionId, questionId, answer, studentId, statu
   let normalizedAnswer = answer;
   if (answer !== null && answer !== undefined && !isIdString(answer) && !isIdArray(answer)) {
     // Non-_id value: resolve to canonical text (backward compat for mobile / legacy)
-    const question = await questionRepository.findById(questionId).catch(() => null);
+    const answerModel = answerEntry?.questionModel || "Question";
+    const question = await findQuestionById(questionId, answerModel).catch(() => null);
     const options = question?.options || [];
     normalizedAnswer = resolveAnswerToText(answer, options);
   }
@@ -1802,7 +1811,13 @@ export const autoSubmitExpiredSessions = async () => {
  */
 const calculateScore = async (session) => {
   const questionIds = session.answers.map((a) => a.questionId);
-  const questions = await questionRepository.findByIds(questionIds);
+  const questionModelsById = new Map(
+    session.answers.map((a) => [
+      a.questionId?.toString?.() || String(a.questionId),
+      a.questionModel || "Question",
+    ])
+  );
+  const questions = await findQuestionsByIds(questionIds, questionModelsById);
   const questionMap = new Map(questions.map((q) => [q._id.toString(), q]));
 
   let totalScore = 0;

@@ -19,7 +19,17 @@ const testSchema = new mongoose.Schema(
     questionBank: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "QuestionBank",
-      required: true,
+      default: null,
+    },
+    aiQuestionBank: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "AiQuestionBank",
+      default: null,
+    },
+    paperSource: {
+      type: String,
+      enum: ["manual", "ai"],
+      default: "manual",
     },
     categoryId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -98,5 +108,19 @@ const testSchema = new mongoose.Schema(
 
 testSchema.index({ title: 1, createdBy: 1 });
 testSchema.index({ questionBank: 1 });
+testSchema.index({ aiQuestionBank: 1 });
+
+testSchema.pre("validate", function validateBankLink(next) {
+  const hasManual = !!this.questionBank;
+  const hasAi = !!this.aiQuestionBank;
+  if (hasManual && hasAi) {
+    return next(new Error("Test cannot link both manual and AI question banks"));
+  }
+  if (!hasManual && !hasAi) {
+    return next(new Error("Test must link a question bank"));
+  }
+  this.paperSource = hasAi ? "ai" : "manual";
+  next();
+});
 
 export default mongoose.models.Test || mongoose.model("Test", testSchema);

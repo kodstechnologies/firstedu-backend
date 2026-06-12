@@ -17,11 +17,17 @@ const createTest = async (testData) => {
 };
 
 const populateQuestionBankWithCategories = (query) => {
-  return query.populate({
-    path: "questionBank",
-    select: "name categories",
-    populate: { path: "categories", select: "name _id" },
-  });
+  return query
+    .populate({
+      path: "questionBank",
+      select: "name categories useSectionWiseDifficulty useSectionWiseQuestions sections overallDifficulty",
+      populate: { path: "categories", select: "name _id" },
+    })
+    .populate({
+      path: "aiQuestionBank",
+      select: "name categories overallDifficulty aiProvider",
+      populate: { path: "categories", select: "name _id" },
+    });
 };
 
 const findTestById = async (id, populateOptions = {}) => {

@@ -128,6 +128,9 @@ const findTestById = async (id, populateOptions = {}) => {
     if (populateOptions.questionBank) {
       query = query.populate("questionBank", populateOptions.questionBank);
     }
+    if (populateOptions.aiQuestionBank) {
+      query = query.populate("aiQuestionBank", populateOptions.aiQuestionBank);
+    }
     return await query;
   } catch (error) {
     throw new ApiError(500, "Failed to fetch test", error.message);

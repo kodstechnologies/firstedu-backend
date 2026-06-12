@@ -1,3 +1,4 @@
+import dns from 'dns';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import { seedAdmin } from '../utils/seedAdmin.js';
@@ -5,6 +6,11 @@ import { seedAdmin } from '../utils/seedAdmin.js';
 import '../models/StudentSession.js';
 
 dotenv.config();
+
+// Windows/router DNS often refuses SRV lookups that mongodb+srv requires (querySrv ECONNREFUSED).
+if (process.env.MONGODB_URI?.startsWith('mongodb+srv://')) {
+  dns.setServers(['8.8.8.8', '1.1.1.1']);
+}
 
 const connectDB = async () => {
   try {

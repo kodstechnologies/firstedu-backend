@@ -1,6 +1,7 @@
 import { ApiError } from "../utils/ApiError.js";
 import testRepository from "../repository/test.repository.js";
 import questionBankRepository from "../repository/questionBank.repository.js";
+import aiQuestionBankRepository from "../repository/aiQuestionBank.repository.js";
 import orderRepository from "../repository/order.repository.js";
 import TestPurchase from "../models/TestPurchase.js";
 import {
@@ -22,8 +23,18 @@ export const createTest = async (data, adminId, file) => {
     await ensureUniqueTestTitle(data.title);
   }
 
-  const bank = await questionBankRepository.findById(data.questionBank);
-  if (!bank) throw new ApiError(404, "Question bank not found");
+  if (data.questionBank && data.aiQuestionBank) {
+    throw new ApiError(400, "Test cannot link both manual and AI question banks");
+  }
+  if (data.aiQuestionBank) {
+    const bank = await aiQuestionBankRepository.findById(data.aiQuestionBank);
+    if (!bank) throw new ApiError(404, "AI question bank not found");
+  } else if (data.questionBank) {
+    const bank = await questionBankRepository.findById(data.questionBank);
+    if (!bank) throw new ApiError(404, "Question bank not found");
+  } else {
+    throw new ApiError(400, "Test must link a question bank");
+  }
 
   let imageUrl = null;
   if (file) {
@@ -58,20 +69,36 @@ export const createTest = async (data, adminId, file) => {
 
 const enrichTestsWithBankStats = async (tests) => {
   const items = Array.isArray(tests) ? tests : [tests];
-  const bankIds = items
-    .map((t) => t?.questionBank?._id)
+  const manualBankIds = items
+    .map((t) => t?.questionBank?._id || t?.questionBank)
     .filter(Boolean)
     .map((id) => id.toString());
-  const uniqueIds = [...new Set(bankIds)];
-  const statsMap = await questionBankRepository.getBanksStatsBatch(uniqueIds);
+  const aiBankIds = items
+    .map((t) => t?.aiQuestionBank?._id || t?.aiQuestionBank)
+    .filter(Boolean)
+    .map((id) => id.toString());
+
+  const [manualStatsMap, aiStatsMap] = await Promise.all([
+    questionBankRepository.getBanksStatsBatch([...new Set(manualBankIds)]),
+    aiQuestionBankRepository.getBanksStatsBatch([...new Set(aiBankIds)]),
+  ]);
 
   items.forEach((t) => {
-    if (t?.questionBank?._id) {
-      const key = t.questionBank._id.toString();
-      const stats = statsMap.get(key) || { totalQuestions: 0, totalMarks: 0 };
-      t.questionBank.totalQuestions = stats.totalQuestions;
-
-      t.questionBank.totalMarks = stats.totalMarks;
+    if (t?.questionBank?._id || t?.questionBank) {
+      const key = (t.questionBank._id || t.questionBank).toString();
+      const stats = manualStatsMap.get(key) || { totalQuestions: 0, totalMarks: 0 };
+      if (t.questionBank && typeof t.questionBank === "object") {
+        t.questionBank.totalQuestions = stats.totalQuestions;
+        t.questionBank.totalMarks = stats.totalMarks;
+      }
+    }
+    if (t?.aiQuestionBank?._id || t?.aiQuestionBank) {
+      const key = (t.aiQuestionBank._id || t.aiQuestionBank).toString();
+      const stats = aiStatsMap.get(key) || { totalQuestions: 0, totalMarks: 0 };
+      if (t.aiQuestionBank && typeof t.aiQuestionBank === "object") {
+        t.aiQuestionBank.totalQuestions = stats.totalQuestions;
+        t.aiQuestionBank.totalMarks = stats.totalMarks;
+      }
     }
   });
 
@@ -100,6 +127,7 @@ export const getTests = async (options = {}) => {
 export const getTestById = async (id) => {
   const test = await testRepository.findTestById(id, {
     questionBank: "name categories",
+    aiQuestionBank: "name categories overallDifficulty aiProvider",
   });
   if (!test) {
     throw new ApiError(404, "Test not found");
@@ -133,8 +161,14 @@ export const updateTest = async (id, data, file) => {
 
   // Block changing questionBank or durationMinutes if test is purchased
   if (isPurchased) {
-    if (Object.prototype.hasOwnProperty.call(data, "questionBank") &&
-      String(data.questionBank) !== String(existing.questionBank?._id ?? existing.questionBank)) {
+    if (
+      (Object.prototype.hasOwnProperty.call(data, "questionBank") &&
+        String(data.questionBank) !==
+          String(existing.questionBank?._id ?? existing.questionBank)) ||
+      (Object.prototype.hasOwnProperty.call(data, "aiQuestionBank") &&
+        String(data.aiQuestionBank) !==
+          String(existing.aiQuestionBank?._id ?? existing.aiQuestionBank))
+    ) {
       throw new ApiError(400, "Cannot change Question Bank: this test has already been purchased by a student.");
     }
     if (Object.prototype.hasOwnProperty.call(data, "durationMinutes") &&
@@ -162,9 +196,18 @@ export const updateTest = async (id, data, file) => {
     }
   }
 
+  if (data.questionBank && data.aiQuestionBank) {
+    throw new ApiError(400, "Test cannot link both manual and AI question banks");
+  }
   if (data.questionBank) {
     const bank = await questionBankRepository.findById(data.questionBank);
     if (!bank) throw new ApiError(404, "Question bank not found");
+    data.aiQuestionBank = null;
+  }
+  if (data.aiQuestionBank) {
+    const bank = await aiQuestionBankRepository.findById(data.aiQuestionBank);
+    if (!bank) throw new ApiError(404, "AI question bank not found");
+    data.questionBank = null;
   }
 
   if (file) {
