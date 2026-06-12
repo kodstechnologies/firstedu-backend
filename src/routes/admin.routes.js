@@ -1,4 +1,4 @@
-import { getEverydayChallengeSchedule, upsertEverydayChallengeSchedule } from "../controllers/adminEverydayChallenge.controller.js";
+import { getEverydayChallengeSchedule, upsertEverydayChallengeSchedule, getEverydayChallengeStatus } from "../controllers/adminEverydayChallenge.controller.js";
 import { updateGamificationSubcategory } from "../controllers/gamificationCategory.controller.js";
 import { Router } from "express";
 
@@ -361,6 +361,7 @@ router.get("/categories/:id/coupons", verifyJWT, getCategoryCoupons);
 router.delete("/categories/:id/coupons/:couponId", verifyJWT, deleteCategoryCoupon);
 
 // Gamification - Everyday Challenge Schedule
+router.get("/gamification/everyday-challenge/status", verifyJWT, getEverydayChallengeStatus);
 router.get("/gamification/everyday-challenge", verifyJWT, getEverydayChallengeSchedule);
 router.post("/gamification/everyday-challenge", verifyJWT, upsertEverydayChallengeSchedule);
 

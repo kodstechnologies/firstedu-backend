@@ -235,13 +235,7 @@ export const joinChallenge = async (id, userId) => {
   }
 
   // Validate if the test is paid and the user has purchased it before joining
-  const test = await testRepository.findTestById(challenge.test);
-  if (test && test.price > 0) {
-    const access = await checkStudentAccessForPaidTest(challenge.test, userId);
-    if (!access.hasAccess) {
-      throw new ApiError(403, `First buy this test '${test.title}' from resource store`);
-    }
-  }
+  // (Purchase check for friends has been removed so they can join freely)
 
   challenge.participants.push({
     student: userId,
@@ -305,16 +299,7 @@ export const startChallenge = async (id, userId) => {
   const participantIds = challenge.participants.map((p) => p.student);
 
   // Paid tests: prevent partial starts by ensuring all participants purchased.
-  const test = await testRepository.findTestById(challenge.test);
-  if (test && test.price > 0) {
-    const accessResults = await Promise.all(
-      participantIds.map((pid) => checkStudentAccessForPaidTest(challenge.test, pid))
-    );
-    const missingPurchase = accessResults.some((r) => !r.hasAccess);
-    if (missingPurchase) {
-      throw new ApiError(403, "All participants must purchase this test first");
-    }
-  }
+  // (Purchase check for participants has been removed so they can start freely)
 
   const sessions = [];
   for (const participantId of participantIds) {

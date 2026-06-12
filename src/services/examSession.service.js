@@ -517,8 +517,8 @@ export const startExamSession = async (testId, studentId, options = {}) => {
     throw new ApiError(400, "Question bank has no questions");
   }
 
-  // Check if student can access paid test.
-  if (test.price > 0 && test.applicableFor !== "everyday_challenge") {
+  // Check if student can access paid test (bypass if it's a challenge room).
+  if (test.price > 0 && test.applicableFor !== "everyday_challenge" && !challengeId) {
     const access =
       test.applicableFor === "challenge_yourself"
         ? await checkStudentAccessForPaidChallengeYourselfTest(testId, studentId)

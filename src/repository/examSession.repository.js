@@ -158,6 +158,7 @@ const findAllCompletedSessions = async (testId) => {
       test: testId,
       status: "completed",
       score: { $ne: null },
+      challenge: null,
     }).select("student score completedAt");
   } catch (error) {
     throw new ApiError(500, "Failed to fetch completed sessions", error.message);
@@ -176,6 +177,7 @@ const findCompletedSessionsForStudentAndTests = async (studentId, testIds) => {
       test: { $in: ids },
       status: "completed",
       score: { $ne: null },
+      challenge: null,
     }).select("test student score completedAt");
   } catch (error) {
     throw new ApiError(
@@ -213,7 +215,7 @@ const getSessionStatusMapByStudent = async (studentId, testIds) => {
     const objectIds = ids.map((id) => new mongoose.Types.ObjectId(id));
 
     const latest = await ExamSession.aggregate([
-      { $match: { student: new mongoose.Types.ObjectId(studentId), test: { $in: objectIds } } },
+      { $match: { student: new mongoose.Types.ObjectId(studentId), test: { $in: objectIds }, challenge: null } },
       // Use updatedAt so pause/resume changes reflect immediately
       { $sort: { updatedAt: -1, createdAt: -1 } },
       {
@@ -253,6 +255,7 @@ const getRankedByTest = async (testId, studentIds = null, limit = 10, year = nul
       test: testId,
       status: "completed",
       score: { $ne: null, $gte: 0 },
+      challenge: null,
     };
     if (year) {
       match.completedAt = {

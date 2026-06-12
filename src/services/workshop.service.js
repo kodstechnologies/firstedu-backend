@@ -218,19 +218,6 @@ export const updateWorkshop = async (id, updateData, file) => {
     throw new ApiError(404, "Workshop not found");
   }
 
-  // Block edit if any student has purchased this workshop
-  const purchasedCount = await eventRegistrationRepository.count({
-    eventType: "workshop",
-    eventId: id,
-    paymentStatus: "completed",
-  });
-  if (purchasedCount > 0) {
-    throw new ApiError(
-      400,
-      `This workshop has been purchased by ${purchasedCount} student(s) and cannot be edited.`
-    );
-  }
-
   if (file) {
     if (workshop.imageUrl) {
       await deleteFileFromCloudinary(workshop.imageUrl);
@@ -267,19 +254,6 @@ export const deleteWorkshop = async (id) => {
   const workshop = await workshopRepository.findById(id);
   if (!workshop) {
     throw new ApiError(404, "Workshop not found");
-  }
-
-  // Block delete if any student has purchased this workshop
-  const purchasedCount = await eventRegistrationRepository.count({
-    eventType: "workshop",
-    eventId: id,
-    paymentStatus: "completed",
-  });
-  if (purchasedCount > 0) {
-    throw new ApiError(
-      400,
-      `This workshop has been purchased by ${purchasedCount} student(s) and cannot be deleted.`
-    );
   }
 
   if (workshop.imageUrl) {

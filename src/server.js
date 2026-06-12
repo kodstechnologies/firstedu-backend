@@ -17,6 +17,7 @@ import olympiadNotificationsService from './services/olympiadNotifications.servi
 import workshopNotificationsService from './services/workshopNotifications.service.js';
 import liveCompetitionNotificationsService from './services/liveCompetitionNotifications.service.js';
 import everydayChallengeCronService from './services/everydayChallengeCron.service.js';
+import studentEverydayChallengeCronService from './services/studentEverydayChallengeCron.service.js';
 
 dotenv.config();
 
@@ -126,10 +127,30 @@ const startServer = async () => {
       try {
         await everydayChallengeCronService.runEverydayChallengeCronTick();
       } catch (error) {
-        console.error('❌ Error in everyday challenge cron:', error);
+        console.error('❌ Error in everyday challenge admin cron:', error);
       }
     });
-    console.log('⏰ Daily cron (9 AM): everyday challenge notifications');
+    console.log('⏰ Daily cron (9 AM): everyday challenge admin notifications');
+
+    // Setup morning cron for Student Everyday Challenge Reminders (Runs every day at 8:00 AM)
+    cron.schedule('0 8 * * *', async () => {
+      try {
+        await studentEverydayChallengeCronService.runStudentEverydayChallengeReminders(true);
+      } catch (error) {
+        console.error('❌ Error in student morning everyday challenge cron:', error);
+      }
+    });
+    console.log('⏰ Daily cron (8 AM): student everyday challenge morning reminders');
+
+    // Setup evening cron for Student Everyday Challenge Reminders (Runs every day at 6:00 PM)
+    cron.schedule('0 18 * * *', async () => {
+      try {
+        await studentEverydayChallengeCronService.runStudentEverydayChallengeReminders(false);
+      } catch (error) {
+        console.error('❌ Error in student evening everyday challenge cron:', error);
+      }
+    });
+    console.log('⏰ Daily cron (6 PM): student everyday challenge evening reminders');
 
     const port = process.env.PORT || 8000;
 
