@@ -133,21 +133,51 @@ const parseJsonArrayFromAI = (rawText) => {
     );
 };
 
+const isRateLimitGeminiError = (error) => {
+    const msg = String(error?.message || error || "").toLowerCase();
+    return msg.includes("rate limit") || msg.includes("quota");
+};
+
 const isTransientGeminiError = (error) => {
     const msg = String(error?.message || error || "").toLowerCase();
     return (
         msg.includes("503") ||
         msg.includes("unavailable") ||
         msg.includes("high demand") ||
-        msg.includes("rate limit") ||
-        msg.includes("quota") ||
         msg.includes("overloaded") ||
         msg.includes("resource exhausted")
     );
 };
 
+const isGeminiSafetyBlockError = (error) => {
+    const msg = String(error?.message || error || "").toLowerCase();
+    return (
+        msg.includes("safety") ||
+        msg.includes("blocked") ||
+        msg.includes("block_reason") ||
+        msg.includes("content filter") ||
+        msg.includes("harm category") ||
+        msg.includes("recitation") ||
+        msg.includes("prohibited content") ||
+        msg.includes("candidate was blocked")
+    );
+};
+
 const toGeminiQuestionBankError = (error) => {
+    if (isGeminiSafetyBlockError(error)) {
+        return new ApiError(
+            400,
+            "AI could not generate questions for this topic due to content restrictions. Try rephrasing the topic or bank name."
+        );
+    }
+
     if (error instanceof ApiError) {
+        if (isRateLimitGeminiError(error)) {
+            return new ApiError(
+                429,
+                "AI service rate limit exceeded. Please try again later."
+            );
+        }
         if (isTransientGeminiError(error)) {
             return new ApiError(
                 503,
@@ -161,6 +191,12 @@ const toGeminiQuestionBankError = (error) => {
     if (msg.includes("API key")) {
         return new ApiError(500, "Invalid or missing Gemini API key");
     }
+    if (isRateLimitGeminiError(error)) {
+        return new ApiError(
+            429,
+            "AI service rate limit exceeded. Please try again later."
+        );
+    }
     if (isTransientGeminiError(error)) {
         return new ApiError(
             503,
@@ -170,56 +206,104 @@ const toGeminiQuestionBankError = (error) => {
     if (msg.includes("Failed to parse AI response")) {
         return new ApiError(500, msg);
     }
-    return new ApiError(500, `AI question bank generation failed: ${msg}`);
+    return new ApiError(500, `AI question generation failed: ${msg}`);
 };
 
 const isRetryableQuestionBankError = (error) => {
-    if (isTransientGeminiError(error)) return true;
+    if (isGeminiSafetyBlockError(error)) return false;
+    if (isTransientGeminiError(error) || isRateLimitGeminiError(error)) {
+        return true;
+    }
+
     const msg = String(error?.message || "");
-    return msg.includes("Failed to parse AI response");
+    if (msg.includes("Failed to parse AI response")) return true;
+    if (msg.includes("AI returned empty response")) return true;
+    if (msg.includes("AI returned") && msg.includes("were requested")) return true;
+    if (/Expected \d+ .* questions, got/.test(msg)) return true;
+    if (/Question \d+:/.test(msg)) return true;
+    if (msg.includes("missing fields")) return true;
+    if (msg.includes("invalid answer")) return true;
+    if (msg.includes("multiple-choice needs")) return true;
+    if (msg.includes("cannot have all four")) return true;
+    if (msg.includes("options must be answer text")) return true;
+    if (msg.includes("Response is not an array")) return true;
+    if (msg.includes("Response is not a JSON array")) return true;
+    return false;
+};
+
+const validateSimpleMcqQuestions = (questions) => {
+    if (!Array.isArray(questions)) {
+        throw new Error("Response is not an array");
+    }
+
+    return questions.map((q, index) => {
+        const requiredFields = [
+            "questionText",
+            "optionA",
+            "optionB",
+            "optionC",
+            "optionD",
+            "answer",
+            "explanation",
+        ];
+        const missingFields = requiredFields.filter((field) => !q[field]);
+
+        if (missingFields.length > 0) {
+            throw new Error(
+                `Question ${index + 1} is missing fields: ${missingFields.join(", ")}`
+            );
+        }
+
+        const validAnswers = ["A", "B", "C", "D"];
+        if (!validAnswers.includes(q.answer.toUpperCase())) {
+            throw new Error(
+                `Question ${index + 1} has invalid answer: ${q.answer}. Must be A, B, C, or D`
+            );
+        }
+
+        return {
+            questionText: q.questionText.trim(),
+            optionA: q.optionA.trim(),
+            optionB: q.optionB.trim(),
+            optionC: q.optionC.trim(),
+            optionD: q.optionD.trim(),
+            answer: q.answer.toUpperCase(),
+            explanation: q.explanation.trim(),
+        };
+    });
 };
 
 /**
- * Parse and validate the AI-generated questions
+ * Parse and validate the AI-generated questions (legacy string input)
  */
 const parseAndValidateQuestions = (jsonString) => {
     try {
         const questions = JSON.parse(jsonString);
-
-        if (!Array.isArray(questions)) {
-            throw new Error('Response is not an array');
-        }
-
-        // Validate each question has required fields
-        const validatedQuestions = questions.map((q, index) => {
-            const requiredFields = ['questionText', 'optionA', 'optionB', 'optionC', 'optionD', 'answer', 'explanation'];
-            const missingFields = requiredFields.filter(field => !q[field]);
-
-            if (missingFields.length > 0) {
-                throw new Error(`Question ${index + 1} is missing fields: ${missingFields.join(', ')}`);
-            }
-
-            // Validate answer is A, B, C, or D
-            const validAnswers = ['A', 'B', 'C', 'D'];
-            if (!validAnswers.includes(q.answer.toUpperCase())) {
-                throw new Error(`Question ${index + 1} has invalid answer: ${q.answer}. Must be A, B, C, or D`);
-            }
-
-            return {
-                questionText: q.questionText.trim(),
-                optionA: q.optionA.trim(),
-                optionB: q.optionB.trim(),
-                optionC: q.optionC.trim(),
-                optionD: q.optionD.trim(),
-                answer: q.answer.toUpperCase(),
-                explanation: q.explanation.trim()
-            };
-        });
-
-        return validatedQuestions;
+        return validateSimpleMcqQuestions(questions);
     } catch (error) {
+        if (error instanceof ApiError) throw error;
         throw new ApiError(500, `Failed to parse AI response: ${error.message}`);
     }
+};
+
+const callGeminiWithRetries = async (generateOnce) => {
+    let lastError;
+    for (let attempt = 1; attempt <= GEMINI_QB_MAX_ATTEMPTS; attempt++) {
+        try {
+            return await generateOnce();
+        } catch (error) {
+            lastError = error;
+            if (
+                attempt < GEMINI_QB_MAX_ATTEMPTS &&
+                isRetryableQuestionBankError(error)
+            ) {
+                await sleep(GEMINI_RETRY_DELAY_MS * attempt);
+                continue;
+            }
+            throw toGeminiQuestionBankError(error);
+        }
+    }
+    throw toGeminiQuestionBankError(lastError);
 };
 
 /**
@@ -513,111 +597,60 @@ export const generateQuestionBankSuggestions = async (params) => {
         excludeQuestionTexts,
     });
 
-    let lastError;
-    for (let attempt = 1; attempt <= GEMINI_QB_MAX_ATTEMPTS; attempt++) {
-        try {
-            const result = await genAI.models.generateContent({
-                model: "gemini-2.5-flash",
-                contents: [{ role: "user", parts: [{ text: prompt }] }],
-                config: {
-                    responseMimeType: "application/json",
-                },
-            });
+    return callGeminiWithRetries(async () => {
+        const result = await genAI.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: [{ role: "user", parts: [{ text: prompt }] }],
+            config: {
+                responseMimeType: "application/json",
+            },
+        });
 
-            const text = result.text || "";
-            if (!text) {
-                throw new ApiError(500, "AI returned empty response");
-            }
-
-            return parseQuestionBankAIResponse(text, expectedCounts);
-        } catch (error) {
-            lastError = error;
-            if (
-                attempt < GEMINI_QB_MAX_ATTEMPTS &&
-                isRetryableQuestionBankError(error)
-            ) {
-                await sleep(GEMINI_RETRY_DELAY_MS * attempt);
-                continue;
-            }
-            throw toGeminiQuestionBankError(error);
+        const text = result.text || "";
+        if (!text) {
+            throw new ApiError(500, "AI returned empty response");
         }
-    }
 
-    throw toGeminiQuestionBankError(lastError);
+        return parseQuestionBankAIResponse(text, expectedCounts);
+    });
 };
 
 export const generateQuestionsWithAI = async (params) => {
     const { topic, subject, classLevel, difficulty, numberOfQuestions } = params;
 
-    try {
-        // Build the prompt
-        const prompt = buildPrompt({
-            topic,
-            subject,
-            classLevel,
-            difficulty,
-            numberOfQuestions
-        });
+    const prompt = buildPrompt({
+        topic,
+        subject,
+        classLevel,
+        difficulty,
+        numberOfQuestions,
+    });
 
-        // Generate content using Gemini 2.5 Flash
+    return callGeminiWithRetries(async () => {
         const result = await genAI.models.generateContent({
             model: "gemini-2.5-flash",
-            contents: [
-                {
-                    role: "user",
-                    parts: [{ text: prompt }]
-                }
-            ]
+            contents: [{ role: "user", parts: [{ text: prompt }] }],
+            config: {
+                responseMimeType: "application/json",
+            },
         });
 
         const text = result.text || "";
-
         if (!text) {
             throw new ApiError(500, "AI returned empty response");
         }
 
-        // Clean AI response
-        const cleanedResponse = cleanAIResponse(text);
+        const parsed = parseJsonArrayFromAI(text);
+        const questions = validateSimpleMcqQuestions(parsed);
 
-        // Parse and validate JSON
-        const questions = parseAndValidateQuestions(cleanedResponse);
-
-        // Add metadata
-        const questionsWithMetadata = questions.map(q => ({
+        return questions.map((q) => ({
             ...q,
             topic,
             subject,
             classLevel,
-            difficulty
+            difficulty,
         }));
-
-        return questionsWithMetadata;
-
-    } catch (error) {
-
-        if (error.message?.includes("API key")) {
-            throw new ApiError(500, "Invalid or missing Gemini API key");
-        }
-
-        if (
-            error.message?.includes("quota") ||
-            error.message?.includes("rate limit")
-        ) {
-            throw new ApiError(
-                429,
-                "AI service rate limit exceeded. Please try again later."
-            );
-        }
-
-        if (error instanceof ApiError) {
-            throw error;
-        }
-
-        throw new ApiError(
-            500,
-            `AI question generation failed: ${error.message}`
-        );
-    }
+    });
 };
 
 
