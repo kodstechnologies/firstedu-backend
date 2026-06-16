@@ -1,7 +1,7 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
-import { generateOTP } from "../utils/otp.js";
+import { generateOTP, generate6DigitOTP } from "../utils/otp.js";
 import { sendOTPEmail } from "../utils/sendEmail.js";
 import teacherRepository from "../repository/teacher.repository.js";
 import teacherValidator from "../validation/teacher.validator.js";
@@ -109,7 +109,7 @@ export const requestForgotPasswordOTP = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Email not registered");
   }
 
-  const otp = generateOTP();
+  const otp = generate6DigitOTP();
 
   teacher.passwordResetOTP = otp;
   teacher.passwordResetOTPExpires = Date.now() + 10 * 60 * 1000; // 10 minutes

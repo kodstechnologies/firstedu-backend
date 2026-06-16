@@ -100,7 +100,7 @@ export const sendOTPEmail = async (email, otp, name) => {
           <p style="color: #999; font-size: 12px;">If you did not request this, please ignore this email.</p>
         </div>
       `,
-      from: `"Your App" <${process.env.SMTP_EMAIL}>`,
+      from: `"Iscorre" <${process.env.SMTP_EMAIL}>`,
     });
     console.log(`✅ Email sent successfully to ${email}. Message ID: ${info.messageId}`);
     return info;

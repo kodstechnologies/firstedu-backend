@@ -1,7 +1,7 @@
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
-import { generateOTP } from '../utils/otp.js';
+import { generateOTP, generate6DigitOTP } from '../utils/otp.js';
 import { sendOTPEmail } from '../utils/sendEmail.js';
 import adminRepository from '../repository/admin.repository.js';
 import adminAuthValidator from '../validation/adminAuth.validator.js';
@@ -116,7 +116,7 @@ export const requestForgotPasswordOTP = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Email not registered");
   }
 
-  const otp = generateOTP();
+  const otp = generate6DigitOTP();
 
   admin.passwordResetOTP = otp;
   admin.passwordResetOTPExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
