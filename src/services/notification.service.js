@@ -141,79 +141,100 @@ export const sendNotificationToMultipleStudents = async (
   data = {},
   sentBy
 ) => {
-  const students = await studentRepository.findAll(
-    { _id: { $in: studentIds } },
-    { limit: 1000 }
-  );
-
-  if (!students.students || students.students.length === 0) {
+  if (!studentIds || studentIds.length === 0) {
     throw new Error("No students found");
   }
 
-  const notifications = students.students.map((student) => ({
-    title,
-    body,
-    recipient: student._id,
-    sentBy,
-    data,
-    type: data.type || "general",
-  }));
+  const batchSize = 500;
+  let allCreatedNotifications = [];
+  let totalFcmSent = 0;
+  let totalFcmFailed = 0;
 
-  const createdNotifications = await notificationRepository.createMany(notifications);
+  for (let i = 0; i < studentIds.length; i += batchSize) {
+    const chunkIds = studentIds.slice(i, i + batchSize);
+    
+    const studentsResult = await studentRepository.findAll(
+      { _id: { $in: chunkIds } },
+      { limit: batchSize }
+    );
+    const studentsList = studentsResult.students || [];
 
-  const sessionMap = await studentSessionRepository.findByStudentIds(studentIds);
-  const fcmTokens = [];
-  const tokenToNotificationMap = new Map();
+    if (studentsList.length === 0) continue;
 
-  students.students.forEach((student, index) => {
-    const session = sessionMap.get(student._id.toString());
-    const token = session?.fcmToken;
-    if (token) {
-      fcmTokens.push(token);
-      tokenToNotificationMap.set(token, createdNotifications[index]._id);
-    }
-  });
+    const notifications = studentsList.map((student) => ({
+      title,
+      body,
+      recipient: student._id,
+      sentBy,
+      data,
+      type: data.type || "general",
+    }));
 
-  // Send FCM notifications
-  let fcmResult = null;
-  if (fcmTokens.length > 0) {
-    try {
-      fcmResult = await sendNotificationToMultipleDevices(
-        fcmTokens,
-        title,
-        body,
-        {
-          ...data,
-          audience: "student",
-        }
-      );
+    const createdNotifications = await notificationRepository.createMany(notifications);
+    allCreatedNotifications.push(...createdNotifications);
 
-      // Update notifications with FCM status for successful sends
-      if (fcmResult.success && fcmResult.responses) {
-        const updatePromises = [];
-        fcmResult.responses.forEach((response, index) => {
-          if (response.success) {
-            const notificationId = Array.from(tokenToNotificationMap.values())[index];
-            updatePromises.push(
-              notificationRepository.update(notificationId, {
-                fcmSent: true,
-                fcmSentAt: new Date(),
-              })
-            );
-          }
-        });
-        await Promise.all(updatePromises);
+    const sessionMap = await studentSessionRepository.findByStudentIds(chunkIds);
+    const fcmTokens = [];
+    const notificationIdsForTokens = []; // Using Array instead of Map
+
+    studentsList.forEach((student, index) => {
+      const session = sessionMap.get(student._id.toString());
+      const token = session?.fcmToken?.trim();
+      if (token) {
+        fcmTokens.push(token);
+        notificationIdsForTokens.push(createdNotifications[index]._id);
       }
-    } catch (error) {
-      console.error("Error sending FCM notifications:", error);
+    });
+
+    if (fcmTokens.length > 0) {
+      try {
+        const fcmResult = await sendNotificationToMultipleDevices(
+          fcmTokens,
+          title,
+          body,
+          {
+            ...data,
+            audience: "student",
+          }
+        );
+
+        totalFcmSent += fcmResult.successCount || 0;
+        totalFcmFailed += fcmResult.failureCount || 0;
+
+        if (fcmResult.success && fcmResult.responses) {
+          const bulkOps = [];
+          fcmResult.responses.forEach((response, index) => {
+            if (response.success) {
+              const notificationId = notificationIdsForTokens[index];
+              if (notificationId) {
+                bulkOps.push({
+                  updateOne: {
+                    filter: { _id: notificationId },
+                    update: { $set: { fcmSent: true, fcmSentAt: new Date() } }
+                  }
+                });
+              }
+            }
+          });
+          if (bulkOps.length > 0) {
+            await notificationRepository.bulkWrite(bulkOps);
+          }
+        }
+      } catch (error) {
+        console.error("Error sending FCM notifications:", error);
+      }
     }
   }
 
+  if (allCreatedNotifications.length === 0) {
+    throw new Error("No students found");
+  }
+
   return {
-    notifications: createdNotifications,
-    totalSent: createdNotifications.length,
-    fcmSent: fcmResult?.successCount || 0,
-    fcmFailed: fcmResult?.failureCount || 0,
+    notifications: allCreatedNotifications,
+    totalSent: allCreatedNotifications.length,
+    fcmSent: totalFcmSent,
+    fcmFailed: totalFcmFailed,
   };
 };
 
@@ -227,72 +248,93 @@ export const sendNotificationToMultipleTeachers = async (
   data = {},
   sentBy
 ) => {
-  const result = await teacherRepository.findAll(
-    { _id: { $in: teacherIds } },
-    { limit: 1000 }
-  );
-
-  if (!result.teachers || result.teachers.length === 0) {
+  if (!teacherIds || teacherIds.length === 0) {
     throw new Error("No teachers found");
   }
 
-  const notifications = result.teachers.map((teacher) => ({
-    title,
-    body,
-    recipient: teacher._id,
-    sentBy,
-    data,
-    type: data.type || "general",
-  }));
+  const batchSize = 500;
+  let allCreatedNotifications = [];
+  let totalFcmSent = 0;
+  let totalFcmFailed = 0;
 
-  const createdNotifications = await notificationRepository.createMany(notifications);
+  for (let i = 0; i < teacherIds.length; i += batchSize) {
+    const chunkIds = teacherIds.slice(i, i + batchSize);
 
-  const fcmTokens = [];
-  const notificationIdsForTokens = [];
+    const result = await teacherRepository.findAll(
+      { _id: { $in: chunkIds } },
+      { limit: batchSize }
+    );
+    const teachersList = result.teachers || [];
 
-  result.teachers.forEach((teacher, index) => {
-    const token = teacher.fcmToken?.trim();
-    if (token) {
-      fcmTokens.push(token);
-      notificationIdsForTokens.push(createdNotifications[index]._id);
-    }
-  });
+    if (teachersList.length === 0) continue;
 
-  let fcmResult = null;
-  if (fcmTokens.length > 0) {
-    try {
-      fcmResult = await sendNotificationToMultipleDevices(fcmTokens, title, body, {
-        ...data,
-        audience: "teacher",
-      });
+    const notifications = teachersList.map((teacher) => ({
+      title,
+      body,
+      recipient: teacher._id,
+      sentBy,
+      data,
+      type: data.type || "general",
+    }));
 
-      if (fcmResult.success && fcmResult.responses) {
-        const updatePromises = [];
-        fcmResult.responses.forEach((response, index) => {
-          if (response.success) {
-            const notificationId = notificationIdsForTokens[index];
-            if (notificationId) {
-              updatePromises.push(
-                notificationRepository.update(notificationId, {
-                  fcmSent: true,
-                  fcmSentAt: new Date(),
-                })
-              );
-            }
-          }
-        });
-        await Promise.all(updatePromises);
+    const createdNotifications = await notificationRepository.createMany(notifications);
+    allCreatedNotifications.push(...createdNotifications);
+
+    const fcmTokens = [];
+    const notificationIdsForTokens = [];
+
+    teachersList.forEach((teacher, index) => {
+      const token = teacher.fcmToken?.trim();
+      if (token) {
+        fcmTokens.push(token);
+        notificationIdsForTokens.push(createdNotifications[index]._id);
       }
-    } catch (error) {
-      console.error("Error sending FCM notifications to teachers:", error);
+    });
+
+    if (fcmTokens.length > 0) {
+      try {
+        const fcmResult = await sendNotificationToMultipleDevices(fcmTokens, title, body, {
+          ...data,
+          audience: "teacher",
+        });
+
+        totalFcmSent += fcmResult.successCount || 0;
+        totalFcmFailed += fcmResult.failureCount || 0;
+
+        if (fcmResult.success && fcmResult.responses) {
+          const bulkOps = [];
+          fcmResult.responses.forEach((response, index) => {
+            if (response.success) {
+              const notificationId = notificationIdsForTokens[index];
+              if (notificationId) {
+                bulkOps.push({
+                  updateOne: {
+                    filter: { _id: notificationId },
+                    update: { $set: { fcmSent: true, fcmSentAt: new Date() } }
+                  }
+                });
+              }
+            }
+          });
+          if (bulkOps.length > 0) {
+            await notificationRepository.bulkWrite(bulkOps);
+          }
+        }
+      } catch (error) {
+        console.error("Error sending FCM notifications to teachers:", error);
+      }
     }
   }
 
+  if (allCreatedNotifications.length === 0) {
+    throw new Error("No teachers found");
+  }
+
   return {
-    notifications: createdNotifications,
-    totalSent: createdNotifications.length,
-    fcmSent: fcmResult?.successCount || 0,
-    fcmFailed: fcmResult?.failureCount || 0,
+    notifications: allCreatedNotifications,
+    totalSent: allCreatedNotifications.length,
+    fcmSent: totalFcmSent,
+    fcmFailed: totalFcmFailed,
   };
 };
 
@@ -375,43 +417,42 @@ export const sendNotificationToPurchasers = async (
  * Send notification to all students
  */
 export const sendNotificationToAllStudents = async (title, body, data = {}, sentBy) => {
-  // Get all students with pagination
-  let allStudentIds = [];
   let page = 1;
-  const limit = 100;
+  const batchSize = 500;
+  const CONCURRENCY_LIMIT = 5; // Process 5 batches concurrently
+  
+  let activePromises = [];
+  const results = [];
+  let totalFound = 0;
 
   while (true) {
-    const result = await studentRepository.findAll({}, { page, limit });
+    const result = await studentRepository.findAll({}, { page, limit: batchSize });
     if (!result.students || result.students.length === 0) break;
 
-    allStudentIds.push(...result.students.map((s) => s._id));
+    const batch = result.students.map((s) => s._id);
+    totalFound += batch.length;
 
-    if (result.students.length < limit) break;
+    activePromises.push(
+      sendNotificationToMultipleStudents(batch, title, body, data, sentBy)
+    );
+
+    if (activePromises.length >= CONCURRENCY_LIMIT) {
+      const batchResults = await Promise.all(activePromises);
+      results.push(...batchResults);
+      activePromises = [];
+    }
+
+    if (result.students.length < batchSize) break;
     page++;
   }
 
-  if (allStudentIds.length === 0) {
+  if (activePromises.length > 0) {
+    const batchResults = await Promise.all(activePromises);
+    results.push(...batchResults);
+  }
+
+  if (totalFound === 0) {
     throw new Error("No students found");
-  }
-
-  // Send in batches to avoid overwhelming the system
-  const batchSize = 500;
-  const batches = [];
-
-  for (let i = 0; i < allStudentIds.length; i += batchSize) {
-    batches.push(allStudentIds.slice(i, i + batchSize));
-  }
-
-  const results = [];
-  for (const batch of batches) {
-    const result = await sendNotificationToMultipleStudents(
-      batch,
-      title,
-      body,
-      data,
-      sentBy
-    );
-    results.push(result);
   }
 
   // Aggregate results
@@ -426,34 +467,42 @@ export const sendNotificationToAllStudents = async (title, body, data = {}, sent
  * Send notification to all teachers
  */
 export const sendNotificationToAllTeachers = async (title, body, data = {}, sentBy) => {
-  let allTeacherIds = [];
   let page = 1;
-  const limit = 100;
+  const batchSize = 500;
+  const CONCURRENCY_LIMIT = 5;
+  
+  let activePromises = [];
+  const results = [];
+  let totalFound = 0;
 
   while (true) {
-    const result = await teacherRepository.findAll({}, { page, limit });
+    const result = await teacherRepository.findAll({}, { page, limit: batchSize });
     if (!result.teachers || result.teachers.length === 0) break;
 
-    allTeacherIds.push(...result.teachers.map((t) => t._id));
+    const batch = result.teachers.map((t) => t._id);
+    totalFound += batch.length;
 
-    if (result.teachers.length < limit) break;
+    activePromises.push(
+      sendNotificationToMultipleTeachers(batch, title, body, data, sentBy)
+    );
+
+    if (activePromises.length >= CONCURRENCY_LIMIT) {
+      const batchResults = await Promise.all(activePromises);
+      results.push(...batchResults);
+      activePromises = [];
+    }
+
+    if (result.teachers.length < batchSize) break;
     page++;
   }
 
-  if (allTeacherIds.length === 0) {
+  if (activePromises.length > 0) {
+    const batchResults = await Promise.all(activePromises);
+    results.push(...batchResults);
+  }
+
+  if (totalFound === 0) {
     throw new Error("No teachers found");
-  }
-
-  const batchSize = 500;
-  const batches = [];
-  for (let i = 0; i < allTeacherIds.length; i += batchSize) {
-    batches.push(allTeacherIds.slice(i, i + batchSize));
-  }
-
-  const results = [];
-  for (const batch of batches) {
-    const result = await sendNotificationToMultipleTeachers(batch, title, body, data, sentBy);
-    results.push(result);
   }
 
   return {

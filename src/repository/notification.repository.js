@@ -108,6 +108,13 @@ class NotificationRepository {
   async createMany(notifications) {
     return await Notification.insertMany(notifications);
   }
+
+  /**
+   * Perform bulk operations
+   */
+  async bulkWrite(operations) {
+    return await Notification.bulkWrite(operations);
+  }
 }
 
 export default new NotificationRepository();
