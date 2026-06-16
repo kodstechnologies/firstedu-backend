@@ -39,8 +39,13 @@ const examSessionSchema = new mongoose.Schema(
       {
         questionId: {
           type: mongoose.Schema.Types.ObjectId,
-          ref: "Question",
           required: true,
+          refPath: "answers.questionModel",
+        },
+        questionModel: {
+          type: String,
+          enum: ["Question", "AiQuestion"],
+          default: "Question",
         },
         answer: mongoose.Schema.Types.Mixed, // Can be string, array, boolean
         status: {

@@ -78,7 +78,52 @@ export const saveGeneratedQuestionsSchema = Joi.object({
     questionBankId: Joi.string().optional().allow(null, '')
 });
 
+// Question bank AI suggestions (single / multiple / true_false counts)
+export const generateQuestionBankSuggestionsSchema = Joi.object({
+    topic: Joi.string().required().trim().min(2).max(300).messages({
+        'string.empty': 'Topic is required',
+        'any.required': 'Topic is required',
+    }),
+    bankName: Joi.string().trim().max(200).optional().allow(''),
+    difficulty: Joi.string()
+        .valid('easy', 'medium', 'hard', 'Easy', 'Medium', 'Hard')
+        .required()
+        .messages({
+            'any.only': 'Difficulty must be easy, medium, or hard',
+            'any.required': 'Difficulty is required',
+        }),
+    singleCount: Joi.number().integer().min(0).max(30).default(0),
+    multipleCount: Joi.number().integer().min(0).max(30).default(0),
+    trueFalseCount: Joi.number().integer().min(0).max(30).default(0),
+    /** Stems from prior AI batches in this session — do not repeat */
+    excludeQuestionTexts: Joi.array()
+        .items(Joi.string().trim().min(3).max(500))
+        .max(100)
+        .default([]),
+})
+    .custom((value, helpers) => {
+        const total =
+            (value.singleCount || 0) +
+            (value.multipleCount || 0) +
+            (value.trueFalseCount || 0);
+        if (total < 1) {
+            return helpers.error('any.custom', {
+                message: 'Request at least one question (single, multiple, or true/false)',
+            });
+        }
+        if (total > 30) {
+            return helpers.error('any.custom', {
+                message: 'Cannot generate more than 30 questions per request',
+            });
+        }
+        return value;
+    })
+    .messages({
+        'any.custom': '{{#message}}',
+    });
+
 export default {
     generateQuestions: generateQuestionsSchema,
-    saveGeneratedQuestions: saveGeneratedQuestionsSchema
+    saveGeneratedQuestions: saveGeneratedQuestionsSchema,
+    generateQuestionBankSuggestions: generateQuestionBankSuggestionsSchema,
 };

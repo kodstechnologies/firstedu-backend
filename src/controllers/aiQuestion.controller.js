@@ -40,6 +40,41 @@ export const generateQuestions = asyncHandler(async (req, res) => {
  * @route POST /api/admin/save-generated-questions
  * @access Admin/Teacher
  */
+/**
+ * Generate question-bank suggestions (single, multiple, true/false) via Gemini
+ * @route POST /api/admin/ai/generate-question-bank-suggestions
+ */
+export const generateQuestionBankSuggestions = asyncHandler(async (req, res) => {
+    const { error, value } =
+        aiQuestionValidator.generateQuestionBankSuggestions.validate(req.body);
+
+    if (error) {
+        throw new ApiError(
+            400,
+            'Validation Error',
+            error.details.map((x) => x.message)
+        );
+    }
+
+    const difficulty = String(value.difficulty).toLowerCase();
+    const questions = await aiQuestionService.generateQuestionBankSuggestions({
+        topic: value.topic,
+        bankName: value.bankName || value.topic,
+        difficulty,
+        singleCount: value.singleCount,
+        multipleCount: value.multipleCount,
+        trueFalseCount: value.trueFalseCount,
+        excludeQuestionTexts: value.excludeQuestionTexts || [],
+    });
+
+    return res.status(200).json(
+        ApiResponse.success(
+            { questions, count: questions.length },
+            'Question bank suggestions generated successfully'
+        )
+    );
+});
+
 export const saveGeneratedQuestions = asyncHandler(async (req, res) => {
     // Validate request body
     const { error, value } = aiQuestionValidator.saveGeneratedQuestions.validate(req.body);
@@ -117,5 +152,6 @@ export const saveGeneratedQuestions = asyncHandler(async (req, res) => {
 
 export default {
     generateQuestions,
-    saveGeneratedQuestions
+    generateQuestionBankSuggestions,
+    saveGeneratedQuestions,
 };

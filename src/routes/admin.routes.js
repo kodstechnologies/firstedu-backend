@@ -197,6 +197,13 @@ import {
   toggleSectionWiseQuestions,
   deleteQuestionBank,
 } from "../controllers/questionBank.controller.js";
+import {
+  createAiQuestionBankWithQuestions,
+  getAiQuestionBanks,
+  getAiQuestionBankById,
+  getAiQuestionsByBankId,
+  deleteAiQuestionBank,
+} from "../controllers/aiQuestionBank.controller.js";
 
 import {
   getAllSupport,
@@ -224,6 +231,7 @@ import {
 
 import {
   generateQuestions,
+  generateQuestionBankSuggestions,
   saveGeneratedQuestions,
 } from '../controllers/aiQuestion.controller.js';
 
@@ -414,6 +422,21 @@ router.patch(
   toggleSectionWiseQuestions
 );
 router.delete("/question-banks/:id", verifyJWT, deleteQuestionBank);
+
+// AI Question Banks (separate collection from manual question banks)
+router.post(
+  "/ai-question-banks/with-questions",
+  verifyJWT,
+  createAiQuestionBankWithQuestions
+);
+router.get("/ai-question-banks", verifyJWT, getAiQuestionBanks);
+router.get("/ai-question-banks/:id", verifyJWT, getAiQuestionBankById);
+router.get(
+  "/ai-question-banks/:id/questions",
+  verifyJWT,
+  getAiQuestionsByBankId
+);
+router.delete("/ai-question-banks/:id", verifyJWT, deleteAiQuestionBank);
 
 // Question Bank Management Routes (individual questions - create, list all, get, update, delete)
 router.post("/questions", verifyJWT, uploadAnyImages, createQuestion);
@@ -648,6 +671,13 @@ router.post(
   '/ai/generate-questions',
   verifyJWT,
   generateQuestions
+);
+
+// Question bank: single / multiple / true-false suggestions (Gemini)
+router.post(
+  '/ai/generate-question-bank-suggestions',
+  verifyJWT,
+  generateQuestionBankSuggestions
 );
 
 // Save generated questions to Question Bank

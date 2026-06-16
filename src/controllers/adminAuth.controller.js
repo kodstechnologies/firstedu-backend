@@ -52,20 +52,20 @@ export const adminLogin = asyncHandler(async (req, res) => {
     createdAt: admin.createdAt,
   };
 
-  // 🍪 Set Secure Cookies
-  res.cookie('accessToken', accessToken, {
+  const isProd = process.env.NODE_ENV === 'production';
+  const cookieOptions = {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production', // Only HTTPS in production
-    sameSite: 'None', // Required if using cross-domain frontend
-    maxAge: 60 * 60 * 1000, // 1 hour
-  });
+    secure: isProd,
+    sameSite: isProd ? 'None' : 'Lax',
+    maxAge: 60 * 60 * 1000,
+  };
+  const refreshCookieOptions = {
+    ...cookieOptions,
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  };
 
-  res.cookie('refreshToken', refreshToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'None',
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-  });
+  res.cookie('accessToken', accessToken, cookieOptions);
+  res.cookie('refreshToken', refreshToken, refreshCookieOptions);
 
   // ✅ Send Response
   return res.status(200).json(ApiResponse.success({
@@ -83,10 +83,11 @@ export const adminLogout = asyncHandler(async (req, res) => {
     $unset: { refreshToken: 1 }, // Removes the refreshToken field
   });
 
+  const isProd = process.env.NODE_ENV === 'production';
   const options = {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'None',
+    secure: isProd,
+    sameSite: isProd ? 'None' : 'Lax',
   };
 
   return res
