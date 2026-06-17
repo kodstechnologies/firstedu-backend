@@ -38,12 +38,25 @@ const getBanksStatsBatch = async (bankIds) => {
       typeof id === "string" ? new mongoose.Types.ObjectId(id) : id
     );
     const results = await AiQuestion.aggregate([
-      { $match: { aiQuestionBank: { $in: objectIds } } },
+      {
+        $match: {
+          aiQuestionBank: { $in: objectIds },
+          parentQuestionId: null,
+        },
+      },
       {
         $group: {
           _id: "$aiQuestionBank",
           totalQuestions: { $sum: 1 },
-          totalMarks: { $sum: { $ifNull: ["$marks", 1] } },
+          totalMarks: {
+            $sum: {
+              $cond: [
+                { $eq: ["$isParent", true] },
+                { $ifNull: ["$marks", 0] },
+                { $ifNull: ["$marks", 1] },
+              ],
+            },
+          },
         },
       },
     ]);
@@ -206,12 +219,17 @@ const getQuestionsByBankId = async (bankId, options = {}) => {
     const { sortBy = "orderInBank", sortOrder = "asc", summary = false } = options;
     const sort = { [sortBy]: sortOrder === "desc" ? -1 : 1 };
     const select = summary
-      ? "questionText questionType difficulty marks negativeMarks orderInBank aiBatchNumber sectionIndex"
+      ? "questionText questionType difficulty marks negativeMarks orderInBank aiBatchNumber sectionIndex parentQuestionId isParent passage"
       : undefined;
     let query = AiQuestion.find({ aiQuestionBank: bankId }).sort(sort);
     if (select) query = query.select(select);
     if (!summary) {
-      query = query.populate("createdBy", "name email");
+      query = query
+        .populate("createdBy", "name email")
+        .populate(
+          "childQuestions",
+          "questionText questionType options correctAnswer explanation marks negativeMarks imageUrl"
+        );
     }
     return await query.lean();
   } catch (error) {

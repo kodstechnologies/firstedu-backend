@@ -203,6 +203,7 @@ import {
   getAiQuestionBankById,
   getAiQuestionsByBankId,
   deleteAiQuestionBank,
+  updateAiQuestion,
 } from "../controllers/aiQuestionBank.controller.js";
 
 import {
@@ -437,6 +438,7 @@ router.get(
   getAiQuestionsByBankId
 );
 router.delete("/ai-question-banks/:id", verifyJWT, deleteAiQuestionBank);
+router.put("/ai-questions/:id", verifyJWT, updateAiQuestion);
 
 // Question Bank Management Routes (individual questions - create, list all, get, update, delete)
 router.post("/questions", verifyJWT, uploadAnyImages, createQuestion);

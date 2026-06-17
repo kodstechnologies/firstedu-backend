@@ -18,6 +18,8 @@ import workshopNotificationsService from './services/workshopNotifications.servi
 import liveCompetitionNotificationsService from './services/liveCompetitionNotifications.service.js';
 import everydayChallengeCronService from './services/everydayChallengeCron.service.js';
 import studentEverydayChallengeCronService from './services/studentEverydayChallengeCron.service.js';
+import { isCorsOriginAllowed } from './utils/corsOrigin.js';
+import os from 'os';
 
 dotenv.config();
 
@@ -39,13 +41,13 @@ const startServer = async () => {
         skipMiddlewares: false,
       },
       cors: {
-        origin: process.env.CORS_ORIGIN?.split(",").map((o) => o.trim()) || [
-          "http://localhost:3000",
-          "http://localhost:5173",
-          "http://localhost:5174",
-          "https://iscorre.com",
-          "https://admin.iscorre.com"
-        ],
+        origin: (origin, callback) => {
+          if (isCorsOriginAllowed(origin)) {
+            callback(null, true);
+          } else {
+            callback(new Error('CORS not allowed'));
+          }
+        },
         credentials: true,
         methods: ["GET", "POST"],
       },
@@ -152,7 +154,7 @@ const startServer = async () => {
     });
     console.log('⏰ Daily cron (6 PM): student everyday challenge evening reminders');
 
-    const port = process.env.PORT || 8000;
+    const port = process.env.PORT || 8001;
 
     // Increase timeouts for large file uploads (up to 500MB)
     // Default Node.js timeout is 2 minutes — not enough for large video/audio uploads
@@ -164,6 +166,17 @@ const startServer = async () => {
     server.listen(port, '0.0.0.0', () => {
       console.log(`🚀!! Server running on http://0.0.0.0:${port} at ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`);
       console.log(`📡 Socket.io server initialized`);
+      const lanIps = [];
+      for (const iface of Object.values(os.networkInterfaces())) {
+        for (const cfg of iface || []) {
+          if (cfg.family === 'IPv4' && !cfg.internal) {
+            lanIps.push(cfg.address);
+          }
+        }
+      }
+      if (lanIps.length) {
+        console.log(`📱 Share API with Wi‑Fi devices: ${lanIps.map(ip => `http://${ip}:${port}`).join(', ')}`);
+      }
     });
   } catch (err) {
     console.error('Server startup failed:', err);

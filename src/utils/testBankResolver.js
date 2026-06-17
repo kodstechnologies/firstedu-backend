@@ -42,8 +42,18 @@ export const getQuestionsForTest = async (test) => {
 
 export const getSectionConfigForTiming = (test) => {
   const { bank, bankType } = getLinkedBank(test);
-  if (bankType !== "manual") return [];
-  if (!bank?.useSectionWiseQuestions || !Array.isArray(bank?.sections)) return [];
+  if (!bank || !Array.isArray(bank.sections) || !bank.sections.length) {
+    return [];
+  }
+
+  if (bankType === "manual") {
+    if (!bank.useSectionWiseQuestions) return [];
+  } else if (bankType === "ai") {
+    if (!bank.useSectionWise) return [];
+  } else {
+    return [];
+  }
+
   return bank.sections.map((section, index) => ({
     index,
     count: section.count,
