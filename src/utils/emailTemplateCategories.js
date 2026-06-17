@@ -485,11 +485,11 @@ export const EMAIL_TEMPLATE_CATEGORIES = [
     slugs: [
       {
         key: "live_competition_gf_start_reminder",
-        label: "Live Competition — Grand Finale Reminder (30 min)",
-        description: "Sent 30 minutes before the Grand Finale (Round 2) event window opens.",
+        label: "Live Competition — Grand Finale Reminder (11 min)",
+        description: "Sent 11 minutes before the Grand Finale (Round 2) event window opens.",
         requiredVariables: ["name", "eventName", "startTime"],
-        defaultSubject: "⏰ {{eventName}} Grand Finale starts in 30 minutes!",
-        defaultContent: `<p>Hi {{name}},</p><p>The Grand Finale of <strong>{{eventName}}</strong> starts in 30 minutes at <strong>{{startTime}}</strong>. Get ready to give your best performance!</p>`,
+        defaultSubject: "⏰ {{eventName}} Grand Finale starts in 11 minutes!",
+        defaultContent: `<p>Hi {{name}},</p><p>The Grand Finale of <strong>{{eventName}}</strong> starts in 11 minutes at <strong>{{startTime}}</strong>. Get ready to give your best performance!</p>`,
       },
       {
         key: "live_competition_gf_start",
@@ -501,11 +501,11 @@ export const EMAIL_TEMPLATE_CATEGORIES = [
       },
       {
         key: "live_competition_start_reminder",
-        label: "Live Competition — Start Reminder (30 min)",
-        description: "Sent 30 minutes before a live competition event window opens.",
+        label: "Live Competition — Start Reminder (11 min)",
+        description: "Sent 11 minutes before a live competition event window opens.",
         requiredVariables: ["name", "eventName", "startTime"],
-        defaultSubject: "⏰ {{eventName}} starts in 30 minutes!",
-        defaultContent: `<p>Hi {{name}},</p><p>Your Live Competition <strong>{{eventName}}</strong> starts in 30 minutes at <strong>{{startTime}}</strong>. Get ready!</p>`,
+        defaultSubject: "⏰ {{eventName}} starts in 11 minutes!",
+        defaultContent: `<p>Hi {{name}},</p><p>Your Live Competition <strong>{{eventName}}</strong> starts in 11 minutes at <strong>{{startTime}}</strong>. Get ready!</p>`,
       },
       {
         key: "live_competition_start",
