@@ -5,24 +5,49 @@ const optionSchema = new mongoose.Schema({
   isCorrect: { type: Boolean, default: false },
 });
 
+const connectedSubQuestionSchema = new mongoose.Schema(
+  {
+    questionText: { type: String, required: true, trim: true },
+    questionType: {
+      type: String,
+      enum: ["single", "multiple", "true_false"],
+      required: true,
+    },
+    options: { type: [optionSchema], default: [] },
+    correctAnswer: {
+      type: mongoose.Schema.Types.Mixed,
+      required: true,
+    },
+    explanation: { type: String, trim: true, required: true },
+    marks: { type: Number, default: 1 },
+    negativeMarks: { type: Number, default: 0 },
+    imageUrl: [{ type: String, trim: true }],
+  },
+  { _id: false }
+);
+
 const aiQuestionSchema = new mongoose.Schema(
   {
     questionText: { type: String, required: true, trim: true },
     imageUrl: { type: String, trim: true, default: null },
     questionType: {
       type: String,
-      enum: ["single", "multiple", "true_false"],
+      enum: ["single", "multiple", "true_false", "connected"],
       default: "single",
     },
     options: [optionSchema],
     correctAnswer: {
       type: mongoose.Schema.Types.Mixed,
-      required: true,
+      required: function () {
+        return this.questionType !== "connected" && !this.isParent;
+      },
     },
     explanation: {
       type: String,
       trim: true,
-      required: true,
+      required: function () {
+        return this.questionType !== "connected" && !this.isParent;
+      },
     },
     subject: { type: String, trim: true },
     aiQuestionBank: {
@@ -48,6 +73,26 @@ const aiQuestionSchema = new mongoose.Schema(
       required: true,
     },
     isActive: { type: Boolean, default: true },
+    isParent: { type: Boolean, default: false },
+    parentQuestionId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "AiQuestion",
+      default: null,
+    },
+    passage: {
+      type: String,
+      trim: true,
+      required: function () {
+        return this.isParent === true;
+      },
+    },
+    connectedQuestions: { type: [connectedSubQuestionSchema], default: [] },
+    childQuestions: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "AiQuestion",
+      },
+    ],
   },
   { timestamps: true }
 );

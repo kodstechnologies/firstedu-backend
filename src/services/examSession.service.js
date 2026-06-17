@@ -6,6 +6,7 @@ import testRepository from "../repository/test.repository.js";
 import tournamentRepository from "../repository/tournament.repository.js";
 import eventRegistrationRepository from "../repository/eventRegistration.repository.js";
 import questionBankRepository from "../repository/questionBank.repository.js";
+import aiQuestionBankRepository from "../repository/aiQuestionBank.repository.js";
 import questionRepository from "../repository/question.repository.js";
 import {
   getQuestionsForTest,
@@ -508,7 +509,7 @@ export const startExamSession = async (testId, studentId, options = {}) => {
   const test = await examSessionRepository.findTestById(testId, {
     questionBank:
       "name sections useSectionWiseQuestions useSectionWiseDifficulty",
-    aiQuestionBank: "name overallDifficulty categories",
+    aiQuestionBank: "name overallDifficulty categories useSectionWise sections",
   });
   if (!test) {
     throw new ApiError(404, "Test not found");
@@ -733,7 +734,7 @@ export const getExamInstructions = async (testId, studentId, options = {}) => {
   const test = await examSessionRepository.findTestById(testId, {
     questionBank:
       "name sections useSectionWiseQuestions useSectionWiseDifficulty overallDifficulty categories",
-    aiQuestionBank: "name overallDifficulty categories",
+    aiQuestionBank: "name overallDifficulty categories useSectionWise sections",
   });
   if (!test) {
     throw new ApiError(404, "Test not found");
@@ -910,24 +911,32 @@ export const getExamInstructions = async (testId, studentId, options = {}) => {
     .filter(Boolean);
 
   const hasSectionsConfigured =
-    getTestBankType(test) === "manual" &&
-    Array.isArray(test?.questionBank?.sections) &&
-    test.questionBank.sections.length > 0;
+    (getTestBankType(test) === "manual" &&
+      Array.isArray(test?.questionBank?.sections) &&
+      test.questionBank.sections.length > 0) ||
+    (getTestBankType(test) === "ai" &&
+      Array.isArray(test?.aiQuestionBank?.sections) &&
+      test.aiQuestionBank.sections.length > 0);
   const sectionWiseEnabled =
-    hasSectionsConfigured &&
-    (
-      !!test?.questionBank?.useSectionWiseQuestions ||
-      !!test?.questionBank?.useSectionWiseDifficulty
-    );
+    (getTestBankType(test) === "manual" &&
+      hasSectionsConfigured &&
+      (!!test?.questionBank?.useSectionWiseQuestions ||
+        !!test?.questionBank?.useSectionWiseDifficulty)) ||
+    (getTestBankType(test) === "ai" &&
+      hasSectionsConfigured &&
+      !!test?.aiQuestionBank?.useSectionWise);
 
   const sections = hasSectionsConfigured
-    ? test.questionBank.sections.map((section, index) => ({
-      id: section.id ?? index + 1,
-      name: section.name || `Section ${index + 1}`,
-      count: section.count || 0,
-      difficulty: section.difficulty || null,
-      timeMinutes: section.timeMinutes || null,
-    }))
+    ? (getTestBankType(test) === "ai"
+        ? test.aiQuestionBank.sections
+        : test.questionBank.sections
+      ).map((section, index) => ({
+        id: section.id ?? index + 1,
+        name: section.name || `Section ${index + 1}`,
+        count: section.count || 0,
+        difficulty: section.difficulty || null,
+        timeMinutes: section.timeMinutes || null,
+      }))
     : [];
 
   let tournamentExam = null;
@@ -1243,6 +1252,8 @@ export const getExamSession = async (sessionId, studentId) => {
     (q) => q?.question?.sectionIndex !== undefined && q?.question?.sectionIndex !== null
   );
   const questionBankId = session?.test?.questionBank?._id || session?.test?.questionBank;
+  const aiQuestionBankId =
+    session?.test?.aiQuestionBank?._id || session?.test?.aiQuestionBank;
   if (questionBankId) {
     const questionBank = await questionBankRepository.findById(questionBankId, false);
     if (
@@ -1255,6 +1266,22 @@ export const getExamSession = async (sessionId, studentId) => {
       )
     ) {
       sectionConfig = questionBank.sections.map((section, index) => ({
+        index,
+        id: section.id ?? index + 1,
+        name: section.name || `Section ${String.fromCharCode(65 + index)}`,
+        count: section.count,
+        difficulty: section.difficulty,
+        timeMinutes: section.timeMinutes || null,
+      }));
+    }
+  } else if (aiQuestionBankId) {
+    const aiBank = await aiQuestionBankRepository.findById(aiQuestionBankId, false);
+    if (
+      Array.isArray(aiBank?.sections) &&
+      aiBank.sections.length > 0 &&
+      (aiBank.useSectionWise || hasSectionIndexedQuestions)
+    ) {
+      sectionConfig = aiBank.sections.map((section, index) => ({
         index,
         id: section.id ?? index + 1,
         name: section.name || `Section ${String.fromCharCode(65 + index)}`,

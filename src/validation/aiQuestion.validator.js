@@ -95,6 +95,12 @@ export const generateQuestionBankSuggestionsSchema = Joi.object({
     singleCount: Joi.number().integer().min(0).max(30).default(0),
     multipleCount: Joi.number().integer().min(0).max(30).default(0),
     trueFalseCount: Joi.number().integer().min(0).max(30).default(0),
+    /** @deprecated use passageCount */
+    connectedCount: Joi.number().integer().min(0).max(10).default(0),
+    passageCount: Joi.number().integer().min(0).max(10).default(0),
+    passageSingleCount: Joi.number().integer().min(0).max(30).default(0),
+    passageMultipleCount: Joi.number().integer().min(0).max(30).default(0),
+    passageTrueFalseCount: Joi.number().integer().min(0).max(30).default(0),
     /** Stems from prior AI batches in this session — do not repeat */
     excludeQuestionTexts: Joi.array()
         .items(Joi.string().trim().min(3).max(500))
@@ -102,21 +108,46 @@ export const generateQuestionBankSuggestionsSchema = Joi.object({
         .default([]),
 })
     .custom((value, helpers) => {
-        const total =
+        const passageCount =
+            (value.passageCount || 0) > 0
+                ? value.passageCount
+                : value.connectedCount || 0;
+        const standaloneTotal =
             (value.singleCount || 0) +
             (value.multipleCount || 0) +
             (value.trueFalseCount || 0);
-        if (total < 1) {
+        const passageQuestionsPerPassage =
+            (value.passageSingleCount || 0) +
+            (value.passageMultipleCount || 0) +
+            (value.passageTrueFalseCount || 0);
+        const apiItemTotal = standaloneTotal + passageCount;
+        const selectableTotal =
+            standaloneTotal + passageCount * passageQuestionsPerPassage;
+
+        if (apiItemTotal < 1 && selectableTotal < 1) {
             return helpers.error('any.custom', {
-                message: 'Request at least one question (single, multiple, or true/false)',
+                message:
+                    'Request at least one standalone question or reading passage',
             });
         }
-        if (total > 30) {
+        if (apiItemTotal > 30) {
             return helpers.error('any.custom', {
-                message: 'Cannot generate more than 30 questions per request',
+                message: 'Cannot generate more than 30 top-level items per request',
             });
         }
-        return value;
+        if (passageQuestionsPerPassage > 0 && passageCount < 1) {
+            return helpers.error('any.custom', {
+                message:
+                    'Set the number of reading passages when requesting passage-based questions',
+            });
+        }
+        if (passageCount > 0 && passageQuestionsPerPassage < 1) {
+            return helpers.error('any.custom', {
+                message:
+                    'Specify at least one passage question type (single, multiple, or true/false)',
+            });
+        }
+        return { ...value, passageCount };
     })
     .messages({
         'any.custom': '{{#message}}',

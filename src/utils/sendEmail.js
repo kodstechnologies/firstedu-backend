@@ -324,7 +324,7 @@ export const sendTeacherApprovalWithCredentialsEmail = async ({
       throw new ApiError(500, `SMTP configuration incomplete. Missing: ${missingVars.join(", ")}`);
     }
 
-    const loginLink = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/teacher/login`;
+    const loginLink = `${process.env.FRONTEND_URL || 'http://localhost:5174'}/teacher/login`;
 
     const info = await sendEmailWithTemplate({
       to: toEmail,
@@ -806,4 +806,4 @@ export const sendEventUpdateEmail = async ({ email, name, eventName, eventType, 
   }
 };
 
-
+

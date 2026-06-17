@@ -8,6 +8,7 @@ import adminRoutes from "./routes/admin.routes.js";
 import teacherRoutes from "./routes/teacher.routes.js";
 import webhooksRoutes from "./routes/webhooks.routes.js";
 import ApiError from "./utils/ApiError.js";
+import { isCorsOriginAllowed } from "./utils/corsOrigin.js";
 
 dotenv.config();
 const app = express();
@@ -16,19 +17,10 @@ const app = express();
 app.use(
   cors({
     origin: (origin, callback) => {
-      const allowedOrigins = process.env.CORS_ORIGIN?.split(",").map((o) =>
-        o.trim(),
-      ) || [
-        "https://iscorre.com",
-        "https://app.iscorre.com",
-        "http://localhost:3000",
-        "http://localhost:5173",
-        "http://localhost:5174",
-      ];
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (isCorsOriginAllowed(origin)) {
         callback(null, true);
       } else {
-        console.warn(`CORS Warning: Origin ${origin} not allowed. Allowed origins:`, allowedOrigins);
+        console.warn(`CORS Warning: Origin ${origin} not allowed.`);
         callback(null, false);
       }
     },

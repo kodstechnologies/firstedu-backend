@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { ApiError } from "../utils/ApiError.js";
+import AiQuestion from "../models/AiQuestion.js";
 import aiQuestionBankRepository from "../repository/aiQuestionBank.repository.js";
 import categoryRepository from "../repository/category.repository.js";
 import { assertAiBankNotInUse } from "../utils/aiBankUsageGuard.js";
@@ -29,6 +30,70 @@ const validateQuestionOptions = (questionType, options) => {
         "Single choice questions must have exactly one correct answer"
       );
     }
+  }
+};
+
+const validateConnectedQuestions = (connectedQuestions = []) => {
+  if (!Array.isArray(connectedQuestions) || connectedQuestions.length === 0) {
+    throw new ApiError(
+      400,
+      "Connected questions must include at least one sub-question"
+    );
+  }
+  connectedQuestions.forEach((sub, index) => {
+    validateQuestionOptions(sub.questionType, sub.options);
+    if (!String(sub.explanation ?? "").trim()) {
+      throw new ApiError(
+        400,
+        `connectedQuestions[${index}] explanation is required`
+      );
+    }
+    if (sub.questionType === "true_false" && sub.correctAnswer === undefined) {
+      throw new ApiError(
+        400,
+        `connectedQuestions[${index}] correctAnswer is required for true_false`
+      );
+    }
+  });
+};
+
+const normalizeSubQuestionScoring = (sub = {}) => ({
+  marks: sub.marks ?? 1,
+  negativeMarks: sub.negativeMarks ?? 0,
+});
+
+const getConnectedTotals = (subs = []) =>
+  subs.reduce(
+    (acc, sub) => {
+      const { marks, negativeMarks } = normalizeSubQuestionScoring(sub);
+      return {
+        marks: acc.marks + marks,
+        negativeMarks: acc.negativeMarks + negativeMarks,
+      };
+    },
+    { marks: 0, negativeMarks: 0 }
+  );
+
+const validateQuestionInput = (q, i) => {
+  if (q.questionType === "connected") {
+    const subs = q.subQuestions ?? q.connectedQuestions ?? [];
+    validateConnectedQuestions(subs);
+    const reading =
+      (q.paragraph && String(q.paragraph).trim()) ||
+      (q.passage && String(q.passage).trim()) ||
+      "";
+    if (!reading) {
+      throw new ApiError(
+        400,
+        `Question ${i + 1}: paragraph is required for connected questions`
+      );
+    }
+    return;
+  }
+
+  validateQuestionOptions(q.questionType, q.options);
+  if (!String(q.explanation || "").trim()) {
+    throw new ApiError(400, `Question ${i + 1}: explanation is required`);
   }
 };
 
@@ -81,12 +146,7 @@ export const createAiQuestionBankWithQuestions = async (data, createdBy) => {
     }
   }
 
-  questionsInput.forEach((q, i) => {
-    validateQuestionOptions(q.questionType, q.options);
-    if (!String(q.explanation || "").trim()) {
-      throw new ApiError(400, `Question ${i + 1}: explanation is required`);
-    }
-  });
+  questionsInput.forEach((q, i) => validateQuestionInput(q, i));
 
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -113,7 +173,10 @@ export const createAiQuestionBankWithQuestions = async (data, createdBy) => {
       session
     );
 
-    const questionDocs = questionsInput.map((q, i) => {
+    const createdQuestions = [];
+
+    for (let i = 0; i < questionsInput.length; i++) {
+      const q = questionsInput[i];
       const sectionIndex = useSectionWise
         ? getSectionIndexByCount(sections, i)
         : null;
@@ -121,16 +184,10 @@ export const createAiQuestionBankWithQuestions = async (data, createdBy) => {
         useSectionWise && sectionIndex !== null
           ? sections[sectionIndex]?.difficulty
           : null;
-      return {
-        questionText: q.questionText,
-        questionType: q.questionType || "single",
-        options: q.options,
-        correctAnswer: q.correctAnswer,
-        explanation: q.explanation,
+      const difficulty = q.difficulty || sectionDifficulty || overallDifficulty;
+      const baseFields = {
         topic: q.topic,
-        difficulty: q.difficulty || sectionDifficulty || overallDifficulty,
-        marks: q.marks ?? 1,
-        negativeMarks: q.negativeMarks ?? 0,
+        difficulty,
         tags: q.tags,
         aiBatchNumber: q.aiBatchNumber ?? null,
         sectionIndex,
@@ -138,12 +195,86 @@ export const createAiQuestionBankWithQuestions = async (data, createdBy) => {
         orderInBank: i,
         createdBy,
       };
-    });
 
-    const createdQuestions = await aiQuestionBankRepository.insertQuestions(
-      questionDocs,
-      session
-    );
+      if (q.questionType === "connected") {
+        const subs = q.subQuestions ?? q.connectedQuestions ?? [];
+        validateConnectedQuestions(subs);
+        const connectedTotals = getConnectedTotals(subs);
+        const passageText =
+          (q.paragraph && String(q.paragraph).trim()) ||
+          (q.passage && String(q.passage).trim()) ||
+          (q.questionText && String(q.questionText).trim()) ||
+          "";
+        const parentLabel =
+          (q.title && String(q.title).trim()) ||
+          (q.questionText && String(q.questionText).trim()) ||
+          passageText.slice(0, 200);
+
+        const [parent] = await AiQuestion.create(
+          [
+            {
+              ...baseFields,
+              questionText: parentLabel,
+              questionType: "connected",
+              isParent: true,
+              passage: passageText,
+              marks: connectedTotals.marks,
+              negativeMarks: connectedTotals.negativeMarks,
+              options: [],
+              connectedQuestions: [],
+            },
+          ],
+          { session }
+        );
+
+        const childIds = [];
+        for (let si = 0; si < subs.length; si++) {
+          const sub = subs[si];
+          const { marks, negativeMarks } = normalizeSubQuestionScoring(sub);
+          const [child] = await AiQuestion.create(
+            [
+              {
+                ...baseFields,
+                questionText: sub.questionText,
+                questionType: sub.questionType,
+                options: sub.options,
+                correctAnswer: sub.correctAnswer,
+                explanation: sub.explanation,
+                marks,
+                negativeMarks,
+                orderInBank: i + (si + 1) * 0.001,
+                parentQuestionId: parent._id,
+              },
+            ],
+            { session }
+          );
+          childIds.push(child._id);
+          createdQuestions.push(child);
+        }
+
+        parent.childQuestions = childIds;
+        await parent.save({ session });
+        createdQuestions.push(parent);
+        continue;
+      }
+
+      const [doc] = await AiQuestion.create(
+        [
+          {
+            ...baseFields,
+            questionText: q.questionText,
+            questionType: q.questionType || "single",
+            options: q.options,
+            correctAnswer: q.correctAnswer,
+            explanation: q.explanation,
+            marks: q.marks ?? 1,
+            negativeMarks: q.negativeMarks ?? 0,
+          },
+        ],
+        { session }
+      );
+      createdQuestions.push(doc);
+    }
 
     await session.commitTransaction();
 
@@ -189,10 +320,178 @@ export const deleteAiQuestionBank = async (id) => {
   return aiQuestionBankRepository.deleteById(id);
 };
 
+export const updateAiQuestion = async (id, updateData) => {
+  const existingQuestion = await AiQuestion.findById(id).populate(
+    "childQuestions"
+  );
+  if (!existingQuestion) {
+    throw new ApiError(404, "AI question not found");
+  }
+  if (existingQuestion.parentQuestionId && !existingQuestion.isParent) {
+    throw new ApiError(
+      400,
+      "Edit connected sub-questions via the parent passage question"
+    );
+  }
+
+  await assertAiBankNotInUse(existingQuestion.aiQuestionBank, "edit");
+
+  if (updateData.options && updateData.questionType !== "connected") {
+    validateQuestionOptions(
+      updateData.questionType || existingQuestion.questionType,
+      updateData.options
+    );
+  }
+
+  const effectiveType =
+    updateData.questionType || existingQuestion.questionType;
+  const hasSubQuestionsUpdate =
+    Array.isArray(updateData.subQuestions) ||
+    Array.isArray(updateData.connectedQuestions);
+  const isConnectedEdit =
+    effectiveType === "connected" || hasSubQuestionsUpdate;
+
+  if (isConnectedEdit) {
+    if (
+      existingQuestion.questionType !== "connected" ||
+      !existingQuestion.isParent
+    ) {
+      throw new ApiError(
+        400,
+        "Connected question editing is only supported for connected parent questions"
+      );
+    }
+
+    if (!hasSubQuestionsUpdate) {
+      const partialParentUpdate = {};
+      if (
+        Object.prototype.hasOwnProperty.call(updateData, "title") ||
+        Object.prototype.hasOwnProperty.call(updateData, "questionText")
+      ) {
+        partialParentUpdate.questionText =
+          (updateData.title && String(updateData.title).trim()) ||
+          (updateData.questionText &&
+            String(updateData.questionText).trim()) ||
+          existingQuestion.questionText;
+      }
+      if (
+        Object.prototype.hasOwnProperty.call(updateData, "paragraph") ||
+        Object.prototype.hasOwnProperty.call(updateData, "passage")
+      ) {
+        partialParentUpdate.passage =
+          (updateData.paragraph && String(updateData.paragraph).trim()) ||
+          (updateData.passage && String(updateData.passage).trim()) ||
+          existingQuestion.passage;
+      }
+      ["difficulty", "imageUrl"].forEach((key) => {
+        if (Object.prototype.hasOwnProperty.call(updateData, key)) {
+          partialParentUpdate[key] = updateData[key];
+        }
+      });
+
+      const updatedParent = await AiQuestion.findByIdAndUpdate(
+        id,
+        partialParentUpdate,
+        { new: true }
+      ).populate("childQuestions");
+
+      return updatedParent;
+    }
+
+    const subs =
+      updateData.subQuestions ?? updateData.connectedQuestions ?? [];
+    validateConnectedQuestions(subs);
+    const connectedTotals = getConnectedTotals(subs);
+
+    const passageText =
+      (updateData.paragraph && String(updateData.paragraph).trim()) ||
+      (updateData.passage && String(updateData.passage).trim()) ||
+      (updateData.questionText && String(updateData.questionText).trim()) ||
+      (existingQuestion.passage && String(existingQuestion.passage).trim()) ||
+      "";
+    if (!passageText) {
+      throw new ApiError(
+        400,
+        "Connected question passage/paragraph is required"
+      );
+    }
+
+    const parentLabel =
+      (updateData.title && String(updateData.title).trim()) ||
+      (updateData.questionText && String(updateData.questionText).trim()) ||
+      (existingQuestion.questionText &&
+        String(existingQuestion.questionText).trim()) ||
+      passageText.slice(0, 200);
+
+    const parentUpdate = {
+      questionText: parentLabel,
+      passage: passageText,
+      difficulty: updateData.difficulty ?? existingQuestion.difficulty,
+    };
+    if (Object.prototype.hasOwnProperty.call(updateData, "imageUrl")) {
+      parentUpdate.imageUrl = updateData.imageUrl;
+    }
+
+    const existingChildIds = (existingQuestion.childQuestions || []).map(
+      (child) => child?._id?.toString?.() || child?.toString?.()
+    );
+    if (existingChildIds.length) {
+      await AiQuestion.deleteMany({ _id: { $in: existingChildIds } });
+    }
+
+    const newChildIds = [];
+    for (const sub of subs) {
+      const { marks, negativeMarks } = normalizeSubQuestionScoring(sub);
+      const child = await AiQuestion.create({
+        questionText: sub.questionText,
+        questionType: sub.questionType,
+        options: sub.options,
+        correctAnswer: sub.correctAnswer,
+        explanation: sub.explanation,
+        difficulty: parentUpdate.difficulty,
+        marks,
+        negativeMarks,
+        aiQuestionBank: existingQuestion.aiQuestionBank,
+        sectionIndex: existingQuestion.sectionIndex,
+        orderInBank: existingQuestion.orderInBank,
+        createdBy: existingQuestion.createdBy,
+        parentQuestionId: existingQuestion._id,
+      });
+      newChildIds.push(child._id);
+    }
+
+    const updatedParent = await AiQuestion.findByIdAndUpdate(
+      id,
+      {
+        ...parentUpdate,
+        marks: connectedTotals.marks,
+        negativeMarks: connectedTotals.negativeMarks,
+        childQuestions: newChildIds,
+        connectedQuestions: [],
+        options: [],
+        correctAnswer: undefined,
+        isParent: true,
+      },
+      { new: true }
+    ).populate(
+      "childQuestions",
+      "questionText questionType options correctAnswer explanation marks negativeMarks imageUrl"
+    );
+
+    return updatedParent;
+  }
+
+  const updatedQuestion = await AiQuestion.findByIdAndUpdate(id, updateData, {
+    new: true,
+  });
+  return updatedQuestion;
+};
+
 export default {
   createAiQuestionBankWithQuestions,
   getAiQuestionBanks,
   getAiQuestionBankById,
   getAiQuestionsByBankId,
   deleteAiQuestionBank,
+  updateAiQuestion,
 };

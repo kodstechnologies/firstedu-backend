@@ -57,6 +57,8 @@ export const generateQuestionBankSuggestions = asyncHandler(async (req, res) => 
     }
 
     const difficulty = String(value.difficulty).toLowerCase();
+    const passageCount =
+        value.passageCount > 0 ? value.passageCount : value.connectedCount || 0;
     const questions = await aiQuestionService.generateQuestionBankSuggestions({
         topic: value.topic,
         bankName: value.bankName || value.topic,
@@ -64,6 +66,11 @@ export const generateQuestionBankSuggestions = asyncHandler(async (req, res) => 
         singleCount: value.singleCount,
         multipleCount: value.multipleCount,
         trueFalseCount: value.trueFalseCount,
+        connectedCount: passageCount,
+        passageCount,
+        passageSingleCount: value.passageSingleCount || 0,
+        passageMultipleCount: value.passageMultipleCount || 0,
+        passageTrueFalseCount: value.passageTrueFalseCount || 0,
         excludeQuestionTexts: value.excludeQuestionTexts || [],
     });
 

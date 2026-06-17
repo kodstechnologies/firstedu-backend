@@ -67,3 +67,17 @@ export const deleteAiQuestionBank = asyncHandler(async (req, res) => {
     .status(200)
     .json(ApiResponse.success(null, "AI question bank deleted successfully"));
 });
+
+export const updateAiQuestion = asyncHandler(async (req, res) => {
+  const { error, value } = aiQuestionBankValidator.updateAiQuestion.validate(
+    req.body
+  );
+  if (error) throwJoiValidationError(error);
+  const question = await aiQuestionBankService.updateAiQuestion(
+    req.params.id,
+    value
+  );
+  return res
+    .status(200)
+    .json(ApiResponse.success(question, "AI question updated successfully"));
+});
