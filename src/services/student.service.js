@@ -276,10 +276,7 @@ export const getReferralInfo = async (studentId) => {
   const totalReferrals = Array.isArray(student.referralHistory)
     ? student.referralHistory.length
     : 0;
-  const baseUrl = process.env.STUDENT_APP_URL || process.env.FRONTEND_URL || '';
-  const shareLink = baseUrl
-    ? `${baseUrl.replace(/\/$/, '')}/signup?ref=${student.referralCode || ''}`
-    : null;
+  const shareLink = `Join me on iscorre! Use my referral code ${student.referralCode || ''} and start learning.\n\nReferral code: ${student.referralCode || ''}`;
 
   return {
     referralCode: student.referralCode || null,

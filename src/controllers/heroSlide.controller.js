@@ -4,23 +4,19 @@ import { uploadImageToCloudinary, uploadVideoToCloudinary, deleteFileFromCloudin
 // ADMIN API: Create a new hero slide
 export const createHeroSlide = async (req, res) => {
   try {
-    const { isActive, order } = req.body;
+    const { isActive, order, link, title } = req.body;
     const file = req.file;
 
-    if (!file) {
-      return res.status(400).json({ success: false, message: 'Media file is required' });
-    }
-
-    let mediaType = 'image';
-    if (file.mimetype.startsWith('video/')) {
-      mediaType = 'video';
-    }
-
     let mediaUrl = '';
-    if (mediaType === 'video') {
-      mediaUrl = await uploadVideoToCloudinary(file.buffer, file.originalname, 'hero-slides');
-    } else {
-      mediaUrl = await uploadImageToCloudinary(file.buffer, file.originalname, 'hero-slides');
+    let mediaType = 'link-only';
+
+    if (file) {
+      mediaType = file.mimetype.startsWith('video/') ? 'video' : 'image';
+      if (mediaType === 'video') {
+        mediaUrl = await uploadVideoToCloudinary(file.buffer, file.originalname, 'hero-slides');
+      } else {
+        mediaUrl = await uploadImageToCloudinary(file.buffer, file.originalname, 'hero-slides');
+      }
     }
 
     const newSlide = await HeroSlide.create({
@@ -28,6 +24,8 @@ export const createHeroSlide = async (req, res) => {
       mediaType,
       isActive: isActive !== undefined ? isActive === 'true' || isActive === true : true,
       order: parseInt(order, 10) || 0,
+      link: link || '',
+      title: title || '',
     });
 
     res.status(201).json({ success: true, data: newSlide });
@@ -52,7 +50,7 @@ export const getHeroSlidesAdmin = async (req, res) => {
 export const updateHeroSlide = async (req, res) => {
   try {
     const { id } = req.params;
-    const { isActive, order } = req.body;
+    const { isActive, order, link, title } = req.body;
     const file = req.file;
 
     const slide = await HeroSlide.findById(id);
@@ -84,6 +82,8 @@ export const updateHeroSlide = async (req, res) => {
 
     if (isActive !== undefined) slide.isActive = isActive === 'true' || isActive === true;
     if (order !== undefined) slide.order = parseInt(order, 10);
+    if (link !== undefined) slide.link = link;
+    if (title !== undefined) slide.title = title;
 
     await slide.save();
 
@@ -121,7 +121,7 @@ export const getActiveHeroSlides = async (req, res) => {
   try {
     const slides = await HeroSlide.find({ isActive: true })
       .sort({ order: 1, createdAt: -1 })
-      .limit(2); // strictly limited to 2 as requested
+      .limit(3); // strictly limited to 3 as requested
 
     res.status(200).json({ success: true, data: slides });
   } catch (error) {

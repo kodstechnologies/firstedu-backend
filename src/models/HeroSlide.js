@@ -4,15 +4,14 @@ const heroSlideSchema = new mongoose.Schema(
   {
     mediaUrl: {
       type: String,
-      required: [true, 'Media URL is required'],
+      default: '',
     },
     mediaType: {
       type: String,
       enum: {
-        values: ['image', 'video'],
-        message: 'Media type must be either image or video',
+        values: ['image', 'video', 'link-only'],
+        message: 'Media type must be image, video, or link-only',
       },
-      required: [true, 'Media type is required'],
     },
     isActive: {
       type: Boolean,
@@ -21,6 +20,14 @@ const heroSlideSchema = new mongoose.Schema(
     order: {
       type: Number,
       default: 0,
+    },
+    link: {
+      type: String,
+      default: '',
+    },
+    title: {
+      type: String,
+      default: '',
     },
   },
   {
