@@ -41,6 +41,26 @@ const teacherSessionSchema = new mongoose.Schema(
       required: true,
       min: 0,
     },
+    teacherPerMinuteRate: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    platformFeePercent: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    platformFeePerMinute: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    studentPerMinuteRate: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     // Agora RTC voice/video call
     callStartTime: {
       type: Date,
@@ -57,6 +77,16 @@ const teacherSessionSchema = new mongoose.Schema(
     },
     // Billing
     totalAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    teacherAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    platformFeeAmount: {
       type: Number,
       default: 0,
       min: 0,

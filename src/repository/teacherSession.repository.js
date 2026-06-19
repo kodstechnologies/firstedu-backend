@@ -3,12 +3,67 @@ import TeacherSession from "../models/TeacherSession.js";
 import User from "../models/Student.js";
 import { ApiError } from "../utils/ApiError.js";
 
+const teacherEarningExpression = {
+  $cond: [
+    { $gt: [{ $ifNull: ["$teacherAmount", 0] }, 0] },
+    "$teacherAmount",
+    {
+      $cond: [
+        { $gt: [{ $ifNull: ["$platformFeeAmount", 0] }, 0] },
+        {
+          $max: [
+            0,
+            {
+              $subtract: [
+                { $ifNull: ["$totalAmount", 0] },
+                { $ifNull: ["$platformFeeAmount", 0] },
+              ],
+            },
+          ],
+        },
+        {
+          $cond: [
+            {
+              $and: [
+                { $gt: [{ $ifNull: ["$teacherPerMinuteRate", 0] }, 0] },
+                { $gt: [{ $ifNull: ["$durationMinutes", 0] }, 0] },
+              ],
+            },
+            {
+              $multiply: [
+                { $ifNull: ["$teacherPerMinuteRate", 0] },
+                { $ifNull: ["$durationMinutes", 0] },
+              ],
+            },
+            { $ifNull: ["$totalAmount", 0] },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
+const getTeacherEarningAmount = (session) => {
+  const teacherAmount = Number(session?.teacherAmount || 0);
+  if (teacherAmount > 0) return teacherAmount;
+
+  const totalAmount = Number(session?.totalAmount || 0);
+  const platformFeeAmount = Number(session?.platformFeeAmount || 0);
+  if (platformFeeAmount > 0) return Math.max(0, totalAmount - platformFeeAmount);
+
+  const teacherRate = Number(session?.teacherPerMinuteRate || 0);
+  const durationMinutes = Number(session?.durationMinutes || 0);
+  if (teacherRate > 0 && durationMinutes > 0) return teacherRate * durationMinutes;
+
+  return totalAmount;
+};
+
 const create = async (sessionData) => {
   try {
     const session = await TeacherSession.create(sessionData);
     return await TeacherSession.findById(session._id)
       .populate("student", "name email")
-      .populate("teacher", "name email skills perMinuteRate");
+      .populate("teacher", "name email skills perMinuteRate platformFeePercent");
   } catch (error) {
     throw new ApiError(500, "Failed to create teacher session", error.message);
   }
@@ -18,7 +73,7 @@ const findById = async (sessionId) => {
   try {
     return await TeacherSession.findById(sessionId)
       .populate("student", "name email")
-      .populate("teacher", "name email skills perMinuteRate");
+      .populate("teacher", "name email skills perMinuteRate platformFeePercent");
   } catch (error) {
     throw new ApiError(500, "Failed to fetch session", error.message);
   }
@@ -28,7 +83,7 @@ const findOne = async (filter) => {
   try {
     return await TeacherSession.findOne(filter)
       .populate("student", "name email")
-      .populate("teacher", "name email skills perMinuteRate");
+      .populate("teacher", "name email skills perMinuteRate platformFeePercent");
   } catch (error) {
     throw new ApiError(500, "Failed to fetch session", error.message);
   }
@@ -42,7 +97,7 @@ const updateById = async (sessionId, updateData) => {
       { new: true, runValidators: true }
     )
       .populate("student", "name email")
-      .populate("teacher", "name email skills perMinuteRate");
+      .populate("teacher", "name email skills perMinuteRate platformFeePercent");
   } catch (error) {
     throw new ApiError(500, "Failed to update session", error.message);
   }
@@ -59,7 +114,7 @@ const completeOngoingSession = async (sessionId, updateData) => {
       { new: true, runValidators: true }
     )
       .populate("student", "name email")
-      .populate("teacher", "name email skills perMinuteRate");
+      .populate("teacher", "name email skills perMinuteRate platformFeePercent");
   } catch (error) {
     throw new ApiError(500, "Failed to complete session", error.message);
   }
@@ -87,7 +142,7 @@ const findStudentSessions = async (studentId, options = {}) => {
 
     const [sessions, total] = await Promise.all([
       TeacherSession.find(query)
-        .populate("teacher", "name email skills perMinuteRate")
+        .populate("teacher", "name email skills perMinuteRate platformFeePercent")
         .sort(sort)
         .skip(skip)
         .limit(limitNum),
@@ -314,7 +369,12 @@ const getTeacherDashboardSessionAggregates = async (teacherId) => {
     const [incomeRow, totalCompletedSessions, todayRow] = await Promise.all([
       TeacherSession.aggregate([
         { $match: { teacher: tid, status: "completed", amountDeducted: true } },
-        { $group: { _id: null, totalIncome: { $sum: "$totalAmount" } } },
+        {
+          $group: {
+            _id: null,
+            totalIncome: { $sum: teacherEarningExpression },
+          },
+        },
       ]),
       TeacherSession.countDocuments({ teacher: tid, status: "completed" }),
       TeacherSession.aggregate([
@@ -354,7 +414,10 @@ const calculateTeacherEarnings = async (teacherId, startDate, endDate) => {
     }
 
     const sessions = await TeacherSession.find(query);
-    const totalEarnings = sessions.reduce((sum, session) => sum + session.totalAmount, 0);
+    const totalEarnings = sessions.reduce(
+      (sum, session) => sum + getTeacherEarningAmount(session),
+      0
+    );
     const totalSessions = sessions.length;
     const totalMinutes = sessions.reduce((sum, session) => sum + session.durationMinutes, 0);
 

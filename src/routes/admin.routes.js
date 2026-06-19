@@ -66,6 +66,11 @@ import {
   sendLoginCredentials,
 } from "../controllers/teacher.controller.js";
 import {
+  getPlatformFees,
+  getPlatformFeesSummary,
+  updatePlatformFee,
+} from "../controllers/adminPlatformFee.controller.js";
+import {
   createCourseTestLink,
   getCourseTestLinks,
   updateCourseTestLink,
@@ -484,8 +489,12 @@ router.post("/teachers/:id/approve", verifyJWT, approveTeacher);
 router.post("/teachers/:id/reject", verifyJWT, rejectTeacher);
 router.post("/teachers/:id/send-credentials", verifyJWT, sendLoginCredentials);
 router.put("/teachers/:id/rate", verifyJWT, updatePerMinuteRate);
+router.put("/teachers/:id/platform-fee", verifyJWT, verifyAdmin, updatePlatformFee);
 router.put("/teachers/:id", verifyJWT, uploadImage.single("profileImage"), updateTeacher);
 router.delete("/teachers/:id", verifyJWT, deleteTeacher);
+
+router.get("/platform-fees", verifyJWT, verifyAdmin, getPlatformFees);
+router.get("/platform-fees/summary", verifyJWT, verifyAdmin, getPlatformFeesSummary);
 
 // Teacher wallet withdrawals (pending requests; approve/reject notifies teacher via FCM)
 router.get("/teacher-withdrawals", verifyJWT, verifyAdmin, getAdminWithdrawalList);

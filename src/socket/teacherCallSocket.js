@@ -441,14 +441,19 @@ export const setupTeacherCallSocket = (io) => {
       }
     };
 
-    socket.on("cancel_call_request", async (payload = {}) => {
+    socket.on("cancel_call_request", async (payload = {}, ack) => {
+      const respond = (body) => {
+        if (typeof ack === "function") ack(body);
+      };
       if (user.role !== "student") {
         socket.emit("call_error", { message: "Only students can cancel a call request" });
+        respond({ ok: false, message: "Only students can cancel a call request" });
         return;
       }
       const requestedId = payload.sessionId || socket.data.pendingCallSessionId;
       if (!requestedId) {
         socket.emit("call_error", { message: "No pending call request to cancel" });
+        respond({ ok: false, message: "No pending call request to cancel" });
         return;
       }
       if (
@@ -456,34 +461,43 @@ export const setupTeacherCallSocket = (io) => {
         socket.data.pendingCallSessionId !== String(requestedId)
       ) {
         socket.emit("call_error", { message: "sessionId does not match your pending request" });
+        respond({ ok: false, message: "sessionId does not match your pending request" });
         return;
       }
       socket.data.pendingCallSessionId = String(requestedId);
       const withdrawn = await withdrawStudentPendingCall();
       if (withdrawn) {
         socket.emit("call_request_cancelled", { sessionId: withdrawn._id.toString() });
+        respond({ ok: true, sessionId: withdrawn._id.toString() });
       } else {
         socket.emit("call_error", {
           message: "No pending call request to cancel or it was already handled",
         });
+        respond({ ok: false, message: "No pending call request to cancel or it was already handled" });
       }
     });
 
-    socket.on("end_call", async (payload = {}) => {
+    socket.on("end_call", async (payload = {}, ack) => {
+      const respond = (body) => {
+        if (typeof ack === "function") ack(body);
+      };
       const { sessionId, recordingUrl, agoraRecordingId } = payload || {};
       if (!sessionId) {
         socket.emit("call_error", { message: "sessionId is required" });
+        respond({ ok: false, message: "sessionId is required" });
         return;
       }
       try {
         const session = await teacherSessionRepository.findById(sessionId);
         if (!session || session.sessionKind !== "call") {
           socket.emit("call_error", { message: "Call session not found" });
+          respond({ ok: false, message: "Call session not found" });
           return;
         }
         assertCallParticipant(session, userId, user.role);
         if (session.status !== "ongoing") {
           socket.emit("call_error", { message: "Call is not active" });
+          respond({ ok: false, message: "Call is not active" });
           return;
         }
         const dm = resolveDurationMinutes(session);
@@ -506,8 +520,14 @@ export const setupTeacherCallSocket = (io) => {
         ns.to(`student:${session.student._id}`).emit("call_session_ended", endedPayload);
         ns.to(`teacher:${session.teacher._id}`).emit("call_session_ended", endedPayload);
         socket.emit("call_ended_ack", { session: updated });
+        respond({ ok: true, session: updated });
       } catch (err) {
         socket.emit("call_error", {
+          message: err.message || "Could not end call",
+          statusCode: err.statusCode,
+        });
+        respond({
+          ok: false,
           message: err.message || "Could not end call",
           statusCode: err.statusCode,
         });

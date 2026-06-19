@@ -33,6 +33,11 @@ const teacherSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    platformFeePercent: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     isLive: {
       type: Boolean,
       default: false,

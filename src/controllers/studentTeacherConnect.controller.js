@@ -5,6 +5,7 @@ import teacherConnectService from "../services/teacherConnect.service.js";
 import teacherConnectValidator from "../validation/teacherConnect.validator.js";
 import walletService from "../services/wallet.service.js";
 import teacherRepository from "../repository/teacher.repository.js";
+import { getRateBreakdown } from "../services/platformFee.service.js";
 
 /**
  * Get available teachers by subject
@@ -105,14 +106,18 @@ export const checkWalletBalance = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Teacher not found");
   }
 
-  const canAfford = wallet.monetaryBalance >= teacher.perMinuteRate;
-  const estimatedCost = teacher.perMinuteRate; // For 1 minute minimum
+  const rate = getRateBreakdown(teacher);
+  const canAfford = wallet.monetaryBalance >= rate.studentPerMinuteRate;
+  const estimatedCost = rate.studentPerMinuteRate; // For 1 minute minimum
 
   return res.status(200).json(
     ApiResponse.success(
       {
         walletBalance: wallet.monetaryBalance,
-        teacherRate: teacher.perMinuteRate,
+        teacherRate: rate.teacherPerMinuteRate,
+        platformFeePercent: rate.platformFeePercent,
+        platformFeePerMinute: rate.platformFeePerMinute,
+        studentRate: rate.studentPerMinuteRate,
         canAfford,
         estimatedCost,
         message: canAfford

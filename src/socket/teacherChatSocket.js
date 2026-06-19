@@ -139,6 +139,7 @@ const startChatBilling = (namespace, sessionId) => {
       sessionId: key,
       durationMinutes: result.session.durationMinutes,
       totalAmount: result.session.totalAmount,
+      teacherAmount: result.session.teacherAmount,
       balanceAfter: result.balanceAfter,
       timestamp: new Date(),
     });
@@ -580,14 +581,19 @@ export const setupTeacherChatSocket = (io) => {
       }
     };
 
-    socket.on("cancel_chat_request", async (payload = {}) => {
+    socket.on("cancel_chat_request", async (payload = {}, ack) => {
+      const respond = (body) => {
+        if (typeof ack === "function") ack(body);
+      };
       if (user.role !== "student") {
         socket.emit("chat_error", { message: "Only students can cancel a chat request" });
+        respond({ ok: false, message: "Only students can cancel a chat request" });
         return;
       }
       const requestedId = payload.sessionId || socket.data.pendingChatSessionId;
       if (!requestedId) {
         socket.emit("chat_error", { message: "No pending chat request to cancel" });
+        respond({ ok: false, message: "No pending chat request to cancel" });
         return;
       }
       if (
@@ -595,34 +601,43 @@ export const setupTeacherChatSocket = (io) => {
         socket.data.pendingChatSessionId !== String(requestedId)
       ) {
         socket.emit("chat_error", { message: "sessionId does not match your pending request" });
+        respond({ ok: false, message: "sessionId does not match your pending request" });
         return;
       }
       socket.data.pendingChatSessionId = String(requestedId);
       const withdrawn = await withdrawStudentPendingChat();
       if (withdrawn) {
         socket.emit("chat_request_cancelled", { sessionId: withdrawn._id.toString() });
+        respond({ ok: true, sessionId: withdrawn._id.toString() });
       } else {
         socket.emit("chat_error", {
           message: "No pending chat request to cancel or it was already handled",
         });
+        respond({ ok: false, message: "No pending chat request to cancel or it was already handled" });
       }
     });
 
-    socket.on("end_chat", async (payload = {}) => {
+    socket.on("end_chat", async (payload = {}, ack) => {
+      const respond = (body) => {
+        if (typeof ack === "function") ack(body);
+      };
       const { sessionId } = payload;
       if (!sessionId) {
         socket.emit("chat_error", { message: "sessionId is required" });
+        respond({ ok: false, message: "sessionId is required" });
         return;
       }
       try {
         const session = await teacherSessionRepository.findById(sessionId);
         if (!session || session.sessionKind !== "chat") {
           socket.emit("chat_error", { message: "Chat session not found" });
+          respond({ ok: false, message: "Chat session not found" });
           return;
         }
         teacherChatService.assertParticipant(session, userId, user.role);
         if (session.status !== "ongoing") {
           socket.emit("chat_error", { message: "Chat is not active" });
+          respond({ ok: false, message: "Chat is not active" });
           return;
         }
         const isTeacher = user.role === "teacher";
@@ -633,8 +648,14 @@ export const setupTeacherChatSocket = (io) => {
             ? "The teacher ended the chat."
             : "The student ended the chat."
         );
+        respond({ ok: true, sessionId: session._id.toString() });
       } catch (err) {
         socket.emit("chat_error", {
+          message: err.message || "Could not end chat",
+          statusCode: err.statusCode,
+        });
+        respond({
+          ok: false,
           message: err.message || "Could not end chat",
           statusCode: err.statusCode,
         });

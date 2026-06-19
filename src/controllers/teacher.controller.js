@@ -58,6 +58,8 @@ export const createTeacher = asyncHandler(async (req, res) => {
     experience: value.experience || null,
     language: value.language || null,
     perMinuteRate: value.salaryPerMinute != null ? Number(value.salaryPerMinute) : 0,
+    platformFeePercent:
+      value.platformFeePercent != null ? Number(value.platformFeePercent) : 0,
     skills: parseSkills(value.skills || []),
     profileImage: profileImageUrl,
     status: "approved",
@@ -235,6 +237,9 @@ export const updateTeacher = asyncHandler(async (req, res) => {
   if (value.experience !== undefined) updateData.experience = value.experience;
   if (value.language !== undefined) updateData.language = value.language;
   if (value.salaryPerMinute !== undefined) updateData.perMinuteRate = Number(value.salaryPerMinute);
+  if (value.platformFeePercent !== undefined) {
+    updateData.platformFeePercent = Number(value.platformFeePercent);
+  }
   if (value.skills !== undefined) updateData.skills = parseSkills(value.skills);
   if (value.password !== undefined) {
     const salt = await bcrypt.genSalt(10);

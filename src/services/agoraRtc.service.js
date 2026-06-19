@@ -65,7 +65,7 @@ export async function issueRtcTokenForSession({ sessionId, requesterId, role }) 
   const channelName = buildAgoraChannelName(session._id);
   const uid = agoraUidFromObjectId(reqId);
   const ttl = cfg.tokenTtlSeconds;
-  const privilegeTtl = ttl;
+  const privilegeExpiredTs = Math.floor(Date.now() / 1000) + ttl;
 
   let token;
   try {
@@ -75,8 +75,7 @@ export async function issueRtcTokenForSession({ sessionId, requesterId, role }) 
       channelName,
       uid,
       RtcRole.PUBLISHER,
-      ttl,
-      privilegeTtl
+      privilegeExpiredTs
     );
   } catch (e) {
     console.error("Agora RtcTokenBuilder.buildTokenWithUid failed:", e?.message || e);

@@ -6,6 +6,7 @@ import * as teacherWalletLedger from "./teacherWalletLedger.service.js";
 import studentSessionRepository from "../repository/studentSession.repository.js";
 import { sendNotificationToDevice } from "./fcm.service.js";
 import * as notificationService from "./notification.service.js";
+import { buildSessionRateSnapshot, roundMoney } from "./platformFee.service.js";
 
 const INSUFFICIENT_REQUEST_MSG =
   "Insufficient wallet balance to start a chat. Please recharge your wallet.";
@@ -38,7 +39,7 @@ export async function notifyTeacherDevice(teacherDoc, title, body, data = {}) {
         title,
         body,
         { ...data },
-        "system"
+        null
       );
     } catch (err) {
       console.error("Send teacher notification failed:", err.message);
@@ -87,8 +88,9 @@ export async function initiateChatRequest(studentId, teacherId, subject) {
     throw new ApiError(400, "You already have an ongoing session with this teacher");
   }
 
+  const rateSnapshot = buildSessionRateSnapshot(teacher);
   const wallet = await walletService.getWalletBalance(studentId, "User");
-  if (wallet.monetaryBalance < teacher.perMinuteRate) {
+  if (wallet.monetaryBalance < rateSnapshot.studentPerMinuteRate) {
     throw new ApiError(400, INSUFFICIENT_REQUEST_MSG);
   }
 
@@ -97,7 +99,7 @@ export async function initiateChatRequest(studentId, teacherId, subject) {
     teacher: teacherId,
     subject: subject || teacher.skills?.[0] || "General",
     sessionKind: "chat",
-    perMinuteRate: teacher.perMinuteRate,
+    ...rateSnapshot,
     status: "pending",
     initiatedBy: "student",
   });
@@ -149,7 +151,8 @@ export async function acceptChatSession(teacherId, sessionId) {
   }
 
   const wallet = await walletService.getWalletBalance(session.student._id, "User");
-  if (wallet.monetaryBalance < session.perMinuteRate) {
+  const studentRate = session.studentPerMinuteRate || session.perMinuteRate;
+  if (wallet.monetaryBalance < studentRate) {
     await teacherSessionRepository.updateById(sessionId, {
       status: "cancelled",
       rejectedAt: new Date(),
@@ -211,7 +214,10 @@ export async function billOneChatMinute(sessionId) {
     return { ok: false, reason: "inactive" };
   }
 
-  const rate = session.perMinuteRate;
+  const rate = session.studentPerMinuteRate || session.perMinuteRate;
+  const teacherRate = session.teacherPerMinuteRate || session.perMinuteRate;
+  const platformFeeRate =
+    session.platformFeePerMinute || Math.max(0, rate - teacherRate);
   const studentId = session.student._id;
 
   const wallet = await walletService.getWalletBalance(studentId, "User");
@@ -230,7 +236,11 @@ export async function billOneChatMinute(sessionId) {
 
   const updated = await teacherSessionRepository.updateById(sessionId, {
     durationMinutes: prevMinutes + 1,
-    totalAmount: prevTotal + rate,
+    totalAmount: roundMoney(prevTotal + rate),
+    teacherAmount: roundMoney((session.teacherAmount || 0) + teacherRate),
+    platformFeeAmount: roundMoney(
+      (session.platformFeeAmount || 0) + platformFeeRate
+    ),
     amountDeducted: true,
   });
 
@@ -266,12 +276,13 @@ export async function finalizeChatSession(
     return await teacherSessionRepository.findById(sessionId);
   }
 
-  const totalAmount = updated?.totalAmount ?? session.totalAmount ?? 0;
+  const teacherAmount =
+    updated?.teacherAmount ?? session.teacherAmount ?? session.totalAmount ?? 0;
   const teacherId = session.teacher._id || session.teacher;
-  if (totalAmount > 0) {
+  if (teacherAmount > 0) {
     await walletService.addMonetaryBalance(
       teacherId,
-      totalAmount,
+      teacherAmount,
       `chat_session_${sessionId}`,
       "Teacher"
     );
@@ -279,7 +290,7 @@ export async function finalizeChatSession(
     await teacherWalletLedger
       .recordSessionEarning({
         teacherId,
-        amount: totalAmount,
+        amount: teacherAmount,
         balanceAfter: bal.monetaryBalance,
         sessionId: updated._id,
         sessionKind: "chat",

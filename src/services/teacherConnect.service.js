@@ -6,9 +6,13 @@ import walletService from "./wallet.service.js";
 import * as teacherWalletLedger from "./teacherWalletLedger.service.js";
 import Teacher from "../models/Teacher.js";
 import { rejectChatSession, chatConstants } from "./teacherChat.service.js";
+import {
+  buildSessionRateSnapshot,
+  roundMoney,
+  withStudentPricing,
+} from "./platformFee.service.js";
 
 const { INSUFFICIENT_REQUEST_MSG, TEACHER_BUSY_MSG } = chatConstants;
-const roundMoney = (value) => Math.round((Number(value) + Number.EPSILON) * 100) / 100;
 const roundDurationMinutes = (value) =>
   Math.round((Number(value) + Number.EPSILON) * 10000) / 10000;
 
@@ -65,7 +69,7 @@ export const getAvailableTeachers = async (
   ]);
 
   const teachers = result.teachers.map((teacher) => ({
-    ...omitContactFromTeacher(teacher),
+    ...omitContactFromTeacher(withStudentPricing(teacher)),
     isOnline: teacher.isLive,
     averageRating: teacher.averageRating ?? 0,
     ratingCount: teacher.ratingCount ?? 0,
@@ -91,7 +95,7 @@ export const getTeacherById = async (teacherId) => {
     throw new ApiError(404, "Teacher not found");
   }
   const result = {
-    ...omitContactFromTeacher(teacher),
+    ...omitContactFromTeacher(withStudentPricing(teacher)),
     isOnline: teacher.isLive,
     averageRating: teacher.averageRating ?? 0,
     ratingCount: teacher.ratingCount ?? 0,
@@ -153,8 +157,9 @@ export const initiateCallRequest = async (studentId, teacherId, subject) => {
     throw new ApiError(400, "You already have a pending call request with this teacher");
   }
 
+  const rateSnapshot = buildSessionRateSnapshot(teacher);
   const wallet = await walletService.getWalletBalance(studentId, "User");
-  if (wallet.monetaryBalance < teacher.perMinuteRate) {
+  if (wallet.monetaryBalance < rateSnapshot.studentPerMinuteRate) {
     throw new ApiError(400, INSUFFICIENT_REQUEST_MSG);
   }
 
@@ -163,7 +168,7 @@ export const initiateCallRequest = async (studentId, teacherId, subject) => {
     teacher: teacherId,
     subject: subject || teacher.skills[0] || "General",
     sessionKind: "call",
-    perMinuteRate: teacher.perMinuteRate,
+    ...rateSnapshot,
     status: "pending",
     initiatedBy: "student",
   });
@@ -204,7 +209,8 @@ export const acceptCallRequest = async (teacherId, sessionId) => {
     }
 
     const wallet = await walletService.getWalletBalance(session.student._id, "User");
-    if (wallet.monetaryBalance < session.perMinuteRate) {
+    const studentRate = session.studentPerMinuteRate || session.perMinuteRate;
+    if (wallet.monetaryBalance < studentRate) {
       await teacherSessionRepository.updateById(sessionId, {
         status: "cancelled",
         rejectedAt: new Date(),
@@ -309,7 +315,13 @@ export const endCall = async (sessionId, durationMinutes, recordingUrl = null, a
           )
         : 1;
   const billableMinutes = roundDurationMinutes(elapsedMinutes);
-  const totalAmount = roundMoney(billableMinutes * session.perMinuteRate);
+  const studentRate = session.studentPerMinuteRate || session.perMinuteRate;
+  const teacherRate = session.teacherPerMinuteRate || session.perMinuteRate;
+  const platformFeeRate =
+    session.platformFeePerMinute || Math.max(0, studentRate - teacherRate);
+  const totalAmount = roundMoney(billableMinutes * studentRate);
+  const teacherAmount = roundMoney(billableMinutes * teacherRate);
+  const platformFeeAmount = roundMoney(billableMinutes * platformFeeRate);
 
   if (!session.amountDeducted) {
     const wallet = await walletService.getWalletBalance(session.student._id, "User");
@@ -324,6 +336,8 @@ export const endCall = async (sessionId, durationMinutes, recordingUrl = null, a
     callEndTime: new Date(),
     durationMinutes: billableMinutes,
     totalAmount,
+    teacherAmount,
+    platformFeeAmount,
     amountDeducted: true,
     recordingUrl,
     agoraRecordingId,
@@ -342,10 +356,10 @@ export const endCall = async (sessionId, durationMinutes, recordingUrl = null, a
   }
 
   const teacherId = session.teacher._id || session.teacher;
-  if (totalAmount > 0) {
+  if (teacherAmount > 0) {
     await walletService.addMonetaryBalance(
       teacherId,
-      totalAmount,
+      teacherAmount,
       `agora_session_${sessionId}`,
       "Teacher"
     );
@@ -353,7 +367,7 @@ export const endCall = async (sessionId, durationMinutes, recordingUrl = null, a
     await teacherWalletLedger
       .recordSessionEarning({
         teacherId,
-        amount: totalAmount,
+        amount: teacherAmount,
         balanceAfter: bal.monetaryBalance,
         sessionId: updatedSession._id,
         sessionKind: "agora_call",
