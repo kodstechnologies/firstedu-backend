@@ -295,18 +295,25 @@ export async function finalizeChatSession(
   const teacherAmount =
     updated?.teacherAmount ?? session.teacherAmount ?? session.totalAmount ?? 0;
   const teacherId = session.teacher._id || session.teacher;
-  if (teacherAmount > 0) {
-    await walletService.addMonetaryBalance(
+  const creditAmount = Number(teacherAmount);
+  if (creditAmount > 0) {
+    const alreadyCredited = await teacherWalletLedger.hasSessionEarning(
       teacherId,
-      teacherAmount,
-      `chat_session_${sessionId}`,
-      "Teacher"
+      updated._id
     );
+    if (!alreadyCredited) {
+      await walletService.addMonetaryBalance(
+        teacherId,
+        creditAmount,
+        `chat_session_${sessionId}`,
+        "Teacher"
+      );
+    }
     const bal = await walletService.getWalletBalance(teacherId, "Teacher");
     await teacherWalletLedger
       .recordSessionEarning({
         teacherId,
-        amount: teacherAmount,
+        amount: creditAmount,
         balanceAfter: bal.monetaryBalance,
         sessionId: updated._id,
         sessionKind: "chat",

@@ -15,6 +15,26 @@ const AGORA_API_BASE = "https://api.agora.io/v1";
 const QUERY_RETRY_MS = 2000;
 const QUERY_MAX_ATTEMPTS = 6;
 
+/** In-flight / active recording handles — survives session doc races on fast hang-ups. */
+const pendingRecordingStarts = new Map();
+const activeRecordingHandles = new Map();
+
+const recordingKey = (sessionId) => sessionId?.toString?.() ?? String(sessionId || "");
+
+export async function waitForRecordingReady(sessionId, maxWaitMs = 5000) {
+  const key = recordingKey(sessionId);
+  if (!key) return null;
+  if (activeRecordingHandles.has(key)) {
+    return activeRecordingHandles.get(key);
+  }
+  const pending = pendingRecordingStarts.get(key);
+  if (!pending) return null;
+  return Promise.race([
+    pending,
+    sleep(maxWaitMs).then(() => activeRecordingHandles.get(key) ?? null),
+  ]);
+}
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function buildBasicAuth(customerId, customerSecret) {
@@ -208,6 +228,17 @@ async function resolveRecordingUrlAfterStop({
  * Stores resourceId + sid on the session document.
  */
 export async function startCallRecording(sessionId) {
+  const key = recordingKey(sessionId);
+  if (!key) return null;
+
+  if (activeRecordingHandles.has(key)) {
+    return activeRecordingHandles.get(key);
+  }
+  if (pendingRecordingStarts.has(key)) {
+    return pendingRecordingStarts.get(key);
+  }
+
+  const startPromise = (async () => {
   const cfg = getAgoraRecordingConfig();
   if (!cfg.enabled) {
     console.warn(
@@ -226,10 +257,12 @@ export async function startCallRecording(sessionId) {
     return null;
   }
   if (session.agoraRecordingResourceId && session.agoraRecordingId) {
-    return {
+    const existing = {
       resourceId: session.agoraRecordingResourceId,
       sid: session.agoraRecordingId,
     };
+    activeRecordingHandles.set(key, existing);
+    return existing;
   }
 
   const channelName = buildAgoraChannelName(session._id);
@@ -286,39 +319,66 @@ export async function startCallRecording(sessionId) {
     agoraRecordingId: sid,
   });
 
+  const handle = { resourceId, sid };
+  activeRecordingHandles.set(key, handle);
   console.info(`[Agora Recording] Started for session ${sessionId} (sid=${sid})`);
-  return { resourceId, sid };
+  return handle;
+  })();
+
+  pendingRecordingStarts.set(key, startPromise);
+  try {
+    return await startPromise;
+  } catch (err) {
+    activeRecordingHandles.delete(key);
+    throw err;
+  } finally {
+    pendingRecordingStarts.delete(key);
+  }
 }
 
 /**
  * Stop Agora Cloud Recording and return the playable file URL when available.
+ * @param {string} sessionId
+ * @param {{ resourceId?: string, sid?: string }} [snapshot] — optional in-memory/db snapshot if session doc was already completed
  */
-export async function stopCallRecording(sessionId) {
+export async function stopCallRecording(sessionId, snapshot = null) {
   const cfg = getAgoraRecordingConfig();
   if (!cfg.enabled) {
     return { recordingUrl: null, agoraRecordingId: null };
   }
 
+  const key = recordingKey(sessionId);
   const session = await teacherSessionRepository.findById(sessionId);
-  if (!session) return { recordingUrl: null, agoraRecordingId: null };
 
-  const resourceId = session.agoraRecordingResourceId;
-  const sid = session.agoraRecordingId;
+  const cached = key ? activeRecordingHandles.get(key) : null;
+  let resourceId =
+    snapshot?.resourceId ||
+    cached?.resourceId ||
+    session?.agoraRecordingResourceId;
+  let sid =
+    snapshot?.sid ||
+    cached?.sid ||
+    session?.agoraRecordingId;
+
+  if (!session && !resourceId && !sid) {
+    return { recordingUrl: null, agoraRecordingId: null };
+  }
+
   if (!resourceId || !sid) {
     console.warn(
       `[Agora Recording] No active recording for session ${sessionId} — start may have failed or call was too short`
     );
     return {
-      recordingUrl: session.recordingUrl || null,
+      recordingUrl: session?.recordingUrl || null,
       agoraRecordingId: sid || null,
     };
   }
 
-  const channelName = buildAgoraChannelName(session._id);
+  const channelName = buildAgoraChannelName(session?._id ?? sessionId);
   const recordingUid = cfg.recordingUid;
   const rtcCfg = getAgoraRtcConfig();
 
-  let recordingUrl = session.recordingUrl || null;
+  let recordingUrl = session?.recordingUrl || null;
   try {
     const stopRes = await agoraRecordingRequest(
       rtcCfg.appId,
@@ -368,11 +428,20 @@ export async function stopCallRecording(sessionId) {
     console.error(`[Agora Recording] Stop failed for session ${sessionId}:`, err.message);
   }
 
+  if (key) activeRecordingHandles.delete(key);
+
   return { recordingUrl, agoraRecordingId: sid };
+}
+
+export function clearActiveRecordingHandle(sessionId) {
+  const key = recordingKey(sessionId);
+  if (key) activeRecordingHandles.delete(key);
 }
 
 export default {
   startCallRecording,
   stopCallRecording,
+  waitForRecordingReady,
+  clearActiveRecordingHandle,
   logAgoraRecordingStatus,
 };

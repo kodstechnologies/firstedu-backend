@@ -1,4 +1,5 @@
 import teacherWalletTransactionRepository from "../repository/teacherWalletTransaction.repository.js";
+import TeacherWalletTransaction from "../models/TeacherWalletTransaction.js";
 
 function signedAmountFromEntry(entry) {
   if (entry.kind === "credit") return entry.amount;
@@ -24,6 +25,16 @@ export function mapTransactionForApi(doc) {
   };
 }
 
+export async function hasSessionEarning(teacherId, sessionId) {
+  const existing = await TeacherWalletTransaction.findOne({
+    teacher: teacherId,
+    referenceId: sessionId,
+    referenceType: "TeacherSession",
+    category: "session_earning",
+  }).lean();
+  return Boolean(existing);
+}
+
 export async function recordSessionEarning({
   teacherId,
   amount,
@@ -31,6 +42,14 @@ export async function recordSessionEarning({
   sessionId,
   sessionKind,
 }) {
+  const existing = await TeacherWalletTransaction.findOne({
+    teacher: teacherId,
+    referenceId: sessionId,
+    referenceType: "TeacherSession",
+    category: "session_earning",
+  }).lean();
+  if (existing) return existing;
+
   const title =
     sessionKind === "chat" ? "Chat session earning" : "Voice call earning";
   const description =

@@ -337,7 +337,7 @@ export const endCall = async (sessionId, durationMinutes, recordingUrl = null, a
   }
 
   // Atomically claim completion so duplicate end/disconnect events cannot credit twice.
-  const updatedSession = await teacherSessionRepository.completeOngoingSession(sessionId, {
+  const completionPayload = {
     status: "completed",
     callEndTime: new Date(),
     durationMinutes: billableMinutes,
@@ -345,9 +345,14 @@ export const endCall = async (sessionId, durationMinutes, recordingUrl = null, a
     teacherAmount,
     platformFeeAmount,
     amountDeducted: true,
-    recordingUrl,
-    agoraRecordingId,
-  });
+  };
+  if (recordingUrl) completionPayload.recordingUrl = recordingUrl;
+  if (agoraRecordingId) completionPayload.agoraRecordingId = agoraRecordingId;
+
+  const updatedSession = await teacherSessionRepository.completeOngoingSession(
+    sessionId,
+    completionPayload
+  );
 
   if (!updatedSession) {
     return await teacherSessionRepository.findById(sessionId);
@@ -362,18 +367,25 @@ export const endCall = async (sessionId, durationMinutes, recordingUrl = null, a
   }
 
   const teacherId = session.teacher._id || session.teacher;
-  if (teacherAmount > 0) {
-    await walletService.addMonetaryBalance(
+  const creditAmount = Number(updatedSession.teacherAmount ?? teacherAmount);
+  if (creditAmount > 0) {
+    const alreadyCredited = await teacherWalletLedger.hasSessionEarning(
       teacherId,
-      teacherAmount,
-      `agora_session_${sessionId}`,
-      "Teacher"
+      updatedSession._id
     );
+    if (!alreadyCredited) {
+      await walletService.addMonetaryBalance(
+        teacherId,
+        creditAmount,
+        `agora_session_${sessionId}`,
+        "Teacher"
+      );
+    }
     const bal = await walletService.getWalletBalance(teacherId, "Teacher");
     await teacherWalletLedger
       .recordSessionEarning({
         teacherId,
-        amount: teacherAmount,
+        amount: creditAmount,
         balanceAfter: bal.monetaryBalance,
         sessionId: updatedSession._id,
         sessionKind: "agora_call",
@@ -676,7 +688,31 @@ export const getStudentChatMessages = async (
 };
 
 /**
- * End call, stopping Agora Cloud Recording first when configured.
+ * Stop Agora Cloud Recording in the background and patch the session URL when ready.
+ */
+export const finalizeCallRecordingAsync = (sessionId, snapshot = null) => {
+  Promise.resolve()
+    .then(async () => {
+      await agoraCloudRecording.waitForRecordingReady(sessionId, 6000);
+      const stopped = await agoraCloudRecording.stopCallRecording(sessionId, snapshot);
+      if (!stopped.recordingUrl && !stopped.agoraRecordingId) return;
+      await teacherSessionRepository.updateById(sessionId, {
+        ...(stopped.recordingUrl ? { recordingUrl: stopped.recordingUrl } : {}),
+        ...(stopped.agoraRecordingId
+          ? { agoraRecordingId: stopped.agoraRecordingId }
+          : {}),
+      });
+    })
+    .catch((err) => {
+      console.error("finalizeCallRecordingAsync:", err.message);
+    })
+    .finally(() => {
+      agoraCloudRecording.clearActiveRecordingHandle(sessionId);
+    });
+};
+
+/**
+ * End call immediately; finalize Agora Cloud Recording asynchronously.
  */
 export const endCallWithRecording = async (
   sessionId,
@@ -684,16 +720,22 @@ export const endCallWithRecording = async (
   clientRecordingUrl = null,
   clientAgoraRecordingId = null
 ) => {
-  let recordingUrl = clientRecordingUrl || null;
-  let agoraRecordingId = clientAgoraRecordingId || null;
-  try {
-    const stopped = await agoraCloudRecording.stopCallRecording(sessionId);
-    if (stopped.recordingUrl) recordingUrl = stopped.recordingUrl;
-    if (stopped.agoraRecordingId) agoraRecordingId = stopped.agoraRecordingId;
-  } catch (err) {
-    console.error("endCallWithRecording stop recording:", err.message);
-  }
-  return endCall(sessionId, durationMinutes, recordingUrl, agoraRecordingId);
+  const preSession = await teacherSessionRepository.findById(sessionId);
+  const recordingSnapshot = preSession
+    ? {
+        resourceId: preSession.agoraRecordingResourceId || undefined,
+        sid: preSession.agoraRecordingId || undefined,
+      }
+    : null;
+
+  const updated = await endCall(
+    sessionId,
+    durationMinutes,
+    clientRecordingUrl || null,
+    clientAgoraRecordingId || null
+  );
+  finalizeCallRecordingAsync(sessionId, recordingSnapshot);
+  return updated;
 };
 
 /**

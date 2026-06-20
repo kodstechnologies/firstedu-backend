@@ -17,6 +17,28 @@ const TEACHER_SOCKET_RECONNECT_GRACE_MS = Number(
 );
 const pendingChatCancelTimers = new Map();
 const chatDisconnectCleanupTimers = new Map();
+const chatSessionParticipants = new Map();
+
+const getChatParticipantKey = (sessionId) =>
+  sessionId?.toString?.() ?? String(sessionId || "");
+
+const clearChatParticipantState = (sessionId) => {
+  chatSessionParticipants.delete(getChatParticipantKey(sessionId));
+};
+
+const markChatParticipantJoined = (sessionId, role) => {
+  const key = getChatParticipantKey(sessionId);
+  if (!key) return false;
+  const state = chatSessionParticipants.get(key) || {
+    teacher: false,
+    student: false,
+  };
+  if (role === "teacher" || role === "student") {
+    state[role] = true;
+  }
+  chatSessionParticipants.set(key, state);
+  return Boolean(state.teacher && state.student);
+};
 
 const getChatDisconnectKey = (kind, userId, sessionId) =>
   `${kind}:${userId?.toString?.() ?? userId}:${sessionId?.toString?.() ?? sessionId}`;
@@ -257,6 +279,7 @@ export const setupTeacherChatSocket = (io) => {
       socket.join(`session:${sid}`);
       socket.data.chatSessionId = sid;
       clearChatDisconnectCleanup("active", userId, sid);
+      markChatParticipantJoined(sid, user.role);
       socket.emit("joined_chat_session", { sessionId: sid, session: ongoing, restored: true });
       startChatBilling(ns, ongoing._id);
     };
@@ -390,8 +413,6 @@ export const setupTeacherChatSocket = (io) => {
         socket.data.chatSessionId = sid;
         clearChatDisconnectCleanup("active", userId, sid);
 
-        startChatBilling(ns, session._id);
-
         const acceptedPayload = {
           session,
           timestamp: new Date(),
@@ -399,6 +420,7 @@ export const setupTeacherChatSocket = (io) => {
 
         ns.to(`student:${studentId}`).emit("chat_accepted", acceptedPayload);
         socket.emit("chat_accepted", acceptedPayload);
+        markChatParticipantJoined(sid, "teacher");
 
         // Non-blocking notification emission
         teacherChatService.notifyStudentDevices(
@@ -478,8 +500,11 @@ export const setupTeacherChatSocket = (io) => {
           clearChatDisconnectCleanup("pending", userId, sid);
           delete socket.data.pendingChatSessionId;
         }
+        const bothJoined = markChatParticipantJoined(sid, user.role);
+        if (bothJoined) {
+          startChatBilling(ns, session._id);
+        }
         socket.emit("joined_chat_session", { sessionId: sid, session });
-        startChatBilling(ns, session._id);
       } catch (err) {
         socket.emit("chat_error", {
           message: err.message || "Cannot join session",
@@ -566,6 +591,7 @@ export const setupTeacherChatSocket = (io) => {
     const endChatForSocket = async (sessionId, reason, message) => {
       const sid = sessionId.toString();
       stopChatBilling(sessionId);
+      clearChatParticipantState(sessionId);
       await teacherChatService.finalizeChatSession(sessionId, { sessionEndReason: reason });
       const endedPayload = {
         sessionId: sid,

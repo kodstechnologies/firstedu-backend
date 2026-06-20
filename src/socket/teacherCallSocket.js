@@ -15,6 +15,28 @@ const TEACHER_SOCKET_RECONNECT_GRACE_MS = Number(
 const pendingCallCancelTimers = new Map();
 const callDisconnectCleanupTimers = new Map();
 const recordingStartTimers = new Map();
+const callSessionParticipants = new Map();
+
+const getCallParticipantKey = (sessionId) =>
+  sessionId?.toString?.() ?? String(sessionId || "");
+
+const clearCallParticipantState = (sessionId) => {
+  callSessionParticipants.delete(getCallParticipantKey(sessionId));
+};
+
+const markCallParticipantJoined = (sessionId, role) => {
+  const key = getCallParticipantKey(sessionId);
+  if (!key) return false;
+  const state = callSessionParticipants.get(key) || {
+    teacher: false,
+    student: false,
+  };
+  if (role === "teacher" || role === "student") {
+    state[role] = true;
+  }
+  callSessionParticipants.set(key, state);
+  return Boolean(state.teacher && state.student);
+};
 
 const getCallDisconnectKey = (kind, userId, sessionId) =>
   `${kind}:${userId?.toString?.() ?? userId}:${sessionId?.toString?.() ?? sessionId}`;
@@ -29,28 +51,21 @@ const clearCallDisconnectCleanup = (kind, userId, sessionId) => {
 };
 
 const clearRecordingStartTimer = (sessionId) => {
-  const key = sessionId?.toString?.() ?? String(sessionId || "");
-  const tid = recordingStartTimers.get(key);
-  if (tid) {
-    clearTimeout(tid);
-    recordingStartTimers.delete(key);
-  }
+  const key = getCallParticipantKey(sessionId);
+  recordingStartTimers.delete(key);
 };
 
-/** Start cloud recording after participants have time to join Agora RTC. */
-const scheduleCallRecordingStart = (sessionId) => {
-  const key = sessionId?.toString?.() ?? String(sessionId || "");
+/** Start cloud recording once both sides have joined the live call channel. */
+const startCallRecordingNow = (sessionId) => {
+  const key = getCallParticipantKey(sessionId);
   if (!key || recordingStartTimers.has(key)) return;
-
-  const timerId = setTimeout(() => {
-    recordingStartTimers.delete(key);
-    agoraCloudRecording
-      .startCallRecording(sessionId)
-      .catch((err) =>
-        console.error(`[Agora Recording] start failed (session ${key}):`, err.message)
-      );
-  }, 3000);
-  recordingStartTimers.set(key, timerId);
+  recordingStartTimers.set(key, true);
+  agoraCloudRecording
+    .startCallRecording(sessionId)
+    .catch((err) => {
+      recordingStartTimers.delete(key);
+      console.error(`[Agora Recording] start failed (session ${key}):`, err.message);
+    });
 };
 
 const clearPendingCallAutoCancel = (sessionId) => {
@@ -72,12 +87,26 @@ function assertCallParticipant(session, userId, role) {
   throw new Error("Not a participant in this call session");
 }
 
-function resolveDurationMinutes(session, endedAt = Date.now()) {
+function resolveDurationMinutes(session, endedAt = Date.now(), clientDurationSeconds = null) {
+  const clientSecs = Number(clientDurationSeconds);
+  const clientMinutes =
+    Number.isFinite(clientSecs) && clientSecs > 0 ? clientSecs / 60 : null;
+
+  let serverMinutes = null;
   if (session.callStartTime) {
-    const elapsedMs = Math.max(1000, endedAt - new Date(session.callStartTime).getTime());
-    return elapsedMs / 60000;
+    const elapsedMs = Math.max(
+      0,
+      endedAt - new Date(session.callStartTime).getTime()
+    );
+    serverMinutes = Math.max(elapsedMs / 60000, 1 / 60);
   }
-  return 1;
+
+  if (clientMinutes != null && serverMinutes != null) {
+    return Math.min(clientMinutes, serverMinutes);
+  }
+  if (clientMinutes != null) return clientMinutes;
+  if (serverMinutes != null) return serverMinutes;
+  return 1 / 60;
 }
 
 export const setupTeacherCallSocket = (io) => {
@@ -178,7 +207,16 @@ export const setupTeacherCallSocket = (io) => {
       socket.join(`session:${sid}`);
       socket.data.callSessionId = sid;
       clearCallDisconnectCleanup("active", userId, sid);
+      markCallParticipantJoined(sid, user.role);
       socket.emit("joined_call_session", { sessionId: sid, session: ongoing, restored: true });
+      if (ongoing.status === "ongoing" && ongoing.callStartTime) {
+        const mediaPayload = {
+          sessionId: sid,
+          session: ongoing,
+          timestamp: ongoing.callStartTime,
+        };
+        socket.emit("call_media_started", mediaPayload);
+      }
     };
 
     const schedulePendingCallDisconnectCleanup = (sessionId) => {
@@ -309,7 +347,7 @@ export const setupTeacherCallSocket = (io) => {
           return;
         }
         await teacherConnectService.acceptCallRequest(userId, sessionId);
-        const session = await teacherConnectService.startCall(sessionId);
+        const session = await teacherSessionRepository.findById(sessionId);
         const sid = session._id.toString();
         clearPendingCallAutoCancel(sid);
         const studentRef = session.student._id ?? session.student;
@@ -318,6 +356,7 @@ export const setupTeacherCallSocket = (io) => {
         socket.join(`session:${sid}`);
         socket.data.callSessionId = sid;
         clearCallDisconnectCleanup("active", userId, sid);
+        markCallParticipantJoined(sid, "teacher");
 
         const acceptedPayload = {
           session,
@@ -326,8 +365,6 @@ export const setupTeacherCallSocket = (io) => {
 
         ns.to(`student:${studentId}`).emit("call_accepted", acceptedPayload);
         socket.emit("call_accepted", acceptedPayload);
-
-        scheduleCallRecordingStart(session._id);
 
         // Non-blocking notification emission
         teacherChatService.notifyStudentDevices(
@@ -393,13 +430,13 @@ export const setupTeacherCallSocket = (io) => {
         return;
       }
       try {
-        const session = await teacherSessionRepository.findById(sessionId);
+        let session = await teacherSessionRepository.findById(sessionId);
         if (!session || session.sessionKind !== "call") {
           socket.emit("call_error", { message: "Call session not found" });
           return;
         }
         assertCallParticipant(session, userId, user.role);
-        if (session.status !== "ongoing") {
+        if (session.status !== "accepted" && session.status !== "ongoing") {
           socket.emit("call_error", { message: "Call is not active" });
           return;
         }
@@ -412,8 +449,29 @@ export const setupTeacherCallSocket = (io) => {
           clearCallDisconnectCleanup("pending", userId, sid);
           delete socket.data.pendingCallSessionId;
         }
+
+        const bothJoined = markCallParticipantJoined(sid, user.role);
+        if (bothJoined && session.status === "accepted") {
+          session = await teacherConnectService.startCall(sessionId);
+          startCallRecordingNow(session._id);
+          const mediaPayload = {
+            sessionId: sid,
+            session,
+            timestamp: session.callStartTime || new Date(),
+          };
+          ns.to(`session:${sid}`).emit("call_media_started", mediaPayload);
+          ns.to(`student:${session.student._id}`).emit("call_media_started", mediaPayload);
+          ns.to(`teacher:${session.teacher._id}`).emit("call_media_started", mediaPayload);
+        } else if (session.status === "ongoing") {
+          const mediaPayload = {
+            sessionId: sid,
+            session,
+            timestamp: session.callStartTime || new Date(),
+          };
+          socket.emit("call_media_started", mediaPayload);
+        }
+
         socket.emit("joined_call_session", { sessionId: sid, session });
-        scheduleCallRecordingStart(session._id);
       } catch (err) {
         socket.emit("call_error", {
           message: err.message || "Cannot join session",
@@ -422,19 +480,35 @@ export const setupTeacherCallSocket = (io) => {
       }
     });
 
-    const endCallForSocket = async (sessionId, reason, message, resolvedDurationMinutes = null) => {
+    const endCallForSocket = async (
+      sessionId,
+      reason,
+      message,
+      resolvedDurationMinutes = null,
+      clientDurationSeconds = null
+    ) => {
       const sid = sessionId.toString();
       clearRecordingStartTimer(sid);
+      clearCallParticipantState(sid);
       const session = await teacherSessionRepository.findById(sessionId);
       if (!session || session.sessionKind !== "call" || session.status !== "ongoing") {
         return;
       }
-      const durationMinutes = resolvedDurationMinutes || resolveDurationMinutes(session);
-      await teacherConnectService.endCallWithRecording(sid, durationMinutes, null, null);
+      const endedAt = Date.now();
+      const durationMinutes =
+        resolvedDurationMinutes ||
+        resolveDurationMinutes(session, endedAt, clientDurationSeconds);
+      const updated = await teacherConnectService.endCallWithRecording(
+        sid,
+        durationMinutes,
+        null,
+        null
+      );
       const endedPayload = {
         sessionId: sid,
         reason,
         message: message || "",
+        session: updated,
         timestamp: new Date(),
       };
       ns.to(`session:${sid}`).emit("call_session_ended", endedPayload);
@@ -507,7 +581,7 @@ export const setupTeacherCallSocket = (io) => {
       const respond = (body) => {
         if (typeof ack === "function") ack(body);
       };
-      const { sessionId, recordingUrl, agoraRecordingId } = payload || {};
+      const { sessionId, recordingUrl, agoraRecordingId, durationSeconds } = payload || {};
       if (!sessionId) {
         socket.emit("call_error", { message: "sessionId is required" });
         respond({ ok: false, message: "sessionId is required" });
@@ -521,13 +595,41 @@ export const setupTeacherCallSocket = (io) => {
           return;
         }
         assertCallParticipant(session, userId, user.role);
+        if (session.status === "accepted") {
+          clearRecordingStartTimer(sessionId);
+          clearCallParticipantState(sessionId);
+          const updated = await teacherSessionRepository.updateById(sessionId, {
+            status: "cancelled",
+            callEndTime: new Date(),
+            sessionEndReason: "ended_before_media_connect",
+          });
+          const sid = updated._id.toString();
+          const isTeacher = user.role === "teacher";
+          const endedPayload = {
+            sessionId: sid,
+            reason: isTeacher ? "ended_by_teacher" : "ended_by_student",
+            message: isTeacher
+              ? "The teacher ended the call before it connected."
+              : "The student ended the call before it connected.",
+            session: updated,
+            timestamp: new Date(),
+          };
+          ns.to(`session:${sid}`).emit("call_session_ended", endedPayload);
+          ns.to(`student:${session.student._id}`).emit("call_session_ended", endedPayload);
+          ns.to(`teacher:${session.teacher._id}`).emit("call_session_ended", endedPayload);
+          socket.emit("call_ended_ack", { session: updated });
+          respond({ ok: true, session: updated });
+          return;
+        }
         if (session.status !== "ongoing") {
           socket.emit("call_error", { message: "Call is not active" });
           respond({ ok: false, message: "Call is not active" });
           return;
         }
+        const endedAt = Date.now();
         clearRecordingStartTimer(sessionId);
-        const dm = resolveDurationMinutes(session);
+        clearCallParticipantState(sessionId);
+        const dm = resolveDurationMinutes(session, endedAt, durationSeconds);
         const updated = await teacherConnectService.endCallWithRecording(
           sessionId,
           dm,

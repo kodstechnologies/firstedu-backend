@@ -66,18 +66,30 @@ export const getAdminChatMessages = async (
     throw new ApiError(404, "Teacher not found");
   }
 
-  const result = await teacherChatMessageRepository.findByStudentAndTeacher(
-    studentId,
-    teacherId,
-    { page, limit, sortOrder: "asc" }
-  );
+  const [result, chatSessionsResult] = await Promise.all([
+    teacherChatMessageRepository.findByStudentAndTeacher(studentId, teacherId, {
+      page,
+      limit,
+      sortOrder: "asc",
+    }),
+    teacherSessionRepository.findChatSessionsByStudentAndTeacher(
+      studentId,
+      teacherId,
+      { page: 1, limit: 100 }
+    ),
+  ]);
 
-  if (result.messages.length === 0) {
+  if (
+    result.messages.length === 0 &&
+    (chatSessionsResult.sessions?.length ?? 0) === 0
+  ) {
     throw new ApiError(404, "No chat messages found for this conversation");
   }
 
   return {
     ...result,
+    sessions: chatSessionsResult.sessions || [],
+    sessionsPagination: chatSessionsResult.pagination,
     student: {
       _id: student._id,
       name: student.name,

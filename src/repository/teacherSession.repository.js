@@ -981,6 +981,49 @@ const findCallSessionsByStudentAndTeacher = async (
   }
 };
 
+const findChatSessionsByStudentAndTeacher = async (
+  studentId,
+  teacherId,
+  options = {}
+) => {
+  try {
+    const { page = 1, limit = 50 } = options;
+    const pageNum = parseInt(page, 10);
+    const limitNum = parseInt(limit, 10);
+    const skip = (pageNum - 1) * limitNum;
+
+    const query = {
+      student: studentId,
+      teacher: teacherId,
+      sessionKind: "chat",
+      status: "completed",
+    };
+
+    const [sessions, total] = await Promise.all([
+      TeacherSession.find(query)
+        .populate("teacher", "name email skills profileImage")
+        .populate("student", "name email phone profileImage")
+        .sort({ callEndTime: -1, chatStartedAt: -1 })
+        .skip(skip)
+        .limit(limitNum)
+        .lean(),
+      TeacherSession.countDocuments(query),
+    ]);
+
+    return {
+      sessions,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total,
+        pages: Math.ceil(total / limitNum) || 1,
+      },
+    };
+  } catch (error) {
+    throw new ApiError(500, "Failed to fetch chat sessions", error.message);
+  }
+};
+
 export default {
   create,
   findById,
@@ -993,6 +1036,7 @@ export default {
   findCallConversationsByTeacher,
   findCallRecordingsByStudentAndTeacher,
   findCallSessionsByStudentAndTeacher,
+  findChatSessionsByStudentAndTeacher,
   findStudentsWithCallLogs,
   findTeachersWithCallLogs,
   findTeacherSessions,

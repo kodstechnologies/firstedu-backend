@@ -93,6 +93,7 @@ export const getAdminChatMessages = asyncHandler(async (req, res) => {
     ApiResponse.success(
       {
         messages: result.messages,
+        sessions: result.sessions || [],
         student: result.student,
         teacher: result.teacher,
       },
