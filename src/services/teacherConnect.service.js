@@ -11,6 +11,12 @@ import {
   roundMoney,
   withStudentPricing,
 } from "./platformFee.service.js";
+import teacherChatMessageRepository from "../repository/teacherChatMessage.repository.js";
+import * as agoraCloudRecording from "./agoraCloudRecording.service.js";
+import {
+  resolveSessionRecordingMp3,
+  buildCallRecordingDownloadName,
+} from "./callRecordingMp3.service.js";
 
 const { INSUFFICIENT_REQUEST_MSG, TEACHER_BUSY_MSG } = chatConstants;
 const roundDurationMinutes = (value) =>
@@ -438,24 +444,256 @@ export const getStudentCallHistory = async (studentId, page = 1, limit = 10, sta
 };
 
 /**
- * Get student's call recordings
+ * Unique teachers with call recordings (call report sidebar).
+ */
+export const getStudentCallConversations = async (
+  studentId,
+  page = 1,
+  limit = 20,
+  search = null
+) => {
+  return await teacherSessionRepository.findCallConversationsByStudent(studentId, {
+    page,
+    limit,
+    search,
+  });
+};
+
+/**
+ * Convert legacy mp4 recordings to mp3 when listing (updates DB).
+ */
+export const hydrateCallRecordingsAsMp3 = async (recordings) => {
+  const hydrated = [];
+  for (const rec of recordings) {
+    const doc = rec.toObject ? rec.toObject() : { ...rec };
+    if (doc.recordingUrl && !/\.mp3(\?|$)/i.test(doc.recordingUrl)) {
+      try {
+        const mp3Url = await resolveSessionRecordingMp3(doc);
+        if (mp3Url) doc.recordingUrl = mp3Url;
+      } catch (err) {
+        console.error(
+          `[MP3] hydrate failed for session ${doc._id}:`,
+          err.message
+        );
+      }
+    }
+    hydrated.push(doc);
+  }
+  return hydrated;
+};
+
+/**
+ * All MP3 recordings with a specific teacher.
+ */
+export const getStudentCallRecordingsByTeacher = async (
+  studentId,
+  teacherId,
+  page = 1,
+  limit = 50
+) => {
+  const teacher = await teacherRepository.findById(teacherId);
+  if (!teacher) {
+    throw new ApiError(404, "Teacher not found");
+  }
+
+  const result = await teacherSessionRepository.findCallRecordingsByStudentAndTeacher(
+    studentId,
+    teacherId,
+    { page, limit }
+  );
+
+  const recordings = await hydrateCallRecordingsAsMp3(result.recordings);
+
+  return {
+    recordings,
+    pagination: result.pagination,
+  };
+};
+
+/**
+ * Get MP3 bytes for a call recording download (converts legacy mp4 on demand).
+ */
+export const getCallRecordingMp3Download = async (studentId, sessionId) => {
+  const session = await teacherSessionRepository.findById(sessionId);
+  if (!session || session.sessionKind !== "call") {
+    throw new ApiError(404, "Call session not found");
+  }
+  if (session.student._id?.toString?.() !== studentId.toString()) {
+    throw new ApiError(403, "You do not have access to this recording");
+  }
+  if (!session.recordingUrl) {
+    throw new ApiError(404, "No recording available for this call");
+  }
+
+  const mp3Url = await resolveSessionRecordingMp3(session);
+  if (!mp3Url) {
+    throw new ApiError(404, "Recording file is not available");
+  }
+
+  const res = await fetch(mp3Url);
+  if (!res.ok) {
+    throw new ApiError(502, "Failed to fetch recording file from storage");
+  }
+
+  const buffer = Buffer.from(await res.arrayBuffer());
+  const teacherName =
+    session.teacher?.name ||
+    (typeof session.teacher === "object" ? session.teacher.name : "teacher");
+
+  return {
+    buffer,
+    fileName: buildCallRecordingDownloadName(teacherName, session.callEndTime),
+    mp3Url,
+  };
+};
+
+/**
+ * Get student's call recordings (completed call sessions with a recording URL).
  */
 export const getStudentRecordings = async (studentId, page = 1, limit = 10) => {
+  return await teacherSessionRepository.findStudentSessions(studentId, {
+    page,
+    limit,
+    status: "completed",
+    sessionKind: "call",
+    hasRecording: true,
+    sortBy: "callEndTime",
+    sortOrder: "desc",
+  });
+};
+
+/**
+ * Unique teacher conversations for chat report (one row per teacher).
+ */
+export const getStudentChatConversations = async (
+  studentId,
+  page = 1,
+  limit = 20,
+  search = null
+) => {
+  return await teacherChatMessageRepository.findConversationsByStudent(studentId, {
+    page,
+    limit,
+    search,
+  });
+};
+
+/**
+ * All messages with a teacher across every completed chat session.
+ */
+export const getStudentChatMessagesByTeacher = async (
+  studentId,
+  teacherId,
+  page = 1,
+  limit = 200
+) => {
+  const teacher = await teacherRepository.findById(teacherId);
+  if (!teacher) {
+    throw new ApiError(404, "Teacher not found");
+  }
+
+  const result = await teacherChatMessageRepository.findByStudentAndTeacher(
+    studentId,
+    teacherId,
+    { page, limit, sortOrder: "asc" }
+  );
+
+  if (result.messages.length === 0) {
+    const hasSession = await teacherSessionRepository.findOne({
+      student: studentId,
+      teacher: teacherId,
+      sessionKind: "chat",
+      status: "completed",
+    });
+    if (!hasSession) {
+      throw new ApiError(404, "No chat history with this teacher");
+    }
+  }
+
+  return result;
+};
+
+/**
+ * Completed chat sessions for the student (chat report list).
+ * @deprecated Use getStudentChatConversations for grouped-by-teacher UI.
+ */
+export const getStudentChatSessions = async (
+  studentId,
+  page = 1,
+  limit = 10,
+  teacherId = null
+) => {
   const result = await teacherSessionRepository.findStudentSessions(studentId, {
     page,
     limit,
     status: "completed",
+    sessionKind: "chat",
+    sortBy: "chatStartedAt",
+    sortOrder: "desc",
+    teacherId,
   });
 
-  // Filter only sessions with recordings
-  const sessionsWithRecordings = result.sessions.filter(
-    (session) => session.recordingUrl
+  const sessions = await Promise.all(
+    result.sessions.map(async (session) => {
+      const doc = session.toObject ? session.toObject() : { ...session };
+      const messageCount = await teacherChatMessageRepository.countBySession(session._id);
+      return { ...doc, messageCount };
+    })
   );
 
   return {
-    recordings: sessionsWithRecordings,
+    sessions,
     pagination: result.pagination,
   };
+};
+
+/**
+ * Paginated chat messages for a completed chat session (student only).
+ */
+export const getStudentChatMessages = async (
+  studentId,
+  sessionId,
+  page = 1,
+  limit = 50
+) => {
+  const session = await teacherSessionRepository.findById(sessionId);
+  if (!session || session.sessionKind !== "chat") {
+    throw new ApiError(404, "Chat session not found");
+  }
+  const sid = session.student._id?.toString?.() ?? String(session.student);
+  if (sid !== studentId.toString()) {
+    throw new ApiError(403, "You do not have access to this chat session");
+  }
+  if (session.status !== "completed") {
+    throw new ApiError(400, "Chat history is available after the session ends");
+  }
+
+  return await teacherChatMessageRepository.findBySession(sessionId, {
+    page,
+    limit,
+    sortOrder: "asc",
+  });
+};
+
+/**
+ * End call, stopping Agora Cloud Recording first when configured.
+ */
+export const endCallWithRecording = async (
+  sessionId,
+  durationMinutes,
+  clientRecordingUrl = null,
+  clientAgoraRecordingId = null
+) => {
+  let recordingUrl = clientRecordingUrl || null;
+  let agoraRecordingId = clientAgoraRecordingId || null;
+  try {
+    const stopped = await agoraCloudRecording.stopCallRecording(sessionId);
+    if (stopped.recordingUrl) recordingUrl = stopped.recordingUrl;
+    if (stopped.agoraRecordingId) agoraRecordingId = stopped.agoraRecordingId;
+  } catch (err) {
+    console.error("endCallWithRecording stop recording:", err.message);
+  }
+  return endCall(sessionId, durationMinutes, recordingUrl, agoraRecordingId);
 };
 
 /**
@@ -576,6 +814,15 @@ export default {
   cancelCallRequest,
   getStudentCallHistory,
   getStudentRecordings,
+  getStudentCallConversations,
+  getStudentCallRecordingsByTeacher,
+  getCallRecordingMp3Download,
+  hydrateCallRecordingsAsMp3,
+  getStudentChatConversations,
+  getStudentChatMessagesByTeacher,
+  getStudentChatSessions,
+  getStudentChatMessages,
+  endCallWithRecording,
   getTeacherPendingRequests,
   getTeacherSessionHistory,
   deleteTeacherSession,

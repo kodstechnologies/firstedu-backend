@@ -118,6 +118,12 @@ import {
   getTeacherById,
   getCallHistory,
   getCallRecordings,
+  getCallReportConversations,
+  getCallTeacherRecordings,
+  downloadCallRecording,
+  getChatReportSessions,
+  getChatTeacherMessages,
+  getChatSessionMessages,
   checkWalletBalance,
   rateTeacher,
 } from "../controllers/studentTeacherConnect.controller.js";
@@ -520,6 +526,28 @@ router.get("/teachers/:teacherId/check-balance", verifyJWT, checkWalletBalance);
 // Teacher sessions (history) + Agora token after call_accepted on /teacher-call socket
 router.get("/teacher-sessions", verifyJWT, getCallHistory);
 router.get("/teacher-sessions/recordings", verifyJWT, getCallRecordings);
+router.get("/teacher-sessions/call-reports", verifyJWT, getCallReportConversations);
+router.get(
+  "/teacher-sessions/call-reports/:teacherId/recordings",
+  verifyJWT,
+  getCallTeacherRecordings
+);
+router.get(
+  "/teacher-sessions/:sessionId/recording/download",
+  verifyJWT,
+  downloadCallRecording
+);
+router.get("/teacher-sessions/chat-reports", verifyJWT, getChatReportSessions);
+router.get(
+  "/teacher-sessions/chat-reports/:teacherId/messages",
+  verifyJWT,
+  getChatTeacherMessages
+);
+router.get(
+  "/teacher-sessions/:sessionId/chat-messages",
+  verifyJWT,
+  getChatSessionMessages
+);
 router.post(
   "/teacher-sessions/:sessionId/agora-token",
   verifyJWT,

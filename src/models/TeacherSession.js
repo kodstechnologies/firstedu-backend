@@ -101,7 +101,13 @@ const teacherSessionSchema = new mongoose.Schema(
       trim: true,
       default: null,
     },
-    // Optional: Agora Cloud Recording resource id (or similar)
+    // Agora Cloud Recording metadata
+    agoraRecordingResourceId: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    /** Agora Cloud Recording session id (sid) */
     agoraRecordingId: {
       type: String,
       trim: true,

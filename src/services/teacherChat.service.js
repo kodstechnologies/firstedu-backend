@@ -6,7 +6,12 @@ import * as teacherWalletLedger from "./teacherWalletLedger.service.js";
 import studentSessionRepository from "../repository/studentSession.repository.js";
 import { sendNotificationToDevice } from "./fcm.service.js";
 import * as notificationService from "./notification.service.js";
-import { buildSessionRateSnapshot, roundMoney } from "./platformFee.service.js";
+import {
+  buildSessionRateSnapshot,
+  perSecondFromPerMinute,
+  roundDurationMinutes,
+  roundMoney,
+} from "./platformFee.service.js";
 
 const INSUFFICIENT_REQUEST_MSG =
   "Insufficient wallet balance to start a chat. Please recharge your wallet.";
@@ -206,40 +211,50 @@ export function assertParticipant(session, userId, role) {
 }
 
 /**
- * Bill one minute: deduct rate, update session. Returns false if wallet insufficient (session should close).
+ * Bill one second: deduct per-minute rate / 60, update session.
+ * Returns false if wallet insufficient (session should close).
  */
-export async function billOneChatMinute(sessionId) {
+export async function billOneChatSecond(sessionId) {
   const session = await teacherSessionRepository.findById(sessionId);
   if (!session || session.sessionKind !== "chat" || session.status !== "ongoing") {
     return { ok: false, reason: "inactive" };
   }
 
-  const rate = session.studentPerMinuteRate || session.perMinuteRate;
-  const teacherRate = session.teacherPerMinuteRate || session.perMinuteRate;
-  const platformFeeRate =
-    session.platformFeePerMinute || Math.max(0, rate - teacherRate);
-  const studentId = session.student._id;
+  const studentPerMinute = session.studentPerMinuteRate || session.perMinuteRate;
+  const teacherPerMinute = session.teacherPerMinuteRate || session.perMinuteRate;
+  const platformFeePerMinute =
+    session.platformFeePerMinute || Math.max(0, studentPerMinute - teacherPerMinute);
 
+  const studentPerSecond = perSecondFromPerMinute(studentPerMinute);
+  const teacherPerSecond = perSecondFromPerMinute(teacherPerMinute);
+  const platformFeePerSecond = perSecondFromPerMinute(platformFeePerMinute);
+
+  if (studentPerSecond <= 0) {
+    return { ok: false, reason: "inactive" };
+  }
+
+  const studentId = session.student._id;
   const wallet = await walletService.getWalletBalance(studentId, "User");
-  if (wallet.monetaryBalance < rate) {
+  if (wallet.monetaryBalance < studentPerSecond) {
     return { ok: false, reason: "insufficient_balance", session };
   }
 
   try {
-    await walletService.deductMonetaryBalance(studentId, rate, "User");
+    await walletService.deductMonetaryBalance(studentId, studentPerSecond, "User");
   } catch {
     return { ok: false, reason: "insufficient_balance", session };
   }
 
   const prevMinutes = session.durationMinutes || 0;
   const prevTotal = session.totalAmount || 0;
+  const durationMinutes = roundDurationMinutes(prevMinutes + 1 / 60);
 
   const updated = await teacherSessionRepository.updateById(sessionId, {
-    durationMinutes: prevMinutes + 1,
-    totalAmount: roundMoney(prevTotal + rate),
-    teacherAmount: roundMoney((session.teacherAmount || 0) + teacherRate),
+    durationMinutes,
+    totalAmount: roundMoney(prevTotal + studentPerSecond),
+    teacherAmount: roundMoney((session.teacherAmount || 0) + teacherPerSecond),
     platformFeeAmount: roundMoney(
-      (session.platformFeeAmount || 0) + platformFeeRate
+      (session.platformFeeAmount || 0) + platformFeePerSecond
     ),
     amountDeducted: true,
   });
@@ -249,7 +264,8 @@ export async function billOneChatMinute(sessionId) {
   return {
     ok: true,
     session: updated,
-    balanceAfter: newWallet.monetaryBalance,
+    balanceAfter: roundMoney(newWallet.monetaryBalance),
+    durationSeconds: Math.round(durationMinutes * 60),
   };
 }
 
@@ -312,7 +328,7 @@ export default {
   acceptChatSession,
   rejectChatSession,
   assertParticipant,
-  billOneChatMinute,
+  billOneChatSecond,
   finalizeChatSession,
   notifyStudentDevices,
   notifyTeacherDevice,

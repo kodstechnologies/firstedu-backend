@@ -6,6 +6,12 @@ import { ApiError } from "../utils/ApiError.js";
 export const roundMoney = (value) =>
   Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
 
+export const roundDurationMinutes = (value) =>
+  Math.round((Number(value) + Number.EPSILON) * 10000) / 10000;
+
+export const perSecondFromPerMinute = (perMinuteRate) =>
+  roundMoney(Number(perMinuteRate || 0) / 60);
+
 export const getRateBreakdown = (teacher) => {
   const teacherPerMinuteRate = roundMoney(teacher?.perMinuteRate || 0);
   const platformFeePercent = Math.max(0, Number(teacher?.platformFeePercent || 0));
@@ -209,6 +215,8 @@ export const updateTeacherPlatformFee = async (teacherId, platformFeePercent) =>
 
 export default {
   roundMoney,
+  roundDurationMinutes,
+  perSecondFromPerMinute,
   getRateBreakdown,
   buildSessionRateSnapshot,
   withStudentPricing,

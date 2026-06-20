@@ -1,5 +1,6 @@
 import teacherSessionRepository from "../repository/teacherSession.repository.js";
 import teacherRepository from "../repository/teacher.repository.js";
+import teacherChatMessageRepository from "../repository/teacherChatMessage.repository.js";
 import teacherChatService from "../services/teacherChat.service.js";
 import { uploadFileToCloudinary } from "../utils/s3Upload.js";
 import {
@@ -78,6 +79,8 @@ const clearPendingChatAutoCancel = (sessionId) => {
   }
 };
 
+const CHAT_BILLING_INTERVAL_MS = 1_000;
+
 const chatBillingTimers = new Map();
 
 const stopChatBilling = (sessionId) => {
@@ -94,7 +97,7 @@ const startChatBilling = (namespace, sessionId) => {
   if (chatBillingTimers.has(key)) return;
 
   const tick = async () => {
-    const result = await teacherChatService.billOneChatMinute(sessionId);
+    const result = await teacherChatService.billOneChatSecond(sessionId);
     if (!result.ok) {
       if (result.reason === "insufficient_balance") {
         stopChatBilling(sessionId);
@@ -135,19 +138,23 @@ const startChatBilling = (namespace, sessionId) => {
       return;
     }
 
-    namespace.to(`session:${key}`).emit("chat_minute_billed", {
+    const billedPayload = {
       sessionId: key,
       durationMinutes: result.session.durationMinutes,
+      durationSeconds: result.durationSeconds,
       totalAmount: result.session.totalAmount,
       teacherAmount: result.session.teacherAmount,
       balanceAfter: result.balanceAfter,
       timestamp: new Date(),
-    });
+    };
+    namespace.to(`session:${key}`).emit("chat_second_billed", billedPayload);
+    namespace.to(`session:${key}`).emit("chat_minute_billed", billedPayload);
   };
 
+  tick().catch((err) => console.error("Chat billing tick error:", err));
   const intervalId = setInterval(() => {
     tick().catch((err) => console.error("Chat billing tick error:", err));
-  }, 60_000);
+  }, CHAT_BILLING_INTERVAL_MS);
 
   chatBillingTimers.set(key, intervalId);
 };
@@ -251,6 +258,7 @@ export const setupTeacherChatSocket = (io) => {
       socket.data.chatSessionId = sid;
       clearChatDisconnectCleanup("active", userId, sid);
       socket.emit("joined_chat_session", { sessionId: sid, session: ongoing, restored: true });
+      startChatBilling(ns, ongoing._id);
     };
 
     const schedulePendingChatDisconnectCleanup = (sessionId) => {
@@ -471,6 +479,7 @@ export const setupTeacherChatSocket = (io) => {
           delete socket.data.pendingChatSessionId;
         }
         socket.emit("joined_chat_session", { sessionId: sid, session });
+        startChatBilling(ns, session._id);
       } catch (err) {
         socket.emit("chat_error", {
           message: err.message || "Cannot join session",
@@ -519,6 +528,7 @@ export const setupTeacherChatSocket = (io) => {
             size: normalized.size,
           };
         }
+        const sentAtDate = sentAt ? new Date(sentAt) : new Date();
         const messagePayload = {
           sessionId: sid,
           text: cleanText,
@@ -526,9 +536,24 @@ export const setupTeacherChatSocket = (io) => {
           from: user.role,
           senderId: userId,
           senderName: user.name || user.email || user.phone,
-          sentAt: sentAt || new Date().toISOString(),
+          sentAt: sentAtDate.toISOString(),
           clientId,
         };
+
+        const saved = await teacherChatMessageRepository.create({
+          session: session._id,
+          student: session.student._id ?? session.student,
+          teacher: session.teacher._id ?? session.teacher,
+          from: user.role,
+          senderId: userId,
+          senderName: messagePayload.senderName,
+          text: cleanText,
+          attachment: uploadedAttachment,
+          sentAt: sentAtDate,
+          clientId: clientId || null,
+        });
+        messagePayload._id = saved._id.toString();
+
         ns.to(`session:${sid}`).emit("chat_message", messagePayload);
       } catch (err) {
         socket.emit("chat_error", {

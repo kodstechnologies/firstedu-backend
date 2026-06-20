@@ -69,6 +69,73 @@ export const getCallHistory = asyncHandler(async (req, res) => {
 });
 
 /**
+ * Download call recording as MP3 (converts legacy files on demand).
+ */
+export const downloadCallRecording = asyncHandler(async (req, res) => {
+  const studentId = req.user._id;
+  const { sessionId } = req.params;
+
+  const { buffer, fileName } = await teacherConnectService.getCallRecordingMp3Download(
+    studentId,
+    sessionId
+  );
+
+  res.setHeader("Content-Type", "audio/mpeg");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="${fileName.replace(/"/g, "")}"`
+  );
+  res.send(buffer);
+});
+
+/**
+ * Get call report conversations grouped by teacher.
+ */
+export const getCallReportConversations = asyncHandler(async (req, res) => {
+  const studentId = req.user._id;
+  const { page = 1, limit = 20, search } = req.query;
+
+  const result = await teacherConnectService.getStudentCallConversations(
+    studentId,
+    parseInt(page),
+    parseInt(limit),
+    search || null
+  );
+
+  return res.status(200).json(
+    ApiResponse.success(
+      result.conversations,
+      "Call conversations fetched successfully",
+      result.pagination
+    )
+  );
+});
+
+/**
+ * Get all recordings with a teacher.
+ */
+export const getCallTeacherRecordings = asyncHandler(async (req, res) => {
+  const studentId = req.user._id;
+  const { teacherId } = req.params;
+  const { page = 1, limit = 50 } = req.query;
+
+  const result = await teacherConnectService.getStudentCallRecordingsByTeacher(
+    studentId,
+    teacherId,
+    parseInt(page),
+    parseInt(limit)
+  );
+
+  return res.status(200).json(
+    ApiResponse.success(
+      result.recordings,
+      "Call recordings fetched successfully",
+      result.pagination
+    )
+  );
+});
+
+/**
  * Get student's call recordings
  */
 export const getCallRecordings = asyncHandler(async (req, res) => {
@@ -83,8 +150,79 @@ export const getCallRecordings = asyncHandler(async (req, res) => {
 
   return res.status(200).json(
     ApiResponse.success(
-      result.recordings,
+      result.sessions,
       "Call recordings fetched successfully",
+      result.pagination
+    )
+  );
+});
+
+/**
+ * Get student's chat conversations grouped by teacher.
+ */
+export const getChatReportSessions = asyncHandler(async (req, res) => {
+  const studentId = req.user._id;
+  const { page = 1, limit = 20, search } = req.query;
+
+  const result = await teacherConnectService.getStudentChatConversations(
+    studentId,
+    parseInt(page),
+    parseInt(limit),
+    search || null
+  );
+
+  return res.status(200).json(
+    ApiResponse.success(
+      result.conversations,
+      "Chat conversations fetched successfully",
+      result.pagination
+    )
+  );
+});
+
+/**
+ * Get all messages with a teacher (merged across sessions).
+ */
+export const getChatTeacherMessages = asyncHandler(async (req, res) => {
+  const studentId = req.user._id;
+  const { teacherId } = req.params;
+  const { page = 1, limit = 200 } = req.query;
+
+  const result = await teacherConnectService.getStudentChatMessagesByTeacher(
+    studentId,
+    teacherId,
+    parseInt(page),
+    parseInt(limit)
+  );
+
+  return res.status(200).json(
+    ApiResponse.success(
+      result.messages,
+      "Chat messages fetched successfully",
+      result.pagination
+    )
+  );
+});
+
+/**
+ * Get messages for a completed chat session.
+ */
+export const getChatSessionMessages = asyncHandler(async (req, res) => {
+  const studentId = req.user._id;
+  const { sessionId } = req.params;
+  const { page = 1, limit = 50 } = req.query;
+
+  const result = await teacherConnectService.getStudentChatMessages(
+    studentId,
+    sessionId,
+    parseInt(page),
+    parseInt(limit)
+  );
+
+  return res.status(200).json(
+    ApiResponse.success(
+      result.messages,
+      "Chat messages fetched successfully",
       result.pagination
     )
   );
@@ -157,6 +295,12 @@ export default {
   getTeacherById,
   getCallHistory,
   getCallRecordings,
+  getCallReportConversations,
+  getCallTeacherRecordings,
+  downloadCallRecording,
+  getChatReportSessions,
+  getChatTeacherMessages,
+  getChatSessionMessages,
   checkWalletBalance,
   rateTeacher,
 };

@@ -281,6 +281,19 @@ import {
 import { verifyJWT } from "../middleware/auth.middleware.js";
 import { verifyAdmin } from "../middleware/admin.middleware.js";
 import {
+  getAdminStudentsWithChatLogs,
+  getAdminTeachersWithChatLogs,
+  getAdminStudentChatConversations,
+  getAdminTeacherChatConversations,
+  getAdminChatMessages,
+  getAdminStudentsWithCallLogs,
+  getAdminTeachersWithCallLogs,
+  getAdminStudentCallConversations,
+  getAdminTeacherCallConversations,
+  getAdminCallSessions,
+  downloadAdminCallRecording,
+} from "../controllers/adminTeacherConnectChat.controller.js";
+import {
   getAdminWithdrawalList,
   getAdminWithdrawalById,
   postAdminApproveWithdrawal,
@@ -799,5 +812,75 @@ router.post("/hero-slides", verifyJWT, uploadSuccessStory.single("media"), creat
 router.get("/hero-slides", verifyJWT, getHeroSlidesAdmin);
 router.put("/hero-slides/:id", verifyJWT, uploadSuccessStory.single("media"), updateHeroSlide);
 router.delete("/hero-slides/:id", verifyJWT, deleteHeroSlide);
+
+// ==================== TEACHER CONNECT CHAT REPORTS (Admin monitoring) ====================
+router.get(
+  "/teacher-connect/chat-reports/students",
+  verifyJWT,
+  verifyAdmin,
+  getAdminStudentsWithChatLogs
+);
+router.get(
+  "/teacher-connect/chat-reports/teachers",
+  verifyJWT,
+  verifyAdmin,
+  getAdminTeachersWithChatLogs
+);
+router.get(
+  "/teacher-connect/chat-reports/students/:studentId/conversations",
+  verifyJWT,
+  verifyAdmin,
+  getAdminStudentChatConversations
+);
+router.get(
+  "/teacher-connect/chat-reports/teachers/:teacherId/conversations",
+  verifyJWT,
+  verifyAdmin,
+  getAdminTeacherChatConversations
+);
+router.get(
+  "/teacher-connect/chat-reports/:studentId/:teacherId/messages",
+  verifyJWT,
+  verifyAdmin,
+  getAdminChatMessages
+);
+
+// ==================== TEACHER CONNECT CALL REPORTS (Admin monitoring) ====================
+router.get(
+  "/teacher-connect/call-reports/students",
+  verifyJWT,
+  verifyAdmin,
+  getAdminStudentsWithCallLogs
+);
+router.get(
+  "/teacher-connect/call-reports/teachers",
+  verifyJWT,
+  verifyAdmin,
+  getAdminTeachersWithCallLogs
+);
+router.get(
+  "/teacher-connect/call-reports/students/:studentId/conversations",
+  verifyJWT,
+  verifyAdmin,
+  getAdminStudentCallConversations
+);
+router.get(
+  "/teacher-connect/call-reports/teachers/:teacherId/conversations",
+  verifyJWT,
+  verifyAdmin,
+  getAdminTeacherCallConversations
+);
+router.get(
+  "/teacher-connect/call-reports/:studentId/:teacherId/calls",
+  verifyJWT,
+  verifyAdmin,
+  getAdminCallSessions
+);
+router.get(
+  "/teacher-connect/call-reports/sessions/:sessionId/recording/download",
+  verifyJWT,
+  verifyAdmin,
+  downloadAdminCallRecording
+);
 
 export default router;

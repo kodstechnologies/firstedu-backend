@@ -63,7 +63,7 @@ const create = async (sessionData) => {
     const session = await TeacherSession.create(sessionData);
     return await TeacherSession.findById(session._id)
       .populate("student", "name email")
-      .populate("teacher", "name email skills perMinuteRate platformFeePercent");
+      .populate("teacher", "name email skills perMinuteRate platformFeePercent profileImage");
   } catch (error) {
     throw new ApiError(500, "Failed to create teacher session", error.message);
   }
@@ -73,7 +73,7 @@ const findById = async (sessionId) => {
   try {
     return await TeacherSession.findById(sessionId)
       .populate("student", "name email")
-      .populate("teacher", "name email skills perMinuteRate platformFeePercent");
+      .populate("teacher", "name email skills perMinuteRate platformFeePercent profileImage");
   } catch (error) {
     throw new ApiError(500, "Failed to fetch session", error.message);
   }
@@ -83,7 +83,7 @@ const findOne = async (filter) => {
   try {
     return await TeacherSession.findOne(filter)
       .populate("student", "name email")
-      .populate("teacher", "name email skills perMinuteRate platformFeePercent");
+      .populate("teacher", "name email skills perMinuteRate platformFeePercent profileImage");
   } catch (error) {
     throw new ApiError(500, "Failed to fetch session", error.message);
   }
@@ -97,7 +97,7 @@ const updateById = async (sessionId, updateData) => {
       { new: true, runValidators: true }
     )
       .populate("student", "name email")
-      .populate("teacher", "name email skills perMinuteRate platformFeePercent");
+      .populate("teacher", "name email skills perMinuteRate platformFeePercent profileImage");
   } catch (error) {
     throw new ApiError(500, "Failed to update session", error.message);
   }
@@ -114,7 +114,7 @@ const completeOngoingSession = async (sessionId, updateData) => {
       { new: true, runValidators: true }
     )
       .populate("student", "name email")
-      .populate("teacher", "name email skills perMinuteRate platformFeePercent");
+      .populate("teacher", "name email skills perMinuteRate platformFeePercent profileImage");
   } catch (error) {
     throw new ApiError(500, "Failed to complete session", error.message);
   }
@@ -126,6 +126,9 @@ const findStudentSessions = async (studentId, options = {}) => {
       page = 1,
       limit = 10,
       status,
+      sessionKind,
+      hasRecording,
+      teacherId,
       sortBy = "createdAt",
       sortOrder = "desc",
     } = options;
@@ -133,6 +136,15 @@ const findStudentSessions = async (studentId, options = {}) => {
     const query = { student: studentId };
     if (status) {
       query.status = status;
+    }
+    if (sessionKind) {
+      query.sessionKind = sessionKind;
+    }
+    if (hasRecording) {
+      query.recordingUrl = { $exists: true, $nin: [null, ""] };
+    }
+    if (teacherId) {
+      query.teacher = teacherId;
     }
 
     const pageNum = parseInt(page);
@@ -432,6 +444,543 @@ const calculateTeacherEarnings = async (teacherId, startDate, endDate) => {
   }
 };
 
+const findCallConversationsByStudent = async (studentId, options = {}) => {
+  try {
+    const { page = 1, limit = 20, search, requireRecording = true } = options;
+    const pageNum = parseInt(page, 10);
+    const limitNum = parseInt(limit, 10);
+    const skip = (pageNum - 1) * limitNum;
+    const searchTrim = typeof search === "string" ? search.trim() : "";
+
+    const matchStage = {
+      student: new mongoose.Types.ObjectId(String(studentId)),
+      sessionKind: "call",
+      status: "completed",
+    };
+    if (requireRecording) {
+      matchStage.recordingUrl = { $exists: true, $nin: [null, ""] };
+    }
+
+    const pipeline = [
+      { $match: matchStage },
+      { $sort: { callEndTime: -1 } },
+      {
+        $group: {
+          _id: "$teacher",
+          recordingCount: {
+            $sum: {
+              $cond: [
+                {
+                  $and: [
+                    { $ne: ["$recordingUrl", null] },
+                    { $ne: ["$recordingUrl", ""] },
+                  ],
+                },
+                1,
+                0,
+              ],
+            },
+          },
+          callCount: { $sum: 1 },
+          totalDurationMinutes: { $sum: { $ifNull: ["$durationMinutes", 0] } },
+          lastCallEndTime: { $max: "$callEndTime" },
+          latestSubject: { $first: "$subject" },
+          latestRecordingUrl: { $first: "$recordingUrl" },
+        },
+      },
+      { $sort: { lastCallEndTime: -1 } },
+      {
+        $lookup: {
+          from: "teachers",
+          localField: "_id",
+          foreignField: "_id",
+          as: "teacherDoc",
+        },
+      },
+      { $unwind: "$teacherDoc" },
+    ];
+
+    if (searchTrim) {
+      const esc = searchTrim.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const rx = new RegExp(esc, "i");
+      pipeline.push({
+        $match: {
+          $or: [
+            { "teacherDoc.name": rx },
+            { "teacherDoc.skills": rx },
+            { latestSubject: rx },
+          ],
+        },
+      });
+    }
+
+    pipeline.push({
+      $facet: {
+        data: [
+          { $skip: skip },
+          { $limit: limitNum },
+          {
+            $project: {
+              teacherId: "$_id",
+              teacher: {
+                _id: "$teacherDoc._id",
+                name: "$teacherDoc.name",
+                profileImage: "$teacherDoc.profileImage",
+                skills: "$teacherDoc.skills",
+              },
+              recordingCount: 1,
+              callCount: 1,
+              totalDurationMinutes: 1,
+              lastCallEndTime: 1,
+              latestSubject: 1,
+              latestRecordingUrl: 1,
+            },
+          },
+        ],
+        total: [{ $count: "count" }],
+      },
+    });
+
+    const [result] = await TeacherSession.aggregate(pipeline);
+    const conversations = result?.data || [];
+    const total = result?.total?.[0]?.count || 0;
+
+    return {
+      conversations,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total,
+        pages: Math.ceil(total / limitNum) || 1,
+      },
+    };
+  } catch (error) {
+    throw new ApiError(500, "Failed to fetch call conversations", error.message);
+  }
+};
+
+const findCallRecordingsByStudentAndTeacher = async (
+  studentId,
+  teacherId,
+  options = {}
+) => {
+  try {
+    const { page = 1, limit = 50 } = options;
+    const pageNum = parseInt(page, 10);
+    const limitNum = parseInt(limit, 10);
+    const skip = (pageNum - 1) * limitNum;
+
+    const query = {
+      student: studentId,
+      teacher: teacherId,
+      sessionKind: "call",
+      status: "completed",
+      recordingUrl: { $exists: true, $nin: [null, ""] },
+    };
+
+    const [sessions, total] = await Promise.all([
+      TeacherSession.find(query)
+        .populate("teacher", "name email skills profileImage")
+        .sort({ callEndTime: -1 })
+        .skip(skip)
+        .limit(limitNum)
+        .lean(),
+      TeacherSession.countDocuments(query),
+    ]);
+
+    return {
+      recordings: sessions,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total,
+        pages: Math.ceil(total / limitNum) || 1,
+      },
+    };
+  } catch (error) {
+    throw new ApiError(500, "Failed to fetch call recordings", error.message);
+  }
+};
+
+const findCallConversationsByTeacher = async (teacherId, options = {}) => {
+  try {
+    const { page = 1, limit = 20, search } = options;
+    const pageNum = parseInt(page, 10);
+    const limitNum = parseInt(limit, 10);
+    const skip = (pageNum - 1) * limitNum;
+    const searchTrim = typeof search === "string" ? search.trim() : "";
+
+    const pipeline = [
+      {
+        $match: {
+          teacher: new mongoose.Types.ObjectId(String(teacherId)),
+          sessionKind: "call",
+          status: "completed",
+        },
+      },
+      { $sort: { callEndTime: -1 } },
+      {
+        $group: {
+          _id: "$student",
+          callCount: { $sum: 1 },
+          recordingCount: {
+            $sum: {
+              $cond: [
+                {
+                  $and: [
+                    { $ne: ["$recordingUrl", null] },
+                    { $ne: ["$recordingUrl", ""] },
+                  ],
+                },
+                1,
+                0,
+              ],
+            },
+          },
+          totalDurationMinutes: { $sum: { $ifNull: ["$durationMinutes", 0] } },
+          lastCallEndTime: { $max: "$callEndTime" },
+          latestSubject: { $first: "$subject" },
+        },
+      },
+      { $sort: { lastCallEndTime: -1 } },
+      {
+        $lookup: {
+          from: "users",
+          localField: "_id",
+          foreignField: "_id",
+          as: "studentDoc",
+        },
+      },
+      { $unwind: "$studentDoc" },
+    ];
+
+    if (searchTrim) {
+      const esc = searchTrim.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const rx = new RegExp(esc, "i");
+      pipeline.push({
+        $match: {
+          $or: [
+            { "studentDoc.name": rx },
+            { "studentDoc.email": rx },
+            { "studentDoc.phone": rx },
+            { latestSubject: rx },
+          ],
+        },
+      });
+    }
+
+    pipeline.push({
+      $facet: {
+        data: [
+          { $skip: skip },
+          { $limit: limitNum },
+          {
+            $project: {
+              studentId: "$_id",
+              student: {
+                _id: "$studentDoc._id",
+                name: "$studentDoc.name",
+                profileImage: "$studentDoc.profileImage",
+                email: "$studentDoc.email",
+                phone: "$studentDoc.phone",
+              },
+              callCount: 1,
+              recordingCount: 1,
+              totalDurationMinutes: 1,
+              lastCallEndTime: 1,
+              latestSubject: 1,
+            },
+          },
+        ],
+        total: [{ $count: "count" }],
+      },
+    });
+
+    const [result] = await TeacherSession.aggregate(pipeline);
+    const conversations = result?.data || [];
+    const total = result?.total?.[0]?.count || 0;
+
+    return {
+      conversations,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total,
+        pages: Math.ceil(total / limitNum) || 1,
+      },
+    };
+  } catch (error) {
+    throw new ApiError(500, "Failed to fetch call conversations", error.message);
+  }
+};
+
+const findStudentsWithCallLogs = async (options = {}) => {
+  try {
+    const { page = 1, limit = 20, search } = options;
+    const pageNum = parseInt(page, 10);
+    const limitNum = parseInt(limit, 10);
+    const skip = (pageNum - 1) * limitNum;
+    const searchTrim = typeof search === "string" ? search.trim() : "";
+
+    const pipeline = [
+      {
+        $match: {
+          sessionKind: "call",
+          status: "completed",
+        },
+      },
+      { $sort: { callEndTime: -1 } },
+      {
+        $group: {
+          _id: "$student",
+          callCount: { $sum: 1 },
+          recordingCount: {
+            $sum: {
+              $cond: [
+                {
+                  $and: [
+                    { $ne: ["$recordingUrl", null] },
+                    { $ne: ["$recordingUrl", ""] },
+                  ],
+                },
+                1,
+                0,
+              ],
+            },
+          },
+          totalDurationMinutes: { $sum: { $ifNull: ["$durationMinutes", 0] } },
+          lastCallEndTime: { $max: "$callEndTime" },
+          latestSubject: { $first: "$subject" },
+          teacherIds: { $addToSet: "$teacher" },
+        },
+      },
+      { $sort: { lastCallEndTime: -1 } },
+      {
+        $lookup: {
+          from: "users",
+          localField: "_id",
+          foreignField: "_id",
+          as: "studentDoc",
+        },
+      },
+      { $unwind: "$studentDoc" },
+    ];
+
+    if (searchTrim) {
+      const esc = searchTrim.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const rx = new RegExp(esc, "i");
+      pipeline.push({
+        $match: {
+          $or: [
+            { "studentDoc.name": rx },
+            { "studentDoc.email": rx },
+            { "studentDoc.phone": rx },
+            { latestSubject: rx },
+          ],
+        },
+      });
+    }
+
+    pipeline.push({
+      $facet: {
+        data: [
+          { $skip: skip },
+          { $limit: limitNum },
+          {
+            $project: {
+              studentId: "$_id",
+              student: {
+                _id: "$studentDoc._id",
+                name: "$studentDoc.name",
+                profileImage: "$studentDoc.profileImage",
+                email: "$studentDoc.email",
+                phone: "$studentDoc.phone",
+              },
+              callCount: 1,
+              recordingCount: 1,
+              conversationCount: { $size: "$teacherIds" },
+              totalDurationMinutes: 1,
+              lastCallEndTime: 1,
+              latestSubject: 1,
+            },
+          },
+        ],
+        total: [{ $count: "count" }],
+      },
+    });
+
+    const [result] = await TeacherSession.aggregate(pipeline);
+    const students = result?.data || [];
+    const total = result?.total?.[0]?.count || 0;
+
+    return {
+      students,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total,
+        pages: Math.ceil(total / limitNum) || 1,
+      },
+    };
+  } catch (error) {
+    throw new ApiError(500, "Failed to fetch students with call logs", error.message);
+  }
+};
+
+const findTeachersWithCallLogs = async (options = {}) => {
+  try {
+    const { page = 1, limit = 20, search } = options;
+    const pageNum = parseInt(page, 10);
+    const limitNum = parseInt(limit, 10);
+    const skip = (pageNum - 1) * limitNum;
+    const searchTrim = typeof search === "string" ? search.trim() : "";
+
+    const pipeline = [
+      {
+        $match: {
+          sessionKind: "call",
+          status: "completed",
+        },
+      },
+      { $sort: { callEndTime: -1 } },
+      {
+        $group: {
+          _id: "$teacher",
+          callCount: { $sum: 1 },
+          recordingCount: {
+            $sum: {
+              $cond: [
+                {
+                  $and: [
+                    { $ne: ["$recordingUrl", null] },
+                    { $ne: ["$recordingUrl", ""] },
+                  ],
+                },
+                1,
+                0,
+              ],
+            },
+          },
+          totalDurationMinutes: { $sum: { $ifNull: ["$durationMinutes", 0] } },
+          lastCallEndTime: { $max: "$callEndTime" },
+          latestSubject: { $first: "$subject" },
+          studentIds: { $addToSet: "$student" },
+        },
+      },
+      { $sort: { lastCallEndTime: -1 } },
+      {
+        $lookup: {
+          from: "teachers",
+          localField: "_id",
+          foreignField: "_id",
+          as: "teacherDoc",
+        },
+      },
+      { $unwind: "$teacherDoc" },
+    ];
+
+    if (searchTrim) {
+      const esc = searchTrim.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const rx = new RegExp(esc, "i");
+      pipeline.push({
+        $match: {
+          $or: [
+            { "teacherDoc.name": rx },
+            { "teacherDoc.skills": rx },
+            { latestSubject: rx },
+          ],
+        },
+      });
+    }
+
+    pipeline.push({
+      $facet: {
+        data: [
+          { $skip: skip },
+          { $limit: limitNum },
+          {
+            $project: {
+              teacherId: "$_id",
+              teacher: {
+                _id: "$teacherDoc._id",
+                name: "$teacherDoc.name",
+                profileImage: "$teacherDoc.profileImage",
+                skills: "$teacherDoc.skills",
+              },
+              callCount: 1,
+              recordingCount: 1,
+              conversationCount: { $size: "$studentIds" },
+              totalDurationMinutes: 1,
+              lastCallEndTime: 1,
+              latestSubject: 1,
+            },
+          },
+        ],
+        total: [{ $count: "count" }],
+      },
+    });
+
+    const [result] = await TeacherSession.aggregate(pipeline);
+    const teachers = result?.data || [];
+    const total = result?.total?.[0]?.count || 0;
+
+    return {
+      teachers,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total,
+        pages: Math.ceil(total / limitNum) || 1,
+      },
+    };
+  } catch (error) {
+    throw new ApiError(500, "Failed to fetch teachers with call logs", error.message);
+  }
+};
+
+const findCallSessionsByStudentAndTeacher = async (
+  studentId,
+  teacherId,
+  options = {}
+) => {
+  try {
+    const { page = 1, limit = 50 } = options;
+    const pageNum = parseInt(page, 10);
+    const limitNum = parseInt(limit, 10);
+    const skip = (pageNum - 1) * limitNum;
+
+    const query = {
+      student: studentId,
+      teacher: teacherId,
+      sessionKind: "call",
+      status: "completed",
+    };
+
+    const [sessions, total] = await Promise.all([
+      TeacherSession.find(query)
+        .populate("teacher", "name email skills profileImage")
+        .populate("student", "name email phone profileImage")
+        .sort({ callEndTime: -1 })
+        .skip(skip)
+        .limit(limitNum)
+        .lean(),
+      TeacherSession.countDocuments(query),
+    ]);
+
+    return {
+      calls: sessions,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total,
+        pages: Math.ceil(total / limitNum) || 1,
+      },
+    };
+  } catch (error) {
+    throw new ApiError(500, "Failed to fetch call sessions", error.message);
+  }
+};
+
 export default {
   create,
   findById,
@@ -440,6 +989,12 @@ export default {
   completeOngoingSession,
   deleteById,
   findStudentSessions,
+  findCallConversationsByStudent,
+  findCallConversationsByTeacher,
+  findCallRecordingsByStudentAndTeacher,
+  findCallSessionsByStudentAndTeacher,
+  findStudentsWithCallLogs,
+  findTeachersWithCallLogs,
   findTeacherSessions,
   findPendingRequests,
   findOngoingSession,

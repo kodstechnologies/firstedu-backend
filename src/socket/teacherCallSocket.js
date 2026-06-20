@@ -2,6 +2,7 @@ import teacherSessionRepository from "../repository/teacherSession.repository.js
 import teacherRepository from "../repository/teacher.repository.js";
 import teacherConnectService from "../services/teacherConnect.service.js";
 import teacherChatService from "../services/teacherChat.service.js";
+import * as agoraCloudRecording from "../services/agoraCloudRecording.service.js";
 import {
   authenticateTeacherConnectSocket,
   normalizeSocketAuthToken,
@@ -13,6 +14,7 @@ const TEACHER_SOCKET_RECONNECT_GRACE_MS = Number(
 );
 const pendingCallCancelTimers = new Map();
 const callDisconnectCleanupTimers = new Map();
+const recordingStartTimers = new Map();
 
 const getCallDisconnectKey = (kind, userId, sessionId) =>
   `${kind}:${userId?.toString?.() ?? userId}:${sessionId?.toString?.() ?? sessionId}`;
@@ -24,6 +26,31 @@ const clearCallDisconnectCleanup = (kind, userId, sessionId) => {
     clearTimeout(timerId);
     callDisconnectCleanupTimers.delete(key);
   }
+};
+
+const clearRecordingStartTimer = (sessionId) => {
+  const key = sessionId?.toString?.() ?? String(sessionId || "");
+  const tid = recordingStartTimers.get(key);
+  if (tid) {
+    clearTimeout(tid);
+    recordingStartTimers.delete(key);
+  }
+};
+
+/** Start cloud recording after participants have time to join Agora RTC. */
+const scheduleCallRecordingStart = (sessionId) => {
+  const key = sessionId?.toString?.() ?? String(sessionId || "");
+  if (!key || recordingStartTimers.has(key)) return;
+
+  const timerId = setTimeout(() => {
+    recordingStartTimers.delete(key);
+    agoraCloudRecording
+      .startCallRecording(sessionId)
+      .catch((err) =>
+        console.error(`[Agora Recording] start failed (session ${key}):`, err.message)
+      );
+  }, 3000);
+  recordingStartTimers.set(key, timerId);
 };
 
 const clearPendingCallAutoCancel = (sessionId) => {
@@ -300,6 +327,8 @@ export const setupTeacherCallSocket = (io) => {
         ns.to(`student:${studentId}`).emit("call_accepted", acceptedPayload);
         socket.emit("call_accepted", acceptedPayload);
 
+        scheduleCallRecordingStart(session._id);
+
         // Non-blocking notification emission
         teacherChatService.notifyStudentDevices(
           studentId,
@@ -384,6 +413,7 @@ export const setupTeacherCallSocket = (io) => {
           delete socket.data.pendingCallSessionId;
         }
         socket.emit("joined_call_session", { sessionId: sid, session });
+        scheduleCallRecordingStart(session._id);
       } catch (err) {
         socket.emit("call_error", {
           message: err.message || "Cannot join session",
@@ -394,17 +424,13 @@ export const setupTeacherCallSocket = (io) => {
 
     const endCallForSocket = async (sessionId, reason, message, resolvedDurationMinutes = null) => {
       const sid = sessionId.toString();
+      clearRecordingStartTimer(sid);
       const session = await teacherSessionRepository.findById(sessionId);
       if (!session || session.sessionKind !== "call" || session.status !== "ongoing") {
         return;
       }
       const durationMinutes = resolvedDurationMinutes || resolveDurationMinutes(session);
-      await teacherConnectService.endCall(
-        sid,
-        durationMinutes,
-        null,
-        null
-      );
+      await teacherConnectService.endCallWithRecording(sid, durationMinutes, null, null);
       const endedPayload = {
         sessionId: sid,
         reason,
@@ -500,8 +526,9 @@ export const setupTeacherCallSocket = (io) => {
           respond({ ok: false, message: "Call is not active" });
           return;
         }
+        clearRecordingStartTimer(sessionId);
         const dm = resolveDurationMinutes(session);
-        const updated = await teacherConnectService.endCall(
+        const updated = await teacherConnectService.endCallWithRecording(
           sessionId,
           dm,
           recordingUrl || null,

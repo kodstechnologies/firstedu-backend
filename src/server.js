@@ -10,6 +10,7 @@ import { setupExamSessionSocket } from './socket/examSessionSocket.js';
 import { setupChallengeSocket } from './socket/challengeSocket.js';
 import { setupTeacherChatSocket } from './socket/teacherChatSocket.js';
 import { setupTeacherCallSocket } from './socket/teacherCallSocket.js';
+import { logAgoraRecordingStatus } from './services/agoraCloudRecording.service.js';
 import { setIO } from './socket/socketGateway.js';
 import examSessionService from './services/examSession.service.js';
 import tournamentNotificationsService from './services/tournamentNotifications.service.js';
@@ -166,6 +167,7 @@ const startServer = async () => {
     server.listen(port, '0.0.0.0', () => {
       console.log(`🚀!! Server running on http://0.0.0.0:${port} at ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`);
       console.log(`📡 Socket.io server initialized`);
+      logAgoraRecordingStatus();
       const lanIps = [];
       for (const iface of Object.values(os.networkInterfaces())) {
         for (const cfg of iface || []) {
