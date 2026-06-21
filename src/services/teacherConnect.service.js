@@ -604,25 +604,31 @@ export const getStudentChatMessagesByTeacher = async (
     throw new ApiError(404, "Teacher not found");
   }
 
-  const result = await teacherChatMessageRepository.findByStudentAndTeacher(
-    studentId,
-    teacherId,
-    { page, limit, sortOrder: "asc" }
-  );
+  const [result, chatSessionsResult] = await Promise.all([
+    teacherChatMessageRepository.findByStudentAndTeacher(studentId, teacherId, {
+      page,
+      limit,
+      sortOrder: "asc",
+    }),
+    teacherSessionRepository.findChatSessionsByStudentAndTeacher(
+      studentId,
+      teacherId,
+      { page: 1, limit: 100 }
+    ),
+  ]);
 
-  if (result.messages.length === 0) {
-    const hasSession = await teacherSessionRepository.findOne({
-      student: studentId,
-      teacher: teacherId,
-      sessionKind: "chat",
-      status: "completed",
-    });
-    if (!hasSession) {
-      throw new ApiError(404, "No chat history with this teacher");
-    }
+  if (
+    result.messages.length === 0 &&
+    (chatSessionsResult.sessions?.length ?? 0) === 0
+  ) {
+    throw new ApiError(404, "No chat history with this teacher");
   }
 
-  return result;
+  return {
+    ...result,
+    sessions: chatSessionsResult.sessions || [],
+    sessionsPagination: chatSessionsResult.pagination,
+  };
 };
 
 /**

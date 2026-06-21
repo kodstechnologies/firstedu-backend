@@ -197,7 +197,10 @@ export const getChatTeacherMessages = asyncHandler(async (req, res) => {
 
   return res.status(200).json(
     ApiResponse.success(
-      result.messages,
+      {
+        messages: result.messages,
+        sessions: result.sessions || [],
+      },
       "Chat messages fetched successfully",
       result.pagination
     )

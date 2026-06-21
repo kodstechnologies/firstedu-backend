@@ -44,18 +44,32 @@ const teacherEarningExpression = {
 };
 
 const getTeacherEarningAmount = (session) => {
-  const teacherAmount = Number(session?.teacherAmount || 0);
-  if (teacherAmount > 0) return teacherAmount;
-
-  const totalAmount = Number(session?.totalAmount || 0);
-  const platformFeeAmount = Number(session?.platformFeeAmount || 0);
-  if (platformFeeAmount > 0) return Math.max(0, totalAmount - platformFeeAmount);
-
   const teacherRate = Number(session?.teacherPerMinuteRate || 0);
   const durationMinutes = Number(session?.durationMinutes || 0);
-  if (teacherRate > 0 && durationMinutes > 0) return teacherRate * durationMinutes;
+  const totalAmount = Number(session?.totalAmount || 0);
+  const storedTeacherAmount = Number(session?.teacherAmount || 0);
+  const storedPlatformFee = Number(session?.platformFeeAmount || 0);
 
-  return totalAmount;
+  if (teacherRate > 0 && durationMinutes > 0) {
+    return Math.round((teacherRate * durationMinutes + Number.EPSILON) * 100) / 100;
+  }
+
+  if (storedTeacherAmount > 0) {
+    if (
+      storedPlatformFee > 0 &&
+      Math.abs(storedTeacherAmount - storedPlatformFee) < 0.01 &&
+      totalAmount > storedTeacherAmount + storedPlatformFee + 0.01
+    ) {
+      return Math.max(0, Math.round((totalAmount - storedPlatformFee + Number.EPSILON) * 100) / 100);
+    }
+    return storedTeacherAmount;
+  }
+
+  if (totalAmount > 0 && storedPlatformFee >= 0) {
+    return Math.max(0, Math.round((totalAmount - storedPlatformFee + Number.EPSILON) * 100) / 100);
+  }
+
+  return 0;
 };
 
 const create = async (sessionData) => {
