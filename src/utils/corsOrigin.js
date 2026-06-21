@@ -3,11 +3,29 @@ const PRIVATE_LAN_HOST =
 
 const DEFAULT_ORIGINS = [
   "https://iscorre.com",
+  "https://www.iscorre.com",
   "https://app.iscorre.com",
+  "https://www.app.iscorre.com",
   "http://localhost:3000",
   "http://localhost:5174",
   "http://localhost:5173",
 ];
+
+/** www and non-www variants of the same host (e.g. iscorre.com ↔ www.iscorre.com). */
+function originAliases(origin) {
+  try {
+    const u = new URL(origin);
+    const aliases = [origin];
+    if (u.hostname.startsWith("www.")) {
+      aliases.push(`${u.protocol}//${u.hostname.slice(4)}`);
+    } else {
+      aliases.push(`${u.protocol}//www.${u.hostname}`);
+    }
+    return aliases;
+  } catch {
+    return [origin];
+  }
+}
 
 export function getAllowedCorsOrigins() {
   const fromEnv = process.env.CORS_ORIGIN?.split(",")
@@ -16,12 +34,15 @@ export function getAllowedCorsOrigins() {
   return fromEnv?.length ? fromEnv : DEFAULT_ORIGINS;
 }
 
-/** Allow explicit list + any private-LAN origin in non-production (Wi‑Fi device testing). */
+/** Allow explicit list + www/non-www alias + private-LAN in non-production. */
 export function isCorsOriginAllowed(origin) {
   if (!origin) return true;
 
   const allowed = getAllowedCorsOrigins();
   if (allowed.includes(origin)) return true;
+
+  const aliases = originAliases(origin);
+  if (aliases.some((a) => allowed.includes(a))) return true;
 
   if (process.env.NODE_ENV === "production") return false;
 
