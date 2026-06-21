@@ -10,23 +10,21 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Checkout latest code
+      # Checkout repository
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # 2. Copy files to EC2
+      # Copy files to EC2
       - name: Copy Project to EC2
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.EC2_KEY }}
-          source: "."
+          source: "./*"
           target: "/home/ubuntu/firstedu-backend"
-          rm: true
-          strip_components: 0
 
-      # 3. Deploy application
+      # Deploy application
       - name: Deploy & Restart
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -36,26 +34,24 @@ jobs:
           script: |
             set -e
 
+            mkdir -p /home/ubuntu/firstedu-backend
             cd /home/ubuntu/firstedu-backend
 
-            echo "Creating .env file..."
+            echo "Current files:"
+            ls -la
+
             echo "${{ secrets.ENV_FILE }}" > .env
 
-            echo "Installing dependencies..."
             npm install
 
-            # If using TypeScript or build step
-            # npm run build
-
-            echo "Stopping old PM2 process..."
-            pm2 delete backend || true
-
-            echo "Starting new PM2 process..."
-            pm2 start src/server.js --name backend
+            if pm2 describe backend > /dev/null; then
+              pm2 restart backend
+            else
+              pm2 start src/server.js --name backend
+            fi
 
             pm2 save
 
-            echo "Restarting Nginx..."
             sudo systemctl restart nginx
 
             echo "Deployment completed successfully"
