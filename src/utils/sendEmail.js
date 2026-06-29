@@ -100,7 +100,7 @@ export const sendOTPEmail = async (email, otp, name) => {
           <p style="color: #999; font-size: 12px;">If you did not request this, please ignore this email.</p>
         </div>
       `,
-      from: `"Iscorre" <${process.env.SMTP_EMAIL}>`,
+      from: `"Iscorre Security" <${process.env.SMTP_CONNECT_EMAIL || process.env.SMTP_EMAIL}>`,
     });
     console.log(`✅ Email sent successfully to ${email}. Message ID: ${info.messageId}`);
     return info;
@@ -125,7 +125,7 @@ export const sendEmailWithTemplate = async ({
   variables = {},
   defaultSubject,
   defaultHtml,
-  from = `"Iscorre" <${process.env.SMTP_EMAIL}>`,
+  from = `"Iscorre" <${process.env.SMTP_CONNECT_EMAIL || process.env.SMTP_EMAIL}>`,
   attachments = [],
 }) => {
   if (!email) throw new ApiError(400, 'Email address is required');
@@ -173,7 +173,7 @@ export const sendContactUsEmail = async ({ name, phone, email, message }) => {
     }
 
     const mailOptions = {
-      from: `"Iscorre Contact" <${process.env.SMTP_EMAIL}>`,
+      from: `"Iscorre Support" <${process.env.SMTP_SUPPORT_EMAIL || process.env.SMTP_EMAIL}>`,
       to: adminEmail,
       replyTo: email,
       subject: `Contact Us: ${name}`,
@@ -249,7 +249,7 @@ export const sendInterviewScheduledEmail = async ({
           <p style="color: #999; font-size: 12px; margin-top: 20px;">Iscorre Teacher Connect</p>
         </div>
       `,
-      from: `"Iscorre Teacher Connect" <${process.env.SMTP_EMAIL}>`,
+      from: `"Iscorre Teacher Connect" <${process.env.SMTP_CONNECT_EMAIL || process.env.SMTP_EMAIL}>`,
     });
     console.log(`✅ Interview scheduled email sent to ${toEmail}. Message ID: ${info.messageId}`);
     return info;
@@ -352,7 +352,7 @@ export const sendTeacherApprovalWithCredentialsEmail = async ({
           <p style="color: #999; font-size: 12px; margin-top: 20px;">Iscorre Teacher Connect</p>
         </div>
       `,
-      from: `"Iscorre Teacher Connect" <${process.env.SMTP_EMAIL}>`,
+      from: `"Iscorre Teacher Connect" <${process.env.SMTP_CONNECT_EMAIL || process.env.SMTP_EMAIL}>`,
       attachments,
     });
     console.log(`✅ Teacher approval email sent to ${toEmail}. Message ID: ${info.messageId}`);
@@ -394,7 +394,7 @@ export const sendTeacherRejectionEmail = async ({ toEmail, teacherName, jobTitle
           <p style="color: #999; font-size: 12px; margin-top: 20px;">Iscorre Teacher Connect</p>
         </div>
       `,
-      from: `"Iscorre Teacher Connect" <${process.env.SMTP_EMAIL}>`,
+      from: `"Iscorre Teacher Connect" <${process.env.SMTP_CONNECT_EMAIL || process.env.SMTP_EMAIL}>`,
     });
     console.log(`✅ Teacher rejection email sent to ${toEmail}. Message ID: ${info.messageId}`);
     return info;
@@ -432,11 +432,12 @@ export const sendCourseEnrollmentEmail = async (email, name, courseTitle, amount
       to: email,
       category: "enrolment",
       slug: "course_enrollment",
-      variables: { 
-        name: name || "Student", 
-        courseTitle: courseTitle || "Course", 
-        amount: amount != null ? amount.toString() : "0", 
-        date: date ? new Date(date).toLocaleDateString() : new Date().toLocaleDateString() 
+      from: `"Iscorre" <${process.env.SMTP_NOREPLY_EMAIL || process.env.SMTP_EMAIL}>`,
+      variables: {
+        name: name || "Student",
+        courseTitle: courseTitle || "Course",
+        amount: amount != null ? amount.toString() : "0",
+        date: date ? new Date(date).toLocaleDateString() : new Date().toLocaleDateString()
       },
     });
     return info;
@@ -455,11 +456,12 @@ export const sendTestBundlePurchaseEmail = async (email, name, bundleName, amoun
       to: email,
       category: "enrolment",
       slug: "test_bundle_purchase",
-      variables: { 
-        name: name || "Student", 
-        bundleName: bundleName || "Bundle", 
-        amount: amount != null ? amount.toString() : "0", 
-        date: date ? new Date(date).toLocaleDateString() : new Date().toLocaleDateString() 
+      from: `"Iscorre" <${process.env.SMTP_NOREPLY_EMAIL || process.env.SMTP_EMAIL}>`,
+      variables: {
+        name: name || "Student",
+        bundleName: bundleName || "Bundle",
+        amount: amount != null ? amount.toString() : "0",
+        date: date ? new Date(date).toLocaleDateString() : new Date().toLocaleDateString()
       },
     });
     return info;
@@ -481,11 +483,12 @@ export const sendEventRegistrationEmail = async (eventType, email, name, eventTi
       to: email,
       category: "enrolment",
       slug,
-      variables: { 
-        name: name || "Student", 
-        eventTitle: eventTitle || "Event", 
-        amount: amount != null ? amount.toString() : "0", 
-        date: date ? new Date(date).toLocaleDateString() : new Date().toLocaleDateString() 
+      from: `"Iscorre" <${process.env.SMTP_NOREPLY_EMAIL || process.env.SMTP_EMAIL}>`,
+      variables: {
+        name: name || "Student",
+        eventTitle: eventTitle || "Event",
+        amount: amount != null ? amount.toString() : "0",
+        date: date ? new Date(date).toLocaleDateString() : new Date().toLocaleDateString()
       },
     });
     return info;
@@ -504,10 +507,10 @@ export const sendTicketReceivedEmail = async (email, name, ticketNumber, subject
       to: email,
       category: "support_ticket",
       slug: "ticket_received",
-      variables: { 
-        name: name || "Student", 
-        ticketNumber: ticketNumber || "—", 
-        subject: subject || "Support Ticket" 
+      variables: {
+        name: name || "Student",
+        ticketNumber: ticketNumber || "—",
+        subject: subject || "Support Ticket"
       },
     });
     return info;
@@ -526,10 +529,10 @@ export const sendTicketReplyEmail = async (email, name, ticketNumber, message) =
       to: email,
       category: "support_ticket",
       slug: "ticket_reply",
-      variables: { 
-        name: name || "Student", 
-        ticketNumber: ticketNumber || "—", 
-        message: message || "You have a new reply to your ticket." 
+      variables: {
+        name: name || "Student",
+        ticketNumber: ticketNumber || "—",
+        message: message || "You have a new reply to your ticket."
       },
     });
     return info;
@@ -562,6 +565,7 @@ export const sendEventStartReminderEmail = async ({ email, name, eventName, even
       to: email,
       category: "event_notifications",
       slug: `${eventType}_start_reminder`,
+      from: `"Iscorre Events" <${process.env.SMTP_NOREPLY_EMAIL || process.env.SMTP_EMAIL}>`,
       variables: {
         name: name || "Student",
         eventName: eventName || eventLabel,
@@ -628,6 +632,7 @@ export const sendEventStartEmail = async ({ email, name, eventName, eventType, s
       to: email,
       category: "event_notifications",
       slug: `${eventType}_start`,
+      from: `"Iscorre Events" <${process.env.SMTP_NOREPLY_EMAIL || process.env.SMTP_EMAIL}>`,
       variables: {
         name: name || "Student",
         eventName: eventName || eventLabel,
@@ -693,6 +698,7 @@ export const sendEventResultEmail = async ({ email, name, eventName, eventType, 
       to: email,
       category: "event_notifications",
       slug: `${eventType}_result_declared`,
+      from: `"Iscorre Events" <${process.env.SMTP_NOREPLY_EMAIL || process.env.SMTP_EMAIL}>`,
       variables: {
         name: name || "Student",
         eventName: eventName || eventLabel,
@@ -762,7 +768,7 @@ export const sendEventUpdateEmail = async ({ email, name, eventName, eventType, 
         eventLabel = eventType.charAt(0).toUpperCase() + eventType.slice(1);
       }
     }
-    
+
     let changesHtml = "";
     if (changedFieldsList && changedFieldsList.length > 0) {
       changesHtml = `<p style="color: #555; font-size: 15px;"><strong>Recent Updates:</strong> ${changedFieldsList.join(", ")}</p>`;
@@ -772,6 +778,7 @@ export const sendEventUpdateEmail = async ({ email, name, eventName, eventType, 
       to: email,
       category: "event_notifications",
       slug: `${eventType}_update`,
+      from: `"Iscorre Events" <${process.env.SMTP_NOREPLY_EMAIL || process.env.SMTP_EMAIL}>`,
       variables: {
         name: name || "Student",
         eventName: eventName || eventLabel,
