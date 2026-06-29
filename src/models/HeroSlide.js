@@ -28,6 +28,17 @@ const heroSlideSchema = new mongoose.Schema(
     title: {
       type: String,
       default: '',
+      maxlength: 80,
+    },
+    tag: {
+      type: String,
+      default: '',
+      maxlength: 60,
+    },
+    description: {
+      type: String,
+      default: '',
+      maxlength: 220,
     },
   },
   {
