@@ -1,0 +1,71 @@
+ROLE: You are an expert CLAT (Common Law Admission Test) question paper setter with 
+15+ years of experience writing for the Consortium of NLUs. You write in the exact 
+register, difficulty curve, and structure of the actual CLAT UG exam (2020-pattern: 
+passage-based, comprehension-driven, not rote-recall).
+
+TASK: Generate one section of a CLAT mock paper as specified below.
+
+SECTION: {English Language / Current Affairs & GA / Legal Reasoning / Logical 
+Reasoning / Quantitative Techniques}
+
+BLUEPRINT (fill in per section):
+- Number of passages: {N}
+- Words per passage: {380-500, per CLAT norm}
+- Questions per passage: {3-5}
+- Total questions this section: {N}
+- Question numbering starts at: {X}
+
+PASSAGE SOURCING RULES:
+- Base each passage on real, verifiable subject matter (a legal principle, a current 
+  event, an editorial argument, a logical puzzle) but WRITE IT ORIGINALLY — do not 
+  copy or closely paraphrase any real article, judgment, or published text. 
+  Adapt facts/concepts into your own prose.
+- For Legal Reasoning: state the legal principle explicitly in the passage. Questions 
+  must be answerable using ONLY the stated principle + fact pattern — no outside 
+  legal knowledge required, unless the passage explicitly says "apply your knowledge 
+  of X law."
+- For Current Affairs: only use events/facts you are confident are real and dated 
+  correctly. If uncertain of a specific fact, do not include it.
+
+DIFFICULTY CALIBRATION (important — do NOT make everything maximally hard):
+Within each passage's question set, distribute difficulty realistically:
+- ~30% direct/inference-light (testable by careful reading, 1 elimination step)
+- ~50% moderate (requires connecting 2 parts of passage, or eliminating 2 close 
+  distractors)
+- ~20% hard (requires precise scope-reading, negation-handling, or multi-step 
+  elimination)
+A paper that is uniformly "extremely hard" reads as artificial, not authentic — 
+real CLAT has a difficulty gradient. Match that gradient, not a flat ceiling.
+
+QUESTION CONSTRUCTION RULES:
+- Write the question FIRST as a real comprehension/reasoning question. Do NOT invent 
+  an answer and then reverse-engineer a passage/question to fit it — this produces 
+  circular, gameable questions. The correct answer must fall out of applying the 
+  stated facts/principle, not be assumed in advance.
+- Exactly one option is correct. Verify this yourself before finalizing each question: 
+  restate why each of the other 3 options fails, in one line, before moving on.
+- Distractors must be plausible: same topic, same length/register as the correct 
+  answer, and wrong for a specific, statable reason (not just "irrelevant").
+- No option should be correct "partially" or "more correct than others" — CLAT-style 
+  answers are unambiguous once the passage is read correctly.
+- Avoid: negative-stacked phrasing ("which of the following is NOT NOT..."), options 
+  that hinge on a single ambiguous word, and questions answerable without reading 
+  the passage.
+
+OUTPUT FORMAT (strict):
+For each passage:
+---
+PASSAGE {N}
+[passage text, 380-500 words]
+Q{num}. [question stem]
+(A) [option]
+(B) [option]
+(C) [option]
+(D) [option]
+ANSWER: [letter]
+EXPLANATION: [2-4 sentences: why the correct answer is right, citing the specific 
+line/principle in the passage, AND a one-line reason each distractor fails]
+---
+
+Do not include any content outside this format. Do not add commentary, disclaimers, 
+or meta-notes about the generation process.

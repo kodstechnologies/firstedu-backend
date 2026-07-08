@@ -1,0 +1,638 @@
+================================================================================
+FIRSTEDU — AI QUESTION BANK: GENERATION → EVALUATION → REGENERATION
+Full pipeline map (functions, files, LLM calls, scores)
+Updated: 2026-07-06
+================================================================================
+
+PART A — HOW TO REACH difficultyMatchScore 80+ (PRACTICAL GUIDE)
+================================================================================
+
+Your target metric is OpenAI validation difficultyMatchScore (not internal
+finalize difficultyMatchScore). Internal finalize often scores 82–94 while
+OpenAI validation stays ~64–66 when:
+
+  1. Explanations contain meta draft text ("adjusting", "is incorrect", "Let's use")
+  2. OpenAI auditor sees formula plug-ins despite multi-step _solveSteps
+  3. A few questions per bank are flagged too-easy (Q1, Q4, Q6 pattern)
+  4. Client validate payload may omit _solveSteps (only explanation text sent)
+
+WHAT THE PIPELINE ALREADY DOES (AI STEERING — 3 LLM CALLS PER CHUNK)
+--------------------------------------------------------------------
+  Call 1 — Archetype planning (Gemini/OpenAI):
+    resolveConceptArchetypeSteering()
+      → buildArchetypePlanningPrompt()
+      → callQuestionBankGenerationLLM()
+      → parseArchetypePlanResponse()
+    Plans N unique hard slots + per-slot blueprints for the batch.
+
+  Call 2 — Skeleton generation (Gemini/OpenAI):
+    buildSolveFirstSkeletonPrompt()
+      → callQuestionBankGenerationLLM()
+      → parseSolveFirstSkeletons()
+
+  Call 3 — Validation audits (OpenAI default):
+    buildTopicRelevancePrompt() + buildCorrectnessAuditPrompt()
+      + buildJeeAuthenticityAuditPrompt()
+    mergeValidationResults() → difficultyMatchScore
+
+TO ASK AN AI TO FIX LOW DIFFICULTY — USE evaluation_regen (BUILT-IN)
+--------------------------------------------------------------------
+After validate returns difficultyMatchScore < 80:
+
+  1. Frontend calls validate → gets regenerationInstructions + dimensionScores
+  2. User triggers regenerate with:
+       generateIntent: "evaluation_regen"
+       topicRelevanceEvaluated: true
+       topicRelevanceRegenerated: false
+       topicRelevanceFeedback: { full validate response payload }
+  3. Backend injects into generation prompt:
+       buildRegenerationEscalationBlock()
+       buildRegenerationQualityGatesBlock()
+       formatTopicRelevanceFeedbackBlock()
+  4. evaluation_regen uses **solve-first** for STEM singles (same as initial).
+     No one-shot fallback on regen — partial batches merge client-side.
+  5. Post-skeleton **LLM difficulty self-audit** rejects weak skeletons before MCQ build.
+  6. **Targeted regen** replaces only failed question numbers (not full bank upscale).
+
+ALTERNATIVE: ADD A 4TH AI CALL (IMPLEMENTED)
+---------------------------------------------
+  Post-skeleton, pre-finalize:
+    applySkeletonDifficultySelfAuditGate() → LLM scores each skeleton 0–100
+    applyDifficultySelfAuditGate() on finalize for built MCQs
+  Env: AI_QB_DIFFICULTY_SELF_AUDIT=1 (default on), AI_QB_DIFFICULTY_SELF_AUDIT_MIN=75
+
+ENV VARS THAT AFFECT DIFFICULTY
+-------------------------------
+  AI_QB_SOLVE_FIRST=1          — solve-first path (default on)
+  AI_QB_ARCHETYPE_STEERING=1   — AI plans slots (default on; 0 = static catalog)
+  AI_QB_ARCHETYPE_HISTORY=1    — persist archetypes per bank section (default on)
+  AI_QB_DIFFICULTY_SELF_AUDIT=1 — skeleton + finalize LLM difficulty gate (default on)
+  AI_QB_INITIAL_DIFFICULTY_TARGET=92
+  OPENAI_CORRECTNESS_AUDIT_MODEL=gpt-4o
+  GEMINI_TEXT_MODEL / OPENAI_QB_GENERATION_MODEL
+
+
+================================================================================
+PART B — HTTP API ENTRY POINTS
+================================================================================
+
+ROUTE FILE: firstedu-backend/src/routes/admin.routes.js
+
+  POST /admin/ai/generate-question-bank-suggestions
+    → aiQuestion.controller.generateQuestionBankSuggestions
+
+  POST /admin/ai/validate-question-topic-relevance
+    → aiQuestion.controller.validateQuestionTopicRelevance
+
+  POST /admin/ai/log-confirmed-questions
+    → aiQuestion.controller.logConfirmedQuestions
+
+FRONTEND API: -firstedu-frontend/src/api/api.endpoints.js
+  generateQuestionBankSuggestions → /admin/ai/generate-question-bank-suggestions
+  validateQuestionTopicRelevance  → /admin/ai/validate-question-topic-relevance
+
+FRONTEND UI: -firstedu-frontend/src/features/admin/question-bank/components/
+  AiSuggestionModal.jsx          — main modal UI
+  aiSuggestion.utils.js          — workflow guards, regen logic
+
+
+================================================================================
+PART C — REQUEST VALIDATION (Joi)
+================================================================================
+
+FILE: firstedu-backend/src/validation/aiQuestion.validator.js
+
+  generateQuestionBankSuggestionsSchema
+    Fields: topic, bankName, difficulty, singleCount, multipleCount,
+            trueFalseCount, passageCount, generateIntent (initial|evaluation_regen),
+            topicRelevanceFeedback, topicRelevanceEvaluated,
+            topicRelevanceRegenerated, allowContinuation, workflowLogKey,
+            generationProvider (gemini|openai), competitiveExamPlan, ...
+
+  validateQuestionTopicRelevanceSchema
+    Fields: topic, bankName, difficulty, questions[], evaluationProvider,
+            singleCount, multipleCount, ... (for pattern compliance audit)
+
+
+================================================================================
+PART D — LOGGING / WORKFLOW TRACE
+================================================================================
+
+FILE: firstedu-backend/src/utils/aiApiCallLogger.js
+
+  runWithPipelineTrace(req, topic, meta, fn)
+    Wraps controller handlers; writes temp/ai-api-logs/YYYY-MM-DD/*.txt
+
+  pipelineTrace(event, details)
+    Events: GENERATION_START, ARCHETYPE_STEERING, SOLVE_FIRST_BATCH,
+            SKELETON_LLM_RESPONSE, SKELETON_REJECTED, BATCH_DONE,
+            FINALIZE_START, FINALIZE_STRIP, FINALIZE_DIFFICULTY_SCORE,
+            VALIDATE_PRE_AUDIT, VALIDATE_SCORES, PIPELINE COMPLETE
+
+  logValidateQuestionTopicRelevance(req, body, response)
+  logInferCompetitiveExamPlan(...)
+
+
+================================================================================
+PART E — PHASE 1: INITIAL GENERATION (generateIntent = "initial")
+================================================================================
+
+CONTROLLER
+----------
+FILE: firstedu-backend/src/controllers/aiQuestion.controller.js
+
+  generateQuestionBankSuggestions(req, res)
+    1. aiQuestionValidator.generateQuestionBankSuggestions.validate(req.body)
+    2. Optional: aiQuestionService.inferCompetitiveExamPlan() if inferCountsIfMissing
+    3. runWithPipelineTrace(..., () =>
+         aiQuestionService.generateQuestionBankSuggestions({...}))
+
+SERVICE ORCHESTRATOR
+--------------------
+FILE: firstedu-backend/src/services/aiQuestion.service.js
+
+  generateQuestionBankSuggestions(params)
+    │
+    ├─ assertGenerationWorkflowAllowed()          [topicRelevanceValidation.service.js]
+    │     validateGenerationWorkflow()
+    │     Rules: must evaluate before continuation;
+    │            evaluation_regen needs prior evaluate + feedback
+    │
+    ├─ resolveGenerationDifficulty()            [examGenerationDifficulty.service.js]
+    │     JEE Main → examCalibrated, all-hard tier
+    │
+    ├─ upscaleRegenerationCountsToSlots()         [aiQuestion.service.js internal]
+    │
+    ├─ resolveSubjectForGeneration()            [subjectDetection.js]
+    │
+    ├─ fetchExamReferenceBrief()                  [examReferenceResearch.service.js]
+    │
+    ├─ splitQuestionBankCountsIntoChunks()        [aiQuestionCountInference.service.js]
+    │     QB_GENERATION_CHUNK_SIZE (default 10) → 25Q = 3 chunks
+    │
+    └─ FOR each chunk:
+          generateQuestionBankBatch({...})
+          merge questions, runningExclude stems, usedArchetypes
+          IF chunks > 1: finalizeQuestionBankSuggestions(merged) once at end
+
+BATCH ROUTER
+------------
+FILE: firstedu-backend/src/services/aiQuestion.service.js
+
+  generateQuestionBankBatch(params)
+    │
+    ├─ shouldUseSolveFirstGeneration()          [questionSolveFirst.service.js]
+    │     TRUE when: singles only, no passages, STEM exam, not evaluation_regen
+    │
+    ├─ PATH A — SOLVE-FIRST (default for JEE Physics singles):
+    │     generateSolveFirstSingles()
+    │     finalizeQuestionBankSuggestions()
+    │
+    └─ PATH B — ONE-SHOT:
+          buildQuestionBankPrompt()
+          callQuestionBankGenerationLLM()
+          parseQuestionBankAIResponse()
+          finalizeQuestionBankSuggestions()
+
+
+================================================================================
+PART F — SOLVE-FIRST GENERATION (DETAILED)
+================================================================================
+
+FILE: firstedu-backend/src/services/aiQuestion.service.js
+  generateSolveFirstSingles(params)
+
+STEP F1 — AI ARCHETYPE STEERING (LLM call #1 per chunk)
+-------------------------------------------------------
+FILE: firstedu-backend/src/services/conceptArchetypePlanner.service.js
+
+  isAiArchetypeSteeringEnabled()          — AI_QB_ARCHETYPE_STEERING (default on)
+
+  resolveConceptArchetypeSteering(params, { callLlm })
+    TRY:
+      buildArchetypePlanningPrompt()
+      callLlm() → callQuestionBankGenerationLLM()
+      parseArchetypePlanResponse()
+      Returns: { conceptSlots[], slotPlans[], source: "ai" }
+    CATCH / disabled:
+      buildFallbackSteering()
+        allocateRankedConceptSlots()        [conceptArchetypeGuidance.service.js]
+        getArchetypeBlueprint() per slot
+      Returns: { source: "catalog" | "catalog_fallback" }
+
+STEP F2 — BUILD SKELETON PROMPT
+---------------------------------
+FILE: firstedu-backend/src/services/questionSolveFirst.service.js
+
+  buildSolveFirstSkeletonPrompt({
+    conceptSlots, slotPlans, archetypeSteeringSource,
+    difficultyTierSlots, excludeQuestionTexts, excludeArchetypes, ...
+  })
+    Assembles blocks from:
+      buildExamNativeDifficultyAuthorityBlock()     [examGenerationDifficulty.service.js]
+      buildDifficultyMixGenerationBlock()           [difficultyMix.service.js]
+      buildBankDifficultyProfileBlock()             [difficultyMix.service.js]
+      buildJeeAuthenticityGenerationBlock()         [examPromptContext.service.js]
+      buildJeeHardStemAuthoringBlock()               [conceptArchetypeGuidance.service.js]
+      buildJeeMainHardAntiTemplateBlock()           [conceptArchetypeGuidance.service.js]
+      buildHardQuestionMandateBlock()                [hardQuestionMandate.service.js]
+      buildBatchArchetypeGuidanceBlock()              [conceptArchetypeGuidance.service.js]
+        Uses AI slotPlans blueprints OR static getArchetypeBlueprint()
+      buildSubjectArchetypeSelectionBlock()         [conceptArchetypeGuidance.service.js]
+        Skipped when aiSteered
+      buildBankArchetypeExcludeBlock()              [conceptArchetypeGuidance.service.js]
+      buildPhysicsNumericalAuthoringBlock()           [examPromptContext.service.js]
+      buildCorrectnessFirstGenerationBlock()         [examPromptContext.service.js]
+      buildSolveFirstSkeletonCorrectnessBlock()      [examPromptContext.service.js]
+
+STEP F3 — SKELETON LLM + PARSE (LLM call #2)
+--------------------------------------------
+FILE: firstedu-backend/src/services/aiQuestion.service.js
+  callQuestionBankGenerationLLM(prompt, { generationProvider, temperature })
+    gemini → genAI.models.generateContent() + geminiJsonConfig()
+    openai → callOpenAIChatForJson()
+
+FILE: firstedu-backend/src/services/questionSolveFirst.service.js
+  parseSolveFirstSkeletons(rawText)
+    parseJsonObjectFromAIText()             [utils/aiJsonRepair.js]
+
+STEP F4 — SKELETON → MCQ (CODE, NO LLM)
+---------------------------------------
+FILE: firstedu-backend/src/services/questionSolveFirst.service.js
+
+  skeletonsToQuestions(skeletons, tierSlots, conceptSlots)
+    FOR each skeleton:
+      validateHardSkeletonMandate()         [hardQuestionMandate.service.js]
+      verifySkeletonAnswer()                [questionSolveFirst.service.js]
+      buildMcqFromSkeleton(sk, i, tier, assignedSlot)
+        stripMetaCommentary() on solveSteps
+        independentlyVerifyQuestion()       [questionNumericVerify.service.js]
+        buildNumericDistractors() / hybridization / molecule builders
+        lockExplanationToMarkedOption()     — numbered Step 1: Step 2: ...
+        assertBuiltMcqConsistency()
+        Sets: questionText, options, correctIndex, explanation,
+              _solveSteps, _conceptSlot
+
+  IF batch < target after SOLVE_FIRST_MAX_ATTEMPTS:
+    one-shot fallback via buildQuestionBankPrompt()
+
+STEP F5 — FINALIZE BATCH
+------------------------
+FILE: firstedu-backend/src/services/aiQuestion.service.js
+
+  finalizeQuestionBankSuggestions(params)
+    reconcileQuestionBankWithIndependentVerify()    [questionNumericVerify.service.js]
+    sanitizeQuestionStemEmbeddedOptions()           [questionSolveFirst.service.js]
+    runDeterministicCorrectnessAudit()              [correctnessPreAudit.service.js]
+    repairFlawedQuestionBankQuestions()             [aiQuestion.service.js internal LLM repair]
+    stripFlawedQuestionBankEntries()                [correctnessPreAudit.service.js]
+    IF stripped: generateQuestionBankBatch() top-up (forceOneShot: true)
+    assignDifficultyTiersToQuestions()              [difficultyMix.service.js]
+  IF generateIntent === INITIAL:
+    runDeterministicDifficultyAudit()               [difficultyPreAudit.service.js]
+    → stats.difficultyMatchScore (INTERNAL — not same as OpenAI validate)
+
+
+================================================================================
+PART G — STATIC ARCHETYPE CATALOG (FALLBACK ONLY)
+================================================================================
+
+FILE: firstedu-backend/src/services/conceptArchetypeGuidance.service.js
+
+  PHYSICS_HARD_BLUEPRINTS, CHEMISTRY_HARD_BLUEPRINTS, MATH_HARD_BLUEPRINTS
+  PHYSICS_ARCHETYPES, PHYSICS_PEAK_ARCHETYPES
+  allocateRankedConceptSlots(count, { excludeArchetypes, maxPerArchetype })
+  getArchetypeBlueprint(conceptSlot)
+  buildBatchArchetypeGuidanceBlock({ conceptSlots, slotPlans, aiSteered })
+  buildBankArchetypeExcludeBlock(usedArchetypes)
+
+FILE: firstedu-backend/src/services/hardQuestionMandate.service.js
+  validateHardSkeletonMandate()
+  validateHardQuestionMandate()
+  detectHardMandateIssues()
+  countConceptClusters(), detectDirectSubstitution()
+
+
+================================================================================
+PART H — PHASE 2: EVALUATION (validate)
+================================================================================
+
+CONTROLLER
+----------
+FILE: firstedu-backend/src/controllers/aiQuestion.controller.js
+
+  validateQuestionTopicRelevance(req, res)
+    aiQuestionValidator.validateQuestionTopicRelevance.validate()
+    runWithPipelineTrace(intent: 'validate', ...)
+    aiQuestionService.validateQuestionTopicRelevance({ questions, ... })
+    logValidateQuestionTopicRelevance()
+
+SERVICE
+-------
+FILE: firstedu-backend/src/services/aiQuestion.service.js
+
+  validateQuestionTopicRelevance(params)
+    │
+    ├─ assertTopicRelevanceEvaluationAllowed()
+    │     validateTopicRelevanceEvaluationWorkflow()
+    │
+    ├─ enrichQuestionsForDifficultyAudit(questions)   [topicRelevanceValidation.service.js]
+    │     inferSolveStepsFromExplanation() if _solveSteps missing
+    │
+    ├─ sampleQuestionsForValidation(questions, 50)
+    │
+    ├─ buildGenerationPlanForEvaluation()             [competitiveExamPlan.service.js]
+    ├─ auditPatternCompliance()                       [competitiveExamPlan.service.js]
+    │
+    ├─ DETERMINISTIC PRE-AUDITS (no LLM):
+    │     runDeterministicCorrectnessAudit(sampled)   [correctnessPreAudit.service.js]
+    │     runDeterministicDifficultyAudit(sampled)    [difficultyPreAudit.service.js]
+    │
+    ├─ LLM AUDITS (parallel — LLM calls #3a #3b #3c):
+    │     buildTopicRelevancePrompt()
+    │     buildCorrectnessAuditPrompt()
+    │     buildJeeAuthenticityAuditPrompt()  (JEE Main/Advanced only)
+    │     callOpenAIChatForJson() or callGeminiChatForJson()
+    │
+    ├─ PARSE LLM RESPONSES:
+    │     parseTopicRelevanceResponse()
+    │     parseCorrectnessAuditResponse()
+    │     parseAuthenticityAuditResponse()
+    │     mergeCorrectnessAuditResults(preAudit, llmCorrectness)
+    │
+    └─ mergeValidationResults(topic, correctness, authenticity, pattern, options)
+          → overallScore, difficultyMatchScore, regenerationInstructions, ...
+
+SCORING — mergeValidationResults()
+------------------------------------
+FILE: firstedu-backend/src/services/topicRelevanceValidation.service.js
+
+  computeDimensionalScores(confirmedIssues, {
+    modelCorrectnessScore,
+    authenticityAuditScore,      ← authenticity LLM difficultyScore
+    deterministicDifficultyScore ← runDeterministicDifficultyAudit score
+  })
+
+  difficultyMatchScore formula when authenticity LLM provides difficultyScore:
+    core = llm_difficulty * 0.4 + deterministic * 0.6  (if det available)
+    difficultyMatchScore = core * 0.8 + penaltyFromIssues * 0.2
+
+  blendValidationScores() → topic + correctness + authenticity/style
+  applyValidationScoreCaps() — caps overall if difficultyMatch < 60 or < 40
+
+  OUTPUT FIELDS:
+    overallScore, topicRelevanceScore, correctnessScore, styleScore,
+    authenticityScore, diversityScore, difficultyMatchScore,
+    dimensionScores: { correctness, style, authenticity, diversity,
+                       difficultyMatch, explanationQuality },
+    confirmedIssues[], regenerationInstructions, verdict, pipelineSummary
+
+THRESHOLDS
+----------
+  TOPIC_RELEVANCE_PASS_SCORE — pass bar for regen eligibility
+  REGEN_TARGET_SCORE = 80
+  INITIAL_GEN_DIFFICULTY_MATCH_TARGET = 80
+  DIFFICULTY_MATCH_CAP_THRESHOLDS.LOW = 40, .MID = 60
+
+
+================================================================================
+PART I — PHASE 3: REGENERATION (generateIntent = "evaluation_regen")
+================================================================================
+
+FRONTEND TRIGGER
+----------------
+FILE: -firstedu-frontend/src/features/admin/question-bank/components/AiSuggestionModal.jsx
+
+  handleValidateTopicRelevance() → stores eval + topicRelevanceWorkflowByProvider.evaluated = true
+
+  EvaluationProviderPanel → "Regenerate failed questions" when canRegenerateFromTopicEvaluation()
+
+  handleRegenerateFromEvaluation()
+    → generateIntent: 'evaluation_regen'
+    → topicRelevanceFeedback: buildTopicRelevanceFeedbackPayload(relevance)
+    → excludeQuestionTexts: passing stems only (collectPassingQuestionStems)
+    → mergeTargetedRegeneration() merges replacements into existing bank by flawedQuestionNumbers
+
+FILE: -firstedu-frontend/src/features/admin/question-bank/components/aiSuggestion.utils.js
+
+  canRegenerateFromTopicEvaluation(), validateRegenerateFromEvaluationRequest()
+  mergeTargetedRegeneration(), deriveTargetedRegenerationCounts()
+  buildValidationSlotIndex(), collectPassingQuestionStems()
+
+BACKEND REGEN FLOW
+------------------
+FILE: firstedu-backend/src/services/aiQuestion.service.js
+
+  generateQuestionBankSuggestions({ generateIntent: "evaluation_regen", ... })
+    assertGenerationWorkflowAllowed() — requires:
+      topicRelevanceEvaluated === true
+      topicRelevanceRegenerated === false
+      topicRelevanceFeedback.overallScore present
+      score < TOPIC_RELEVANCE_PASS_SCORE OR confirmed issues
+
+    resolveTargetedRegenerationCounts()     [regenerationTargeting.service.js]
+      → replacement count = failed question numbers only (not full bank upscale)
+
+    shouldUseSolveFirstGeneration() → TRUE for STEM singles (same as initial)
+    → applySkeletonDifficultySelfAuditGate() before MCQ build
+    → NO one-shot fallback on regen deficit (partial batch returned for client merge)
+
+    loadPersistedArchetypes() / persistArchetypes()  [archetypeHistory.service.js]
+
+  Focused regen prompts (buildQuestionBankPrompt / buildSolveFirstSkeletonPrompt):
+    buildRegenerationEscalationBlock()      [topicRelevanceValidation.service.js]
+    buildRegenerationQualityGatesBlock()    [topicRelevanceValidation.service.js]
+    Skips heavy calibration/JEE blocks on evaluation_regen
+
+  Response includes targetedRegeneration: { replacementCount, failedQuestionNumbers }
+
+AFTER REGEN
+-----------
+  Frontend merges replacements, sets topicRelevanceWorkflowByProvider.regenerated = true
+  User re-evaluates merged bank — topicRelevanceRegenerated blocks second evaluation_regen
+
+
+================================================================================
+PART J — SUPPORTING SERVICES (BY CONCERN)
+================================================================================
+
+DIFFICULTY / EXAM CALIBRATION
+  examGenerationDifficulty.service.js  → resolveGenerationDifficulty()
+  examDifficultyCalibration.js         → detectExamProfile(), buildDifficultyCalibrationBlock()
+  difficultyMix.service.js             → buildDifficultyTierSlots(), assignDifficultyTiersToQuestions()
+
+NUMERIC CORRECTNESS
+  questionNumericVerify.service.js     → independentlyVerifyQuestion()
+                                       → reconcileQuestionBankWithIndependentVerify()
+
+CORRECTNESS PRE-AUDIT
+  correctnessPreAudit.service.js       → runDeterministicCorrectnessAudit()
+                                       → flattenQuestionBankForCorrectnessAudit()
+                                       → stripFlawedQuestionBankEntries()
+
+DIFFICULTY PRE-AUDIT
+  difficultyPreAudit.service.js        → runDeterministicDifficultyAudit()
+                                       → detectTooEasyForTier()
+                                       → scoreReasoningDepth()
+                                       → INITIAL_GEN_DIFFICULTY_MATCH_TARGET
+
+DIFFICULTY SELF-AUDIT (LLM)
+  difficultySelfAudit.service.js       → applySkeletonDifficultySelfAuditGate()
+                                       → applyDifficultySelfAuditGate()
+
+TARGETED REGENERATION
+  regenerationTargeting.service.js     → resolveTargetedRegenerationCounts()
+                                       → extractRegenerationTargetNumbers()
+
+ARCHETYPE HISTORY
+  archetypeHistory.service.js          → loadPersistedArchetypes()
+                                       → persistArchetypes()
+
+EXAM / PROMPT CONTEXT
+  examPromptContext.service.js         → JEE blocks, physics/chem authoring
+  competitiveExamPlan.service.js       → inferCompetitiveExamPlan(), auditPatternCompliance()
+  examReferenceResearch.service.js     → fetchExamReferenceBrief()
+
+SUBJECT DETECTION
+  subjectDetection.js                  → resolveSubjectForGeneration()
+                                       → buildRegenerationSubjectScopeBlock()
+
+COUNT / CHUNKING
+  aiQuestionCountInference.service.js  → splitQuestionBankCountsIntoChunks()
+                                       → QB_GENERATION_CHUNK_SIZE
+
+JSON REPAIR
+  utils/aiJsonRepair.js                → parseJsonObjectFromAIText()
+                                       → parseJsonArrayFromAIText()
+
+
+================================================================================
+PART K — TYPICAL 25-QUESTION JEE PHYSICS RUN (YOUR 15:00 LOG)
+================================================================================
+
+  Chunk 1 (10 requested → 9 produced, 1 stripped):
+    ARCHETYPE_STEERING source=ai (10 AI-planned slots)
+    generateSolveFirstSingles → finalize
+    Internal difficultyMatchScore: 94
+
+  Chunk 2 (10 requested → 10 produced):
+    ARCHETYPE_STEERING source=ai (10 new slots, excludes chunk1 archetypes)
+    Internal difficultyMatchScore: 88
+
+  Chunk 3 (5 requested → 5 produced):
+    ARCHETYPE_STEERING source=ai
+    Internal difficultyMatchScore: 82
+
+  validate (24 questions — 1 lost to strip/top-up failure):
+    VALIDATE_PRE_AUDIT difficultyMatchScore: 64 (deterministic)
+    VALIDATE_SCORES:
+      overallScore: 92
+      correctnessScore: 100
+      diversityScore: 100        ← AI steering fixed duplicates
+      difficultyMatchScore: 64  ← still below 80 target
+      explanationQuality: 60
+    Issues: Q1,Q4,Q6 difficulty; Q3 short explanation
+
+
+================================================================================
+PART L — FUNCTION INDEX (ALPHABETICAL BY FILE)
+================================================================================
+
+aiQuestion.controller.js
+  generateQuestionBankSuggestions
+  validateQuestionTopicRelevance
+  logConfirmedQuestions
+
+aiQuestion.service.js
+  generateQuestionBankSuggestions
+  generateQuestionBankBatch          (internal)
+  generateSolveFirstSingles          (internal)
+  finalizeQuestionBankSuggestions    (internal)
+  validateQuestionTopicRelevance
+  callQuestionBankGenerationLLM      (internal)
+  inferCompetitiveExamPlan
+  inferQuestionBankCounts
+
+conceptArchetypePlanner.service.js
+  isAiArchetypeSteeringEnabled
+  buildArchetypePlanningPrompt
+  parseArchetypePlanResponse
+  resolveConceptArchetypeSteering
+
+conceptArchetypeGuidance.service.js
+  allocateRankedConceptSlots
+  getArchetypeBlueprint
+  buildBatchArchetypeGuidanceBlock
+  buildBankArchetypeExcludeBlock
+  buildSubjectArchetypeSelectionBlock
+  buildJeeHardStemAuthoringBlock
+  buildJeeMainHardAntiTemplateBlock
+
+questionSolveFirst.service.js
+  isSolveFirstEnabled
+  shouldUseSolveFirstGeneration
+  allocateConceptSlots
+  buildSolveFirstSkeletonPrompt
+  parseSolveFirstSkeletons
+  skeletonsToQuestions
+  buildMcqFromSkeleton
+  sanitizeQuestionStemEmbeddedOptions
+
+topicRelevanceValidation.service.js
+  GENERATE_INTENTS
+  assertGenerationWorkflowAllowed
+  assertTopicRelevanceEvaluationAllowed
+  validateGenerationWorkflow
+  validateTopicRelevanceEvaluationWorkflow
+  sampleQuestionsForValidation
+  enrichQuestionsForDifficultyAudit
+  inferSolveStepsFromExplanation
+  buildTopicRelevancePrompt
+  buildCorrectnessAuditPrompt
+  buildJeeAuthenticityAuditPrompt
+  parseTopicRelevanceResponse
+  parseCorrectnessAuditResponse
+  parseAuthenticityAuditResponse
+  mergeCorrectnessAuditResults
+  mergeValidationResults
+  computeDimensionalScores
+  blendValidationScores
+  applyValidationScoreCaps
+  buildRegenerationEscalationBlock
+  buildRegenerationQualityGatesBlock
+  formatTopicRelevanceFeedbackBlock
+
+correctnessPreAudit.service.js
+  runDeterministicCorrectnessAudit
+  flattenQuestionBankForCorrectnessAudit
+  stripFlawedQuestionBankEntries
+
+difficultyPreAudit.service.js
+  runDeterministicDifficultyAudit
+  INITIAL_GEN_DIFFICULTY_MATCH_TARGET
+
+hardQuestionMandate.service.js
+  validateHardSkeletonMandate
+  validateHardQuestionMandate
+  buildHardQuestionMandateBlock
+
+questionNumericVerify.service.js
+  independentlyVerifyQuestion
+  reconcileQuestionBankWithIndependentVerify
+
+aiApiCallLogger.js
+  runWithPipelineTrace
+  pipelineTrace
+  pipelineTraceSection
+
+aiSuggestion.utils.js (frontend)
+  validateGenerationWorkflow
+  validateTopicRelevanceEvaluationWorkflow
+  resolveGenerateIntentFromEvaluation
+  buildTopicRelevanceFeedbackPayload
+  GENERATE_INTENTS
+
+
+================================================================================
+END OF DOCUMENT
+================================================================================
