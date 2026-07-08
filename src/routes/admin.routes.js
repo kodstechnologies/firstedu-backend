@@ -238,7 +238,17 @@ import {
 import {
   generateQuestions,
   generateQuestionBankSuggestions,
+  getQuestionBankBackgroundValidation,
+  getPipelineEventsStatus,
+  generateImageQuestion,
+  generateImageQuestionOpenAI,
+  generateQuestionImage,
+  generateQuestionImageOpenAI,
+  listGeminiImageModels,
+  listGeminiTextModels,
   saveGeneratedQuestions,
+  validateQuestionTopicRelevance,
+  logConfirmedQuestions,
 } from '../controllers/aiQuestion.controller.js';
 
 import {
@@ -702,6 +712,66 @@ router.post(
   '/ai/generate-question-bank-suggestions',
   verifyJWT,
   generateQuestionBankSuggestions
+);
+
+router.get(
+  '/ai/question-bank-background-validation/:jobId',
+  verifyJWT,
+  getQuestionBankBackgroundValidation
+);
+
+router.get(
+  '/ai/pipeline-events/:workflowLogKey',
+  verifyJWT,
+  getPipelineEventsStatus
+);
+
+router.post(
+  '/ai/generate-image-question',
+  verifyJWT,
+  generateImageQuestion
+);
+
+router.post(
+  '/ai/generate-image-question-openai',
+  verifyJWT,
+  generateImageQuestionOpenAI
+);
+
+router.post(
+  '/ai/generate-question-image',
+  verifyJWT,
+  generateQuestionImage
+);
+
+router.get(
+  '/ai/gemini-image-models',
+  verifyJWT,
+  listGeminiImageModels
+);
+
+router.get(
+  '/ai/gemini-text-models',
+  verifyJWT,
+  listGeminiTextModels
+);
+
+router.post(
+  '/ai/generate-question-image-openai',
+  verifyJWT,
+  generateQuestionImageOpenAI
+);
+
+router.post(
+  '/ai/validate-question-topic-relevance',
+  verifyJWT,
+  validateQuestionTopicRelevance
+);
+
+router.post(
+  '/ai/log-confirmed-questions',
+  verifyJWT,
+  logConfirmedQuestions
 );
 
 // Save generated questions to Question Bank

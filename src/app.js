@@ -39,7 +39,7 @@ app.use(
   webhooksRoutes,
 );
 
-app.use(express.json({ limit: "16kb" }));
+app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || "2mb" }));
 
 // Routes
 app.use("/user", studentRoutes);
@@ -58,6 +58,15 @@ app.get("/test", (req, res) => {
 
 // Basic Error Handler
 app.use((err, req, res, next) => {
+  // JSON body too large (express.json / body-parser)
+  if (err.type === "entity.too.large") {
+    return res.status(413).json({
+      success: false,
+      message: `Request body too large. Maximum JSON size is ${process.env.JSON_BODY_LIMIT || "2mb"}.`,
+      data: null,
+    });
+  }
+
   // Handle multer file size errors
   if (err.code === "LIMIT_FILE_SIZE") {
     return res.status(413).json({

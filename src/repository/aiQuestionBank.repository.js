@@ -154,7 +154,7 @@ const findAll = async (filter = {}, options = {}) => {
     const [items, total] = await Promise.all([
       AiQuestionBank.find(query)
         .select(
-          "name categories overallDifficulty useSectionWise sections questionCount aiProvider generationTopic createdAt createdBy"
+          "name categories overallDifficulty useSectionWise negativeMarks sections questionCount aiProvider generationTopic createdAt createdBy"
         )
         .populate(categoryPopulate)
         .sort(sort)

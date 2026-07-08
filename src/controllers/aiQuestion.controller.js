@@ -4,6 +4,25 @@ import { ApiResponse } from '../utils/ApiResponse.js';
 import aiQuestionValidator from '../validation/aiQuestion.validator.js';
 import aiQuestionService from '../services/aiQuestion.service.js';
 import questionService from '../services/question.service.js';
+import {
+    logGenerateQuestionBankSuggestions,
+    logInferCompetitiveExamPlan,
+    logValidateQuestionTopicRelevance,
+    runWithPipelineTrace,
+} from '../utils/aiApiCallLogger.js';
+import { resolveGeminiTextModel } from '../services/geminiTextModels.js';
+import { QB_GENERATION_CHUNK_SIZE } from '../services/aiQuestionCountInference.service.js';
+import { isSolveFirstEnabled } from '../services/questionSolveFirst.service.js';
+import {
+    isQuestionBankCountsMissing,
+    countSelectableFromPlan,
+} from '../services/aiQuestionCountInference.service.js';
+import { logConfirmedQuestionsToFile } from '../services/confirmedQuestionsLogger.service.js';
+import {
+    startQuestionBankBackgroundValidation,
+    getQuestionBankBackgroundValidationStatus,
+} from '../services/questionBankBackgroundValidation.service.js';
+import { getPipelineEvents } from '../utils/pipelineEventStore.js';
 
 /**
  * Generate questions using AI
@@ -59,26 +78,390 @@ export const generateQuestionBankSuggestions = asyncHandler(async (req, res) => 
     const difficulty = String(value.difficulty).toLowerCase();
     const passageCount =
         value.passageCount > 0 ? value.passageCount : value.connectedCount || 0;
-    const questions = await aiQuestionService.generateQuestionBankSuggestions({
-        topic: value.topic,
-        bankName: value.bankName || value.topic,
-        difficulty,
+
+    const countsMissing = isQuestionBankCountsMissing({
         singleCount: value.singleCount,
         multipleCount: value.multipleCount,
         trueFalseCount: value.trueFalseCount,
-        connectedCount: passageCount,
         passageCount,
+        connectedCount: value.connectedCount || 0,
         passageSingleCount: value.passageSingleCount || 0,
         passageMultipleCount: value.passageMultipleCount || 0,
         passageTrueFalseCount: value.passageTrueFalseCount || 0,
+    });
+
+    let inferredCounts = null;
+    let competitiveExamPlan = null;
+    let singleCount = value.singleCount;
+    let multipleCount = value.multipleCount;
+    let trueFalseCount = value.trueFalseCount;
+    let resolvedPassageCount = passageCount;
+    let passageSingleCount = value.passageSingleCount || 0;
+    let passageMultipleCount = value.passageMultipleCount || 0;
+    let passageTrueFalseCount = value.passageTrueFalseCount || 0;
+
+    if (countsMissing && value.inferCountsIfMissing) {
+        const planResult = await aiQuestionService.inferCompetitiveExamPlan({
+            topic: value.topic,
+            bankName: value.bankName || value.topic,
+            difficulty,
+            sectionName: value.sectionName || '',
+            subject: value.subject || '',
+            categoryPaths: value.categoryPaths || [],
+            maxSelectableSlots: value.maxSelectableSlots || 0,
+        });
+
+        competitiveExamPlan = planResult.plan;
+        inferredCounts = planResult.plan;
+        singleCount = planResult.plan.singleCount;
+        multipleCount = planResult.plan.multipleCount;
+        trueFalseCount = planResult.plan.trueFalseCount;
+        resolvedPassageCount = planResult.plan.passageCount;
+        passageSingleCount = planResult.plan.passageSingleCount;
+        passageMultipleCount = planResult.plan.passageMultipleCount;
+        passageTrueFalseCount = planResult.plan.passageTrueFalseCount;
+
+        const guessedSelectable = countSelectableFromPlan(planResult.plan);
+        const subjectSummary = (planResult.plan.subjects || [])
+            .map((s) => `${s.count} ${s.label}`)
+            .join(', ');
+        const topicLabel = value.bankName || value.topic;
+        console.log(
+            `[ai-qb] AI exam plan for "${topicLabel}": profile=${planResult.plan.examProfile}` +
+                (planResult.plan.catSection ? ` (${planResult.plan.catSection})` : '') +
+                `, ${guessedSelectable} question(s)` +
+                (subjectSummary ? ` — ${subjectSummary}` : '') +
+                (planResult.usedFallback ? ' (fallback plan)' : '') +
+                (planResult.plan.rationale ? ` — ${planResult.plan.rationale}` : '')
+        );
+
+        void logInferCompetitiveExamPlan(
+            req,
+            {
+                topic: value.topic,
+                bankName: value.bankName || value.topic,
+                difficulty,
+                maxSelectableSlots: value.maxSelectableSlots || 0,
+                generateIntent: value.generateIntent || 'initial',
+                workflowLogKey: value.workflowLogKey || '',
+            },
+            {
+                competitiveExamPlan: planResult.plan,
+                usedFallback: planResult.usedFallback || false,
+                detectedSubject: planResult.detectedSubject || null,
+            }
+        );
+    } else if (value.competitiveExamPlan) {
+        competitiveExamPlan = value.competitiveExamPlan;
+    }
+
+    const deferValidation = aiQuestionService.shouldDeferQuestionBankValidation({
+        deferValidation: value.deferValidation,
+        generateIntent: value.generateIntent || 'initial',
+        generationMode: value.generationMode || 'default',
+    });
+
+    const promptFirstGeneration =
+        String(value.generationMode || 'default').toLowerCase() === 'prompt_first';
+
+    const questions = await runWithPipelineTrace(
+        req,
+        value.topic || value.bankName,
+        {
+            startNewSession: !value.allowContinuation,
+            allowContinuation: value.allowContinuation || false,
+            workflowLogKey: value.workflowLogKey || '',
+            intent: value.generateIntent || 'initial',
+            generationMode: value.generationMode || 'default',
+            provider: value.generationProvider || 'gemini',
+            difficulty,
+            singleCount,
+            multipleCount,
+            trueFalseCount,
+            passageCount: resolvedPassageCount,
+            solveFirstEnabled: isSolveFirstEnabled(),
+            chunkSize: QB_GENERATION_CHUNK_SIZE,
+        },
+        () =>
+            aiQuestionService.generateQuestionBankSuggestions({
+                topic: value.topic,
+                bankName: value.bankName || value.topic,
+                difficulty,
+                singleCount,
+                multipleCount,
+                trueFalseCount,
+                connectedCount: resolvedPassageCount,
+                passageCount: resolvedPassageCount,
+                passageSingleCount,
+                passageMultipleCount,
+                passageTrueFalseCount,
+                excludeQuestionTexts: value.excludeQuestionTexts || [],
+                categoryPaths: value.categoryPaths || [],
+                sectionName: value.sectionName || "",
+                subject: value.subject || "",
+                topicRelevanceFeedback: value.topicRelevanceFeedback || null,
+                generateIntent: value.generateIntent || "initial",
+                topicRelevanceEvaluated: value.topicRelevanceEvaluated || false,
+                topicRelevanceRegenerated: value.topicRelevanceRegenerated || false,
+                hasGeneratedQuestions: value.hasGeneratedQuestions || false,
+                allowContinuation: value.allowContinuation || false,
+                inferCountsIfMissing: false,
+                maxSelectableSlots: value.maxSelectableSlots || 0,
+                competitiveExamPlan,
+                generationProvider: value.generationProvider || "gemini",
+                deferValidation,
+                generationMode: value.generationMode || "default",
+                workflowLogKey: value.workflowLogKey?.trim() || "",
+            })
+    );
+
+    let backgroundValidation = null;
+    if (
+        !promptFirstGeneration &&
+        deferValidation &&
+        value.startBackgroundValidation &&
+        Array.isArray(questions.questions) &&
+        questions.questions.length
+    ) {
+        const jobId = `qbv-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+        const bgCtx = questions.backgroundValidationContext || {};
+        backgroundValidation = startQuestionBankBackgroundValidation(jobId, {
+            rawQuestions: questions.questions,
+            workflowLogKey: value.workflowLogKey?.trim() || "",
+            topic: value.topic,
+            bankName: value.bankName || value.topic,
+            difficulty,
+            generationProvider: value.generationProvider || 'gemini',
+            evaluationProvider: value.backgroundEvaluationProvider || 'openai',
+            categoryPaths: value.categoryPaths || [],
+            sectionName: value.sectionName || '',
+            subject: value.subject || '',
+            competitiveExamPlan,
+            examReferenceBlock: bgCtx.examReferenceBlock || '',
+            difficultyResolution: bgCtx.difficultyResolution || questions.difficultyResolution,
+            maxSelectableSlots: bgCtx.maxSelectableSlots || value.maxSelectableSlots || 0,
+            singleCount: bgCtx.singleCount ?? singleCount,
+            multipleCount: bgCtx.multipleCount ?? multipleCount,
+            trueFalseCount: bgCtx.trueFalseCount ?? trueFalseCount,
+            passageCount: bgCtx.passageCount ?? resolvedPassageCount,
+            passageSingleCount: bgCtx.passageSingleCount ?? passageSingleCount,
+            passageMultipleCount: bgCtx.passageMultipleCount ?? passageMultipleCount,
+            passageTrueFalseCount: bgCtx.passageTrueFalseCount ?? passageTrueFalseCount,
+            excludeQuestionTexts: bgCtx.excludeQuestionTexts || value.excludeQuestionTexts || [],
+        });
+    }
+
+    const responseBody = ApiResponse.success(
+        {
+            questions: questions.questions,
+            count: questions.questions.length,
+            detectedSubject: questions.detectedSubject,
+            inferredCounts: inferredCounts || questions.inferredCounts || null,
+            competitiveExamPlan,
+            generationProvider: value.generationProvider || "gemini",
+            generationDifficulty: questions.generationDifficulty,
+            difficultySource: questions.difficultyResolution?.source,
+            difficultyRationale: questions.difficultyResolution?.rationale,
+            examProfile: questions.difficultyResolution?.examProfile,
+            targetedRegeneration: questions.targetedRegeneration || null,
+            pipelineSummary: questions.pipelineSummary || null,
+            validationDeferred: !!backgroundValidation,
+            backgroundValidation,
+        },
+        'Question bank suggestions generated successfully'
+    );
+
+    void logGenerateQuestionBankSuggestions(req, value, responseBody);
+
+    return res.status(200).json(responseBody);
+});
+
+/**
+ * Poll background validation started by deferred question-bank generation.
+ * @route GET /api/admin/ai/question-bank-background-validation/:jobId
+ */
+export const getQuestionBankBackgroundValidation = asyncHandler(async (req, res) => {
+    const jobId = String(req.params.jobId || '').trim();
+    if (!jobId) {
+        throw new ApiError(400, 'jobId is required');
+    }
+
+    const status = getQuestionBankBackgroundValidationStatus(jobId);
+    if (!status) {
+        throw new ApiError(404, 'Background validation job not found or expired');
+    }
+
+    return res.status(200).json(
+        ApiResponse.success(status, 'Background validation status retrieved')
+    );
+});
+
+/**
+ * Poll live pipeline events for an in-flight generation or validation run.
+ * @route GET /api/admin/ai/pipeline-events/:workflowLogKey
+ */
+export const getPipelineEventsStatus = asyncHandler(async (req, res) => {
+    const workflowLogKey = String(req.params.workflowLogKey || '').trim();
+    if (!workflowLogKey) {
+        throw new ApiError(400, 'workflowLogKey is required');
+    }
+
+    const since = Number(req.query.since);
+    const sincePartial = Number(req.query.sincePartial);
+    const payload = getPipelineEvents(
+        workflowLogKey,
+        Number.isFinite(since) ? since : 0,
+        Number.isFinite(sincePartial) ? sincePartial : 0
+    );
+
+    return res.status(200).json(
+        ApiResponse.success(payload, 'Pipeline events retrieved')
+    );
+});
+
+/**
+ * Generate a single image-based question (text + imageSpec)
+ * @route POST /api/admin/ai/generate-image-question
+ */
+export const generateImageQuestion = asyncHandler(async (req, res) => {
+    const { error, value } =
+        aiQuestionValidator.generateImageQuestionText.validate(req.body);
+
+    if (error) {
+        throw new ApiError(
+            400,
+            'Validation Error',
+            error.details.map((x) => x.message)
+        );
+    }
+
+    const question = await aiQuestionService.generateImageQuestionText({
+        topic: value.topic,
+        bankName: value.bankName || value.topic,
+        difficulty: String(value.difficulty).toLowerCase(),
         excludeQuestionTexts: value.excludeQuestionTexts || [],
+        imageQuestionType: value.imageQuestionType || 'mixed',
+        usedImageQuestionTypes: value.usedImageQuestionTypes || [],
+        categoryPaths: value.categoryPaths || [],
+        sectionName: value.sectionName || '',
+        subject: value.subject || '',
+    });
+
+    return res.status(200).json(
+        ApiResponse.success({ question }, 'Image question generated successfully')
+    );
+});
+
+/**
+ * Generate a single image-based question (text + imageSpec) via OpenAI — test flow
+ * @route POST /api/admin/ai/generate-image-question-openai
+ */
+export const generateImageQuestionOpenAI = asyncHandler(async (req, res) => {
+    const { error, value } =
+        aiQuestionValidator.generateImageQuestionText.validate(req.body);
+
+    if (error) {
+        throw new ApiError(
+            400,
+            'Validation Error',
+            error.details.map((x) => x.message)
+        );
+    }
+
+    const question = await aiQuestionService.generateImageQuestionTextWithOpenAI({
+        topic: value.topic,
+        bankName: value.bankName || value.topic,
+        difficulty: String(value.difficulty).toLowerCase(),
+        excludeQuestionTexts: value.excludeQuestionTexts || [],
+        imageQuestionType: value.imageQuestionType || 'mixed',
+        usedImageQuestionTypes: value.usedImageQuestionTypes || [],
+        categoryPaths: value.categoryPaths || [],
+        sectionName: value.sectionName || '',
+        subject: value.subject || '',
     });
 
     return res.status(200).json(
         ApiResponse.success(
-            { questions, count: questions.length },
-            'Question bank suggestions generated successfully'
+            { question },
+            'Image question generated successfully with OpenAI'
         )
+    );
+});
+
+/**
+ * Generate image from imageSpec and upload to storage
+ * @route POST /api/admin/ai/generate-question-image
+ */
+export const generateQuestionImage = asyncHandler(async (req, res) => {
+    const { error, value } =
+        aiQuestionValidator.generateQuestionImage.validate(req.body);
+
+    if (error) {
+        throw new ApiError(
+            400,
+            'Validation Error',
+            error.details.map((x) => x.message)
+        );
+    }
+
+    const result = await aiQuestionService.generateQuestionImageFromSpec(
+        value.imageSpec,
+        { imageModel: value.imageModel }
+    );
+
+    return res.status(200).json(
+        ApiResponse.success(result, 'Question image generated successfully')
+    );
+});
+
+/**
+ * List selectable Gemini / Imagen image models
+ * @route GET /api/admin/ai/gemini-image-models
+ */
+export const listGeminiImageModels = asyncHandler(async (req, res) => {
+    const models = aiQuestionService.getGeminiImageModelOptions();
+    return res.status(200).json(
+        ApiResponse.success({ models }, 'Gemini image models retrieved successfully')
+    );
+});
+
+/**
+ * List selectable Gemini text models (question generation)
+ * @route GET /api/admin/ai/gemini-text-models
+ */
+export const listGeminiTextModels = asyncHandler(async (req, res) => {
+    const models = aiQuestionService.getGeminiTextModelOptions();
+    const active = resolveGeminiTextModel();
+    return res.status(200).json(
+        ApiResponse.success(
+            { models, active },
+            'Gemini text models retrieved successfully'
+        )
+    );
+});
+
+/**
+ * Generate image from imageSpec via OpenAI and upload to storage
+ * @route POST /api/admin/ai/generate-question-image-openai
+ */
+export const generateQuestionImageOpenAI = asyncHandler(async (req, res) => {
+    const { error, value } =
+        aiQuestionValidator.generateQuestionImage.validate(req.body);
+
+    if (error) {
+        throw new ApiError(
+            400,
+            'Validation Error',
+            error.details.map((x) => x.message)
+        );
+    }
+
+    const result = await aiQuestionService.generateQuestionImageFromSpecWithOpenAI(
+        value.imageSpec
+    );
+
+    return res.status(200).json(
+        ApiResponse.success(result, 'Question image generated successfully with OpenAI')
     );
 });
 
@@ -157,8 +540,119 @@ export const saveGeneratedQuestions = asyncHandler(async (req, res) => {
         .json(ApiResponse.success(response, message));
 });
 
+/**
+ * Validate generated question relevancy to topic via OpenAI (sample of up to 50).
+ * @route POST /api/admin/ai/validate-question-topic-relevance
+ */
+export const validateQuestionTopicRelevance = asyncHandler(async (req, res) => {
+    const { error, value } =
+        aiQuestionValidator.validateQuestionTopicRelevance.validate(req.body);
+
+    if (error) {
+        throw new ApiError(
+            400,
+            'Validation Error',
+            error.details.map((x) => x.message)
+        );
+    }
+
+    const result = await runWithPipelineTrace(
+        req,
+        value.topic || value.bankName,
+        {
+            startNewSession: false,
+            intent: 'validate',
+            provider: value.evaluationProvider || 'openai',
+            workflowLogKey: value.workflowLogKey || '',
+            difficulty: value.difficulty
+                ? String(value.difficulty).toLowerCase()
+                : '',
+            questionCount: Array.isArray(value.questions)
+                ? value.questions.length
+                : 0,
+        },
+        () =>
+            aiQuestionService.validateQuestionTopicRelevance({
+                topic: value.topic,
+                bankName: value.bankName || '',
+                subject: value.subject || '',
+                sectionName: value.sectionName || '',
+                difficulty: value.difficulty
+                    ? String(value.difficulty).toLowerCase()
+                    : '',
+                questions: value.questions,
+                alreadyEvaluated: value.alreadyEvaluated || false,
+                evaluationProvider: value.evaluationProvider || 'openai',
+                competitiveExamPlan: value.competitiveExamPlan || null,
+                categoryPaths: value.categoryPaths || [],
+                singleCount: value.singleCount || 0,
+                multipleCount: value.multipleCount || 0,
+                trueFalseCount: value.trueFalseCount || 0,
+                passageCount: value.passageCount || 0,
+                passageSingleCount: value.passageSingleCount || 0,
+                passageMultipleCount: value.passageMultipleCount || 0,
+                passageTrueFalseCount: value.passageTrueFalseCount || 0,
+            })
+    );
+
+    const responseBody = ApiResponse.success(
+        { ...result, evaluationProvider: value.evaluationProvider || "openai" },
+        "Topic relevance validated successfully"
+    );
+
+    void logValidateQuestionTopicRelevance(req, value, responseBody);
+
+    return res.status(200).json(responseBody);
+});
+
+/**
+ * Log confirmed questions to temp/confirmed-questions (topic, section, stems, options, correct answer, explanation).
+ * @route POST /api/admin/ai/log-confirmed-questions
+ */
+export const logConfirmedQuestions = asyncHandler(async (req, res) => {
+    const { error, value } =
+        aiQuestionValidator.logConfirmedQuestions.validate(req.body);
+
+    if (error) {
+        throw new ApiError(
+            400,
+            'Validation Error',
+            error.details.map((x) => x.message)
+        );
+    }
+
+    const result = await logConfirmedQuestionsToFile({
+        topic: value.topic,
+        bankName: value.bankName || '',
+        sectionName: value.sectionName || '',
+        sectionIndex: value.sectionIndex ?? null,
+        questions: value.questions,
+    });
+
+    return res.status(200).json(
+        ApiResponse.success(
+            {
+                filePath: result.filePath,
+                questionCount: result.questionCount,
+                appended: result.appended,
+            },
+            'Confirmed questions logged successfully'
+        )
+    );
+});
+
 export default {
     generateQuestions,
     generateQuestionBankSuggestions,
+    getQuestionBankBackgroundValidation,
+    getPipelineEventsStatus,
+    generateImageQuestion,
+    generateImageQuestionOpenAI,
+    generateQuestionImage,
+  listGeminiImageModels,
+  listGeminiTextModels,
+  generateQuestionImageOpenAI,
     saveGeneratedQuestions,
+    validateQuestionTopicRelevance,
+    logConfirmedQuestions,
 };

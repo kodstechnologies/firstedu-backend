@@ -11,6 +11,12 @@ const sectionSchema = new mongoose.Schema(
       required: true,
     },
     timeMinutes: { type: Number, min: 0, default: 0 },
+    negativeMarks: { type: Number, min: 0, default: 1 },
+    contentType: {
+      type: String,
+      enum: ["text", "image"],
+      default: "text",
+    },
   },
   { _id: false }
 );
@@ -37,6 +43,8 @@ const aiQuestionBankSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    /** Applied to every question when useSectionWise is false. */
+    negativeMarks: { type: Number, min: 0, default: 1 },
     sections: [sectionSchema],
     aiProvider: {
       type: String,

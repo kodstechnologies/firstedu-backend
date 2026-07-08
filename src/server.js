@@ -156,6 +156,7 @@ const startServer = async () => {
     console.log('⏰ Daily cron (6 PM): student everyday challenge evening reminders');
 
     const port = process.env.PORT || 8001;
+    const host = process.env.HOST || '127.0.0.1';
 
     // Increase timeouts for large file uploads (up to 500MB)
     // Default Node.js timeout is 2 minutes — not enough for large video/audio uploads
@@ -164,20 +165,25 @@ const startServer = async () => {
     server.keepAliveTimeout = 10 * 60 * 1000; // 10 minutes
     server.requestTimeout = 10 * 60 * 1000;   // 10 minutes
 
-    server.listen(port, '0.0.0.0', () => {
-      console.log(`🚀!! Server running on http://0.0.0.0:${port} at ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`);
+    server.listen(port, host, () => {
+      const when = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
+      const bindUrl = host === '0.0.0.0' ? `http://localhost:${port}` : `http://${host}:${port}`;
+      console.log(`🚀 Server ready at ${when}`);
+      console.log(`   ${bindUrl}`);
       console.log(`📡 Socket.io server initialized`);
       logAgoraRecordingStatus();
-      const lanIps = [];
-      for (const iface of Object.values(os.networkInterfaces())) {
-        for (const cfg of iface || []) {
-          if (cfg.family === 'IPv4' && !cfg.internal) {
-            lanIps.push(cfg.address);
+      if (host === '0.0.0.0') {
+        const lanIps = [];
+        for (const iface of Object.values(os.networkInterfaces())) {
+          for (const cfg of iface || []) {
+            if (cfg.family === 'IPv4' && !cfg.internal) {
+              lanIps.push(cfg.address);
+            }
           }
         }
-      }
-      if (lanIps.length) {
-        console.log(`📱 Share API with Wi‑Fi devices: ${lanIps.map(ip => `http://${ip}:${port}`).join(', ')}`);
+        if (lanIps.length) {
+          console.log(`📱 Share API with Wi‑Fi devices: ${lanIps.map(ip => `http://${ip}:${port}`).join(', ')}`);
+        }
       }
     });
   } catch (err) {

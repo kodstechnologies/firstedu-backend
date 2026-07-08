@@ -74,6 +74,31 @@ const getConnectedTotals = (subs = []) =>
     { marks: 0, negativeMarks: 0 }
   );
 
+const resolveQuestionNegativeMarks = (
+  q,
+  questionIndex,
+  { useSectionWise, sections, bankNegativeMarks }
+) => {
+  if (Number(q?.negativeMarks) > 0) {
+    return Number(q.negativeMarks);
+  }
+  if (useSectionWise) {
+    const sectionIndex = getSectionIndexByCount(sections, questionIndex);
+    const sectionValue = sections[sectionIndex]?.negativeMarks;
+    return Number(sectionValue) >= 0 ? Number(sectionValue) : 1;
+  }
+  return Number(bankNegativeMarks) >= 0 ? Number(bankNegativeMarks) : 1;
+};
+
+const applyNegativeMarksToConnectedSubs = (subs, fallbackNegativeMarks) =>
+  (subs || []).map((sub) => ({
+    ...sub,
+    negativeMarks:
+      Number(sub?.negativeMarks) > 0
+        ? Number(sub.negativeMarks)
+        : fallbackNegativeMarks,
+  }));
+
 const validateQuestionInput = (q, i) => {
   if (q.questionType === "connected") {
     const subs = q.subQuestions ?? q.connectedQuestions ?? [];
@@ -122,6 +147,8 @@ export const createAiQuestionBankWithQuestions = async (data, createdBy) => {
   const overallDifficulty = data.overallDifficulty || "medium";
   const useSectionWise = data.useSectionWise ?? false;
   const sections = useSectionWise ? data.sections || [] : [];
+  const bankNegativeMarks =
+    Number(data.negativeMarks) >= 0 ? Number(data.negativeMarks) : 1;
 
   if (!questionsInput.length) {
     throw new ApiError(400, "At least one question is required");
@@ -158,12 +185,16 @@ export const createAiQuestionBankWithQuestions = async (data, createdBy) => {
         categories: categoryIds,
         overallDifficulty,
         useSectionWise,
+        negativeMarks: useSectionWise ? 0 : bankNegativeMarks,
         sections: sections.map((s, idx) => ({
           id: s.id ?? idx + 1,
           name: s.name || `Section ${idx + 1}`,
           count: s.count,
           difficulty: s.difficulty || overallDifficulty,
           timeMinutes: s.timeMinutes ?? 0,
+          negativeMarks:
+            Number(s.negativeMarks) >= 0 ? Number(s.negativeMarks) : 1,
+          contentType: s.contentType === "image" ? "image" : "text",
         })),
         aiProvider: data.aiProvider || "gemini",
         generationTopic: data.generationTopic || null,
@@ -185,6 +216,11 @@ export const createAiQuestionBankWithQuestions = async (data, createdBy) => {
           ? sections[sectionIndex]?.difficulty
           : null;
       const difficulty = q.difficulty || sectionDifficulty || overallDifficulty;
+      const questionNegativeMarks = resolveQuestionNegativeMarks(q, i, {
+        useSectionWise,
+        sections,
+        bankNegativeMarks,
+      });
       const baseFields = {
         topic: q.topic,
         difficulty,
@@ -197,7 +233,11 @@ export const createAiQuestionBankWithQuestions = async (data, createdBy) => {
       };
 
       if (q.questionType === "connected") {
-        const subs = q.subQuestions ?? q.connectedQuestions ?? [];
+        const rawSubs = q.subQuestions ?? q.connectedQuestions ?? [];
+        const subs = applyNegativeMarksToConnectedSubs(
+          rawSubs,
+          questionNegativeMarks
+        );
         validateConnectedQuestions(subs);
         const connectedTotals = getConnectedTotals(subs);
         const passageText =
@@ -268,7 +308,8 @@ export const createAiQuestionBankWithQuestions = async (data, createdBy) => {
             correctAnswer: q.correctAnswer,
             explanation: q.explanation,
             marks: q.marks ?? 1,
-            negativeMarks: q.negativeMarks ?? 0,
+            negativeMarks: questionNegativeMarks,
+            imageUrl: q.imageUrl || null,
           },
         ],
         { session }

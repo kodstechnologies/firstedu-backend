@@ -1,4 +1,12 @@
 import Joi from 'joi';
+import { GEMINI_IMAGE_MODEL_IDS } from '../services/geminiImageModels.js';
+import { IMAGE_QUESTION_ARCHETYPE_IDS } from '../services/imageQuestionArchetypes.js';
+import {
+    GENERATE_INTENTS,
+    validateGenerationWorkflow,
+    validateTopicRelevanceEvaluationWorkflow,
+} from '../services/topicRelevanceValidation.service.js';
+import { GENERATION_MODES } from '../services/examPromptFirst.service.js';
 
 // Validation schema for generating questions
 export const generateQuestionsSchema = Joi.object({
@@ -79,6 +87,30 @@ export const saveGeneratedQuestionsSchema = Joi.object({
 });
 
 // Question bank AI suggestions (single / multiple / true_false counts)
+const TOPIC_RELEVANCE_ISSUE_CATEGORIES = [
+    "factual",
+    "style",
+    "diversity",
+    "authenticity",
+    "difficulty",
+    "correctness",
+];
+
+const topicRelevanceIssueSchema = Joi.object({
+    questionNumber: Joi.number().integer().min(1).optional().allow(null),
+    sampleNumber: Joi.number().integer().min(1).optional().allow(null),
+    issue: Joi.string().trim().max(500).required(),
+    severity: Joi.string()
+        .valid("critical", "major", "minor", "suspected")
+        .optional(),
+    confidence: Joi.string().trim().max(20).optional(),
+    category: Joi.string()
+        .valid(...TOPIC_RELEVANCE_ISSUE_CATEGORIES)
+        .optional(),
+}).unknown(true);
+
+const optionalRelevanceScore = Joi.number().min(0).max(100).optional().allow(null);
+
 export const generateQuestionBankSuggestionsSchema = Joi.object({
     topic: Joi.string().required().trim().min(2).max(300).messages({
         'string.empty': 'Topic is required',
@@ -106,6 +138,109 @@ export const generateQuestionBankSuggestionsSchema = Joi.object({
         .items(Joi.string().trim().min(3).max(500))
         .max(100)
         .default([]),
+    sectionName: Joi.string().trim().max(200).optional().allow(""),
+    categoryPaths: Joi.array()
+        .items(Joi.string().trim().min(1).max(500))
+        .max(20)
+        .default([]),
+    subject: Joi.string().trim().max(100).optional().allow(""),
+    topicRelevanceFeedback: Joi.object({
+        overallScore: Joi.number().min(0).max(100).required(),
+        regenerationInstructions: Joi.string()
+            .trim()
+            .max(2000)
+            .optional()
+            .allow(""),
+        topicRelevanceScore: optionalRelevanceScore,
+        correctnessScore: optionalRelevanceScore,
+        styleScore: optionalRelevanceScore,
+        authenticityScore: optionalRelevanceScore,
+        /** @deprecated legacy fields from older evaluate responses */
+        verdict: Joi.string()
+            .valid("strong", "moderate", "weak", "off-topic")
+            .optional(),
+        summary: Joi.string().trim().max(2000).optional().allow(""),
+        confirmedIssues: Joi.array()
+            .items(topicRelevanceIssueSchema)
+            .max(50)
+            .optional(),
+        correctnessIssues: Joi.array()
+            .items(topicRelevanceIssueSchema)
+            .max(50)
+            .optional(),
+        flawedQuestionNumbers: Joi.array()
+            .items(Joi.number().integer().min(1))
+            .max(50)
+            .optional(),
+        issuesByDimension: Joi.object().unknown(true).optional(),
+        dimensionScores: Joi.object().unknown(true).optional(),
+        difficultyMatchScore: optionalRelevanceScore,
+        diversityScore: optionalRelevanceScore,
+        outliers: Joi.array()
+            .items(
+                Joi.object({
+                    sampleNumber: Joi.number().integer().min(1).required(),
+                    reason: Joi.string().trim().max(500).required(),
+                })
+            )
+            .max(5)
+            .optional(),
+    })
+        .unknown(true)
+        .optional(),
+    generateIntent: Joi.string()
+        .valid(GENERATE_INTENTS.INITIAL, GENERATE_INTENTS.EVALUATION_REGEN)
+        .default(GENERATE_INTENTS.INITIAL),
+    /** default = solve-first / one-shot pipeline; prompt_first = exam-setter prompt then Gemini */
+    generationMode: Joi.string()
+        .valid(GENERATION_MODES.DEFAULT, GENERATION_MODES.PROMPT_FIRST)
+        .default(GENERATION_MODES.DEFAULT),
+    topicRelevanceEvaluated: Joi.boolean().default(false),
+    topicRelevanceRegenerated: Joi.boolean().default(false),
+    hasGeneratedQuestions: Joi.boolean().default(false),
+    allowContinuation: Joi.boolean().default(false),
+    /** Client workflow id — ties multi-chunk generation + validation into one ai-api-log file */
+    workflowLogKey: Joi.string().trim().max(80).optional().allow(''),
+    generationProvider: Joi.string().valid('gemini', 'openai').default('gemini'),
+    /** When true (default), return after generation and validate in background. */
+    deferValidation: Joi.boolean().optional(),
+    /** Provider used for background validation after deferred generation. */
+    backgroundEvaluationProvider: Joi.string()
+        .valid('gemini', 'openai')
+        .default('openai'),
+    /** When deferValidation is on, start background job only on the final client chunk. */
+    startBackgroundValidation: Joi.boolean().default(false),
+    /** When all type counts are 0, Gemini infers counts from topic/exam (requires maxSelectableSlots). Ignored when counts are provided. */
+    inferCountsIfMissing: Joi.boolean().default(false),
+    /** Empty bank slots — required for infer mode; when counts are provided, caps selectable total. */
+    maxSelectableSlots: Joi.number().integer().min(1).max(500).optional(),
+    competitiveExamPlan: Joi.object({
+        examProfile: Joi.string().trim().max(50).optional(),
+        catSection: Joi.string().trim().max(50).optional().allow(null),
+        paperNumber: Joi.number().integer().valid(1, 2).optional().allow(null),
+        isFullPaper: Joi.boolean().optional(),
+        topicScope: Joi.string().trim().max(500).optional().allow(''),
+        singleCount: Joi.number().integer().min(0).max(30).optional(),
+        multipleCount: Joi.number().integer().min(0).max(30).optional(),
+        trueFalseCount: Joi.number().integer().min(0).max(30).optional(),
+        passageCount: Joi.number().integer().min(0).max(10).optional(),
+        passageSingleCount: Joi.number().integer().min(0).max(30).optional(),
+        passageMultipleCount: Joi.number().integer().min(0).max(30).optional(),
+        passageTrueFalseCount: Joi.number().integer().min(0).max(30).optional(),
+        subjects: Joi.array()
+            .items(
+                Joi.object({
+                    id: Joi.string().trim().max(50).optional(),
+                    label: Joi.string().trim().max(100).optional(),
+                    count: Joi.number().integer().min(0).max(30).optional(),
+                })
+            )
+            .max(20)
+            .optional(),
+        rationale: Joi.string().trim().max(2000).optional().allow(''),
+    })
+        .unknown(true)
+        .optional(),
 })
     .custom((value, helpers) => {
         const passageCount =
@@ -124,11 +259,33 @@ export const generateQuestionBankSuggestionsSchema = Joi.object({
         const selectableTotal =
             standaloneTotal + passageCount * passageQuestionsPerPassage;
 
-        if (apiItemTotal < 1 && selectableTotal < 1) {
-            return helpers.error('any.custom', {
-                message:
-                    'Request at least one standalone question or reading passage',
-            });
+        const countsMissing = apiItemTotal < 1 && selectableTotal < 1;
+
+        if (!countsMissing) {
+            value.inferCountsIfMissing = false;
+            if (
+                value.maxSelectableSlots &&
+                selectableTotal > value.maxSelectableSlots
+            ) {
+                return helpers.error('any.custom', {
+                    message: `Requested ${selectableTotal} selectable question(s), but only ${value.maxSelectableSlots} empty slot(s) remain in the bank`,
+                });
+            }
+        }
+
+        if (countsMissing) {
+            if (!value.inferCountsIfMissing) {
+                return helpers.error('any.custom', {
+                    message:
+                        'Request at least one standalone question or reading passage, or set inferCountsIfMissing with maxSelectableSlots',
+                });
+            }
+            if (!value.maxSelectableSlots || value.maxSelectableSlots < 1) {
+                return helpers.error('any.custom', {
+                    message:
+                        'maxSelectableSlots is required when inferring question counts from topic',
+                });
+            }
         }
         if (apiItemTotal > 30) {
             return helpers.error('any.custom', {
@@ -147,14 +304,215 @@ export const generateQuestionBankSuggestionsSchema = Joi.object({
                     'Specify at least one passage question type (single, multiple, or true/false)',
             });
         }
+
+        const workflowError = validateGenerationWorkflow({
+            generateIntent: value.generateIntent,
+            topicRelevanceEvaluated: value.topicRelevanceEvaluated,
+            topicRelevanceRegenerated: value.topicRelevanceRegenerated,
+            topicRelevanceFeedback: value.topicRelevanceFeedback,
+            hasGeneratedQuestions: value.hasGeneratedQuestions,
+            allowContinuation: value.allowContinuation,
+        });
+        if (workflowError) {
+            return helpers.error('any.custom', { message: workflowError });
+        }
+
         return { ...value, passageCount };
     })
     .messages({
         'any.custom': '{{#message}}',
     });
 
+export const generateImageQuestionTextSchema = Joi.object({
+    topic: Joi.string().required().trim().min(2).max(300),
+    bankName: Joi.string().trim().max(200).optional().allow(''),
+    difficulty: Joi.string()
+        .valid('easy', 'medium', 'hard', 'Easy', 'Medium', 'Hard')
+        .required(),
+    excludeQuestionTexts: Joi.array()
+        .items(Joi.string().trim().min(3).max(500))
+        .max(100)
+        .default([]),
+    imageQuestionType: Joi.string()
+        .valid('mixed', ...IMAGE_QUESTION_ARCHETYPE_IDS)
+        .default('mixed'),
+    usedImageQuestionTypes: Joi.array()
+        .items(Joi.string().valid(...IMAGE_QUESTION_ARCHETYPE_IDS))
+        .max(50)
+        .default([]),
+    sectionName: Joi.string().trim().max(200).optional().allow(""),
+    categoryPaths: Joi.array()
+        .items(Joi.string().trim().min(1).max(500))
+        .max(20)
+        .default([]),
+    subject: Joi.string().trim().max(100).optional().allow(""),
+});
+
+export const generateQuestionImageSchema = Joi.object({
+    imageSpec: Joi.object({
+        archetype: Joi.string().trim().max(80).optional(),
+        type: Joi.string().trim().max(80).optional(),
+        description: Joi.string().trim().min(10).max(2000).optional(),
+        style: Joi.string().trim().max(500).optional().allow(''),
+        labels: Joi.object().pattern(Joi.string(), Joi.string()).optional(),
+        imagePrompt: Joi.string().trim().min(20).max(4000).optional(),
+        prompt: Joi.string().trim().min(20).max(4000).optional(),
+    })
+        .custom((value, helpers) => {
+            const hasPrompt =
+                String(value?.imagePrompt || value?.prompt || "").trim().length >= 20;
+            const hasDescription =
+                String(value?.description || "").trim().length >= 10;
+            if (!hasPrompt && !hasDescription) {
+                return helpers.message(
+                    'imageSpec must include imagePrompt or description for image generation'
+                );
+            }
+            return value;
+        })
+        .required(),
+    imageModel: Joi.string()
+        .valid(...GEMINI_IMAGE_MODEL_IDS)
+        .optional(),
+});
+
+export const validateQuestionTopicRelevanceSchema = Joi.object({
+    topic: Joi.string().required().trim().min(2).max(300).messages({
+        'string.empty': 'Topic is required',
+        'any.required': 'Topic is required',
+    }),
+    bankName: Joi.string().trim().max(200).optional().allow(''),
+    subject: Joi.string().trim().max(100).optional().allow(''),
+    sectionName: Joi.string().trim().max(200).optional().allow(''),
+    difficulty: Joi.string()
+        .valid('easy', 'medium', 'hard', 'Easy', 'Medium', 'Hard')
+        .optional()
+        .allow(''),
+    questions: Joi.array()
+        .items(
+            Joi.object({
+                questionType: Joi.string()
+                    .valid('single', 'multiple', 'true_false')
+                    .default('single'),
+                questionText: Joi.string().required().trim().min(5).max(2000),
+                options: Joi.array()
+                    .items(Joi.string().trim().max(500))
+                    .max(4)
+                    .optional(),
+                correctAnswer: Joi.string().trim().max(800).optional().allow(''),
+                explanation: Joi.string().trim().max(3000).optional().allow(''),
+                passage: Joi.string().trim().max(3000).optional().allow(''),
+                _solveSteps: Joi.array()
+                    .items(Joi.string().trim().max(1200))
+                    .max(12)
+                    .optional(),
+                _conceptSlot: Joi.string().trim().max(120).optional().allow(''),
+                conceptSlot: Joi.string().trim().max(120).optional().allow(''),
+            })
+        )
+        .min(1)
+        .max(500)
+        .required()
+        .messages({
+            'array.min': 'At least one question is required',
+            'any.required': 'Questions array is required',
+        }),
+    alreadyEvaluated: Joi.boolean().default(false),
+    evaluationProvider: Joi.string().valid('gemini', 'openai').default('openai'),
+    workflowLogKey: Joi.string().trim().max(80).optional().allow(''),
+    categoryPaths: Joi.array()
+        .items(Joi.string().trim().min(1).max(500))
+        .max(20)
+        .default([]),
+    competitiveExamPlan: Joi.object({
+        examProfile: Joi.string().trim().max(50).optional(),
+        catSection: Joi.string().trim().max(50).optional().allow(null),
+        paperNumber: Joi.number().integer().valid(1, 2).optional().allow(null),
+        isFullPaper: Joi.boolean().optional(),
+        topicScope: Joi.string().trim().max(500).optional().allow(''),
+        singleCount: Joi.number().integer().min(0).max(30).optional(),
+        multipleCount: Joi.number().integer().min(0).max(30).optional(),
+        trueFalseCount: Joi.number().integer().min(0).max(30).optional(),
+        passageCount: Joi.number().integer().min(0).max(10).optional(),
+        passageSingleCount: Joi.number().integer().min(0).max(30).optional(),
+        passageMultipleCount: Joi.number().integer().min(0).max(30).optional(),
+        passageTrueFalseCount: Joi.number().integer().min(0).max(30).optional(),
+        subjects: Joi.array()
+            .items(
+                Joi.object({
+                    id: Joi.string().trim().max(50).optional(),
+                    label: Joi.string().trim().max(100).optional(),
+                    count: Joi.number().integer().min(0).max(30).optional(),
+                })
+            )
+            .max(20)
+            .optional(),
+        rationale: Joi.string().trim().max(2000).optional().allow(''),
+    })
+        .unknown(true)
+        .optional(),
+    singleCount: Joi.number().integer().min(0).max(30).optional(),
+    multipleCount: Joi.number().integer().min(0).max(30).optional(),
+    trueFalseCount: Joi.number().integer().min(0).max(30).optional(),
+    passageCount: Joi.number().integer().min(0).max(10).optional(),
+    passageSingleCount: Joi.number().integer().min(0).max(30).optional(),
+    passageMultipleCount: Joi.number().integer().min(0).max(30).optional(),
+    passageTrueFalseCount: Joi.number().integer().min(0).max(30).optional(),
+})
+    .custom((value, helpers) => {
+        const workflowError = validateTopicRelevanceEvaluationWorkflow({
+            alreadyEvaluated: value.alreadyEvaluated,
+            evaluationProvider: value.evaluationProvider,
+            questionCount: value.questions?.length || 0,
+        });
+        if (workflowError) {
+            return helpers.error('any.custom', { message: workflowError });
+        }
+        return value;
+    })
+    .messages({
+        'any.custom': '{{#message}}',
+    });
+
+const confirmedQuestionItemSchema = Joi.object({
+    questionType: Joi.string()
+        .valid('single', 'multiple', 'true_false', 'connected')
+        .optional(),
+    questionText: Joi.string().trim().max(8000).optional().allow(''),
+    text: Joi.string().trim().max(8000).optional().allow(''),
+    title: Joi.string().trim().max(500).optional().allow(''),
+    passage: Joi.string().trim().max(12000).optional().allow(''),
+    options: Joi.array().items(Joi.string().trim().max(2000)).max(8).optional(),
+    optionA: Joi.string().trim().max(2000).optional().allow(''),
+    optionB: Joi.string().trim().max(2000).optional().allow(''),
+    optionC: Joi.string().trim().max(2000).optional().allow(''),
+    optionD: Joi.string().trim().max(2000).optional().allow(''),
+    correctIndex: Joi.number().integer().min(0).max(7).optional(),
+    multipleCorrectIndexes: Joi.array()
+        .items(Joi.number().integer().min(0).max(7))
+        .optional(),
+    correctAnswer: Joi.alternatives()
+        .try(Joi.string().trim().max(50), Joi.array().items(Joi.string()))
+        .optional(),
+    explanation: Joi.string().trim().max(8000).optional().allow(''),
+    subQuestions: Joi.array().items(Joi.link('#confirmedQuestion')).optional(),
+    connectedQuestions: Joi.array().items(Joi.link('#confirmedQuestion')).optional(),
+}).id('confirmedQuestion');
+
+export const logConfirmedQuestionsSchema = Joi.object({
+    topic: Joi.string().required().trim().min(2).max(500),
+    bankName: Joi.string().trim().max(300).optional().allow(''),
+    sectionName: Joi.string().trim().max(200).optional().allow(''),
+    sectionIndex: Joi.number().integer().min(0).max(50).optional().allow(null),
+    questions: Joi.array().items(confirmedQuestionItemSchema).min(1).max(50).required(),
+});
+
 export default {
     generateQuestions: generateQuestionsSchema,
     saveGeneratedQuestions: saveGeneratedQuestionsSchema,
     generateQuestionBankSuggestions: generateQuestionBankSuggestionsSchema,
+    generateImageQuestionText: generateImageQuestionTextSchema,
+    generateQuestionImage: generateQuestionImageSchema,
+    validateQuestionTopicRelevance: validateQuestionTopicRelevanceSchema,
+    logConfirmedQuestions: logConfirmedQuestionsSchema,
 };

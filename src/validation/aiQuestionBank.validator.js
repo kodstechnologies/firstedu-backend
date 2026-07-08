@@ -80,8 +80,9 @@ const aiQuestionItemSchema = Joi.object({
   marks: Joi.number().min(0).default(1),
   negativeMarks: Joi.number().min(0).default(0),
   tags: Joi.array().items(Joi.string().trim()).optional(),
-  aiBatchNumber: Joi.number().integer().min(1).optional(),
+  aiBatchNumber: Joi.number().integer().min(1).optional().allow(null),
   sectionIndex: Joi.number().integer().min(0).optional().allow(null),
+  imageUrl: Joi.string().trim().uri().optional().allow("", null),
   passage: Joi.string().trim().optional().allow("", null),
   subQuestions: Joi.array().items(connectedSubQuestionSchema).optional(),
   connectedQuestions: Joi.array().items(connectedSubQuestionSchema).optional(),
@@ -117,6 +118,8 @@ const sectionSchema = Joi.object({
   id: Joi.number().optional(),
   name: Joi.string().trim().optional(),
   timeMinutes: Joi.number().min(0).optional().default(0),
+  negativeMarks: Joi.number().min(0).optional().default(1),
+  contentType: Joi.string().valid("text", "image").optional().default("text"),
 });
 
 const createAiQuestionBankWithQuestions = Joi.object({
@@ -128,6 +131,7 @@ const createAiQuestionBankWithQuestions = Joi.object({
   generationTopic: Joi.string().trim().allow("", null).optional(),
   aiProvider: Joi.string().trim().default("gemini"),
   useSectionWise: Joi.boolean().default(false),
+  negativeMarks: Joi.number().min(0).optional().default(1),
   sections: Joi.array()
     .items(sectionSchema)
     .when("useSectionWise", {

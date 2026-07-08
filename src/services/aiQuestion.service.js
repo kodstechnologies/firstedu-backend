@@ -1,31 +1,268 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Modality } from "@google/genai";
+import axios from "axios";
+import {
+    assertGenerationWorkflowAllowed,
+    assertTopicRelevanceEvaluationAllowed,
+    buildTopicRelevancePrompt,
+    buildCorrectnessAuditPrompt,
+    buildJeeAuthenticityAuditPrompt,
+    buildRegenerationEscalationBlock,
+    buildRegenerationQualityGatesBlock,
+    formatTopicRelevanceFeedbackBlock,
+    mergeValidationResults,
+    mergeCorrectnessAuditResults,
+    parseTopicRelevanceResponse,
+    parseCorrectnessAuditResponse,
+    parseAuthenticityAuditResponse,
+    REGEN_TARGET_SCORE,
+    GENERATE_INTENTS,
+    enrichQuestionsForDifficultyAudit,
+    sampleQuestionsForValidation,
+    TOPIC_RELEVANCE_MAX_SAMPLE,
+} from "./topicRelevanceValidation.service.js";
+import { runDeterministicCorrectnessAudit } from "./correctnessPreAudit.service.js";
+import {
+    buildCountPlanGuidanceBlock,
+    getCountInferenceContext,
+    isQuestionBankCountsMissing,
+    normalizeInferredPlan,
+    suggestRealisticDefaultPlan,
+    splitQuestionBankCountsIntoChunks,
+    countApiItemsFromQuestionCounts,
+    QB_GENERATION_CHUNK_SIZE,
+    computeChunkTierOffsets,
+    isParallelChunkGenerationEnabled,
+    QB_PARALLEL_CHUNK_CONCURRENCY,
+    runTasksWithConcurrency,
+} from "./aiQuestionCountInference.service.js";
 import { ApiError } from "../utils/ApiError.js";
+import { uploadImageToCloudinary } from "../utils/s3Upload.js";
+import {
+    getImageQuestionArchetype,
+    getImagePromptRulesForArchetype,
+    IMAGE_QUESTION_ARCHETYPES,
+    pickImageQuestionArchetype,
+} from "./imageQuestionArchetypes.js";
+import {
+    buildDifficultyCalibrationBlock,
+    detectExamProfile,
+    detectCatSection,
+    getFormatOnlyExampleNote,
+} from "./examDifficultyCalibration.js";
+import {
+    buildExamGenerationContextBlock,
+    buildExamAuthoringBlock,
+    buildExamToughnessBlock,
+    buildCorrectnessFirstGenerationBlock,
+    buildPreOutputCorrectnessChecklist,
+    buildGenerationCorrectnessMandatesBlock,
+    buildAutomatedAuditorDefectsBlock,
+    buildExplanationOptionLockBlock,
+    buildSolveFirstSkeletonCorrectnessBlock,
+    buildPostSolveSelfCheckBlock,
+    buildExamAnswerKeyLockBlock,
+    buildExamSolveThenWriteBlock,
+    buildExamDifficultyFloorBlock,
+    buildMathematicsDifficultyBlock,
+    buildChemistryNumericalAuthoringBlock,
+    buildPhysicsNumericalAuthoringBlock,
+    buildJeeAuthenticityGenerationBlock,
+    buildJeeExamPatternFromPlanBlock,
+    buildJeeFullPaperMixBlock,
+    isJeeFullPaperTopic,
+    buildPcmAuthoringBlock,
+    getGenerationTopicFocus,
+    isChemistryGenerationSubject,
+    isMathematicsGenerationSubject,
+    isPhysicsGenerationSubject,
+    buildCatSectionAuthoringBlock,
+} from "./examPromptContext.service.js";
+import {
+    buildPromptFirstQuestionBankPrompt,
+    isPromptFirstGenerationMode,
+} from "./examPromptFirst.service.js";
+import {
+    appendJsonOutputToComposedPrompt,
+    resolveComposedGenerationPrompt,
+} from "./examPromptComposer.service.js";
+import {
+    stripFlawedQuestionBankEntries,
+    flattenQuestionBankForCorrectnessAudit,
+} from "./correctnessPreAudit.service.js";
+import { resolveConceptArchetypeSteering } from "./conceptArchetypePlanner.service.js";
+import {
+    buildSolveFirstSkeletonPrompt,
+    getSolveFirstExamProfile,
+    getSolveFirstSubjectId,
+    parseSolveFirstSkeletons,
+    shouldUseSolveFirstGeneration,
+    skeletonsToQuestions,
+    SOLVE_FIRST_MAX_ATTEMPTS,
+    sanitizeQuestionStemEmbeddedOptions,
+    sanitizeBankQuestionForPipeline,
+} from "./questionSolveFirst.service.js";
+import {
+    applyDifficultySelfAuditGate,
+    applySkeletonDifficultySelfAuditGate,
+    DIFFICULTY_SELF_AUDIT_MIN_SCORE,
+    SKELETON_DIFFICULTY_SELF_AUDIT_MIN_SCORE,
+} from "./difficultySelfAudit.service.js";
+import {
+    reconcileQuestionBankWithIndependentVerify,
+} from "./questionNumericVerify.service.js";
+import {
+    repairSkeletonAuditRejections,
+    repairDifficultyRejectedQuestions,
+} from "./skeletonRepair.service.js";
+import {
+    buildHardQuestionMandateBlock,
+    isVeteranDifficultyEnabled,
+    isExamNativeVeteranGeneration,
+    isRepairOnFailEnabled,
+    isFinalizeDifficultyRegenEnabled,
+    isFinalizeTopUpEnabled,
+    getFinalizeTopUpMaxWaves,
+} from "./hardQuestionMandate.service.js";
+import {
+    buildCompetitiveExamPlanGenerationBlock,
+    buildCompetitiveExamPlanPrompt,
+    normalizeCompetitiveExamPlan,
+    resolveExamContextForGeneration,
+    suggestMinimalSubjectFallback,
+    buildGenerationPlanForEvaluation,
+    auditPatternCompliance,
+    enforceCatVarcFormatDefaults,
+    resolveExamTopicScope,
+} from "./competitiveExamPlan.service.js";
+import {
+    assignDifficultyTiersToQuestions,
+    buildDifficultyMixGenerationBlock,
+    buildDifficultyTierSlots,
+    normalizeQuestionTier,
+    buildBankDifficultyProfileBlock,
+    buildAssignedTierSlotsBlock,
+    buildPerTierExamCalibrationBlock,
+    countSelectableSlots,
+} from "./difficultyMix.service.js";
+import {
+    resolveGenerationDifficulty,
+    buildExamNativeDifficultyAuthorityBlock,
+} from "./examGenerationDifficulty.service.js";
+import {
+    INITIAL_GEN_DIFFICULTY_MATCH_TARGET,
+    runDeterministicDifficultyAudit,
+} from "./difficultyPreAudit.service.js";
+import {
+    resolveTargetedRegenerationCounts,
+    extractRegenerationTargetNumbers,
+} from "./regenerationTargeting.service.js";
+import {
+    loadPersistedArchetypes,
+    persistArchetypes,
+} from "./archetypeHistory.service.js";
+import { fetchExamReferenceBrief } from "./examReferenceResearch.service.js";
+import {
+    buildSubjectScopeBlock,
+    buildSubjectScopeBlockForGeneration,
+    resolveGenerationSubject,
+    resolveSubjectForGeneration,
+} from "./subjectDetection.js";
+import {
+    enrichPromptForExamPaperStyle,
+    EXAM_PAPER_IMAGE_DEFAULT_STYLE,
+    EXAM_PAPER_IMAGE_GENERATION_BLOCK,
+    EXAM_PAPER_IMAGE_QUESTION_RULES,
+    EXAM_PAPER_IMAGEN_SUFFIX,
+} from "./examPaperImageStyle.js";
+import {
+    parseJsonArrayFromAIText,
+    parseJsonObjectFromAIText,
+} from "../utils/aiJsonRepair.js";
+import { pipelineTrace, pipelineTraceSection, getActiveWorkflowLogKey } from "../utils/aiApiCallLogger.js";
+import { createPromptBasedGenerationRun } from "../utils/promptBasedGenerationLogger.js";
+import {
+    DEFAULT_IMAGEN_MODEL,
+    GEMINI_IMAGE_MODEL_IDS,
+    GEMINI_IMAGE_MODEL_OPTIONS,
+    getGeminiImageModelOptions,
+    getImageModelMeta,
+    isNanoBananaImageModel,
+    resolveGeminiImageModel,
+} from "./geminiImageModels.js";
+import {
+    GEMINI_TEXT_MODEL_IDS,
+    GEMINI_TEXT_MODEL_OPTIONS,
+    getGeminiTextModelOptions,
+    resolveGeminiTextModel,
+} from "./geminiTextModels.js";
 
-// Initialize Gemini 2.5 Flash
+export {
+    GEMINI_IMAGE_MODEL_IDS,
+    GEMINI_IMAGE_MODEL_OPTIONS,
+    getGeminiImageModelOptions,
+    GEMINI_TEXT_MODEL_IDS,
+    GEMINI_TEXT_MODEL_OPTIONS,
+    getGeminiTextModelOptions,
+};
+
+// Initialize Gemini client (model from GEMINI_TEXT_MODEL)
 const genAI = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY,
 });
 
+const geminiTextModel = () => resolveGeminiTextModel();
+
+const mixOptionsFromResolution = (difficultyResolution) => {
+    if (!difficultyResolution?.examCalibrated) return {};
+    return {
+        examProfile: difficultyResolution.examProfile,
+        examCalibrated: true,
+    };
+};
+
+if (process.env.GEMINI_API_KEY) {
+  console.log(`[gemini] text model: ${geminiTextModel()}`);
+}
+
 /**
  * Build a structured prompt for AI question generation
  */
-const buildPrompt = ({ topic, subject, classLevel, difficulty, numberOfQuestions }) => {
+const buildPrompt = ({ topic, subject, classLevel, difficulty, numberOfQuestions, categoryPaths = [], sectionName = "" }) => {
+    const resolvedSubject = resolveGenerationSubject({
+        topic,
+        subject,
+        classLevel,
+        categoryPaths,
+        sectionName,
+        bankName: topic,
+    });
+    const subjectBlock = buildSubjectScopeBlock(resolvedSubject);
+    const calibration = buildDifficultyCalibrationBlock({
+        topic,
+        subject: resolvedSubject.id || subject,
+        classLevel,
+        difficulty,
+        batchSize: numberOfQuestions,
+        mode: "text",
+        categoryPaths,
+        sectionName,
+    });
     return `You are an expert educator creating multiple-choice questions for competitive exams.
 
 Generate exactly ${numberOfQuestions} high-quality MCQ questions with the following specifications:
 
 **Topic:** ${topic}
-**Subject:** ${subject}
 **Class/Level:** ${classLevel}
 **Difficulty:** ${difficulty}
-
+${subjectBlock}
+${calibration}
 **CRITICAL INSTRUCTIONS:**
 1. Return ONLY a valid JSON array, no markdown, no code blocks, no extra text
 2. Each question must have exactly 4 options (A, B, C, D)
 3. Each question must have exactly ONE correct answer
 4. Include a clear explanation for the correct answer
 5. Questions should be appropriate for ${classLevel} level
-6. Difficulty should match "${difficulty}" level
+6. Difficulty must match the calibration above — NOT generic textbook exercises
 
 **Required JSON Format:**
 [
@@ -47,90 +284,45 @@ Generate exactly ${numberOfQuestions} high-quality MCQ questions with the follow
 - Ensure all questions are unique and relevant to the topic`;
 };
 
-/**
- * Clean AI response by removing markdown code blocks and extra whitespace
- */
-const cleanAIResponse = (responseText) => {
-    let cleaned = responseText.trim();
+const GEMINI_QB_GENERATION_TEMPERATURE = Math.min(
+    1,
+    Math.max(0, Number(process.env.GEMINI_QB_GENERATION_TEMPERATURE ?? 0.15))
+);
 
-    // Remove markdown code blocks
-    cleaned = cleaned.replace(/```json\s*/gi, '');
-    cleaned = cleaned.replace(/```\s*/g, '');
+const geminiJsonConfig = (temperature = GEMINI_QB_GENERATION_TEMPERATURE) => ({
+    responseMimeType: "application/json",
+    temperature,
+});
 
-    // Remove any leading/trailing whitespace
-    cleaned = cleaned.trim();
-
-    return cleaned;
-};
-
-const GEMINI_QB_MAX_ATTEMPTS = 3;
-const GEMINI_RETRY_DELAY_MS = 2000;
+const GEMINI_QB_MAX_ATTEMPTS = Math.max(
+    1,
+    Number(process.env.GEMINI_QB_MAX_ATTEMPTS) || 6
+);
+const GEMINI_RETRY_DELAY_MS = Math.max(
+    500,
+    Number(process.env.GEMINI_RETRY_DELAY_MS) || 4000
+);
+const GEMINI_RETRY_MAX_DELAY_MS = Math.max(
+    GEMINI_RETRY_DELAY_MS,
+    Number(process.env.GEMINI_RETRY_MAX_DELAY_MS) || 45000
+);
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** Extract the outermost JSON array (handles extra text before/after). */
-const extractJsonArraySubstring = (text) => {
-    const cleaned = cleanAIResponse(text);
-    const start = cleaned.indexOf("[");
-    if (start === -1) return cleaned;
-
-    let depth = 0;
-    let inString = false;
-    let escaped = false;
-
-    for (let i = start; i < cleaned.length; i++) {
-        const ch = cleaned[i];
-        if (inString) {
-            if (escaped) escaped = false;
-            else if (ch === "\\") escaped = true;
-            else if (ch === '"') inString = false;
-            continue;
-        }
-        if (ch === '"') inString = true;
-        else if (ch === "[") depth++;
-        else if (ch === "]") {
-            depth--;
-            if (depth === 0) return cleaned.slice(start, i + 1);
-        }
-    }
-
-    return cleaned.slice(start);
-};
-
-/** Fix common Gemini JSON mistakes (trailing commas, junk after array). */
-const repairJsonArrayString = (str) => {
-    let s = String(str || "").trim();
-    s = s.replace(/,\s*([\]}])/g, "$1");
-    const lastBracket = s.lastIndexOf("]");
-    if (lastBracket !== -1 && lastBracket < s.length - 1) {
-        s = s.slice(0, lastBracket + 1);
-    }
-    return s;
-};
-
 const parseJsonArrayFromAI = (rawText) => {
-    const candidates = [
-        () => cleanAIResponse(rawText),
-        () => extractJsonArraySubstring(rawText),
-        () => repairJsonArrayString(cleanAIResponse(rawText)),
-        () => repairJsonArrayString(extractJsonArraySubstring(rawText)),
-    ];
-
-    let lastError;
-    for (const build of candidates) {
-        try {
-            const parsed = JSON.parse(build());
-            if (Array.isArray(parsed)) return parsed;
-            lastError = new Error("Response is not a JSON array");
-        } catch (e) {
-            lastError = e;
-        }
+    try {
+        return parseJsonArrayFromAIText(rawText);
+    } catch (error) {
+        throw new ApiError(500, error.message);
     }
+};
 
-    throw new ApiError(
-        500,
-        `Failed to parse AI response: ${lastError?.message || "Invalid JSON"}. Please try again.`
-    );
+const parseJsonObjectFromAI = (rawText) => {
+    try {
+        return parseJsonObjectFromAIText(rawText);
+    } catch (error) {
+        throw new ApiError(500, error.message);
+    }
 };
 
 const isRateLimitGeminiError = (error) => {
@@ -138,15 +330,77 @@ const isRateLimitGeminiError = (error) => {
     return msg.includes("rate limit") || msg.includes("quota");
 };
 
-const isTransientGeminiError = (error) => {
-    const msg = String(error?.message || error || "").toLowerCase();
+/** Collect message + cause chain (Node fetch errors nest details in .cause). */
+const collectErrorText = (error) => {
+    const parts = [];
+    let cur = error;
+    for (let i = 0; i < 8 && cur; i++) {
+        if (cur.message) parts.push(String(cur.message));
+        if (cur.code) parts.push(String(cur.code));
+        if (cur.status) parts.push(String(cur.status));
+        if (cur.statusCode) parts.push(String(cur.statusCode));
+        cur = cur.cause;
+    }
+    return parts.join(" ").toLowerCase();
+};
+
+const isNetworkGeminiError = (error) => {
+    const msg = collectErrorText(error);
     return (
+        msg.includes("fetch failed") ||
+        msg.includes("econnreset") ||
+        msg.includes("etimedout") ||
+        msg.includes("enotfound") ||
+        msg.includes("econnrefused") ||
+        msg.includes("enetunreach") ||
+        msg.includes("socket hang up") ||
+        msg.includes("network error") ||
+        msg.includes("network request failed") ||
+        msg.includes("aborterror") ||
+        msg.includes("connect timeout") ||
+        msg.includes("und_err")
+    );
+};
+
+const isTransientGeminiError = (error) => {
+    const msg = collectErrorText(error);
+    return (
+        isNetworkGeminiError(error) ||
         msg.includes("503") ||
+        msg.includes("502") ||
+        msg.includes("504") ||
+        msg.includes("500") ||
+        msg.includes("429") ||
         msg.includes("unavailable") ||
         msg.includes("high demand") ||
         msg.includes("overloaded") ||
-        msg.includes("resource exhausted")
+        msg.includes("resource exhausted") ||
+        msg.includes("deadline") ||
+        msg.includes("temporarily") ||
+        msg.includes("try again") ||
+        msg.includes("internal error") ||
+        msg.includes("service unavailable")
     );
+};
+
+const getGeminiRetryDelayMs = (error, attempt) => {
+    const network = isNetworkGeminiError(error);
+    const rateLimited = isRateLimitGeminiError(error);
+    const base = network
+        ? GEMINI_RETRY_DELAY_MS * 2
+        : rateLimited
+          ? GEMINI_RETRY_DELAY_MS * 3
+          : GEMINI_RETRY_DELAY_MS;
+    const exponential = base * 2 ** (attempt - 1);
+    const jitter = Math.floor(Math.random() * 1000);
+    return Math.min(exponential + jitter, GEMINI_RETRY_MAX_DELAY_MS);
+};
+
+const isGeminiAvailabilityError = (error) => {
+    if (error instanceof ApiError && [429, 502, 503, 504].includes(error.statusCode)) {
+        return true;
+    }
+    return isTransientGeminiError(error) || isRateLimitGeminiError(error);
 };
 
 const isGeminiSafetyBlockError = (error) => {
@@ -179,9 +433,12 @@ const toGeminiQuestionBankError = (error) => {
             );
         }
         if (isTransientGeminiError(error)) {
+            const network = isNetworkGeminiError(error);
             return new ApiError(
                 503,
-                "Gemini is busy right now. Please wait a moment and try again."
+                network
+                    ? "Could not reach the Gemini API (network error). Check your internet connection and try again."
+                    : "Gemini is busy right now. Please wait a moment and try again."
             );
         }
         return error;
@@ -198,9 +455,12 @@ const toGeminiQuestionBankError = (error) => {
         );
     }
     if (isTransientGeminiError(error)) {
+        const network = isNetworkGeminiError(error);
         return new ApiError(
             503,
-            "Gemini is busy right now. Please wait a moment and try again."
+            network
+                ? "Could not reach the Gemini API (network error). Check your internet connection and try again."
+                : "Gemini is busy right now. Please wait a moment and try again."
         );
     }
     if (msg.includes("Failed to parse AI response")) {
@@ -211,12 +471,17 @@ const toGeminiQuestionBankError = (error) => {
 
 const isRetryableQuestionBankError = (error) => {
     if (isGeminiSafetyBlockError(error)) return false;
+    if (error instanceof ApiError) {
+        if ([429, 502, 503, 504].includes(error.statusCode)) return true;
+    }
     if (isTransientGeminiError(error) || isRateLimitGeminiError(error)) {
         return true;
     }
 
     const msg = String(error?.message || "");
     if (msg.includes("Failed to parse AI response")) return true;
+    if (msg.includes("Failed to parse image question")) return true;
+    if (msg.includes("AI returned invalid image question JSON")) return true;
     if (msg.includes("AI returned empty response")) return true;
     if (msg.includes("AI returned") && msg.includes("were requested")) return true;
     if (/Expected \d+ .* questions, got/.test(msg)) return true;
@@ -231,6 +496,8 @@ const isRetryableQuestionBankError = (error) => {
     if (msg.includes("connected needs")) return true;
     if (msg.includes("connected passage")) return true;
     if (/Passage \d+:/.test(msg)) return true;
+    if (msg.includes("missing a non-empty questions array")) return true;
+    if (msg.includes("combined response")) return true;
     return false;
 };
 
@@ -300,7 +567,12 @@ const callGeminiWithRetries = async (generateOnce) => {
                 attempt < GEMINI_QB_MAX_ATTEMPTS &&
                 isRetryableQuestionBankError(error)
             ) {
-                await sleep(GEMINI_RETRY_DELAY_MS * attempt);
+                const delayMs = getGeminiRetryDelayMs(error, attempt);
+                console.warn(
+                    `[gemini] attempt ${attempt}/${GEMINI_QB_MAX_ATTEMPTS} failed — retrying in ${delayMs}ms:`,
+                    collectErrorText(error).slice(0, 200)
+                );
+                await sleep(delayMs);
                 continue;
             }
             throw toGeminiQuestionBankError(error);
@@ -371,22 +643,333 @@ const buildQuestionBankPrompt = ({
     passageTrueFalseCount = 0,
     connectedCount = 0,
     excludeQuestionTexts = [],
+    categoryPaths = [],
+    sectionName = "",
+    subject = "",
+    topicRelevanceFeedback = null,
+    generateIntent = "initial",
+    maxSelectableSlots = 0,
+    examReferenceBlock = "",
+    competitiveExamPlan = null,
+    tierSlotOffset = 0,
+    totalBatchSelectable = null,
+    difficultyResolution = null,
 }) => {
+    const effectiveDifficulty =
+        difficultyResolution?.generationDifficulty || difficulty;
+    const mixOpts = mixOptionsFromResolution(difficultyResolution);
+    const examNativeDifficultyBlock = buildExamNativeDifficultyAuthorityBlock({
+        difficultyResolution,
+    });
     const resolvedPassageCount = passageCount || connectedCount || 0;
     const passageSubPerPassage =
         passageSingleCount + passageMultipleCount + passageTrueFalseCount;
     const passageSubTotal = resolvedPassageCount * passageSubPerPassage;
     const standaloneTotal = singleCount + multipleCount + trueFalseCount;
     const total = standaloneTotal + resolvedPassageCount;
+    const selectableForMix = standaloneTotal + passageSubTotal;
     const excludeBlock = formatExcludeBlock(excludeQuestionTexts);
+    const isEvaluationRegen =
+        generateIntent === "evaluation_regen" && topicRelevanceFeedback;
+    const resolvedSubject = resolveSubjectForGeneration({
+        generateIntent,
+        topicRelevanceFeedback,
+        topic,
+        bankName,
+        sectionName,
+        categoryPaths,
+        subject,
+    });
+    const examCtx = resolveExamContextForGeneration({
+        competitiveExamPlan,
+        bankName,
+        topic,
+        subject: resolvedSubject.id || subject,
+        sectionName,
+        categoryPaths,
+    });
+    const examProfile = examCtx.examProfile;
+    const catSection = examCtx.catSection;
+    const regenEscalationBlock = isEvaluationRegen
+        ? buildRegenerationEscalationBlock({
+              topic,
+              bankName,
+              sectionName,
+              categoryPaths,
+              examProfile,
+              topicRelevanceFeedback,
+              maxSelectableSlots,
+          })
+        : "";
+    const initialQualityGatesBlock = !isEvaluationRegen
+        ? buildRegenerationQualityGatesBlock({
+              topic,
+              bankName,
+              examProfile,
+              maxSelectableSlots,
+              generateIntent: "initial",
+          })
+        : "";
+    const generationCorrectnessMandatesBlock = !isEvaluationRegen
+        ? buildGenerationCorrectnessMandatesBlock({ examProfile })
+        : "";
+    const automatedAuditorDefectsBlock = buildAutomatedAuditorDefectsBlock({
+        examProfile,
+    });
+    const explanationOptionLockBlock = buildExplanationOptionLockBlock({
+        examProfile,
+    });
+    const relevanceFeedbackBlock = isEvaluationRegen
+        ? ""
+        : formatTopicRelevanceFeedbackBlock(topicRelevanceFeedback);
+    const subjectBlock = buildSubjectScopeBlockForGeneration({
+        generateIntent,
+        topicRelevanceFeedback,
+        resolvedSubject,
+        topic,
+        bankName,
+        categoryPaths,
+        examProfile,
+    });
+    const difficultyMixBlock = buildDifficultyMixGenerationBlock({
+        bankDifficulty: effectiveDifficulty,
+        batchSize: selectableForMix || total,
+        examProfile,
+        examCalibrated: difficultyResolution?.examCalibrated || false,
+    });
+    const batchSelectableTotal =
+        totalBatchSelectable != null
+            ? totalBatchSelectable
+            : selectableForMix || total;
+    const fullTierSlots = buildDifficultyTierSlots(
+        batchSelectableTotal,
+        effectiveDifficulty,
+        mixOpts
+    );
+    const chunkTierSlots = fullTierSlots.slice(
+        tierSlotOffset,
+        tierSlotOffset + (selectableForMix || total)
+    );
+    const bankDifficultyProfileBlock = buildBankDifficultyProfileBlock({
+        bankDifficulty: effectiveDifficulty,
+        examProfile,
+    });
+    const assignedTierSlotsBlock = buildAssignedTierSlotsBlock({
+        tierSlots: chunkTierSlots,
+        examProfile,
+        slotOffset: tierSlotOffset,
+    });
+    const perTierExamCalibrationBlock = buildPerTierExamCalibrationBlock({
+        examProfile,
+        hardOnly: difficultyResolution?.examCalibrated || false,
+    });
+    const calibration = isEvaluationRegen
+        ? ""
+        : buildDifficultyCalibrationBlock({
+              bankName,
+              topic,
+              subject: resolvedSubject.id || "",
+              difficulty: effectiveDifficulty,
+              batchSize: selectableForMix || standaloneTotal,
+              mode: "text",
+              categoryPaths,
+              sectionName,
+              catSection,
+          });
+    const examContextBlock = !isEvaluationRegen
+        ? buildExamGenerationContextBlock({
+              examProfile,
+              topic,
+              bankName,
+              sectionName,
+              categoryPaths,
+              resolvedSubject,
+              difficulty: effectiveDifficulty,
+              catSection,
+              batchSize: selectableForMix || total,
+          })
+        : "";
+    const examAuthoringBlock = isEvaluationRegen
+        ? ""
+        : buildExamAuthoringBlock({ examProfile });
+    const examToughnessBlock = isEvaluationRegen
+        ? ""
+        : buildExamToughnessBlock({
+              examProfile,
+              batchSize: standaloneTotal || total,
+              difficulty: effectiveDifficulty,
+              catSection,
+          });
+    const examAnswerKeyLockBlock = buildExamAnswerKeyLockBlock();
+    const examDifficultyFloorBlock = buildExamDifficultyFloorBlock({
+        examProfile,
+        difficulty: effectiveDifficulty,
+        catSection,
+    });
+    const examSolveThenWriteBlock = buildExamSolveThenWriteBlock();
+    const isMultiSubjectPlan =
+        Array.isArray(competitiveExamPlan?.subjects) &&
+        competitiveExamPlan.subjects.length > 1;
+    const usePcmAuthoringBlock =
+        isMultiSubjectPlan ||
+        isJeeFullPaperTopic({ topic, bankName, categoryPaths, sectionName });
+    const pcmAuthoringBlock =
+        !isEvaluationRegen &&
+        (isMultiSubjectPlan ||
+            isJeeFullPaperTopic({ topic, bankName, categoryPaths, sectionName }))
+            ? buildPcmAuthoringBlock({ examProfile })
+            : "";
+    const mathematicsDifficultyBlock =
+        !usePcmAuthoringBlock &&
+        !isMultiSubjectPlan &&
+        isMathematicsGenerationSubject({
+            resolvedSubject,
+            topic,
+            bankName,
+            categoryPaths,
+            sectionName,
+        })
+            ? buildMathematicsDifficultyBlock({ examProfile, difficulty })
+            : "";
+    const physicsNumericalBlock =
+        !usePcmAuthoringBlock &&
+        !isMultiSubjectPlan &&
+        isPhysicsGenerationSubject({
+            resolvedSubject,
+            topic,
+            bankName,
+            categoryPaths,
+            sectionName,
+        })
+            ? buildPhysicsNumericalAuthoringBlock({ examProfile })
+            : "";
+    const chemistryNumericalBlock =
+        !usePcmAuthoringBlock &&
+        !isMultiSubjectPlan &&
+        isChemistryGenerationSubject({
+            resolvedSubject,
+            topic,
+            bankName,
+            categoryPaths,
+            sectionName,
+        })
+            ? buildChemistryNumericalAuthoringBlock({ examProfile })
+            : "";
+    const catSectionAuthoringBlock = buildCatSectionAuthoringBlock({
+        catSection,
+        passageCount: resolvedPassageCount,
+        singleCount,
+        passageSingleCount,
+    });
+    const competitivePlanBlock = competitiveExamPlan
+        ? buildCompetitiveExamPlanGenerationBlock(competitiveExamPlan)
+        : "";
+    const jeeFullPaperBlock =
+        !isEvaluationRegen &&
+        !competitiveExamPlan &&
+        (examProfile === "jee_main" || examProfile === "jee_advanced") &&
+        (examCtx.isFullPaper ||
+            isJeeFullPaperTopic({ topic, bankName, categoryPaths, sectionName }))
+            ? buildJeeFullPaperMixBlock({
+                  examProfile,
+                  difficulty,
+                  batchSize: standaloneTotal || total,
+              })
+            : "";
+    const jeeAuthenticityBlock =
+        !isEvaluationRegen &&
+        (examProfile === "jee_main" || examProfile === "jee_advanced")
+            ? buildJeeAuthenticityGenerationBlock({
+                  examProfile,
+                  difficulty,
+                  batchSize: standaloneTotal || total,
+                  sectionName,
+                  paperNumber: competitiveExamPlan?.paperNumber ?? null,
+              })
+            : "";
+    const hardMandateBlock = isEvaluationRegen
+        ? ""
+        : buildHardQuestionMandateBlock({
+              examProfile,
+              tier: effectiveDifficulty,
+              examCalibrated: difficultyResolution?.examCalibrated || false,
+          });
+    const jeePatternFromPlanBlock =
+        !isEvaluationRegen &&
+        competitiveExamPlan &&
+        (examProfile === "jee_main" || examProfile === "jee_advanced")
+            ? buildJeeExamPatternFromPlanBlock(competitiveExamPlan)
+            : "";
+    const exampleNote = getFormatOnlyExampleNote(examProfile, catSection);
+    const syllabusFocusRaw = getGenerationTopicFocus({ topic, sectionName, bankName });
+    const syllabusFocus =
+        competitiveExamPlan?.topicScope ||
+        resolveExamTopicScope({
+            topicScope: "",
+            topic,
+            bankName,
+            sectionName,
+            categoryPaths,
+            examProfile,
+            catSection,
+            subjects: competitiveExamPlan?.subjects || [],
+        }) ||
+        syllabusFocusRaw ||
+        topic;
+    const formatExample = {
+        questionType: "single",
+        difficultyTier: "hard",
+        questionText:
+            "Sample stem with exam-appropriate setup and constraints — replace with a real question for this topic.",
+        options: ["Option A text", "Option B text", "Option C text", "Option D text"],
+        correctAnswer: "B",
+        explanation:
+            "Concise proof showing why option B is correct — same conclusion as correctAnswer.",
+    };
+    const correctnessFirstBlock = buildCorrectnessFirstGenerationBlock({
+        examProfile,
+        catSection,
+    });
+    const preOutputCorrectnessChecklist = buildPreOutputCorrectnessChecklist({
+        examProfile,
+    });
+    const postSolveSelfCheckBlock = buildPostSolveSelfCheckBlock();
     return `You are an expert educator creating exam questions for an Indian competitive-education platform.
-
+${correctnessFirstBlock}
+${generationCorrectnessMandatesBlock}
+${automatedAuditorDefectsBlock}
+${explanationOptionLockBlock}
+${examNativeDifficultyBlock}
+${postSolveSelfCheckBlock}
+${regenEscalationBlock}
+${initialQualityGatesBlock}
 Generate exactly ${total} top-level items for a question bank with these specifications:
 
 **Question bank name:** ${bankName}
-**Topic / syllabus focus:** ${topic}
-**Difficulty:** ${difficulty}
-
+**Topic / syllabus focus (AUTHORITATIVE — generate for this, not the category path):** ${syllabusFocus || topic}
+**Bank difficulty profile:** ${effectiveDifficulty}${difficultyResolution?.examCalibrated ? " (exam-native — all questions hard; UI difficulty ignored)" : " (controls per-question tier mix below — NOT one uniform tier for all items)"}
+${difficultyMixBlock}
+${bankDifficultyProfileBlock}
+${perTierExamCalibrationBlock}
+${assignedTierSlotsBlock}
+${subjectBlock}
+${examContextBlock}
+${examReferenceBlock}
+${examAuthoringBlock}
+${catSectionAuthoringBlock}
+${examDifficultyFloorBlock}
+${examSolveThenWriteBlock}
+${pcmAuthoringBlock}
+${mathematicsDifficultyBlock}
+${physicsNumericalBlock}
+${chemistryNumericalBlock}
+${competitivePlanBlock}
+${jeePatternFromPlanBlock}
+${jeeFullPaperBlock}
+${jeeAuthenticityBlock}
+${hardMandateBlock}
+${examToughnessBlock}
+${calibration}
 **Standalone questions (NOT based on any reading passage):**
 - Single correct (one answer): ${singleCount}
 - Multiple correct (two or more answers): ${multipleCount}
@@ -399,10 +982,10 @@ Generate exactly ${total} top-level items for a question bank with these specifi
   - Multiple correct (per passage): ${passageMultipleCount}
   - True/False (per passage): ${passageTrueFalseCount}
 - Total passage sub-questions across all passages: ${passageSubTotal} (${resolvedPassageCount} passage(s) × ${passageSubPerPassage} question(s) each)
-${excludeBlock}
+${relevanceFeedbackBlock}${excludeBlock}
 **CRITICAL INSTRUCTIONS:**
 1. Return ONLY a valid JSON array — no markdown, no code fences, no extra text.
-2. Each standalone item must include: questionType, questionText, options, correctAnswer, explanation.
+2. Each standalone item must include: questionType, difficultyTier, questionText, options, correctAnswer, explanation. Each passage sub-question must include difficultyTier.
 3. questionType must be exactly one of: "single", "multiple", "true_false", "connected".
 4. For "single": exactly 4 options; correctAnswer is one letter "A", "B", "C", or "D".
 5. For "multiple": exactly 4 options; correctAnswer is an array of letters, e.g. ["A","C"] (at least 2 correct).
@@ -410,24 +993,25 @@ ${excludeBlock}
 7. For "connected" (reading passage): include title (short label), passage (reading paragraph, 80–250 words), and subQuestions array with exactly ${passageSubPerPassage} sub-question(s) per passage (${passageSingleCount} single, ${passageMultipleCount} multiple, ${passageTrueFalseCount} true_false in EACH passage). Sub-questions must use only types single, multiple, or true_false. Each sub-question must be answerable ONLY from its passage. Do NOT repeat standalone questions as passage sub-questions. Do NOT put all singles in passage 1 and all true/false in passage 2 — every passage must follow the per-passage mix above.
 8. Every standalone question and every passage sub-question MUST have a clear explanation (minimum one sentence).
 9. Items must be unique within this response AND must not duplicate or closely paraphrase any question listed under "ALREADY SHOWN TO THE USER" above.
-10. Questions must be accurate and appropriate for ${difficulty} difficulty.
-11. Use Indian curriculum context where relevant (CBSE, JEE, NEET, etc.) when the topic fits.
+10. Every question MUST match its assigned difficultyTier from the DIFFICULTY MIX block and satisfy the calibration above. Never output chapter-test, homework, or trivial one-step items at any tier — if a draft feels too easy for its tier, rewrite harder before output.
+11. **Correctness gate:** Every item must pass solve-then-write and answer-key-lock checks — computed answer in one option, correctAnswer matches, explanation derives the same value, four distinct options, no draft meta-text. Discard and replace any failing draft; never return knowingly broken questions.
+12. Use Indian curriculum context where relevant (CBSE, JEE, NEET, etc.) when the topic fits.
+${isEvaluationRegen ? `13. **REGEN ONLY:** Every returned question must pass the REGENERATION QUALITY GATES above — if any draft would keep the set below ${REGEN_TARGET_SCORE}/100 topic alignment, replace it before output.\n` : `13. **Every returned question must pass the GENERATION QUALITY GATES and CORRECTNESS MANDATES above** — if any draft would fail the automated factual auditor, replace it before output.\n`}
 
 **FORMATTING RULES (mandatory):**
-12. questionText, passage, title, and explanation: plain text only — NO backticks, NO markdown.
-13. options[] values are ANSWER TEXT ONLY — do NOT prefix with "A)", "B.", "(C)", or similar.
-14. For "multiple": questionText MUST include "Select all that apply". At least ONE option must be incorrect.
-15. For "true_false": options must be exactly ["True", "False"].
+${isEvaluationRegen ? "14" : "14"}. questionText, passage, title, and explanation: plain text only — NO backticks, NO markdown.
+${isEvaluationRegen ? "15" : "15"}. options[] values are ANSWER TEXT ONLY — do NOT prefix with "A)", "B.", "(C)", or similar.
+${isEvaluationRegen ? "16" : "16"}. For "multiple": questionText MUST include "Select all that apply". At least ONE option must be incorrect.
+${isEvaluationRegen ? "17" : "17"}. For "true_false": options must be exactly ["True", "False"].
+${isEvaluationRegen ? "18" : "18"}. **Valid JSON only:** no LaTeX or backslashes in text fields; use Unicode for math (°, ², ×, ≈). No raw line breaks inside strings — use spaces. Never use the double-quote character inside string values.
+${isEvaluationRegen ? "19" : "19"}. **explanation:** maximum 3 sentences and 500 characters — concise key steps only, not a full textbook solution. Must end at the same value as the marked option; no meta-commentary about fixing or re-checking.
 
+${preOutputCorrectnessChecklist}
+${examAnswerKeyLockBlock}
+${exampleNote}
 **Required JSON format (example structure only):**
 [
-  {
-    "questionType": "single",
-    "questionText": "What is 2 + 2?",
-    "options": ["3", "4", "5", "6"],
-    "correctAnswer": "B",
-    "explanation": "2 + 2 equals 4, which is option B."
-  },
+  ${JSON.stringify(formatExample, null, 2).split("\n").join("\n  ")},
   {
     "questionType": "connected",
     "title": "Reading: Photosynthesis",
@@ -435,6 +1019,7 @@ ${excludeBlock}
     "subQuestions": [
       {
         "questionType": "single",
+        "difficultyTier": "medium",
         "questionText": "According to the passage, where does photosynthesis primarily occur?",
         "options": ["Roots", "Leaves", "Stem", "Flowers"],
         "correctAnswer": "B",
@@ -452,6 +1037,104 @@ ${excludeBlock}
 ]
 
 Generate exactly ${singleCount} standalone single, ${multipleCount} standalone multiple, ${trueFalseCount} standalone true_false, and ${resolvedPassageCount} connected passage item(s). Each passage must have exactly ${passageSingleCount} single, ${passageMultipleCount} multiple, and ${passageTrueFalseCount} true_false sub-questions (${passageSubTotal} passage sub-questions in total). Return ONLY the JSON array.`;
+};
+
+const buildQuestionBankCountOnlyPrompt = ({
+    topic,
+    bankName,
+    difficulty,
+    categoryPaths = [],
+    sectionName = "",
+    subject = "",
+    topicRelevanceFeedback = null,
+    generateIntent = "initial",
+    maxApiItems,
+    maxSelectableSlots = 10,
+    examProfile,
+    catSection,
+    resolvedSubject,
+}) => {
+    const isEvaluationRegen =
+        generateIntent === "evaluation_regen" && topicRelevanceFeedback;
+    const relevanceFeedbackBlock = isEvaluationRegen
+        ? ""
+        : formatTopicRelevanceFeedbackBlock(topicRelevanceFeedback);
+    const subjectBlock = buildSubjectScopeBlockForGeneration({
+        generateIntent,
+        topicRelevanceFeedback,
+        resolvedSubject,
+        topic,
+        bankName,
+        categoryPaths,
+        examProfile,
+    });
+    const calibration = buildDifficultyCalibrationBlock({
+        bankName,
+        topic,
+        subject: resolvedSubject.id || "",
+        difficulty,
+        batchSize: maxApiItems,
+        mode: "text",
+        categoryPaths,
+        sectionName,
+    });
+    const countGuidance = buildCountPlanGuidanceBlock({
+        topic,
+        bankName,
+        difficulty,
+        sectionName,
+        subject: resolvedSubject.label || subject,
+        categoryPaths,
+        examProfile,
+        catSection,
+        maxApiItems,
+        maxSelectableSlots,
+    });
+    const syllabusFocus =
+        resolveExamTopicScope({
+            topicScope: "",
+            topic,
+            bankName,
+            sectionName,
+            categoryPaths,
+            examProfile,
+            catSection,
+            subjects: [],
+        }) ||
+        getGenerationTopicFocus({ topic, sectionName, bankName }) ||
+        topic;
+
+    return `You are an expert educator planning question batches for an Indian competitive-education platform.
+
+${countGuidance}
+
+**Question bank name:** ${bankName}
+**Topic / syllabus focus (AUTHORITATIVE):** ${syllabusFocus}
+**Difficulty:** ${difficulty}
+${subjectBlock}
+${calibration}
+${relevanceFeedbackBlock}
+
+**YOUR TASK:** Decide ONLY how many questions to generate — do NOT write any question text.
+
+Return ONLY valid JSON (no markdown):
+{
+  "plan": {
+    "singleCount": 0,
+    "multipleCount": 0,
+    "trueFalseCount": 0,
+    "passageCount": 0,
+    "passageSingleCount": 0,
+    "passageMultipleCount": 0,
+    "passageTrueFalseCount": 0,
+    "rationale": "One short sentence why this count fits the topic and exam"
+  }
+}
+
+**PLAN RULES:**
+- Decide HOW MANY questions only. Standalone questions are always single-choice (multipleCount=0, trueFalseCount=0).
+- Passages only if the topic needs reading comprehension; passage sub-questions are single-choice only.
+- Selectable total (standalone + passageCount × passage sub-questions) must match the slot target in COUNT PLANNING.`;
 };
 
 const letterToIndex = (letter) => {
@@ -547,14 +1230,23 @@ const parseQuestionBankAIItem = (q, index, labelPrefix = null) => {
         }
     }
 
-    return {
+    const tier = normalizeQuestionTier(q.difficultyTier || q.difficulty);
+
+    const built = {
         questionType,
         questionText: finalQuestionText,
         options,
         correctIndex,
         multipleCorrectIndexes,
         explanation,
+        ...(tier ? { difficulty: tier } : {}),
+        ...(Array.isArray(q._solveSteps) ? { _solveSteps: q._solveSteps } : {}),
+        ...(Array.isArray(q.solveSteps) ? { _solveSteps: q.solveSteps } : {}),
+        ...(q._conceptSlot || q.conceptSlot
+            ? { _conceptSlot: q._conceptSlot || q.conceptSlot }
+            : {}),
     };
+    return built;
 };
 
 const parseConnectedAIItem = (q, index) => {
@@ -589,8 +1281,10 @@ const parseConnectedAIItem = (q, index) => {
     };
 };
 
-const parseQuestionBankAIResponse = (rawText, expectedCounts) => {
-    const questions = parseJsonArrayFromAI(rawText);
+const parseQuestionBankAIItems = (questions, expectedCounts) => {
+    if (!Array.isArray(questions)) {
+        throw new ApiError(500, "AI returned invalid questions array");
+    }
 
     const expectedTotal =
         expectedCounts.singleCount +
@@ -718,6 +1412,1713 @@ const parseQuestionBankAIResponse = (rawText, expectedCounts) => {
     return parsed;
 };
 
+const parseQuestionBankAIResponse = (rawText, expectedCounts) => {
+    const questions = parseJsonArrayFromAI(rawText);
+    return parseQuestionBankAIItems(questions, expectedCounts);
+};
+
+/** Soft parse for prompt-first fill: keep valid items, ignore exact count mismatch. */
+const parseQuestionBankAIResponseSoft = (rawText) => {
+    const questions = parseJsonArrayFromAI(rawText);
+    if (!Array.isArray(questions)) {
+        throw new ApiError(500, "AI returned invalid questions array");
+    }
+    const parsed = [];
+    for (let i = 0; i < questions.length; i++) {
+        try {
+            const q = questions[i];
+            if (q?.questionType === "connected") {
+                parsed.push(parseConnectedAIItem(q, i));
+            } else {
+                parsed.push(parseQuestionBankAIItem(q, i));
+            }
+        } catch (err) {
+            pipelineTrace("PROMPT_FIRST_ITEM_PARSE_SKIP", {
+                index: i + 1,
+                error: err?.message || String(err),
+            });
+        }
+    }
+    return parsed;
+};
+
+const inferredPlanToExpectedCounts = (plan) => ({
+    singleCount: plan.singleCount,
+    multipleCount: plan.multipleCount,
+    trueFalseCount: plan.trueFalseCount,
+    connectedCount: plan.passageCount,
+    passageCount: plan.passageCount,
+    passageSingleCount: plan.passageSingleCount,
+    passageMultipleCount: plan.passageMultipleCount,
+    passageTrueFalseCount: plan.passageTrueFalseCount,
+});
+
+const upscaleRegenerationCountsToSlots = resolveTargetedRegenerationCounts;
+
+const GEMINI_QB_CORRECTNESS_REPAIR_PASSES = isRepairOnFailEnabled()
+    ? Math.min(
+          3,
+          Math.max(
+              0,
+              Number(
+                  process.env.AI_QB_CORRECTNESS_REPAIR_PASSES ??
+                      process.env.GEMINI_QB_CORRECTNESS_REPAIR_PASSES ??
+                      3
+              )
+          )
+      )
+    : 0;
+const GEMINI_QB_REPAIR_BATCH_SIZE = Math.min(
+    12,
+    Math.max(1, Number(process.env.GEMINI_QB_REPAIR_BATCH_SIZE ?? 6))
+);
+
+const unwrapFinalizedQuestions = (result) =>
+    Array.isArray(result) ? result : result?.questions || [];
+
+const unwrapFinalizedStats = (result) =>
+    Array.isArray(result) ? {} : result?.stats || {};
+
+const questionToRepairPayload = (q) => {
+    const questionType = q.questionType || "single";
+    if (questionType === "multiple") {
+        const letters = (q.multipleCorrectIndexes || [q.correctIndex])
+            .map((i) => String.fromCharCode(65 + i));
+        return {
+            questionType,
+            questionText: q.questionText,
+            options: q.options,
+            correctAnswer: letters,
+            explanation: q.explanation,
+        };
+    }
+    if (questionType === "true_false") {
+        return {
+            questionType,
+            questionText: q.questionText,
+            options: q.options?.slice(0, 2) || ["True", "False"],
+            correctAnswer: q.correctIndex === 1 ? "False" : "True",
+            explanation: q.explanation,
+        };
+    }
+    const letter = String.fromCharCode(65 + (q.correctIndex ?? 0));
+    return {
+        questionType,
+        questionText: q.questionText,
+        options: q.options,
+        correctAnswer: letter,
+        explanation: q.explanation,
+    };
+};
+
+const getQuestionAtRef = (questions, ref) => {
+    if (ref?.subIndex != null) {
+        return questions[ref.topIndex]?.subQuestions?.[ref.subIndex];
+    }
+    return questions[ref.topIndex];
+};
+
+const applyRepairedQuestions = (questions, flawedEntries, repairedRaw) => {
+    const next = questions.map((q) =>
+        q.questionType === "connected"
+            ? { ...q, subQuestions: [...(q.subQuestions || [])] }
+            : { ...q }
+    );
+    for (let i = 0; i < flawedEntries.length; i++) {
+        const entry = flawedEntries[i];
+        const parsed = parseQuestionBankAIItem(
+            repairedRaw[i],
+            entry.auditItem.sampleNumber - 1,
+            `Repair Q${entry.auditItem.sampleNumber}`
+        );
+        if (entry.ref.subIndex != null) {
+            next[entry.ref.topIndex].subQuestions[entry.ref.subIndex] = parsed;
+        } else {
+            next[entry.ref.topIndex] = parsed;
+        }
+    }
+    return next;
+};
+
+const buildQuestionBankRepairPrompt = ({
+    topic,
+    bankName,
+    difficulty,
+    flawedEntries,
+    questions,
+    examProfile = "competitive",
+}) => {
+    const itemBlocks = flawedEntries
+        .map((entry, idx) => {
+            const q = getQuestionAtRef(questions, entry.ref);
+            const payload = questionToRepairPayload(q);
+            const issueLines = [...new Set((entry.issues || []).map((i) => i.issue))]
+                .slice(0, 4)
+                .join("; ");
+            return `
+### Replacement ${idx + 1} (questionType: ${payload.questionType})
+**Automated defects:** ${issueLines || "answer-key / explanation mismatch"}
+**Failed draft — do NOT copy; write a new question on the same concept:**
+${JSON.stringify(payload, null, 2)}`;
+        })
+        .join("\n");
+
+    return `You are repairing ${flawedEntries.length} flawed MCQ(s) for an exam question bank.
+
+**Topic:** ${topic || bankName}
+**Difficulty:** ${difficulty}
+
+${buildCorrectnessFirstGenerationBlock({ examProfile })}
+${buildGenerationCorrectnessMandatesBlock({ examProfile })}
+${buildAutomatedAuditorDefectsBlock({ examProfile })}
+${buildExplanationOptionLockBlock({ examProfile })}
+${buildPostSolveSelfCheckBlock()}
+${buildExamSolveThenWriteBlock()}
+${buildExamAnswerKeyLockBlock()}
+${buildPreOutputCorrectnessChecklist({ examProfile })}
+
+**TASK:** Return ONLY a valid JSON array with exactly **${flawedEntries.length}** replacement object(s), in the same order as below.
+Each replacement must use the same questionType as the failed draft, test the same syllabus concept, and pass every factual correctness gate (solve → option match → correctAnswer → explanation lock → distinct options).
+Write new stems — do not lightly edit broken drafts. The factual auditor will reject wrong keys, explanation mismatches, missing computed values in options, and duplicate options.
+
+**Common defects you MUST fix (do not repeat these patterns):**
+- Explanation derives **4.926 atm** but options list **926 atm** — include the full decimal value with unit in exactly one option.
+- All four options identical (e.g. all "1") or all start with "0" — write four **distinct** plausible values.
+- Ratio/orbit questions: if explanation gives **4:1**, options must include **4:1** (or equivalent) and correctAnswer must point to it.
+- pH/Ka/de Broglie: use proper decimals and scientific notation (1.0 × 10⁻⁵), never bare integers or \`0 x 10^-6\`.
+- Bond order / MO theory: if explanation computes **2.5**, one option must say **2.5** — not a different integer.
+- Mixing molarity: explanation **6 M** but options **0.32 M** — use total moles ÷ total volume (L).
+- pH buffer: invalid option **347** — pH must be **0–14**.
+- Arrhenius two-T: explanation ends at intermediate **1.0705** but options are times in seconds — final **time** must be in one option.
+
+${itemBlocks}
+
+**Output rules:** JSON array only — no markdown. options[] = answer text only (no A)/B. prefixes). explanation max 3 sentences, must match correctAnswer.`;
+};
+
+/** Regenerate individual flawed questions (one LLM call per entry). */
+const repairFlawedEntriesBatch = async ({
+    questions,
+    flawedEntries,
+    topic,
+    bankName,
+    difficulty,
+    generationProvider = "gemini",
+    pass = 0,
+}) => {
+    if (!flawedEntries?.length) return questions;
+
+    const provider = generationProvider === "openai" ? "openai" : "gemini";
+    const examProfile = detectExamProfile({ topic, bankName });
+    let current = questions;
+    let repairedAny = false;
+
+    pipelineTrace("CORRECTNESS_REPAIR_PASS", {
+        pass: pass + 1,
+        provider,
+        mode: "per-question",
+        totalFlawed: flawedEntries.length,
+    });
+
+    for (const entry of flawedEntries.slice(0, GEMINI_QB_REPAIR_BATCH_SIZE)) {
+        const prompt = buildQuestionBankRepairPrompt({
+            topic,
+            bankName,
+            difficulty,
+            flawedEntries: [entry],
+            questions: current,
+            examProfile,
+        });
+
+        const repairedRaw = await callQuestionBankGenerationLLM(prompt, {
+            generationProvider: provider,
+            temperature: 0.1,
+        });
+        const arr = parseJsonArrayFromAI(repairedRaw);
+        if (!Array.isArray(arr) || arr.length !== 1) {
+            pipelineTrace("CORRECTNESS_REPAIR_SKIP", {
+                pass: pass + 1,
+                questionNumber: entry.auditItem?.sampleNumber,
+                returned: Array.isArray(arr) ? arr.length : 0,
+            });
+            continue;
+        }
+
+        current = applyRepairedQuestions(current, [entry], arr);
+        repairedAny = true;
+    }
+
+    return repairedAny ? current : questions;
+};
+
+const collectQuestionTextsFromBankQuestions = (questions = []) => {
+    const texts = [];
+    for (const q of questions) {
+        if (q.questionType === "connected") {
+            if (q.passage?.trim()) texts.push(q.passage.trim());
+            for (const sub of q.subQuestions || []) {
+                if (sub.questionText?.trim()) texts.push(sub.questionText.trim());
+            }
+        } else if (q.questionText?.trim()) {
+            texts.push(q.questionText.trim());
+        }
+    }
+    return texts;
+};
+
+export const shouldDeferQuestionBankValidation = ({
+    deferValidation,
+    generateIntent = "initial",
+    generationMode = "default",
+} = {}) => {
+    if (isPromptFirstGenerationMode(generationMode)) return false;
+    if (generateIntent === "evaluation_regen") return false;
+    // Veteran mode needs sync finalize + audits — deferred fast path ships template drills.
+    if (isVeteranDifficultyEnabled()) return false;
+    if (deferValidation === false) return false;
+    if (deferValidation === true) return true;
+    return process.env.AI_QB_DEFER_VALIDATION !== "0";
+};
+
+/** Prompt-first path: minimal sanitize only — no validation queue markers. */
+export const preparePromptFirstQuestions = (questions = []) =>
+    (questions || [])
+        .map((q, index) => {
+            const sanitized = sanitizeBankQuestionForPipeline(q);
+            if (!sanitized) return null;
+            return {
+                ...sanitized,
+                _questionIndex: index,
+            };
+        })
+        .filter(Boolean);
+
+export const prepareFastPathQuestions = (
+    questions = [],
+    { examCalibrated = false } = {}
+) =>
+    (questions || [])
+        .map((q, index) => {
+            const sanitized = sanitizeBankQuestionForPipeline(q);
+            if (!sanitized) return null;
+            return {
+                ...sanitized,
+                _validationStatus: "pending",
+                _questionIndex: index,
+            };
+        })
+        .filter(Boolean);
+
+/** After repair, drop items that still fail critical/major factual checks. */
+export const finalizeQuestionBankSuggestions = async ({
+    questions,
+    topic,
+    bankName,
+    difficulty,
+    generationProvider,
+    excludeQuestionTexts = [],
+    categoryPaths = [],
+    sectionName = "",
+    subject = "",
+    examReferenceBlock = "",
+    competitiveExamPlan = null,
+    generateIntent = "initial",
+    maxSelectableSlots = 0,
+    allowTopUp = true,
+    difficultyResolution = null,
+    topUpWave = 0,
+    skipDifficultyAudit = false,
+}) => {
+    const provider = generationProvider === "openai" ? "openai" : "gemini";
+    const effectiveDifficulty =
+        difficultyResolution?.generationDifficulty || difficulty;
+    const mixOpts = mixOptionsFromResolution(difficultyResolution);
+    const topUpBudgetRemaining = Math.max(
+        0,
+        getFinalizeTopUpMaxWaves() - topUpWave
+    );
+    let topUpWavesUsed = 0;
+    const canRunShallowTopUp = () =>
+        allowTopUp &&
+        isFinalizeTopUpEnabled() &&
+        topUpWavesUsed < topUpBudgetRemaining;
+
+    const runShallowReplacementBatch = async (
+        singleCountForTopUp,
+        { extraExclude = [], traceEvent, excludeFrom = null } = {}
+    ) => {
+        if (!canRunShallowTopUp() || singleCountForTopUp < 1) {
+            if (singleCountForTopUp > 0) {
+                pipelineTrace("FINALIZE_TOP_UP_SKIPPED", {
+                    reason: "budget_exhausted",
+                    requested: singleCountForTopUp,
+                    topUpWave,
+                    maxWaves: getFinalizeTopUpMaxWaves(),
+                });
+            }
+            return [];
+        }
+        pipelineTrace(traceEvent, {
+            count: singleCountForTopUp,
+            topUpWave: topUpWave + topUpWavesUsed,
+        });
+        try {
+            const topUpResult = await generateQuestionBankBatch({
+                topic,
+                bankName,
+                difficulty,
+                singleCount: singleCountForTopUp,
+                multipleCount: 0,
+                trueFalseCount: 0,
+                passageCount: 0,
+                passageSingleCount: 0,
+                passageMultipleCount: 0,
+                passageTrueFalseCount: 0,
+                excludeQuestionTexts: [
+                    ...excludeQuestionTexts,
+                    ...collectQuestionTextsFromBankQuestions(
+                        excludeFrom ?? sanitizedInput
+                    ),
+                    ...extraExclude,
+                ],
+                categoryPaths,
+                sectionName,
+                subject,
+                topicRelevanceFeedback: null,
+                generateIntent,
+                maxSelectableSlots,
+                examReferenceBlock,
+                competitiveExamPlan,
+                provider,
+                genTemperature: provider === "openai" ? 0.15 : 0.1,
+                allowTopUp: false,
+                forceOneShot: true,
+                skipFinalizeDifficultyAudit: true,
+                topUpWave: topUpWave + topUpWavesUsed + 1,
+                difficultyResolution,
+            });
+            const topUpQuestions = unwrapFinalizedQuestions(topUpResult);
+            topUpWavesUsed += 1;
+            pipelineTrace(`${traceEvent}_DONE`, {
+                added: topUpQuestions.length,
+                requested: singleCountForTopUp,
+            });
+            return topUpQuestions;
+        } catch (topUpErr) {
+            pipelineTrace(`${traceEvent}_FAILED`, {
+                error: topUpErr?.message || String(topUpErr),
+            });
+            return [];
+        }
+    };
+
+    pipelineTrace('FINALIZE_START', { inputCount: questions.length, provider });
+
+    const examProfileForGate = detectExamProfile({
+        bankName,
+        topic,
+        subject,
+        sectionName,
+        categoryPaths,
+    });
+
+    let sanitizedInput = (questions || [])
+        .map(sanitizeBankQuestionForPipeline)
+        .filter(Boolean);
+    const sanitizeDropped = (questions || []).length - sanitizedInput.length;
+    if (sanitizeDropped > 0) {
+        pipelineTrace("FINALIZE_SANITIZE_STRIPPED", { count: sanitizeDropped });
+    }
+
+    if (
+        sanitizeDropped > 0 &&
+        sanitizeDropped <= Math.max(1, GEMINI_QB_REPAIR_BATCH_SIZE)
+    ) {
+        const topUpQuestions = await runShallowReplacementBatch(sanitizeDropped, {
+            traceEvent: "FINALIZE_SANITIZE_TOP_UP",
+        });
+        if (topUpQuestions.length) {
+            sanitizedInput = [
+                ...sanitizedInput,
+                ...topUpQuestions
+                    .map(sanitizeBankQuestionForPipeline)
+                    .filter(Boolean),
+            ];
+        }
+    }
+
+    let selfAuditResult = { questions: sanitizedInput, rejectedCount: 0, rejected: [] };
+    if (!skipDifficultyAudit) {
+        selfAuditResult = await applyDifficultySelfAuditGate(
+            sanitizedInput,
+            {
+                topic,
+                bankName,
+                difficulty: effectiveDifficulty,
+                examProfile: examProfileForGate,
+                minScore: DIFFICULTY_SELF_AUDIT_MIN_SCORE,
+            },
+            {
+                callLlm: (auditPrompt) =>
+                    callQuestionBankGenerationLLM(auditPrompt, {
+                        generationProvider: provider,
+                        temperature: 0.1,
+                    }),
+            }
+        );
+        sanitizedInput = selfAuditResult.questions;
+    }
+
+    if (selfAuditResult.rejectedCount > 0) {
+        if (isRepairOnFailEnabled()) {
+            const repairedSingles = await repairDifficultyRejectedQuestions(
+                selfAuditResult.rejected,
+                { topic, bankName, examProfile: examProfileForGate },
+                {
+                    callLlm: (repairPrompt) =>
+                        callQuestionBankGenerationLLM(repairPrompt, {
+                            generationProvider: provider,
+                            temperature: 0.1,
+                        }),
+                    parseQuestion: (raw, index) =>
+                        parseQuestionBankAIItem(raw, index, "Difficulty repair"),
+                }
+            );
+            if (repairedSingles.length) {
+                sanitizedInput = [...sanitizedInput, ...repairedSingles];
+                pipelineTrace("FINALIZE_DIFFICULTY_REPAIRED", {
+                    repairedCount: repairedSingles.length,
+                    rejectedCount: selfAuditResult.rejectedCount,
+                });
+            } else {
+                pipelineTrace("FINALIZE_DIFFICULTY_SELF_AUDIT_STRIPPED", {
+                    rejectedCount: selfAuditResult.rejectedCount,
+                    minScore: DIFFICULTY_SELF_AUDIT_MIN_SCORE,
+                });
+            }
+        } else if (
+            isFinalizeDifficultyRegenEnabled() &&
+            selfAuditResult.rejectedCount <=
+                Math.max(1, GEMINI_QB_REPAIR_BATCH_SIZE)
+        ) {
+            const regenCount = selfAuditResult.rejectedCount;
+            pipelineTrace("FINALIZE_DIFFICULTY_REGEN", {
+                count: regenCount,
+                minScore: DIFFICULTY_SELF_AUDIT_MIN_SCORE,
+            });
+            const regenQuestions = await runShallowReplacementBatch(regenCount, {
+                extraExclude: selfAuditResult.rejected
+                    .map((r) => r.question?.questionText)
+                    .filter(Boolean),
+                traceEvent: "FINALIZE_DIFFICULTY_REGEN",
+            });
+            if (regenQuestions.length) {
+                sanitizedInput = [...sanitizedInput, ...regenQuestions];
+                pipelineTrace("FINALIZE_DIFFICULTY_REGEN_DONE", {
+                    added: regenQuestions.length,
+                    requested: regenCount,
+                });
+            } else {
+                pipelineTrace("FINALIZE_DIFFICULTY_REGEN_EMPTY", {
+                    requested: regenCount,
+                });
+            }
+        } else {
+            pipelineTrace("FINALIZE_DIFFICULTY_SELF_AUDIT_STRIPPED", {
+                rejectedCount: selfAuditResult.rejectedCount,
+                minScore: DIFFICULTY_SELF_AUDIT_MIN_SCORE,
+                regenEnabled: isFinalizeDifficultyRegenEnabled(),
+            });
+        }
+    }
+
+    let normalized = reconcileQuestionBankWithIndependentVerify(sanitizedInput).map(
+        sanitizeQuestionStemEmbeddedOptions
+    );
+    const reconcileAudit = runDeterministicCorrectnessAudit(
+        flattenQuestionBankForCorrectnessAudit(normalized).map((e) => e.auditItem)
+    );
+    pipelineTrace('FINALIZE_NUMERIC_RECONCILE', {
+        correctnessScore: reconcileAudit.correctnessScore,
+        issueCount: reconcileAudit.confirmedIssues?.length ?? 0,
+    });
+
+    const repairFn = GEMINI_QB_CORRECTNESS_REPAIR_PASSES
+        ? (current, flawedEntries, pass) =>
+              repairFlawedEntriesBatch({
+                  questions: current,
+                  flawedEntries,
+                  topic,
+                  bankName,
+                  difficulty: effectiveDifficulty,
+                  generationProvider: provider,
+                  pass,
+              })
+        : null;
+
+    let { questions: cleaned, strippedCount, repairedPasses, audit } =
+        await stripFlawedQuestionBankEntries(normalized, {
+            repairFn,
+            maxRepairPasses: GEMINI_QB_CORRECTNESS_REPAIR_PASSES,
+        });
+
+    pipelineTrace('FINALIZE_STRIP', {
+        strippedCount,
+        repairedPasses,
+        correctnessScore: audit?.correctnessScore,
+        styleScore: audit?.styleScore,
+        issueCount: audit?.confirmedIssues?.length ?? 0,
+    });
+    if (audit?.confirmedIssues?.length) {
+        pipelineTraceSection(
+            'stripped issues',
+            audit.confirmedIssues.slice(0, 20).map(
+                (i) => `Q${i.questionNumber}: ${i.issue}`
+            )
+        );
+    }
+
+    if (
+        strippedCount > 0 &&
+        strippedCount <= Math.max(1, GEMINI_QB_REPAIR_BATCH_SIZE)
+    ) {
+        pipelineTrace('FINALIZE_TOP_UP', {
+            count: strippedCount,
+            preAuditScore: audit?.correctnessScore,
+        });
+        console.log(
+            `[ai-qb] top-up: generating ${strippedCount} replacement(s) after stripping flawed items (pre-audit ${audit?.correctnessScore ?? "?"}/100)`
+        );
+        const topUpQuestions = await runShallowReplacementBatch(strippedCount, {
+            excludeFrom: cleaned,
+            traceEvent: "FINALIZE_TOP_UP",
+        });
+        if (topUpQuestions.length) {
+            cleaned = [...cleaned, ...topUpQuestions];
+        }
+    }
+
+    const stats = {
+        correctnessScore: audit?.correctnessScore,
+        styleScore: audit?.styleScore,
+        strippedCount,
+        repairedPasses,
+        difficultySelfAuditRejected: selfAuditResult.rejectedCount,
+        outputCount: cleaned.length,
+        confirmedIssueCount: audit?.confirmedIssues?.length ?? 0,
+    };
+
+    cleaned = assignDifficultyTiersToQuestions(
+        cleaned,
+        effectiveDifficulty,
+        mixOpts
+    );
+
+    if (generateIntent === GENERATE_INTENTS.INITIAL) {
+        const examProfile = detectExamProfile({
+            bankName,
+            topic,
+            subject,
+            sectionName,
+            categoryPaths,
+        });
+        const diffCtx = {
+            bankDifficulty: effectiveDifficulty,
+            examProfile,
+            examCalibrated: difficultyResolution?.examCalibrated || false,
+        };
+
+        const flatEntries = flattenQuestionBankForCorrectnessAudit(cleaned).map(
+            (e) => {
+                const { topIndex, subIndex } = e.ref;
+                const q = cleaned[topIndex];
+                const tier =
+                    subIndex != null
+                        ? q.subQuestions?.[subIndex]?.difficulty
+                        : q.difficulty;
+                return {
+                    ...e.auditItem,
+                    difficultyTier: tier,
+                    _solveSteps: q._solveSteps,
+                };
+            }
+        );
+        const diffAudit = runDeterministicDifficultyAudit(flatEntries, diffCtx);
+        stats.difficultyMatchScore = diffAudit.difficultyMatchScore;
+        stats.difficultyMatchTarget = INITIAL_GEN_DIFFICULTY_MATCH_TARGET;
+        pipelineTrace('FINALIZE_DIFFICULTY_SCORE', {
+            difficultyMatchScore: diffAudit.difficultyMatchScore,
+            target: INITIAL_GEN_DIFFICULTY_MATCH_TARGET,
+            issueCount: diffAudit.confirmedIssues?.length ?? 0,
+        });
+        stats.outputCount = cleaned.length;
+    }
+
+    pipelineTrace('FINALIZE_DONE', stats);
+
+    return { questions: cleaned, stats };
+};
+
+/**
+ * Call Gemini to infer question-type counts from topic/exam context (plan only — no questions).
+ */
+export const inferQuestionBankCounts = async (params) => {
+    const {
+        topic,
+        bankName,
+        difficulty,
+        sectionName = "",
+        subject = "",
+        categoryPaths = [],
+        maxSelectableSlots = 0,
+        topicRelevanceFeedback = null,
+        generateIntent = "initial",
+    } = params;
+
+    if (!process.env.GEMINI_API_KEY) {
+        throw new ApiError(500, "Gemini API key is not configured (GEMINI_API_KEY)");
+    }
+
+    const inferenceCtx = getCountInferenceContext({
+        topic,
+        bankName,
+        difficulty,
+        sectionName,
+        subject,
+        categoryPaths,
+        maxSelectableSlots,
+    });
+
+    const resolvedSubject = resolveSubjectForGeneration({
+        generateIntent,
+        topicRelevanceFeedback,
+        topic,
+        bankName,
+        sectionName,
+        categoryPaths,
+        subject,
+    });
+
+    const prompt = buildQuestionBankCountOnlyPrompt({
+        topic,
+        bankName,
+        difficulty,
+        categoryPaths,
+        sectionName,
+        subject,
+        topicRelevanceFeedback,
+        generateIntent,
+        maxApiItems: inferenceCtx.maxApiItems,
+        maxSelectableSlots: inferenceCtx.maxSelectableSlots,
+        examProfile: inferenceCtx.examProfile,
+        catSection: inferenceCtx.catSection,
+        resolvedSubject,
+    });
+
+    try {
+        const plan = await callGeminiWithRetries(async () => {
+            const result = await genAI.models.generateContent({
+                model: geminiTextModel(),
+                contents: [{ role: "user", parts: [{ text: prompt }] }],
+                config: {
+                    responseMimeType: "application/json",
+                },
+            });
+
+            const text = result.text || "";
+            if (!text) {
+                throw new ApiError(500, "AI returned empty count-inference response");
+            }
+
+            const parsed = parseJsonObjectFromAI(text);
+            const rawPlan =
+                parsed.plan && typeof parsed.plan === "object" ? parsed.plan : parsed;
+            return normalizeInferredPlan(rawPlan, inferenceCtx.maxApiItems, {
+                maxSelectableSlots: inferenceCtx.maxSelectableSlots,
+            });
+        });
+
+        return { plan, detectedSubject: resolvedSubject };
+    } catch (error) {
+        if (isGeminiAvailabilityError(error)) {
+            throw error instanceof ApiError ? error : toGeminiQuestionBankError(error);
+        }
+
+        const plan = suggestRealisticDefaultPlan({
+            catSection: inferenceCtx.catSection,
+            examProfile: inferenceCtx.examProfile,
+            maxApiItems: inferenceCtx.maxApiItems,
+            maxSelectableSlots: inferenceCtx.maxSelectableSlots,
+        });
+
+        return { plan, detectedSubject: resolvedSubject, usedFallback: true };
+    }
+};
+
+/**
+ * Step 1: AI detects exam type, topic scope, subjects, and counts.
+ * Step 2 is generateQuestionBankSuggestions with the returned plan.
+ */
+export const inferCompetitiveExamPlan = async (params) => {
+    const {
+        topic,
+        bankName,
+        difficulty,
+        sectionName = "",
+        subject = "",
+        categoryPaths = [],
+        maxSelectableSlots = 0,
+    } = params;
+
+    if (!process.env.GEMINI_API_KEY) {
+        throw new ApiError(500, "Gemini API key is not configured (GEMINI_API_KEY)");
+    }
+
+    const inferenceCtx = getCountInferenceContext({
+        topic,
+        bankName,
+        difficulty,
+        sectionName,
+        subject,
+        categoryPaths,
+        maxSelectableSlots,
+    });
+
+    const resolvedSubject = resolveGenerationSubject({
+        topic,
+        bankName,
+        sectionName,
+        categoryPaths,
+        subject,
+    });
+
+    const prompt = buildCompetitiveExamPlanPrompt({
+        topic,
+        bankName,
+        difficulty,
+        sectionName,
+        subject,
+        categoryPaths,
+        maxApiItems: inferenceCtx.maxApiItems,
+        maxSelectableSlots: inferenceCtx.maxSelectableSlots,
+    });
+
+    const normalizePlan = (rawPlan) =>
+        normalizeCompetitiveExamPlan(rawPlan, {
+            maxApiItems: inferenceCtx.maxApiItems,
+            maxSelectableSlots: inferenceCtx.maxSelectableSlots,
+            topic,
+            bankName,
+            categoryPaths,
+            sectionName,
+            subject,
+            bankDifficulty: difficulty,
+        });
+
+    try {
+        const plan = await callGeminiWithRetries(async () => {
+            const result = await genAI.models.generateContent({
+                model: geminiTextModel(),
+                contents: [{ role: "user", parts: [{ text: prompt }] }],
+                config: {
+                    responseMimeType: "application/json",
+                    temperature: 0.2,
+                },
+            });
+
+            const text = result.text || "";
+            if (!text) {
+                throw new ApiError(500, "AI returned empty exam plan");
+            }
+
+            const parsed = parseJsonObjectFromAIText(text);
+            const rawPlan =
+                parsed.plan && typeof parsed.plan === "object" ? parsed.plan : parsed;
+            return normalizePlan(rawPlan);
+        });
+
+        console.log(
+            `[ai-qb] AI exam plan: profile=${plan.examProfile}` +
+                (plan.catSection ? ` (${plan.catSection})` : "") +
+                (plan.isFullPaper ? ", fullPaper" : "") +
+                (plan.topicScope ? ` — ${plan.topicScope}` : "")
+        );
+
+        return { plan, detectedSubject: resolvedSubject };
+    } catch (error) {
+        if (isGeminiAvailabilityError(error)) {
+            throw error instanceof ApiError ? error : toGeminiQuestionBankError(error);
+        }
+
+        const selectableTarget = inferenceCtx.maxSelectableSlots;
+        const subjects = suggestMinimalSubjectFallback({
+            topic,
+            bankName,
+            categoryPaths,
+            sectionName,
+            subject,
+            selectableTarget,
+        });
+        const plan = normalizePlan({
+            subjects,
+            singleCount: selectableTarget,
+            rationale: `Fallback ${selectableTarget}-question plan (AI planning unavailable).`,
+        });
+
+        return { plan, detectedSubject: resolvedSubject, usedFallback: true };
+    }
+};
+
+/**
+ * Solve-first path: LLM skeletons → code-built options → verify → MCQs.
+ */
+const generateSolveFirstSingles = async ({
+    topic,
+    bankName,
+    difficulty,
+    singleCount,
+    excludeQuestionTexts = [],
+    excludeArchetypes = [],
+    categoryPaths = [],
+    sectionName = "",
+    subject = "",
+    topicRelevanceFeedback = null,
+    generateIntent = "initial",
+    examReferenceBlock = "",
+    competitiveExamPlan = null,
+    provider = "gemini",
+    genTemperature,
+    slotOffset = 0,
+    difficultyResolution = null,
+    maxSelectableSlots = 0,
+    skipSkeletonDifficultyAudit = false,
+}) => {
+    const effectiveDifficulty =
+        difficultyResolution?.generationDifficulty || difficulty;
+    const examNativeVeteran = isExamNativeVeteranGeneration(difficultyResolution);
+    const mixOpts = mixOptionsFromResolution(difficultyResolution);
+    const callRepairLlm = (repairPrompt) =>
+        callQuestionBankGenerationLLM(repairPrompt, {
+            generationProvider: provider,
+            temperature: 0.1,
+        });
+    const examProfile = getSolveFirstExamProfile({
+        topic,
+        bankName,
+        sectionName,
+        categoryPaths,
+        subject,
+    });
+    const { catSection } = resolveExamContextForGeneration({
+        competitiveExamPlan,
+        bankName,
+        topic,
+        subject,
+        sectionName,
+        categoryPaths,
+    });
+    const subjectId = getSolveFirstSubjectId({
+        topic,
+        bankName,
+        sectionName,
+        categoryPaths,
+        subject,
+        topicRelevanceFeedback,
+        generateIntent,
+    });
+    const archetypeOffset =
+        slotOffset + Math.max(0, excludeQuestionTexts?.length || 0);
+    const steering = await resolveConceptArchetypeSteering(
+        {
+            count: singleCount,
+            topic,
+            bankName,
+            subject,
+            subjectId,
+            examProfile,
+            catSection,
+            bankDifficulty: effectiveDifficulty,
+            examCalibrated: difficultyResolution?.examCalibrated || false,
+            excludeArchetypes,
+            excludeQuestionTexts,
+            slotOffset: archetypeOffset,
+            subjects: competitiveExamPlan?.subjects,
+            preferPeak:
+                difficultyResolution?.examCalibrated ||
+                isVeteranDifficultyEnabled() ||
+                String(effectiveDifficulty || "").toLowerCase() === "hard",
+            topicRelevanceFeedback,
+            generateIntent,
+        },
+        {
+            callLlm: (planPrompt) =>
+                callQuestionBankGenerationLLM(planPrompt, {
+                    generationProvider: provider,
+                    temperature: 0.25,
+                }),
+        }
+    );
+    const conceptSlots = steering.conceptSlots;
+    const slotPlans = steering.slotPlans;
+    const difficultyTierSlots = buildDifficultyTierSlots(
+        singleCount,
+        effectiveDifficulty,
+        mixOpts
+    );
+
+    let questions = [];
+    let runningExclude = [...excludeQuestionTexts];
+    const batchSeenStems = [];
+    let attempts = 0;
+    const llmTemperature =
+        genTemperature ?? (provider === "openai" ? 0.15 : 0.1);
+
+    if (examNativeVeteran) {
+        pipelineTrace("VETERAN_GENERATION_STRATEGY", {
+            skeletonDifficultyAudit: !skipSkeletonDifficultyAudit,
+            repairOnFail: isRepairOnFailEnabled(),
+            regenOnFail: !isRepairOnFailEnabled(),
+            maxAttempts: SOLVE_FIRST_MAX_ATTEMPTS,
+        });
+    }
+
+    while (
+        questions.length < singleCount &&
+        attempts < SOLVE_FIRST_MAX_ATTEMPTS
+    ) {
+        attempts += 1;
+        const need = singleCount - questions.length;
+        const slots = conceptSlots.slice(
+            questions.length,
+            questions.length + need
+        );
+        const tiers = difficultyTierSlots.slice(
+            questions.length,
+            questions.length + need
+        );
+
+        const prompt = buildSolveFirstSkeletonPrompt({
+            topic,
+            bankName,
+            difficulty: effectiveDifficulty,
+            count: need,
+            conceptSlots: slots,
+            slotPlans: slotPlans.slice(
+                questions.length,
+                questions.length + need
+            ),
+            archetypeSteeringSource: steering.source,
+            difficultyTierSlots: tiers,
+            excludeQuestionTexts: runningExclude,
+            excludeArchetypes: [
+                ...excludeArchetypes,
+                ...questions.map((q) => q._conceptSlot).filter(Boolean),
+            ],
+            categoryPaths,
+            sectionName,
+            subject,
+            examProfile,
+            examReferenceBlock,
+            difficultyResolution,
+            slotOffset: archetypeOffset + questions.length,
+            generateIntent,
+            topicRelevanceFeedback,
+            maxSelectableSlots,
+        });
+
+        const rawText = await callQuestionBankGenerationLLM(prompt, {
+            generationProvider: provider,
+            temperature: llmTemperature,
+        });
+
+        let skeletons = [];
+        try {
+            skeletons = parseSolveFirstSkeletons(rawText);
+        } catch (err) {
+            pipelineTrace('SKELETON_PARSE_FAILED', {
+                attempt: attempts,
+                error: err?.message || String(err),
+            });
+            console.warn(
+                `[solve-first] attempt ${attempts}/${SOLVE_FIRST_MAX_ATTEMPTS}: JSON parse failed — ${err?.message || err}`
+            );
+            continue;
+        }
+
+        if (!skeletons.length) {
+            pipelineTrace('SKELETON_PARSE_EMPTY', {
+                attempt: attempts,
+                requested: need,
+            });
+            console.warn(
+                `[solve-first] attempt ${attempts}/${SOLVE_FIRST_MAX_ATTEMPTS}: no parseable skeletons for ${need} slot(s)`
+            );
+            continue;
+        }
+
+        const skeletonAudit = skipSkeletonDifficultyAudit
+            ? {
+                  skeletons,
+                  keptIndices: skeletons.map((_, i) => i),
+                  rejectedCount: 0,
+                  rejected: [],
+              }
+            : await applySkeletonDifficultySelfAuditGate(
+            skeletons,
+            {
+                topic,
+                bankName,
+                difficulty: effectiveDifficulty,
+                examProfile,
+                minScore: SKELETON_DIFFICULTY_SELF_AUDIT_MIN_SCORE,
+            },
+            {
+                callLlm: (auditPrompt) =>
+                    callQuestionBankGenerationLLM(auditPrompt, {
+                        generationProvider: provider,
+                        temperature: 0.1,
+                    }),
+            }
+        );
+
+        const alignSlotsForIndices = (indices) => ({
+            alignedSlots: indices.map((i) => slots[i] ?? ""),
+            alignedTiers: indices.map((i) => tiers[i] ?? tiers[0] ?? "medium"),
+        });
+
+        let batchQuestions = [];
+
+        if (skeletonAudit.skeletons.length) {
+            const { alignedSlots, alignedTiers } = alignSlotsForIndices(
+                skeletonAudit.keptIndices ??
+                    skeletonAudit.skeletons.map((_, i) => i)
+            );
+            pipelineTrace("SKELETON_LLM_RESPONSE", {
+                attempt: attempts,
+                parsed: skeletonAudit.skeletons.length,
+                requested: need,
+                conceptSlots: alignedSlots,
+                phase: "initial_pass",
+            });
+            const keptBatch = await skeletonsToQuestions(
+                skeletonAudit.skeletons,
+                alignedTiers,
+                alignedSlots,
+                {
+                    batchSeenStems,
+                    examCalibrated: difficultyResolution?.examCalibrated || false,
+                    publishPartials: true,
+                },
+                { callLlm: callRepairLlm, examProfile }
+            );
+            batchQuestions = batchQuestions.concat(keptBatch);
+        }
+
+        if (skeletonAudit.rejected?.length) {
+            if (isRepairOnFailEnabled()) {
+                const repairedRows = await repairSkeletonAuditRejections(
+                    skeletonAudit.rejected,
+                    {
+                        examProfile,
+                        examCalibrated:
+                            difficultyResolution?.examCalibrated || false,
+                        conceptSlots: slots,
+                    },
+                    { callLlm: callRepairLlm }
+                );
+                for (const row of repairedRows) {
+                    const skeletonIndex = row.skeletonIndex;
+                    const { alignedSlots, alignedTiers } = alignSlotsForIndices([
+                        skeletonIndex,
+                    ]);
+                    const repairedBatch = await skeletonsToQuestions(
+                        [row.skeleton],
+                        alignedTiers,
+                        alignedSlots,
+                        {
+                            batchSeenStems,
+                            examCalibrated:
+                                difficultyResolution?.examCalibrated || false,
+                            publishPartials: true,
+                        },
+                        { callLlm: callRepairLlm, examProfile }
+                    );
+                    batchQuestions = batchQuestions.concat(repairedBatch);
+                }
+                if (repairedRows.length) {
+                    pipelineTrace("SKELETON_DIFFICULTY_REPAIRED", {
+                        count: repairedRows.length,
+                        rejected: skeletonAudit.rejectedCount,
+                    });
+                }
+            } else {
+                pipelineTrace("SKELETON_DIFFICULTY_DEFER_REGEN", {
+                    kept: skeletonAudit.skeletons.length,
+                    rejected: skeletonAudit.rejectedCount,
+                    deficit: need - batchQuestions.length,
+                });
+            }
+        }
+
+        if (!batchQuestions.length) {
+            pipelineTrace("SKELETON_BUILD_EMPTY", {
+                attempt: attempts,
+                parsed: skeletons.length,
+            });
+            continue;
+        }
+
+        questions = questions.concat(batchQuestions);
+        runningExclude = [
+            ...runningExclude,
+            ...batchQuestions.map((q) => q.questionText).filter(Boolean),
+        ];
+
+        pipelineTrace("SKELETON_BATCH_OK", {
+            attempt: attempts,
+            built: batchQuestions.length,
+            requested: need,
+            total: questions.length,
+            target: singleCount,
+        });
+        console.log(
+            `[solve-first] attempt ${attempts}: ${batchQuestions.length}/${need} built (${questions.length}/${singleCount} total)`
+        );
+        continue;
+    }
+
+    if (questions.length < singleCount) {
+        const deficit = singleCount - questions.length;
+        if (generateIntent === "evaluation_regen") {
+            pipelineTrace("SOLVE_FIRST_REGEN_PARTIAL", {
+                produced: questions.length,
+                target: singleCount,
+                deficit,
+                attempts,
+            });
+            console.warn(
+                `[solve-first] evaluation_regen: ${questions.length}/${singleCount} after ${attempts} attempt(s) — no one-shot fallback (use targeted merge)`
+            );
+        } else if (
+            difficultyResolution?.examCalibrated &&
+            isVeteranDifficultyEnabled()
+        ) {
+            pipelineTrace("SOLVE_FIRST_VETERAN_NO_FALLBACK", {
+                produced: questions.length,
+                target: singleCount,
+                deficit,
+                attempts,
+            });
+            console.warn(
+                `[solve-first] veteran mode: ${questions.length}/${singleCount} after ${attempts} attempt(s) — no one-shot fallback (quality over easy filler)`
+            );
+        } else {
+            pipelineTrace('SOLVE_FIRST_FALLBACK', {
+                produced: questions.length,
+                target: singleCount,
+                deficit,
+                attempts,
+            });
+            console.warn(
+                `[solve-first] ${questions.length}/${singleCount} after ${attempts} attempt(s) — one-shot fallback for ${deficit}`
+            );
+
+            const fallbackPrompt = buildQuestionBankPrompt({
+                topic,
+                bankName,
+                difficulty,
+                singleCount: deficit,
+                multipleCount: 0,
+                trueFalseCount: 0,
+                passageCount: 0,
+                passageSingleCount: 0,
+                passageMultipleCount: 0,
+                passageTrueFalseCount: 0,
+                connectedCount: 0,
+                excludeQuestionTexts: runningExclude,
+                categoryPaths,
+                sectionName,
+                subject,
+                topicRelevanceFeedback,
+                generateIntent,
+                maxSelectableSlots: 0,
+                examReferenceBlock,
+                competitiveExamPlan,
+            });
+
+            const fallbackRaw = await callQuestionBankGenerationLLM(fallbackPrompt, {
+                generationProvider: provider,
+                temperature: llmTemperature,
+            });
+
+            const fallbackExpected = {
+                singleCount: deficit,
+                multipleCount: 0,
+                trueFalseCount: 0,
+                connectedCount: 0,
+                passageCount: 0,
+                passageSingleCount: 0,
+                passageMultipleCount: 0,
+                passageTrueFalseCount: 0,
+            };
+            const fallbackParsed = parseQuestionBankAIResponse(
+                fallbackRaw,
+                fallbackExpected
+            );
+            questions = questions.concat(fallbackParsed);
+        }
+    }
+
+    return assignDifficultyTiersToQuestions(
+        questions.slice(0, singleCount),
+        effectiveDifficulty,
+        mixOpts
+    );
+};
+
+/**
+ * Generate one LLM batch for explicit question counts (single API call).
+ */
+const generateQuestionBankBatch = async ({
+    topic,
+    bankName,
+    difficulty,
+    singleCount,
+    multipleCount,
+    trueFalseCount,
+    passageCount,
+    passageSingleCount,
+    passageMultipleCount,
+    passageTrueFalseCount,
+    excludeQuestionTexts = [],
+    excludeArchetypes = [],
+    categoryPaths = [],
+    sectionName = "",
+    subject = "",
+    topicRelevanceFeedback = null,
+    generateIntent = "initial",
+    maxSelectableSlots = 0,
+    examReferenceBlock = "",
+    competitiveExamPlan = null,
+    provider = "gemini",
+    genTemperature,
+    allowTopUp = true,
+    chunkIndex = 0,
+    chunkTotal = 1,
+    forceOneShot = false,
+    tierSlotOffset = 0,
+    totalBatchSelectable = null,
+    difficultyResolution = null,
+    deferValidation = false,
+    skipFinalizeDifficultyAudit = false,
+    topUpWave = 0,
+    generationMode = "default",
+    promptFirstComposedBody = null,
+    promptFirstComposeSource = null,
+    promptBasedGenRun = null,
+}) => {
+    const promptFirst = isPromptFirstGenerationMode(generationMode);
+
+    if (promptFirst) {
+        pipelineTrace("PROMPT_FIRST_BATCH", {
+            singleCount,
+            multipleCount,
+            trueFalseCount,
+            passageCount,
+            chunk: `${chunkIndex + 1}/${chunkTotal}`,
+            composeSource: promptFirstComposeSource || "per_chunk_static",
+        });
+
+        const expectedCounts = {
+            singleCount,
+            multipleCount,
+            trueFalseCount,
+            connectedCount: passageCount,
+            passageCount,
+            passageSingleCount,
+            passageMultipleCount,
+            passageTrueFalseCount,
+        };
+
+        const chunkPromptParams = {
+            topic,
+            bankName,
+            sectionName,
+            categoryPaths,
+            subject,
+            difficulty,
+            singleCount,
+            multipleCount,
+            trueFalseCount,
+            passageCount,
+            passageSingleCount,
+            passageMultipleCount,
+            passageTrueFalseCount,
+            excludeQuestionTexts,
+        };
+
+        const chunkLabel = String(chunkIndex + 1).padStart(2, "0");
+
+        const requiredApiItems =
+            singleCount + multipleCount + trueFalseCount + passageCount;
+        const maxPromptFirstAttempts = Math.max(
+            1,
+            Number(process.env.AI_QB_PROMPT_FIRST_MAX_ATTEMPTS ?? 2)
+        );
+
+        const promptFirstTemperature = Math.min(
+            1,
+            Math.max(
+                0.2,
+                Number(process.env.AI_QB_PROMPT_FIRST_TEMPERATURE ?? 0.35)
+            )
+        );
+
+        const accepted = [];
+        const seenStems = new Set(
+            (excludeQuestionTexts || []).map((t) =>
+                String(t || "").trim().toLowerCase()
+            )
+        );
+        let remaining = {
+            singleCount,
+            multipleCount,
+            trueFalseCount,
+            passageCount,
+            passageSingleCount,
+            passageMultipleCount,
+            passageTrueFalseCount,
+        };
+
+        for (let attempt = 1; attempt <= maxPromptFirstAttempts; attempt++) {
+            const need =
+                remaining.singleCount +
+                remaining.multipleCount +
+                remaining.trueFalseCount +
+                remaining.passageCount;
+            if (need <= 0) break;
+
+            const attemptParams = {
+                ...chunkPromptParams,
+                ...remaining,
+                excludeQuestionTexts: [
+                    ...excludeQuestionTexts,
+                    ...accepted.map((q) => q.questionText).filter(Boolean),
+                ],
+            };
+            const prompt = promptFirstComposedBody
+                ? appendJsonOutputToComposedPrompt(
+                      promptFirstComposedBody,
+                      attemptParams
+                  )
+                : buildPromptFirstQuestionBankPrompt(attemptParams);
+
+            if (attempt === 1) {
+                pipelineTrace("PROMPT_FIRST_BUILT", {
+                    promptLength: prompt.length,
+                    composed: Boolean(promptFirstComposedBody),
+                    examProfile: detectExamProfile({
+                        topic,
+                        bankName,
+                        subject,
+                        sectionName,
+                        categoryPaths,
+                    }),
+                });
+            }
+
+            promptBasedGenRun?.save(
+                `chunk-${chunkLabel}-generation-prompt-attempt-${attempt}.txt`,
+                prompt
+            );
+
+            const rawText = await callQuestionBankGenerationLLM(prompt, {
+                generationProvider: provider,
+                temperature: genTemperature ?? promptFirstTemperature,
+            });
+            promptBasedGenRun?.save(
+                `chunk-${chunkLabel}-generation-response-attempt-${attempt}.txt`,
+                rawText
+            );
+
+            const parsed = parseQuestionBankAIResponseSoft(rawText);
+            const sanitized = preparePromptFirstQuestions(parsed);
+            let addedSingles = 0;
+            let addedMultiple = 0;
+            let addedTf = 0;
+            let addedPassages = 0;
+
+            for (const q of sanitized) {
+                const type = String(q.questionType || "single").toLowerCase();
+                const stemKey = String(q.questionText || q.passage || "")
+                    .trim()
+                    .toLowerCase();
+                if (!stemKey || seenStems.has(stemKey)) continue;
+                if (type === "connected") {
+                    if (addedPassages >= remaining.passageCount) continue;
+                    addedPassages += 1;
+                } else if (type === "multiple") {
+                    if (addedMultiple >= remaining.multipleCount) continue;
+                    addedMultiple += 1;
+                } else if (type === "true_false") {
+                    if (addedTf >= remaining.trueFalseCount) continue;
+                    addedTf += 1;
+                } else {
+                    if (addedSingles >= remaining.singleCount) continue;
+                    addedSingles += 1;
+                }
+                seenStems.add(stemKey);
+                accepted.push(q);
+            }
+
+            remaining = {
+                singleCount: Math.max(0, remaining.singleCount - addedSingles),
+                multipleCount: Math.max(
+                    0,
+                    remaining.multipleCount - addedMultiple
+                ),
+                trueFalseCount: Math.max(0, remaining.trueFalseCount - addedTf),
+                passageCount: Math.max(0, remaining.passageCount - addedPassages),
+                passageSingleCount: remaining.passageSingleCount,
+                passageMultipleCount: remaining.passageMultipleCount,
+                passageTrueFalseCount: remaining.passageTrueFalseCount,
+            };
+
+            pipelineTrace("PROMPT_FIRST_FILL_PASS", {
+                attempt,
+                accepted: accepted.length,
+                required: requiredApiItems,
+                remaining:
+                    remaining.singleCount +
+                    remaining.multipleCount +
+                    remaining.trueFalseCount +
+                    remaining.passageCount,
+                sanitized: sanitized.length,
+            });
+        }
+
+        const fastQuestions = accepted.slice(0, requiredApiItems);
+
+        promptBasedGenRun?.save(`chunk-${chunkLabel}-parsed-summary.json`, {
+            chunk: `${chunkIndex + 1}/${chunkTotal}`,
+            expectedCounts,
+            maxAttempts: maxPromptFirstAttempts,
+            outputCount: fastQuestions.length,
+            requiredApiItems,
+        });
+
+        pipelineTrace("BATCH_DONE", {
+            mode: deferValidation ? "prompt-first-deferred" : "prompt-first",
+            chunk: `${chunkIndex + 1}/${chunkTotal}`,
+            outputCount: fastQuestions.length,
+            composeSource: promptFirstComposeSource || undefined,
+        });
+        return {
+            questions: fastQuestions,
+            stats: {
+                mode: "prompt_first",
+                composeSource: promptFirstComposeSource || "static",
+                requested: requiredApiItems,
+                outputCount: fastQuestions.length,
+            },
+        };
+    }
+
+    const useSolveFirst =
+        !forceOneShot &&
+        shouldUseSolveFirstGeneration({
+        singleCount,
+        multipleCount,
+        trueFalseCount,
+        passageCount,
+        generateIntent,
+        competitiveExamPlan,
+        topic,
+        bankName,
+        categoryPaths,
+        sectionName,
+        subject,
+    });
+
+    if (useSolveFirst) {
+        pipelineTrace('SOLVE_FIRST_BATCH', {
+            singleCount,
+            chunk: `${chunkIndex + 1}/${chunkTotal}`,
+        });
+        console.log(
+            `[ai-qb] solve-first generation: ${singleCount} single(s) (chunk ${chunkIndex + 1}/${chunkTotal})`
+        );
+        const questions = await generateSolveFirstSingles({
+            topic,
+            bankName,
+            difficulty,
+            singleCount,
+            excludeQuestionTexts,
+            excludeArchetypes,
+            categoryPaths,
+            sectionName,
+            subject,
+            topicRelevanceFeedback,
+            generateIntent,
+            examReferenceBlock,
+            competitiveExamPlan,
+            provider,
+            genTemperature,
+            slotOffset: tierSlotOffset,
+            difficultyResolution,
+            maxSelectableSlots,
+            skipSkeletonDifficultyAudit: deferValidation,
+        });
+
+        if (deferValidation) {
+            const fastQuestions = prepareFastPathQuestions(questions, {
+                examCalibrated: difficultyResolution?.examCalibrated,
+            });
+            pipelineTrace("BATCH_DONE", {
+                mode: "solve-first-deferred",
+                chunk: `${chunkIndex + 1}/${chunkTotal}`,
+                outputCount: fastQuestions.length,
+            });
+            return { questions: fastQuestions, stats: { mode: "deferred" } };
+        }
+
+        const finalized = await finalizeQuestionBankSuggestions({
+            questions,
+            topic,
+            bankName,
+            difficulty,
+            generationProvider: provider,
+            excludeQuestionTexts,
+            categoryPaths,
+            sectionName,
+            subject,
+            examReferenceBlock,
+            competitiveExamPlan,
+            generateIntent,
+            maxSelectableSlots,
+            allowTopUp,
+            difficultyResolution,
+            skipDifficultyAudit: skipFinalizeDifficultyAudit,
+            topUpWave,
+        });
+        pipelineTrace('BATCH_DONE', {
+            mode: 'solve-first',
+            chunk: `${chunkIndex + 1}/${chunkTotal}`,
+            ...unwrapFinalizedStats(finalized),
+        });
+        return finalized;
+    }
+
+    pipelineTrace('ONE_SHOT_BATCH', {
+        singleCount,
+        multipleCount,
+        trueFalseCount,
+        passageCount,
+        chunk: `${chunkIndex + 1}/${chunkTotal}`,
+    });
+
+    const expectedCounts = {
+        singleCount,
+        multipleCount,
+        trueFalseCount,
+        connectedCount: passageCount,
+        passageCount,
+        passageSingleCount,
+        passageMultipleCount,
+        passageTrueFalseCount,
+    };
+
+    const chunkNote =
+        chunkTotal > 1
+            ? `\n**Batch note:** This is generation chunk ${chunkIndex + 1} of ${chunkTotal}. Return exactly the counts requested below — other chunks cover the rest of the bank. Do not repeat stems from excluded questions.\n`
+            : "";
+
+    const selectableThisChunk = countSelectableSlots({
+        singleCount,
+        multipleCount,
+        trueFalseCount,
+        passageCount,
+        passageSingleCount,
+        passageMultipleCount,
+        passageTrueFalseCount,
+    });
+
+    const prompt =
+        chunkNote +
+        buildQuestionBankPrompt({
+            topic,
+            bankName,
+            difficulty,
+            singleCount,
+            multipleCount,
+            trueFalseCount,
+            passageCount,
+            passageSingleCount,
+            passageMultipleCount,
+            passageTrueFalseCount,
+            connectedCount: passageCount,
+            excludeQuestionTexts,
+            categoryPaths,
+            sectionName,
+            subject,
+            topicRelevanceFeedback,
+            generateIntent,
+            maxSelectableSlots,
+            examReferenceBlock,
+            competitiveExamPlan,
+            tierSlotOffset,
+            totalBatchSelectable:
+                totalBatchSelectable ??
+                (chunkTotal > 1 ? null : selectableThisChunk),
+            difficultyResolution,
+        });
+
+    const rawText = await callQuestionBankGenerationLLM(prompt, {
+        generationProvider: provider,
+        temperature: genTemperature,
+    });
+
+    const questions = parseQuestionBankAIResponse(rawText, expectedCounts);
+
+    if (deferValidation) {
+        const fastQuestions = prepareFastPathQuestions(questions, {
+            examCalibrated: difficultyResolution?.examCalibrated,
+        });
+        pipelineTrace("BATCH_DONE", {
+            mode: "one-shot-deferred",
+            chunk: `${chunkIndex + 1}/${chunkTotal}`,
+            outputCount: fastQuestions.length,
+        });
+        return { questions: fastQuestions, stats: { mode: "deferred" } };
+    }
+
+    const finalized = await finalizeQuestionBankSuggestions({
+        questions,
+        topic,
+        bankName,
+        difficulty,
+        generationProvider: provider,
+        excludeQuestionTexts,
+        categoryPaths,
+        sectionName,
+        subject,
+        examReferenceBlock,
+        competitiveExamPlan,
+        generateIntent,
+        maxSelectableSlots,
+        allowTopUp,
+        difficultyResolution,
+        skipDifficultyAudit: skipFinalizeDifficultyAudit,
+        topUpWave,
+    });
+    pipelineTrace('BATCH_DONE', {
+        mode: 'one-shot',
+        chunk: `${chunkIndex + 1}/${chunkTotal}`,
+        ...unwrapFinalizedStats(finalized),
+    });
+    return finalized;
+};
+
 /**
  * Generate question-bank suggestions (single, multiple, true/false) via Gemini.
  */
@@ -735,54 +3136,565 @@ export const generateQuestionBankSuggestions = async (params) => {
         passageMultipleCount = 0,
         passageTrueFalseCount = 0,
         excludeQuestionTexts = [],
+        excludeArchetypes = [],
+        categoryPaths = [],
+        sectionName = "",
+        subject = "",
+        topicRelevanceFeedback = null,
+        generateIntent = "initial",
+        topicRelevanceEvaluated = false,
+        topicRelevanceRegenerated = false,
+        hasGeneratedQuestions = false,
+        allowContinuation = false,
+        inferCountsIfMissing = false,
+        maxSelectableSlots = 0,
+        competitiveExamPlan = null,
+        generationProvider = "gemini",
+        forceOneShot = false,
+        deferValidation = false,
+        generationMode = "default",
+        workflowLogKey = "",
     } = params;
 
-    if (!process.env.GEMINI_API_KEY) {
+    const promptFirst = isPromptFirstGenerationMode(generationMode);
+    const resolvedWorkflowLogKey =
+        String(workflowLogKey || "").trim() || getActiveWorkflowLogKey();
+
+    assertGenerationWorkflowAllowed({
+        generateIntent,
+        topicRelevanceEvaluated,
+        topicRelevanceRegenerated,
+        topicRelevanceFeedback,
+        hasGeneratedQuestions,
+        allowContinuation,
+    });
+
+    const provider = generationProvider === "openai" ? "openai" : "gemini";
+    if (provider === "gemini" && !process.env.GEMINI_API_KEY) {
         throw new ApiError(500, "Gemini API key is not configured (GEMINI_API_KEY)");
     }
+    if (provider === "openai" && !process.env.OPENAI_API_KEY) {
+        throw new ApiError(500, "OpenAI API key is not configured (OPENAI_API_KEY)");
+    }
 
-    const resolvedPassageCount = passageCount || connectedCount || 0;
-    const expectedCounts = {
+    const difficultyResolution = promptFirst
+        ? {
+              userDifficulty: String(difficulty || "medium").toLowerCase(),
+              generationDifficulty: String(difficulty || "medium").toLowerCase(),
+              examCalibrated: false,
+              source: "prompt_first",
+              examProfile: detectExamProfile({
+                  topic,
+                  bankName,
+                  subject,
+                  sectionName,
+                  categoryPaths,
+              }),
+              rationale: `Prompt-first strategy — using UI difficulty "${difficulty}" (no exam-native veteran upscale).`,
+          }
+        : resolveGenerationDifficulty({
+              topic,
+              bankName,
+              sectionName,
+              categoryPaths,
+              subject,
+              userDifficulty: difficulty,
+              competitiveExamPlan,
+              generateIntent,
+          });
+    const generationDifficulty = difficultyResolution.generationDifficulty;
+
+    if (difficultyResolution.examCalibrated) {
+        pipelineTrace("EXAM_NATIVE_DIFFICULTY", {
+            userDifficulty: difficultyResolution.userDifficulty,
+            generationDifficulty,
+            examProfile: difficultyResolution.examProfile,
+            source: difficultyResolution.source,
+        });
+        console.log(`[ai-qb] ${difficultyResolution.rationale}`);
+    }
+
+    let resolvedSingleCount = singleCount;
+    let resolvedMultipleCount = multipleCount;
+    let resolvedTrueFalseCount = trueFalseCount;
+    let resolvedPassageCount = passageCount || connectedCount || 0;
+    let resolvedPassageSingleCount = passageSingleCount;
+    let resolvedPassageMultipleCount = passageMultipleCount;
+    let resolvedPassageTrueFalseCount = passageTrueFalseCount;
+    let inferredCounts = null;
+
+    ({
+        singleCount: resolvedSingleCount,
+        multipleCount: resolvedMultipleCount,
+        trueFalseCount: resolvedTrueFalseCount,
+        passageCount: resolvedPassageCount,
+        passageSingleCount: resolvedPassageSingleCount,
+        passageMultipleCount: resolvedPassageMultipleCount,
+        passageTrueFalseCount: resolvedPassageTrueFalseCount,
+    } = upscaleRegenerationCountsToSlots({
+        generateIntent,
+        topicRelevanceFeedback,
+        maxSelectableSlots,
+        singleCount: resolvedSingleCount,
+        multipleCount: resolvedMultipleCount,
+        trueFalseCount: resolvedTrueFalseCount,
+        passageCount: resolvedPassageCount,
+        passageSingleCount: resolvedPassageSingleCount,
+        passageMultipleCount: resolvedPassageMultipleCount,
+        passageTrueFalseCount: resolvedPassageTrueFalseCount,
+    }));
+
+    if (generateIntent === "evaluation_regen") {
+        const flawed = extractRegenerationTargetNumbers(topicRelevanceFeedback);
+        pipelineTrace("REGEN_TARGETED", {
+            failedQuestionNumbers: [...flawed].slice(0, 20),
+            replacementSingleCount: resolvedSingleCount,
+            replacementPassageCount: resolvedPassageCount,
+        });
+    }
+
+    const persistedArchetypes = await loadPersistedArchetypes({
+        bankName,
+        sectionName,
+    });
+    let mergedExcludeArchetypes = [
+        ...new Set([...(excludeArchetypes || []), ...persistedArchetypes]),
+    ];
+
+    const effectiveMaxSelectableSlots =
+        generateIntent === "evaluation_regen"
+            ? countSelectableSlots({
+                  singleCount: resolvedSingleCount,
+                  multipleCount: resolvedMultipleCount,
+                  trueFalseCount: resolvedTrueFalseCount,
+                  passageCount: resolvedPassageCount,
+                  passageSingleCount: resolvedPassageSingleCount,
+                  passageMultipleCount: resolvedPassageMultipleCount,
+                  passageTrueFalseCount: resolvedPassageTrueFalseCount,
+              }) || maxSelectableSlots
+            : maxSelectableSlots;
+
+    const examCtxForCounts = resolveExamContextForGeneration({
+        competitiveExamPlan,
+        bankName,
+        topic,
+        sectionName,
+        categoryPaths,
+    });
+    if (
+        examCtxForCounts.catSection === "cat_varc" &&
+        !resolvedPassageCount &&
+        resolvedSingleCount > 0
+    ) {
+        const slotTarget =
+            maxSelectableSlots > 0
+                ? maxSelectableSlots
+                : resolvedSingleCount;
+        const adjusted = enforceCatVarcFormatDefaults(
+            {
+                singleCount: resolvedSingleCount,
+                multipleCount: resolvedMultipleCount,
+                trueFalseCount: resolvedTrueFalseCount,
+                passageCount: resolvedPassageCount,
+                passageSingleCount: resolvedPassageSingleCount,
+                passageMultipleCount: resolvedPassageMultipleCount,
+                passageTrueFalseCount: resolvedPassageTrueFalseCount,
+            },
+            slotTarget
+        );
+        resolvedSingleCount = adjusted.singleCount || 0;
+        resolvedMultipleCount = adjusted.multipleCount || 0;
+        resolvedTrueFalseCount = adjusted.trueFalseCount || 0;
+        resolvedPassageCount = adjusted.passageCount || 0;
+        resolvedPassageSingleCount = adjusted.passageSingleCount || 0;
+        resolvedPassageMultipleCount = adjusted.passageMultipleCount || 0;
+        resolvedPassageTrueFalseCount = adjusted.passageTrueFalseCount || 0;
+        pipelineTrace("CAT_VARC_FORMAT", {
+            passages: resolvedPassageCount,
+            passageSubs: resolvedPassageSingleCount,
+            vaSingles: resolvedSingleCount,
+            slotTarget,
+        });
+        console.log(
+            `[ai-qb] CAT VARC format: ${resolvedPassageCount} RC passage(s) × ${resolvedPassageSingleCount} sub-Q + ${resolvedSingleCount} VA singles (not all-standalone GMAT style)`
+        );
+    }
+
+    const countsMissing = isQuestionBankCountsMissing({
         singleCount,
         multipleCount,
         trueFalseCount,
-        connectedCount: resolvedPassageCount,
-        passageCount: resolvedPassageCount,
+        passageCount,
+        connectedCount,
         passageSingleCount,
         passageMultipleCount,
         passageTrueFalseCount,
-    };
-    const prompt = buildQuestionBankPrompt({
+    });
+
+    if (countsMissing) {
+        throw new ApiError(
+            400,
+            "Question counts are required, or set inferCountsIfMissing with maxSelectableSlots"
+        );
+    }
+
+    const resolvedSubject = resolveSubjectForGeneration({
+        generateIntent,
+        topicRelevanceFeedback,
         topic,
         bankName,
-        difficulty,
-        singleCount,
-        multipleCount,
-        trueFalseCount,
-        passageCount: resolvedPassageCount,
-        passageSingleCount,
-        passageMultipleCount,
-        passageTrueFalseCount,
-        connectedCount: resolvedPassageCount,
-        excludeQuestionTexts,
+        sectionName,
+        categoryPaths,
+        subject,
     });
 
-    return callGeminiWithRetries(async () => {
-        const result = await genAI.models.generateContent({
-            model: "gemini-2.5-flash",
-            contents: [{ role: "user", parts: [{ text: prompt }] }],
-            config: {
-                responseMimeType: "application/json",
-            },
+    // Explicit counts from the client — use them as-is; no topic-based count inference.
+    if (!countsMissing) {
+        const examCtx = resolveExamContextForGeneration({
+            competitiveExamPlan,
+            bankName,
+            topic,
+            subject: resolvedSubject.id || subject,
+            sectionName,
+            categoryPaths,
+        });
+        const { block: examReferenceBlock } = await fetchExamReferenceBrief({
+            bankName,
+            topic,
+            sectionName,
+            categoryPaths,
+            subject: resolvedSubject.id || subject,
+            difficulty: generationDifficulty,
+            examProfile: examCtx.examProfile,
+            catSection: examCtx.catSection,
         });
 
-        const text = result.text || "";
-        if (!text) {
-            throw new ApiError(500, "AI returned empty response");
+        const regenTemperature =
+            generateIntent === "evaluation_regen" ? 0.15 : undefined;
+        const genTemperature =
+            regenTemperature ??
+            (provider === "openai"
+                ? Math.min(
+                      1,
+                      Math.max(
+                          0,
+                          Number(process.env.OPENAI_QB_GENERATION_TEMPERATURE ?? 0.2)
+                      )
+                  )
+                : undefined);
+
+        const countChunks = splitQuestionBankCountsIntoChunks(
+            {
+                singleCount: resolvedSingleCount,
+                multipleCount: resolvedMultipleCount,
+                trueFalseCount: resolvedTrueFalseCount,
+                passageCount: resolvedPassageCount,
+                passageSingleCount: resolvedPassageSingleCount,
+                passageMultipleCount: resolvedPassageMultipleCount,
+                passageTrueFalseCount: resolvedPassageTrueFalseCount,
+            },
+            QB_GENERATION_CHUNK_SIZE
+        );
+
+        if (countChunks.length > 1) {
+            const totalApiItems = countApiItemsFromQuestionCounts({
+                singleCount: resolvedSingleCount,
+                multipleCount: resolvedMultipleCount,
+                trueFalseCount: resolvedTrueFalseCount,
+                passageCount: resolvedPassageCount,
+            });
+            pipelineTrace('CHUNKING', {
+                totalApiItems,
+                chunks: countChunks.length,
+                chunkSize: QB_GENERATION_CHUNK_SIZE,
+            });
+            console.log(
+                `[ai-qb] chunking ${totalApiItems} API item(s) into ${countChunks.length} call(s) of ≤${QB_GENERATION_CHUNK_SIZE}`
+            );
         }
 
-        return parseQuestionBankAIResponse(text, expectedCounts);
-    });
+        pipelineTrace('GENERATION_START', {
+            provider,
+            singleCount: resolvedSingleCount,
+            multipleCount: resolvedMultipleCount,
+            trueFalseCount: resolvedTrueFalseCount,
+            passageCount: resolvedPassageCount,
+            chunks: countChunks.length,
+            generationMode: promptFirst ? "prompt_first" : "default",
+        });
+
+        let promptFirstComposedBody = null;
+        let promptFirstComposeSource = null;
+        let promptBasedGenRun = null;
+        if (promptFirst) {
+            promptBasedGenRun = createPromptBasedGenerationRun({
+                topic,
+                bankName,
+                sectionName,
+                subject,
+                difficulty: generationDifficulty,
+                workflowLogKey: resolvedWorkflowLogKey,
+                provider,
+                generationMode: "prompt_first",
+                counts: {
+                    singleCount: resolvedSingleCount,
+                    multipleCount: resolvedMultipleCount,
+                    trueFalseCount: resolvedTrueFalseCount,
+                    passageCount: resolvedPassageCount,
+                    passageSingleCount: resolvedPassageSingleCount,
+                    passageMultipleCount: resolvedPassageMultipleCount,
+                    passageTrueFalseCount: resolvedPassageTrueFalseCount,
+                },
+                chunks: countChunks.length,
+            });
+
+            const composed = await resolveComposedGenerationPrompt(
+                {
+                    topic,
+                    bankName,
+                    sectionName,
+                    categoryPaths,
+                    subject,
+                    difficulty: generationDifficulty,
+                    singleCount: resolvedSingleCount,
+                    multipleCount: resolvedMultipleCount,
+                    trueFalseCount: resolvedTrueFalseCount,
+                    passageCount: resolvedPassageCount,
+                    passageSingleCount: resolvedPassageSingleCount,
+                    passageMultipleCount: resolvedPassageMultipleCount,
+                    passageTrueFalseCount: resolvedPassageTrueFalseCount,
+                    excludeQuestionTexts,
+                },
+                {
+                    workflowLogKey: resolvedWorkflowLogKey,
+                    promptBasedGenRun,
+                    callLlmText: (composePrompt, opts = {}) =>
+                        callQuestionBankGenerationLLMText(composePrompt, {
+                            generationProvider: provider,
+                            ...opts,
+                        }),
+                }
+            );
+            promptFirstComposedBody = composed.composedBody;
+            promptFirstComposeSource = composed.source;
+
+            if (promptBasedGenRun?.runDir) {
+                pipelineTrace("PROMPT_BASED_GEN_LOG", {
+                    runDir: promptBasedGenRun.runDir,
+                    runKey: promptBasedGenRun.runKey,
+                });
+            }
+        }
+
+        let runningExclude = [...excludeQuestionTexts];
+        let usedArchetypes = [...mergedExcludeArchetypes];
+        let mergedQuestions = [];
+        let lastStats = {};
+        const totalBatchSelectable = countSelectableSlots({
+            singleCount: resolvedSingleCount,
+            multipleCount: resolvedMultipleCount,
+            trueFalseCount: resolvedTrueFalseCount,
+            passageCount: resolvedPassageCount,
+            passageSingleCount: resolvedPassageSingleCount,
+            passageMultipleCount: resolvedPassageMultipleCount,
+            passageTrueFalseCount: resolvedPassageTrueFalseCount,
+        });
+        const chunkTierOffsets = computeChunkTierOffsets(countChunks);
+
+        const runOneChunk = async (chunkIndex) => {
+            const chunk = countChunks[chunkIndex];
+            const batchResult = await generateQuestionBankBatch({
+                topic,
+                bankName,
+                difficulty: generationDifficulty,
+                singleCount: chunk.singleCount,
+                multipleCount: chunk.multipleCount,
+                trueFalseCount: chunk.trueFalseCount,
+                passageCount: chunk.passageCount,
+                passageSingleCount: chunk.passageSingleCount,
+                passageMultipleCount: chunk.passageMultipleCount,
+                passageTrueFalseCount: chunk.passageTrueFalseCount,
+                excludeQuestionTexts: runningExclude,
+                excludeArchetypes: usedArchetypes,
+                categoryPaths,
+                sectionName,
+                subject,
+                topicRelevanceFeedback,
+                generateIntent,
+                maxSelectableSlots: effectiveMaxSelectableSlots,
+                examReferenceBlock,
+                competitiveExamPlan,
+                provider,
+                genTemperature,
+                allowTopUp: countChunks.length === 1,
+                chunkIndex,
+                chunkTotal: countChunks.length,
+                tierSlotOffset: chunkTierOffsets[chunkIndex] ?? 0,
+                totalBatchSelectable,
+                forceOneShot,
+                difficultyResolution,
+                deferValidation,
+                generationMode,
+                promptFirstComposedBody,
+                promptFirstComposeSource,
+                promptBasedGenRun,
+            });
+            return { chunkIndex, chunk, batchResult };
+        };
+
+        let chunkResults;
+        const useParallelChunks =
+            countChunks.length > 1 && isParallelChunkGenerationEnabled();
+
+        if (useParallelChunks) {
+            pipelineTrace("PARALLEL_CHUNK_GENERATION", {
+                chunks: countChunks.length,
+                concurrency: QB_PARALLEL_CHUNK_CONCURRENCY,
+            });
+            console.log(
+                `[ai-qb] parallel chunk generation: ${countChunks.length} chunk(s), concurrency ${QB_PARALLEL_CHUNK_CONCURRENCY}`
+            );
+            chunkResults = await runTasksWithConcurrency(
+                countChunks.map(
+                    (_, chunkIndex) => () => runOneChunk(chunkIndex)
+                ),
+                QB_PARALLEL_CHUNK_CONCURRENCY
+            );
+            chunkResults.sort((a, b) => a.chunkIndex - b.chunkIndex);
+        } else {
+            chunkResults = [];
+            for (let chunkIndex = 0; chunkIndex < countChunks.length; chunkIndex++) {
+                chunkResults.push(await runOneChunk(chunkIndex));
+            }
+        }
+
+        for (const { batchResult } of chunkResults) {
+            const batchQuestions = unwrapFinalizedQuestions(batchResult);
+            lastStats = unwrapFinalizedStats(batchResult);
+
+            mergedQuestions = mergedQuestions.concat(batchQuestions);
+            runningExclude = [
+                ...runningExclude,
+                ...collectQuestionTextsFromBankQuestions(batchQuestions),
+            ];
+            usedArchetypes = [
+                ...usedArchetypes,
+                ...batchQuestions
+                    .map((q) => q._conceptSlot)
+                    .filter(Boolean),
+            ];
+        }
+
+        await persistArchetypes({
+            bankName,
+            sectionName,
+            archetypes: usedArchetypes,
+        });
+
+        let pipelineSummary = {
+            generationChunks: countChunks.length,
+            generationMode: promptFirst ? "prompt_first" : "default",
+            ...(promptFirst && promptFirstComposeSource
+                ? { promptComposeSource: promptFirstComposeSource }
+                : {}),
+            ...lastStats,
+            ...(deferValidation ? { mode: "deferred" } : {}),
+        };
+        let repairedQuestions = mergedQuestions;
+
+        if (!deferValidation && countChunks.length > 1 && !promptFirst) {
+            const finalResult = await finalizeQuestionBankSuggestions({
+                questions: mergedQuestions,
+                topic,
+                bankName,
+                difficulty: generationDifficulty,
+                generationProvider: provider,
+                excludeQuestionTexts: runningExclude,
+                categoryPaths,
+                sectionName,
+                subject,
+                examReferenceBlock,
+                competitiveExamPlan,
+                generateIntent,
+                maxSelectableSlots,
+                allowTopUp: true,
+                difficultyResolution,
+            });
+            repairedQuestions = unwrapFinalizedQuestions(finalResult);
+            pipelineSummary = {
+                generationChunks: countChunks.length,
+                ...unwrapFinalizedStats(finalResult),
+            };
+        }
+
+        if (promptBasedGenRun?.runDir) {
+            const summaryPath = promptBasedGenRun.finalize({
+                generationMode: "prompt_first",
+                composeSource: promptFirstComposeSource,
+                chunks: countChunks.length,
+                totalQuestions: repairedQuestions.length,
+                logDir: promptBasedGenRun.runDir,
+            });
+            pipelineSummary = {
+                ...pipelineSummary,
+                promptBasedGenLogDir: promptBasedGenRun.runDir,
+                promptBasedGenSummary: summaryPath || undefined,
+            };
+        }
+
+        return {
+            questions: promptFirst
+                ? preparePromptFirstQuestions(repairedQuestions)
+                : deferValidation
+                  ? prepareFastPathQuestions(repairedQuestions, {
+                        examCalibrated: difficultyResolution?.examCalibrated,
+                    })
+                  : repairedQuestions,
+            detectedSubject: resolvedSubject,
+            inferredCounts,
+            generationProvider: provider,
+            generationChunks: countChunks.length,
+            pipelineSummary,
+            difficultyResolution,
+            generationDifficulty,
+            validationDeferred: promptFirst ? false : deferValidation,
+            skipBackgroundValidation: promptFirst,
+            backgroundValidationContext:
+                promptFirst || !deferValidation
+                    ? null
+                    : {
+                          examReferenceBlock,
+                          difficultyResolution,
+                          generationDifficulty,
+                          singleCount: resolvedSingleCount,
+                          multipleCount: resolvedMultipleCount,
+                          trueFalseCount: resolvedTrueFalseCount,
+                          passageCount: resolvedPassageCount,
+                          passageSingleCount: resolvedPassageSingleCount,
+                          passageMultipleCount: resolvedPassageMultipleCount,
+                          passageTrueFalseCount: resolvedPassageTrueFalseCount,
+                          maxSelectableSlots: effectiveMaxSelectableSlots,
+                          excludeQuestionTexts: runningExclude,
+                      },
+            ...(generateIntent === "evaluation_regen"
+                ? {
+                      targetedRegeneration: {
+                          replacementCount: totalBatchSelectable,
+                          failedQuestionNumbers: [
+                              ...extractRegenerationTargetNumbers(
+                                  topicRelevanceFeedback
+                              ),
+                          ],
+                      },
+                  }
+                : {}),
+        };
+    }
+
+    throw new ApiError(
+        400,
+        "Question counts are required. Use inferQuestionBankCounts first or pass explicit counts."
+    );
 };
 
 export const generateQuestionsWithAI = async (params) => {
@@ -798,7 +3710,7 @@ export const generateQuestionsWithAI = async (params) => {
 
     return callGeminiWithRetries(async () => {
         const result = await genAI.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: geminiTextModel(),
             contents: [{ role: "user", parts: [{ text: prompt }] }],
             config: {
                 responseMimeType: "application/json",
@@ -824,7 +3736,1113 @@ export const generateQuestionsWithAI = async (params) => {
 };
 
 
+const buildImageQuestionPrompt = ({
+    topic,
+    bankName,
+    difficulty,
+    excludeQuestionTexts = [],
+    imageQuestionType = "mixed",
+    usedImageQuestionTypes = [],
+    categoryPaths = [],
+    sectionName = "",
+    subject = "",
+}) => {
+    const archetypeId = pickImageQuestionArchetype({
+        preferred: imageQuestionType,
+        usedTypes: usedImageQuestionTypes,
+    });
+    const archetype = IMAGE_QUESTION_ARCHETYPES[archetypeId];
+    const excludeBlock = formatExcludeBlock(excludeQuestionTexts);
+    const resolvedSubject = resolveGenerationSubject({
+        topic,
+        bankName,
+        sectionName,
+        categoryPaths,
+        subject,
+    });
+    const subjectBlock = buildSubjectScopeBlock(resolvedSubject);
+    const calibration = buildDifficultyCalibrationBlock({
+        bankName,
+        topic,
+        subject: resolvedSubject.id || "",
+        difficulty,
+        batchSize: 1,
+        mode: "image",
+        categoryPaths,
+        sectionName,
+    });
+    const exampleJson = JSON.stringify(
+        {
+            questionType: "single",
+            ...archetype.example,
+            explanation:
+                archetype.example.explanation ||
+                "Clear one-sentence explanation referencing the figure.",
+        },
+        null,
+        2
+    );
+    const syllabusFocus = getGenerationTopicFocus({ topic, sectionName, bankName });
+
+    return `You are an expert educator creating ONE image-based multiple-choice exam question for an Indian competitive-education platform.
+
+**Question bank:** ${bankName}
+**Topic / syllabus focus (AUTHORITATIVE):** ${syllabusFocus || topic}
+**Difficulty:** ${difficulty}
+**Required archetype for this question:** ${archetypeId} (${archetype.label})
+${subjectBlock}
+${calibration}
+${excludeBlock}
+**CRITICAL INSTRUCTIONS (all archetypes):**
+1. Return ONLY a valid JSON object — no markdown, no code fences, no extra text.
+2. The question MUST require looking at the image to answer — not answerable from text alone.
+3. questionType must be "single" with exactly 4 options and one correct answer letter A–D.
+4. Include a clear explanation (minimum one sentence).
+5. imageSpec.archetype MUST be "${archetypeId}".
+6. imageSpec must include description, style, imagePrompt, and labels (use {} if no letter markers).
+7. questionText must start with "Refer to the figure" or similar and reference the image.
+8. options[] must be FULL ANSWER TEXT — NEVER bare letters "A", "B", "C", "D". The UI adds A/B/C/D prefixes.
+9. Do NOT duplicate or paraphrase excluded questions.
+10. imageSpec.imagePrompt: one plain-text paragraph for image AI — exam-paper schematic style (see below), no watermarks.
+11. On-image text: use only single letters A–D and digits where the archetype allows; never full words or sentences on the figure.
+${EXAM_PAPER_IMAGE_GENERATION_BLOCK}
+${EXAM_PAPER_IMAGE_QUESTION_RULES}
+
+${archetype.instructions}
+
+**Required JSON format (follow this archetype — structure only):**
+${exampleJson}
+
+Return ONLY the JSON object.`;
+};
+
+const enrichImagePromptForClarity = (prompt) => {
+    return enrichPromptForExamPaperStyle(String(prompt || "").trim());
+};
+
+/** Normalize imageSpec.labels into letter → meaning pairs. */
+const normalizeLabelEntries = (labels = {}) => {
+    const entries = Object.entries(labels || {}).filter(([, v]) =>
+        String(v || "").trim()
+    );
+    if (!entries.length) return [];
+    return entries.map(([key, value], idx) => {
+        const letter = /^[A-Z]$/i.test(String(key).trim())
+            ? String(key).trim().toUpperCase()
+            : String.fromCharCode(65 + Math.min(idx, 25));
+        const meaning = String(value).split(/[(\[]/)[0].trim();
+        return { letter, meaning };
+    });
+};
+
+const formatLetterMarkerClause = (labelEntries) => {
+    if (!labelEntries.length) {
+        return "Place only single capital letters A, B, C, D as markers. No words anywhere on the image.";
+    }
+    const parts = labelEntries.map(
+        ({ letter, meaning }) =>
+            `place large bold letter "${letter}" on the part representing ${meaning}`
+    );
+    return `On the image: ${parts.join("; ")}. Show ONLY these single letters — absolutely no words, names, or other text.`;
+};
+
+/** Remove instructions that ask Imagen to render full-word labels (it cannot do this reliably). */
+const stripWordLabelInstructions = (prompt) => {
+    let p = String(prompt || "");
+    p = p.replace(/\b(?:label|labels|labeled|labelling|reading)\s+(?:exactly\s+)?"[^"]+"/gi, "");
+    p = p.replace(/\bBold\s+(?:black\s+)?labels[^.]*\./gi, "");
+    p = p.replace(/\b(?:clear|readable)\s+labels[^.]*\./gi, "");
+    p = p.replace(/\b(?:correctly\s+spelled|human-readable|real\s+English)\s+[^.]*\./gi, "");
+    p = p.replace(/\bdisplay\s+ONLY\s+these\s+exact[^.]*\./gi, "");
+    p = p.replace(/\b(?:North America|South America|Atlantic Ocean|Pacific Ocean)[^.]*on\s+the\s+image[^.]*\./gi, "");
+    return p.replace(/\s{2,}/g, " ").trim();
+};
+
+/** Append archetype-aware rules before sending to Imagen. */
+const finalizeImagePromptForImagen = (prompt, imageSpec = {}) => {
+    let p = stripWordLabelInstructions(enrichImagePromptForClarity(String(prompt || "").trim()));
+    if (!p) return p;
+
+    const archetypeId =
+        imageSpec.archetype || imageSpec.questionArchetype || imageSpec.type || "";
+    const rules = getImagePromptRulesForArchetype(archetypeId);
+    const labelEntries = normalizeLabelEntries(imageSpec.labels);
+    const letterClause = formatLetterMarkerClause(labelEntries);
+
+    const parts = [p];
+    if (rules.letterClause && letterClause && !/Show ONLY these single letters/i.test(p)) {
+        parts.push(letterClause);
+    } else if (rules.letterClause && !labelEntries.length && !/capital letters A/i.test(p)) {
+        parts.push(
+            "Place only single capital letters A, B, C, D as markers where needed. No words anywhere on the image."
+        );
+    }
+    if (rules.noTextRule && !/STRICT:/i.test(p)) {
+        parts.push(rules.noTextRule);
+    }
+    if (!/exam\s+paper|question\s+paper|schematic/i.test(p)) {
+        parts.push(EXAM_PAPER_IMAGEN_SUFFIX);
+    }
+    return parts.join(" ");
+};
+
+const buildImagePromptFromSpec = (imageSpec = {}) => {
+    const ready = String(imageSpec.imagePrompt || imageSpec.prompt || "").trim();
+    if (ready.length >= 20) return finalizeImagePromptForImagen(ready, imageSpec);
+
+    const description = String(imageSpec.description || "").trim();
+    const style = String(
+        imageSpec.style || EXAM_PAPER_IMAGE_DEFAULT_STYLE
+    ).trim();
+    const archetypeId = String(imageSpec.archetype || imageSpec.type || "diagram").trim();
+    const archetype = getImageQuestionArchetype(archetypeId);
+    const visualType = String(imageSpec.type || archetypeId || "diagram").trim();
+    const labelEntries = normalizeLabelEntries(imageSpec.labels);
+    const rules = getImagePromptRulesForArchetype(archetypeId);
+    const letterHint = rules.letterClause ? formatLetterMarkerClause(labelEntries) : "";
+    const built = [
+        `Exam question paper ${visualType} figure for a competitive exam.`,
+        description,
+        `Style: ${style}.`,
+        letterHint,
+        EXAM_PAPER_IMAGEN_SUFFIX,
+    ]
+        .filter(Boolean)
+        .join(" ");
+    return finalizeImagePromptForImagen(built, imageSpec);
+};
+
+/** Convert labels object to letter-keyed map (A→meaning) for consistent letter-only images. */
+const normalizeImageSpecLabels = (rawLabels = {}) => {
+    const entries = normalizeLabelEntries(rawLabels);
+    const normalized = {};
+    for (const { letter, meaning } of entries) {
+        normalized[letter] = meaning;
+    }
+    return normalized;
+};
+
+const areBareLetterOptions = (options) =>
+    Array.isArray(options) &&
+    options.length > 0 &&
+    options.every((o) => /^[A-D]$/i.test(String(o).trim()));
+
+/** When the model copies bare A–D into options[], recover text from imageSpec.labels. */
+const deriveImageQuestionOptionsFromLabels = (options, labels = {}) => {
+    if (!areBareLetterOptions(options)) return options;
+    const entries = normalizeLabelEntries(labels);
+    if (!entries.length) return options;
+
+    const derived = ["", "", "", ""];
+    for (const { letter, meaning } of entries) {
+        const idx = letter.charCodeAt(0) - 65;
+        if (idx >= 0 && idx <= 3 && meaning) derived[idx] = meaning;
+    }
+    return derived.filter(Boolean).length >= 2 ? derived : options;
+};
+
+const normalizeImageSpec = (raw = {}) => {
+    const description = stripMarkdownNoise(raw.description || "");
+    if (!description) {
+        throw new ApiError(500, "AI image question is missing imageSpec.description");
+    }
+
+    const style = stripMarkdownNoise(
+        raw.style || EXAM_PAPER_IMAGE_DEFAULT_STYLE
+    );
+    const archetype = String(
+        raw.archetype || raw.questionArchetype || raw.type || "labeled_diagram"
+    ).trim();
+    const type = String(raw.type || archetype || "diagram").trim();
+    const labels = normalizeImageSpecLabels(
+        raw.labels && typeof raw.labels === "object" && !Array.isArray(raw.labels)
+            ? raw.labels
+            : {}
+    );
+
+    const specForPrompt = { archetype, type, description, style, labels };
+
+    let imagePrompt = stripMarkdownNoise(raw.imagePrompt || raw.prompt || "");
+    if (imagePrompt.length < 20) {
+        imagePrompt = buildImagePromptFromSpec(specForPrompt);
+    } else {
+        imagePrompt = finalizeImagePromptForImagen(imagePrompt, specForPrompt);
+    }
+
+    return {
+        archetype,
+        type,
+        description,
+        style,
+        labels,
+        imagePrompt,
+    };
+};
+
+const parseImageQuestionAIResponse = (rawText) => {
+    const parsed = parseJsonObjectFromAI(rawText);
+
+    if (!parsed?.imageSpec) {
+        throw new ApiError(500, "AI image question is missing imageSpec");
+    }
+
+    if (areBareLetterOptions(parsed.options)) {
+        parsed.options = deriveImageQuestionOptionsFromLabels(
+            parsed.options,
+            parsed.imageSpec.labels
+        );
+    }
+
+    const item = parseQuestionBankAIItem(parsed, 0, "Image question");
+    const imageSpec = normalizeImageSpec(parsed.imageSpec);
+
+    return {
+        ...item,
+        imageSpec,
+    };
+};
+
+const IMAGEN_FALLBACK_MODELS = [
+    DEFAULT_IMAGEN_MODEL,
+    "imagen-3.0-generate-002",
+];
+
+const buildImagenGenerationConfig = (model) => {
+    const config = { numberOfImages: 1 };
+    if (model.includes("ultra") || model === DEFAULT_IMAGEN_MODEL) {
+        config.imageSize = "1K";
+    }
+    return config;
+};
+
+const extractImageBytesFromGenerateContentResponse = (response) => {
+    const candidates = response?.candidates || [];
+    for (const candidate of candidates) {
+        const parts = candidate?.content?.parts || [];
+        for (const part of parts) {
+            if (part?.inlineData?.data) {
+                return {
+                    bytes: part.inlineData.data,
+                    mimeType: part.inlineData.mimeType || "image/png",
+                };
+            }
+        }
+    }
+
+    if (response?.data) {
+        return { bytes: response.data, mimeType: "image/png" };
+    }
+
+    return null;
+};
+
+const extensionForMimeType = (mimeType = "image/png") => {
+    const map = {
+        "image/png": "png",
+        "image/jpeg": "jpg",
+        "image/jpg": "jpg",
+        "image/webp": "webp",
+    };
+    return map[String(mimeType).toLowerCase()] || "png";
+};
+
+const generateImagenImageBytes = async (model, prompt) => {
+    const response = await genAI.models.generateImages({
+        model,
+        prompt,
+        config: buildImagenGenerationConfig(model),
+    });
+
+    const imageBytes =
+        response?.generatedImages?.[0]?.image?.imageBytes ||
+        response?.generatedImages?.[0]?.image?.bytes;
+
+    if (!imageBytes) {
+        throw new Error("No image bytes in Imagen response");
+    }
+
+    return { buffer: Buffer.from(imageBytes, "base64"), mimeType: "image/png" };
+};
+
+const generateNanoBananaImageBytes = async (model, prompt) => {
+    const response = await genAI.models.generateContent({
+        model,
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        config: {
+            responseModalities: [Modality.IMAGE],
+        },
+    });
+
+    const extracted = extractImageBytesFromGenerateContentResponse(response);
+    if (!extracted?.bytes) {
+        throw new Error("No image bytes in Nano Banana response");
+    }
+
+    return {
+        buffer: Buffer.from(extracted.bytes, "base64"),
+        mimeType: extracted.mimeType,
+    };
+};
+
+const generateGeminiImageBytes = async (model, prompt) => {
+    if (isNanoBananaImageModel(model)) {
+        return generateNanoBananaImageBytes(model, prompt);
+    }
+    return generateImagenImageBytes(model, prompt);
+};
+
+const OPENAI_IMAGES_URL = "https://api.openai.com/v1/images/generations";
+const OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions";
+
+const getOpenAIImageConfig = () => ({
+    apiKey: process.env.OPENAI_API_KEY,
+    model: String(process.env.OPENAI_IMAGE_MODEL || "gpt-image-1").trim(),
+    size: String(process.env.OPENAI_IMAGE_SIZE || "1024x1024").trim(),
+    quality: String(process.env.OPENAI_IMAGE_QUALITY || "medium").trim(),
+});
+
+const getOpenAIChatConfig = () => ({
+    apiKey: process.env.OPENAI_API_KEY,
+    model: String(process.env.OPENAI_CHAT_MODEL || "gpt-4o-mini").trim(),
+});
+
+const buildOpenAIImageRequestBody = (prompt, { model, size, quality }) => {
+    const body = {
+        model,
+        prompt,
+        n: 1,
+        size,
+    };
+
+    if (model.startsWith("dall-e-3")) {
+        body.quality = quality === "high" || quality === "hd" ? "hd" : "standard";
+        body.response_format = "b64_json";
+    } else if (model.startsWith("dall-e-2")) {
+        body.response_format = "b64_json";
+    } else if (model.startsWith("gpt-image")) {
+        body.quality = quality;
+    }
+
+    return body;
+};
+
+const extractOpenAIImageBytes = (responseData) => {
+    const item = responseData?.data?.[0];
+    if (!item) return null;
+
+    if (item.b64_json) {
+        return Buffer.from(item.b64_json, "base64");
+    }
+
+    if (item.url) {
+        return null;
+    }
+
+    return null;
+};
+
+const OPENAI_MAX_ATTEMPTS = 3;
+const OPENAI_RETRY_DELAY_MS = 3000;
+
+const parseOpenAIApiError = (error) => {
+    const status = error?.response?.status;
+    const body = error?.response?.data?.error || {};
+    const message = body.message || error?.message || "Unknown OpenAI error";
+    const code = String(body.code || body.type || "").toLowerCase();
+    return { status, message, code };
+};
+
+const isOpenAIQuotaExceeded = ({ status, message, code }) =>
+    status === 429 &&
+    (code === "insufficient_quota" || /quota|billing|exceeded your current/i.test(message));
+
+const isOpenAIRetryableError = (error) => {
+    const parsed = parseOpenAIApiError(error);
+    if (parsed.status === 429 && isOpenAIQuotaExceeded(parsed)) return false;
+    return parsed.status === 429 || parsed.status === 500 || parsed.status === 503;
+};
+
+const toOpenAIApiError = (error, actionLabel = "OpenAI request") => {
+    if (error instanceof ApiError) return error;
+
+    const parsed = parseOpenAIApiError(error);
+    const { status, message, code } = parsed;
+
+    if (status === 401) {
+        return new ApiError(500, "OpenAI API key is invalid (OPENAI_API_KEY)");
+    }
+    if (isOpenAIQuotaExceeded(parsed)) {
+        return new ApiError(
+            402,
+            "OpenAI account has no remaining quota. Add billing or credits at https://platform.openai.com/account/billing, or use Gemini for now."
+        );
+    }
+    if (status === 429) {
+        return new ApiError(
+            429,
+            "OpenAI rate limit exceeded. Please wait a moment and try again."
+        );
+    }
+    if (status === 400 && /content policy|safety|moderation/i.test(message)) {
+        return new ApiError(
+            400,
+            "OpenAI rejected this prompt due to content policy. Try regenerating the question."
+        );
+    }
+
+    return new ApiError(500, `${actionLabel} failed: ${message}`);
+};
+
+const callOpenAIWithRetries = async (fn) => {
+    let lastError;
+    for (let attempt = 1; attempt <= OPENAI_MAX_ATTEMPTS; attempt++) {
+        try {
+            return await fn();
+        } catch (error) {
+            lastError = error;
+            if (attempt < OPENAI_MAX_ATTEMPTS && isOpenAIRetryableError(error)) {
+                const retryAfter = Number(error?.response?.headers?.["retry-after"]);
+                const delayMs =
+                    Number.isFinite(retryAfter) && retryAfter > 0
+                        ? retryAfter * 1000
+                        : OPENAI_RETRY_DELAY_MS * attempt;
+                await sleep(delayMs);
+                continue;
+            }
+            throw error;
+        }
+    }
+    throw lastError;
+};
+
+const toOpenAIImageError = (error) => toOpenAIApiError(error, "OpenAI image generation");
+
+const toOpenAIChatError = (error) => toOpenAIApiError(error, "OpenAI question generation");
+
+const callOpenAIChatForText = async (
+    prompt,
+    { model: modelOverride, temperature = 0.2 } = {}
+) => {
+    const { apiKey, model: defaultModel } = getOpenAIChatConfig();
+    const model = modelOverride || defaultModel;
+
+    if (!apiKey) {
+        throw new ApiError(500, "OpenAI API key is not configured (OPENAI_API_KEY)");
+    }
+
+    try {
+        const response = await callOpenAIWithRetries(() =>
+            axios.post(
+                OPENAI_CHAT_URL,
+                {
+                    model,
+                    messages: [{ role: "user", content: prompt }],
+                    temperature,
+                },
+                {
+                    headers: {
+                        Authorization: `Bearer ${apiKey}`,
+                        "Content-Type": "application/json",
+                    },
+                    timeout: 120000,
+                }
+            )
+        );
+
+        const text = response.data?.choices?.[0]?.message?.content || "";
+        if (!text.trim()) {
+            throw new ApiError(500, "OpenAI returned empty response");
+        }
+
+        return text;
+    } catch (error) {
+        throw toOpenAIChatError(error);
+    }
+};
+
+const callOpenAIChatForJson = async (prompt, { model: modelOverride } = {}) => {
+    const { apiKey, model: defaultModel } = getOpenAIChatConfig();
+    const model = modelOverride || defaultModel;
+
+    if (!apiKey) {
+        throw new ApiError(500, "OpenAI API key is not configured (OPENAI_API_KEY)");
+    }
+
+    try {
+        const response = await callOpenAIWithRetries(() =>
+            axios.post(
+                OPENAI_CHAT_URL,
+                {
+                    model,
+                    messages: [{ role: "user", content: prompt }],
+                    response_format: { type: "json_object" },
+                },
+                {
+                    headers: {
+                        Authorization: `Bearer ${apiKey}`,
+                        "Content-Type": "application/json",
+                    },
+                    timeout: 120000,
+                }
+            )
+        );
+
+        const text = response.data?.choices?.[0]?.message?.content || "";
+        if (!text.trim()) {
+            throw new ApiError(500, "OpenAI returned empty response");
+        }
+
+        return text;
+    } catch (error) {
+        throw toOpenAIChatError(error);
+    }
+};
+
+const callGeminiChatForJson = async (prompt, { temperature } = {}) => {
+    if (!process.env.GEMINI_API_KEY) {
+        throw new ApiError(500, "Gemini API key is not configured (GEMINI_API_KEY)");
+    }
+
+    return callGeminiWithRetries(async () => {
+        const result = await genAI.models.generateContent({
+            model: geminiTextModel(),
+            contents: [{ role: "user", parts: [{ text: prompt }] }],
+            config: geminiJsonConfig(temperature ?? 0.1),
+        });
+        const text = result.text || "";
+        if (!text.trim()) {
+            throw new ApiError(500, "Gemini returned empty response");
+        }
+        return text;
+    });
+};
+
+const callQuestionBankGenerationLLMText = async (
+    prompt,
+    { generationProvider = "gemini", temperature = 0.2 } = {}
+) => {
+    if (generationProvider === "openai") {
+        if (!process.env.OPENAI_API_KEY) {
+            throw new ApiError(
+                500,
+                "OpenAI API key is not configured (OPENAI_API_KEY)"
+            );
+        }
+        const model =
+            process.env.OPENAI_QB_GENERATION_MODEL?.trim() ||
+            getOpenAIChatConfig().model;
+        return callOpenAIChatForText(prompt, { model, temperature });
+    }
+
+    if (!process.env.GEMINI_API_KEY) {
+        throw new ApiError(500, "Gemini API key is not configured (GEMINI_API_KEY)");
+    }
+
+    return callGeminiWithRetries(async () => {
+        const result = await genAI.models.generateContent({
+            model: geminiTextModel(),
+            contents: [{ role: "user", parts: [{ text: prompt }] }],
+            config: { temperature },
+        });
+        const text = result.text || "";
+        if (!text) {
+            throw new ApiError(500, "AI returned empty response");
+        }
+        return text;
+    });
+};
+
+const callQuestionBankGenerationLLM = async (
+    prompt,
+    { generationProvider = "gemini", temperature } = {}
+) => {
+    if (generationProvider === "openai") {
+        if (!process.env.OPENAI_API_KEY) {
+            throw new ApiError(
+                500,
+                "OpenAI API key is not configured (OPENAI_API_KEY)"
+            );
+        }
+        const model =
+            process.env.OPENAI_QB_GENERATION_MODEL?.trim() ||
+            getOpenAIChatConfig().model;
+        return callOpenAIChatForJson(prompt, { model });
+    }
+
+    if (!process.env.GEMINI_API_KEY) {
+        throw new ApiError(500, "Gemini API key is not configured (GEMINI_API_KEY)");
+    }
+
+    return callGeminiWithRetries(async () => {
+        const result = await genAI.models.generateContent({
+            model: geminiTextModel(),
+            contents: [{ role: "user", parts: [{ text: prompt }] }],
+            config: geminiJsonConfig(temperature),
+        });
+        const text = result.text || "";
+        if (!text) {
+            throw new ApiError(500, "AI returned empty response");
+        }
+        return text;
+    });
+};
+
+/**
+ * Generate a single image-based MCQ (text + imageSpec) via Gemini.
+ */
+export const generateImageQuestionText = async (params) => {
+    const {
+        topic,
+        bankName,
+        difficulty,
+        excludeQuestionTexts = [],
+        imageQuestionType = "mixed",
+        usedImageQuestionTypes = [],
+        categoryPaths = [],
+        sectionName = "",
+        subject = "",
+    } = params;
+
+    if (!process.env.GEMINI_API_KEY) {
+        throw new ApiError(500, "Gemini API key is not configured (GEMINI_API_KEY)");
+    }
+
+    const prompt = buildImageQuestionPrompt({
+        topic,
+        bankName,
+        difficulty,
+        excludeQuestionTexts,
+        imageQuestionType,
+        usedImageQuestionTypes,
+        categoryPaths,
+        sectionName,
+        subject,
+    });
+
+    return callGeminiWithRetries(async () => {
+        const result = await genAI.models.generateContent({
+            model: geminiTextModel(),
+            contents: [{ role: "user", parts: [{ text: prompt }] }],
+            config: {
+                responseMimeType: "application/json",
+            },
+        });
+
+        const text = result.text || "";
+        if (!text) {
+            throw new ApiError(500, "AI returned empty response");
+        }
+
+        return parseImageQuestionAIResponse(text);
+    });
+};
+
+/**
+ * Generate a single image-based MCQ (text + imageSpec) via OpenAI — test flow only.
+ */
+export const generateImageQuestionTextWithOpenAI = async (params) => {
+    const {
+        topic,
+        bankName,
+        difficulty,
+        excludeQuestionTexts = [],
+        imageQuestionType = "mixed",
+        usedImageQuestionTypes = [],
+        categoryPaths = [],
+        sectionName = "",
+        subject = "",
+    } = params;
+
+    const prompt = buildImageQuestionPrompt({
+        topic,
+        bankName,
+        difficulty,
+        excludeQuestionTexts,
+        imageQuestionType,
+        usedImageQuestionTypes,
+        categoryPaths,
+        sectionName,
+        subject,
+    });
+
+    const text = await callOpenAIChatForJson(prompt);
+    return parseImageQuestionAIResponse(text);
+};
+
+/**
+ * Generate an educational image from imageSpec, upload to S3, return public URL.
+ */
+export const generateQuestionImageFromSpec = async (imageSpec, options = {}) => {
+    if (!process.env.GEMINI_API_KEY) {
+        throw new ApiError(500, "Gemini API key is not configured (GEMINI_API_KEY)");
+    }
+
+    const prompt = buildImagePromptFromSpec(imageSpec);
+    if (!prompt || prompt.length < 10) {
+        throw new ApiError(
+            400,
+            "imageSpec.imagePrompt or imageSpec.description is required to generate an image"
+        );
+    }
+
+    const requestedModel = options.imageModel;
+    let modelsToTry;
+    try {
+        modelsToTry = requestedModel
+            ? [resolveGeminiImageModel(requestedModel)]
+            : IMAGEN_FALLBACK_MODELS;
+    } catch (error) {
+        throw new ApiError(400, error.message);
+    }
+
+    let lastError;
+    for (const model of modelsToTry) {
+        try {
+            const { buffer, mimeType } = await callGeminiWithRetries(() =>
+                generateGeminiImageBytes(model, prompt)
+            );
+
+            const ext = extensionForMimeType(mimeType);
+            const imageUrl = await uploadImageToCloudinary(
+                buffer,
+                `ai-question-image.${ext}`,
+                "question-images",
+                mimeType
+            );
+
+            const modelMeta = getImageModelMeta(model);
+
+            return {
+                imageUrl,
+                prompt,
+                provider: "gemini",
+                model,
+                modelLabel: modelMeta?.label || model,
+                modelFamily: modelMeta?.family || "imagen",
+            };
+        } catch (error) {
+            lastError = error;
+        }
+    }
+
+    throw toGeminiQuestionBankError(
+        lastError || new Error("Image generation failed for all Gemini image models")
+    );
+};
+
+/**
+ * Generate an educational image from imageSpec via OpenAI, upload to S3, return public URL.
+ */
+export const generateQuestionImageFromSpecWithOpenAI = async (imageSpec) => {
+    const { apiKey, model, size, quality } = getOpenAIImageConfig();
+
+    if (!apiKey) {
+        throw new ApiError(500, "OpenAI API key is not configured (OPENAI_API_KEY)");
+    }
+
+    const prompt = buildImagePromptFromSpec(imageSpec);
+    if (!prompt || prompt.length < 10) {
+        throw new ApiError(
+            400,
+            "imageSpec.imagePrompt or imageSpec.description is required to generate an image"
+        );
+    }
+
+    try {
+        const response = await callOpenAIWithRetries(() =>
+            axios.post(
+                OPENAI_IMAGES_URL,
+                buildOpenAIImageRequestBody(prompt, { model, size, quality }),
+                {
+                    headers: {
+                        Authorization: `Bearer ${apiKey}`,
+                        "Content-Type": "application/json",
+                    },
+                    timeout: 120000,
+                }
+            )
+        );
+
+        let buffer = extractOpenAIImageBytes(response.data);
+        const remoteUrl = response.data?.data?.[0]?.url;
+
+        if (!buffer && remoteUrl) {
+            const imageResponse = await axios.get(remoteUrl, {
+                responseType: "arraybuffer",
+                timeout: 60000,
+            });
+            buffer = Buffer.from(imageResponse.data);
+        }
+
+        if (!buffer) {
+            throw new Error("No image data in OpenAI response");
+        }
+
+        const imageUrl = await uploadImageToCloudinary(
+            buffer,
+            "ai-question-image-openai.png",
+            "question-images",
+            "image/png"
+        );
+
+        return { imageUrl, prompt, provider: "openai", model };
+    } catch (error) {
+        throw toOpenAIImageError(error);
+    }
+};
+
+export const validateQuestionTopicRelevance = async (params) => {
+    const {
+        topic,
+        bankName = "",
+        subject = "",
+        sectionName = "",
+        difficulty = "",
+        questions = [],
+        alreadyEvaluated = false,
+        evaluationProvider = "openai",
+        competitiveExamPlan = null,
+        categoryPaths = [],
+        singleCount = 0,
+        multipleCount = 0,
+        trueFalseCount = 0,
+        passageCount = 0,
+        passageSingleCount = 0,
+        passageMultipleCount = 0,
+        passageTrueFalseCount = 0,
+    } = params;
+
+    assertTopicRelevanceEvaluationAllowed({
+        alreadyEvaluated,
+        questionCount: Array.isArray(questions) ? questions.length : 0,
+    });
+
+    const provider = evaluationProvider === "gemini" ? "gemini" : "openai";
+    if (provider === "gemini" && !process.env.GEMINI_API_KEY) {
+        throw new ApiError(500, "Gemini API key is not configured (GEMINI_API_KEY)");
+    }
+    if (provider === "openai" && !process.env.OPENAI_API_KEY) {
+        throw new ApiError(500, "OpenAI API key is not configured (OPENAI_API_KEY)");
+    }
+
+    const callAuditLlm =
+        provider === "gemini" ? callGeminiChatForJson : callOpenAIChatForJson;
+
+    const { sampled, totalCount, sampleCount } = sampleQuestionsForValidation(
+        enrichQuestionsForDifficultyAudit(questions),
+        TOPIC_RELEVANCE_MAX_SAMPLE
+    );
+
+    if (!sampled.length) {
+        throw new ApiError(400, "At least one question is required for validation");
+    }
+
+    const generationPlan = buildGenerationPlanForEvaluation({
+        competitiveExamPlan,
+        singleCount,
+        multipleCount,
+        trueFalseCount,
+        passageCount,
+        passageSingleCount,
+        passageMultipleCount,
+        passageTrueFalseCount,
+        bankName,
+        topic,
+        sectionName,
+        categoryPaths,
+        subject,
+        difficulty,
+    });
+
+    const examCtx = resolveExamContextForGeneration({
+        competitiveExamPlan: generationPlan,
+        bankName,
+        topic,
+        subject,
+        sectionName,
+        categoryPaths,
+    });
+    const examProfile = examCtx.examProfile;
+    const isJeeProfile =
+        examProfile === "jee_main" || examProfile === "jee_advanced";
+
+    const patternComplianceResult = auditPatternCompliance(
+        generationPlan,
+        questions
+    );
+
+    const promptContext = { topic, bankName, sectionName };
+    const preAudit = runDeterministicCorrectnessAudit(sampled);
+    const difficultyPreAudit = runDeterministicDifficultyAudit(
+        sampled.map((q) => ({
+            ...q,
+            difficultyTier: q.difficulty || difficulty,
+            _solveSteps: q._solveSteps,
+            _conceptSlot: q._conceptSlot,
+        })),
+        {
+            bankDifficulty: difficulty || generationPlan?.bankDifficulty || "hard",
+            examProfile,
+            examCalibrated: generationPlan?.examCalibrated || false,
+        }
+    );
+    pipelineTrace('VALIDATE_PRE_AUDIT', {
+        provider,
+        sampleCount,
+        totalCount,
+        correctnessScore: preAudit.correctnessScore,
+        styleScore: preAudit.styleScore,
+        difficultyMatchScore: difficultyPreAudit.difficultyMatchScore,
+        issueCount: preAudit.confirmedIssues?.length ?? 0,
+    });
+    if (preAudit.confirmedIssues?.length) {
+        pipelineTraceSection(
+            'pre-audit issues',
+            preAudit.confirmedIssues.slice(0, 25).map(
+                (i) => `Q${i.questionNumber}: ${i.issue}`
+            )
+        );
+    }
+    const correctnessModel =
+        provider === "openai"
+            ? process.env.OPENAI_CORRECTNESS_AUDIT_MODEL?.trim() || "gpt-4o"
+            : undefined;
+
+    const topicPrompt = buildTopicRelevancePrompt({
+        topic,
+        bankName,
+        subject,
+        sectionName,
+        difficulty,
+        examProfile,
+        sampled,
+        totalCount,
+        sampleCount,
+    });
+    const correctnessPrompt = buildCorrectnessAuditPrompt({
+        topic,
+        difficulty,
+        examProfile,
+        sampled,
+        totalCount,
+        sampleCount,
+    });
+    const authenticityPrompt = isJeeProfile
+        ? buildJeeAuthenticityAuditPrompt({
+              topic,
+              difficulty,
+              examProfile,
+              generationPlan,
+              sampled,
+              totalCount,
+              sampleCount,
+          })
+        : null;
+
+    try {
+        const [topicRaw, correctnessRaw, authenticityRaw] = await Promise.all([
+            callAuditLlm(topicPrompt),
+            callAuditLlm(
+                correctnessPrompt,
+                provider === "openai" ? { model: correctnessModel } : {}
+            ),
+            authenticityPrompt
+                ? callAuditLlm(
+                      authenticityPrompt,
+                      provider === "openai" ? { model: correctnessModel } : {}
+                  )
+                : Promise.resolve(null),
+        ]);
+        const topicResult = parseTopicRelevanceResponse(topicRaw, promptContext);
+        const llmCorrectness = parseCorrectnessAuditResponse(correctnessRaw);
+        const correctnessResult = mergeCorrectnessAuditResults(
+            preAudit,
+            llmCorrectness
+        );
+        const authenticityResult =
+            authenticityRaw != null
+                ? parseAuthenticityAuditResponse(authenticityRaw)
+                : null;
+        const result = mergeValidationResults(
+            topicResult,
+            correctnessResult,
+            promptContext,
+            authenticityResult,
+            patternComplianceResult,
+            {
+                questionsAudited: sampleCount,
+                totalCount,
+                deterministicDifficultyScore:
+                    difficultyPreAudit.difficultyMatchScore,
+            }
+        );
+        pipelineTrace('VALIDATE_SCORES', {
+            overallScore: result.overallScore,
+            topicRelevanceScore: result.topicRelevanceScore,
+            correctnessScore: result.correctnessScore,
+            styleScore: result.styleScore,
+            authenticityScore: result.authenticityScore,
+            diversityScore: result.diversityScore,
+            difficultyMatchScore: result.difficultyMatchScore,
+            dimensionScores: result.dimensionScores,
+            patternComplianceScore: result.patternComplianceScore,
+            factualIssueCount: result.factualIssues?.length ?? 0,
+        });
+        if (result.factualIssues?.length) {
+            pipelineTraceSection(
+                'factual issues',
+                result.factualIssues.slice(0, 25).map(
+                    (i) => `Q${i.questionNumber}: ${i.issue}`
+                )
+            );
+        }
+        return {
+            ...result,
+            totalCount,
+            sampleCount,
+            maxSample: TOPIC_RELEVANCE_MAX_SAMPLE,
+            evaluationProvider: provider,
+            pipelineSummary: {
+                overallScore: result.overallScore,
+                topicRelevanceScore: result.topicRelevanceScore,
+                correctnessScore: result.correctnessScore,
+                styleScore: result.styleScore,
+                authenticityScore: result.authenticityScore,
+                diversityScore: result.diversityScore,
+                difficultyMatchScore: result.difficultyMatchScore,
+                dimensionScores: result.dimensionScores,
+                preAuditScore: preAudit.correctnessScore,
+                correctQuestions: result.correctQuestions,
+                criticalErrors: result.criticalErrors,
+                majorErrors: result.majorErrors,
+                minorErrors: result.minorErrors,
+                sampleCount,
+                totalCount,
+            },
+        };
+    } catch (error) {
+        if (error instanceof ApiError) throw error;
+        throw provider === "openai"
+            ? toOpenAIApiError(error, "OpenAI topic validation")
+            : new ApiError(
+                  500,
+                  error?.message || "Gemini topic validation failed"
+              );
+    }
+};
+
 export default {
     generateQuestionsWithAI,
+    inferQuestionBankCounts,
+    inferCompetitiveExamPlan,
     generateQuestionBankSuggestions,
+    generateImageQuestionText,
+    generateImageQuestionTextWithOpenAI,
+    generateQuestionImageFromSpec,
+    generateQuestionImageFromSpecWithOpenAI,
+    getGeminiImageModelOptions,
+    validateQuestionTopicRelevance,
+    shouldDeferQuestionBankValidation,
+    prepareFastPathQuestions,
+    finalizeQuestionBankSuggestions,
 };
