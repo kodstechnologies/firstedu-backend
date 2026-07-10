@@ -224,9 +224,9 @@ export const generateQuestionBankSuggestionsSchema = Joi.object({
         paperNumber: Joi.number().integer().valid(1, 2).optional().allow(null),
         isFullPaper: Joi.boolean().optional(),
         topicScope: Joi.string().trim().max(500).optional().allow(''),
-        singleCount: Joi.number().integer().min(0).max(30).optional(),
-        multipleCount: Joi.number().integer().min(0).max(30).optional(),
-        trueFalseCount: Joi.number().integer().min(0).max(30).optional(),
+        singleCount: Joi.number().integer().min(0).max(100).optional(),
+        multipleCount: Joi.number().integer().min(0).max(100).optional(),
+        trueFalseCount: Joi.number().integer().min(0).max(100).optional(),
         passageCount: Joi.number().integer().min(0).max(10).optional(),
         passageSingleCount: Joi.number().integer().min(0).max(30).optional(),
         passageMultipleCount: Joi.number().integer().min(0).max(30).optional(),
@@ -236,7 +236,7 @@ export const generateQuestionBankSuggestionsSchema = Joi.object({
                 Joi.object({
                     id: Joi.string().trim().max(50).optional(),
                     label: Joi.string().trim().max(100).optional(),
-                    count: Joi.number().integer().min(0).max(30).optional(),
+                    count: Joi.number().integer().min(0).max(100).optional(),
                 })
             )
             .max(20)
@@ -434,9 +434,9 @@ export const validateQuestionTopicRelevanceSchema = Joi.object({
         paperNumber: Joi.number().integer().valid(1, 2).optional().allow(null),
         isFullPaper: Joi.boolean().optional(),
         topicScope: Joi.string().trim().max(500).optional().allow(''),
-        singleCount: Joi.number().integer().min(0).max(30).optional(),
-        multipleCount: Joi.number().integer().min(0).max(30).optional(),
-        trueFalseCount: Joi.number().integer().min(0).max(30).optional(),
+        singleCount: Joi.number().integer().min(0).max(100).optional(),
+        multipleCount: Joi.number().integer().min(0).max(100).optional(),
+        trueFalseCount: Joi.number().integer().min(0).max(100).optional(),
         passageCount: Joi.number().integer().min(0).max(10).optional(),
         passageSingleCount: Joi.number().integer().min(0).max(30).optional(),
         passageMultipleCount: Joi.number().integer().min(0).max(30).optional(),
@@ -446,7 +446,7 @@ export const validateQuestionTopicRelevanceSchema = Joi.object({
                 Joi.object({
                     id: Joi.string().trim().max(50).optional(),
                     label: Joi.string().trim().max(100).optional(),
-                    count: Joi.number().integer().min(0).max(30).optional(),
+                    count: Joi.number().integer().min(0).max(100).optional(),
                 })
             )
             .max(20)
@@ -455,9 +455,9 @@ export const validateQuestionTopicRelevanceSchema = Joi.object({
     })
         .unknown(true)
         .optional(),
-    singleCount: Joi.number().integer().min(0).max(30).optional(),
-    multipleCount: Joi.number().integer().min(0).max(30).optional(),
-    trueFalseCount: Joi.number().integer().min(0).max(30).optional(),
+    singleCount: Joi.number().integer().min(0).max(100).optional(),
+    multipleCount: Joi.number().integer().min(0).max(100).optional(),
+    trueFalseCount: Joi.number().integer().min(0).max(100).optional(),
     passageCount: Joi.number().integer().min(0).max(10).optional(),
     passageSingleCount: Joi.number().integer().min(0).max(30).optional(),
     passageMultipleCount: Joi.number().integer().min(0).max(30).optional(),

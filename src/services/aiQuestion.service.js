@@ -226,8 +226,17 @@ export {
 };
 
 // Initialize Gemini client (model from GEMINI_TEXT_MODEL)
+// httpOptions.timeout bounds a single call's wait for Gemini to respond at
+// all — without it, the SDK falls back to undici's ~5min default headers
+// timeout, so a stuck call silently hangs for minutes before our own
+// retry/backoff logic (callGeminiWithRetries) ever gets a chance to run.
+const GEMINI_REQUEST_TIMEOUT_MS = Math.max(
+    10_000,
+    Number(process.env.GEMINI_REQUEST_TIMEOUT_MS ?? 90_000)
+);
 const genAI = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY,
+  httpOptions: { timeout: GEMINI_REQUEST_TIMEOUT_MS },
 });
 
 const geminiTextModel = () => resolveGeminiTextModel();
