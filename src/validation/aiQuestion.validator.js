@@ -124,9 +124,9 @@ export const generateQuestionBankSuggestionsSchema = Joi.object({
             'any.only': 'Difficulty must be easy, medium, or hard',
             'any.required': 'Difficulty is required',
         }),
-    singleCount: Joi.number().integer().min(0).max(30).default(0),
-    multipleCount: Joi.number().integer().min(0).max(30).default(0),
-    trueFalseCount: Joi.number().integer().min(0).max(30).default(0),
+    singleCount: Joi.number().integer().min(0).max(100).default(0),
+    multipleCount: Joi.number().integer().min(0).max(100).default(0),
+    trueFalseCount: Joi.number().integer().min(0).max(100).default(0),
     /** @deprecated use passageCount */
     connectedCount: Joi.number().integer().min(0).max(10).default(0),
     passageCount: Joi.number().integer().min(0).max(10).default(0),

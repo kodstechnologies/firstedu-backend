@@ -511,7 +511,7 @@ const detectDuplicateOptions = (q) => {
     return null;
 };
 
-/** A "multiple correct" MCQ where every option is marked correct has no wrong answer at all — not a valid question. */
+/** "Multiple correct" MCQs are capped at exactly 2 correct answers — 3 or 4 correct is not a valid question for this format. */
 const detectAllOptionsMarkedCorrect = (q) => {
     if (String(q.questionType || "").toLowerCase() !== "multiple") return null;
     const opts = q.options || [];
@@ -520,10 +520,10 @@ const detectAllOptionsMarkedCorrect = (q) => {
         : [];
     if (opts.length < 2 || !correctIdx.length) return null;
     const uniqueCorrect = new Set(correctIdx.map(Number));
-    if (uniqueCorrect.size >= opts.length) {
+    if (uniqueCorrect.size > 2) {
         return {
             questionNumber: q.sampleNumber,
-            issue: `All ${opts.length} options are marked correct — a multiple-correct question needs at least one wrong option, otherwise it isn't a valid question.`,
+            issue: `${uniqueCorrect.size} of ${opts.length} options are marked correct — multiple-correct questions must have exactly 2 correct answers, never 3 or all ${opts.length}.`,
             severity: "major",
             confidence: "confirmed",
             category: ISSUE_CATEGORY.FACTUAL,

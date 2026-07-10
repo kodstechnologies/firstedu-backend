@@ -196,7 +196,7 @@ ${hardGateBlock}${jeeHardGateBlock}
 1. questionType: "single" | "multiple" | "true_false" | "connected"
 2. Standalone items: questionType, difficultyTier, questionText, options (4 for single/multiple), correctAnswer, explanation
 3. connected items: title, passage, subQuestions[] — each sub-question answerable ONLY from its passage
-4. single → correctAnswer is one letter "A"–"D"; multiple → array of letters; true_false → "True" or "False"
+4. single → correctAnswer is one letter "A"–"D"; multiple → array of EXACTLY 2 letters (never 3, never all 4 — exactly 2 correct and 2 wrong); true_false → "True" or "False"
 5. options[] = answer text only — no "A)" prefixes
 6. explanation: 2–4 sentences; why correct + why each distractor fails (for passage items)
 7. Plain text in strings — no markdown, no LaTeX backslashes; valid JSON only
