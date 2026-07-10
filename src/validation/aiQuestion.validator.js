@@ -291,9 +291,9 @@ export const generateQuestionBankSuggestionsSchema = Joi.object({
                 });
             }
         }
-        if (apiItemTotal > 30) {
+        if (apiItemTotal > 50) {
             return helpers.error('any.custom', {
-                message: 'Cannot generate more than 30 top-level items per request',
+                message: 'Cannot generate more than 50 top-level items per request',
             });
         }
         if (passageQuestionsPerPassage > 0 && passageCount < 1) {
