@@ -223,7 +223,7 @@ export const buildCorrectnessFirstGenerationBlock = ({
 **CAT QA / aptitude:** Solve work-rate, TSD, and % problems to **one** final answer before options. Stem may mention intermediate values as traps — that is fine — but \`correctAnswer\` and explanation must agree on the same final value. Never use two identical option strings.`
             : examProfile === "jee_main" || examProfile === "jee_advanced"
               ? `
-**JEE / NTA:** Numerical result must appear **verbatim** in exactly one option (with units). Optics/fringe: compute position fully before options. No duplicate or indistinguishable options (e.g. two "butene"). Chemistry: mixing molarity = total moles ÷ total L; pH 0–14; Arrhenius two-T problems must end at **time** in options, not intermediate k.`
+**JEE / NTA:** Numerical result must appear **verbatim** in exactly one option (with units). Optics/fringe: compute position fully before options. No duplicate or indistinguishable options (e.g. two "butene"). **Organic chemistry:** each option must be a **distinct** IUPAC name — never repeat the same compound in two letters (e.g. identical "iodo-1-methylcyclopentane" for C and D); position prefixes (1-/2-/3-/ortho/meta/para) must differ across all four options. Explanation must conclude the **same** name as the marked option — not a different positional isomer. Chemistry: mixing molarity = total moles ÷ total L; pH 0–14; Arrhenius two-T problems must end at **time** in options, not intermediate k. Use standard scientific notation in options (e.g. \`1.0 × 10⁻⁵ M\`), never \`0 x 10^-2\`.`
               : examProfile === "neet"
                 ? `
 **NEET:** NCERT-consistent numerics; explanation must derive the marked option only — no alternate conclusion in the text.`

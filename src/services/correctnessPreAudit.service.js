@@ -38,6 +38,41 @@ const norm = (s) =>
         .replace(/\s+/g, " ")
         .trim();
 
+const looksLikeNomenclatureOption = (s) =>
+    /\b(?:bromo|chloro|iodo|fluoro|methyl|ethyl|propyl|butyl|benzene|cyclo|pentane|hexane|heptane|octane|butene|propene|isomer|toluene|aniline|carboxy|hydroxy|amino|nitro|oxo|yl)\b/i.test(
+        String(s || "")
+    );
+
+const levenshteinRatio = (a, b) => {
+    if (a === b) return 1;
+    const m = a.length;
+    const n = b.length;
+    if (!m || !n) return 0;
+    const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+    for (let i = 0; i <= m; i++) dp[i][0] = i;
+    for (let j = 0; j <= n; j++) dp[0][j] = j;
+    for (let i = 1; i <= m; i++) {
+        for (let j = 1; j <= n; j++) {
+            const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+            dp[i][j] = Math.min(
+                dp[i - 1][j] + 1,
+                dp[i][j - 1] + 1,
+                dp[i - 1][j - 1] + cost
+            );
+        }
+    }
+    const dist = dp[m][n];
+    return 1 - dist / Math.max(m, n);
+};
+
+const optionTextSimilarity = (a, b) => {
+    const na = norm(a);
+    const nb = norm(b);
+    if (!na || !nb) return 0;
+    if (na === nb) return 1;
+    return levenshteinRatio(na, nb);
+};
+
 const extractSqrtRadicand = (text) => {
     const m = String(text || "").match(/(?:√|sqrt\s*\(?\s*)(\d+(?:\.\d+)?)/i);
     return m ? m[1] : null;
@@ -176,6 +211,8 @@ const detectExplanationConclusionMismatch = (q) => {
         /(\d+(?:\.\d+)?)\s+is the answer/i,
         /answer is\s*(\d+(?:\.\d+)?)/i,
         /correct answer is\s*(\d+(?:\.\d+)?)/i,
+        /conclud(?:es|ing)\s+(?:that\s+)?(?:the\s+)?(?:answer\s+is\s+)?(\d+(?:\.\d+)?)\b/i,
+        /therefore,?\s+(?:the\s+)?(?:product\s+is\s+)?(\d+(?:\.\d+)?)\b/i,
         /ways\s*=\s*(\d+(?:\.\d+)?)/i,
         /total\s*=\s*(\d+(?:\.\d+)?)/i,
     ];
@@ -190,6 +227,52 @@ const detectExplanationConclusionMismatch = (q) => {
             return {
                 questionNumber: q.sampleNumber,
                 issue: `Explanation concludes ${claimed} but marked answer is ${String.fromCharCode(65 + markedIdx)} (${opts[markedIdx]}); ${claimed} matches option ${String.fromCharCode(65 + altIdx)}.`,
+                severity: "critical",
+                confidence: "confirmed",
+                category: ISSUE_CATEGORY.FACTUAL,
+            };
+        }
+    }
+    return null;
+};
+
+/** Explanation names a compound/option text that differs from the marked answer. */
+const detectExplanationNamedConclusionMismatch = (q) => {
+    const explanation = String(q.explanation || "");
+    const opts = (q.options || []).map((o) => String(o || "").trim()).filter(Boolean);
+    const markedIdx = getMarkedOptionIndex(q);
+    if (markedIdx == null || !opts[markedIdx]) return null;
+
+    const tail = explanation.slice(Math.max(0, explanation.length - 320));
+    const patterns = [
+        /\btherefore,?\s+(?:the\s+(?:correct\s+)?(?:product|compound|isomer|structure|answer)\s+is\s+)?([^.;,\n]{4,120})/i,
+        /\bconclud(?:es|ing)\s+(?:that\s+)?(?:the\s+)?(?:product|compound|isomer|structure|answer)\s+is\s+([^.;,\n]{4,120})/i,
+        /\bhence,?\s+(?:the\s+)?(?:product|compound|isomer|structure)\s+is\s+([^.;,\n]{4,120})/i,
+    ];
+
+    for (const pat of patterns) {
+        const match = tail.match(pat);
+        if (!match?.[1]) continue;
+        const claimed = norm(match[1]);
+        if (claimed.length < 4) continue;
+
+        const markedNorm = norm(opts[markedIdx]);
+        if (markedNorm.includes(claimed) || claimed.includes(markedNorm)) continue;
+
+        let bestIdx = -1;
+        let bestScore = 0;
+        for (let i = 0; i < opts.length; i++) {
+            const score = optionTextSimilarity(claimed, opts[i]);
+            if (score > bestScore) {
+                bestScore = score;
+                bestIdx = i;
+            }
+        }
+
+        if (bestIdx >= 0 && bestIdx !== markedIdx && bestScore >= 0.55) {
+            return {
+                questionNumber: q.sampleNumber,
+                issue: `Explanation concludes "${match[1].trim()}" but marked answer is ${String.fromCharCode(65 + markedIdx)} (${opts[markedIdx]}).`,
                 severity: "critical",
                 confidence: "confirmed",
                 category: ISSUE_CATEGORY.FACTUAL,
@@ -342,7 +425,7 @@ const detectTrivialOptionInStem = (q) => {
 /** Near-duplicate options (e.g. two "butene" without 1-/2- prefix). */
 const detectNearDuplicateOptions = (q) => {
     if (String(q.questionType || "").toLowerCase() === "true_false") return null;
-    const opts = (q.options || []).map((o) => norm(o)).filter(Boolean);
+    const opts = (q.options || []).map((o) => String(o || "").trim()).filter(Boolean);
     if (opts.length < 2) return null;
 
     const looksLikeMathOrFormulaDistractor = (s) =>
@@ -350,7 +433,7 @@ const detectNearDuplicateOptions = (q) => {
 
     for (let i = 0; i < opts.length; i++) {
         for (let j = i + 1; j < opts.length; j++) {
-            if (opts[i] === opts[j]) continue;
+            if (norm(opts[i]) === norm(opts[j])) continue;
             const shorter = opts[i].length < opts[j].length ? opts[i] : opts[j];
             const longer = opts[i].length >= opts[j].length ? opts[i] : opts[j];
             if (shorter.length < 4) continue;
@@ -362,43 +445,26 @@ const detectNearDuplicateOptions = (q) => {
             }
             const lengthRatio = shorter.length / longer.length;
             const substringHit =
-                lengthRatio >= 0.9 && longer.includes(shorter);
+                lengthRatio >= 0.9 && norm(longer).includes(norm(shorter));
             const similar =
-                levenshteinRatio(shorter, longer) > 0.92 || substringHit;
+                optionTextSimilarity(shorter, longer) > 0.92 || substringHit;
             if (similar) {
+                const nomenclaturePair =
+                    looksLikeNomenclatureOption(shorter) ||
+                    looksLikeNomenclatureOption(longer);
                 return {
                     questionNumber: q.sampleNumber,
                     issue: `Options ${String.fromCharCode(65 + i)} and ${String.fromCharCode(65 + j)} are near-duplicates — use clearly distinct distractors.`,
-                    severity: "major",
+                    severity: nomenclaturePair ? "critical" : "major",
                     confidence: "confirmed",
-                    category: ISSUE_CATEGORY.STYLE,
+                    category: nomenclaturePair
+                        ? ISSUE_CATEGORY.FACTUAL
+                        : ISSUE_CATEGORY.STYLE,
                 };
             }
         }
     }
     return null;
-};
-
-const levenshteinRatio = (a, b) => {
-    if (a === b) return 1;
-    const m = a.length;
-    const n = b.length;
-    if (!m || !n) return 0;
-    const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
-    for (let i = 0; i <= m; i++) dp[i][0] = i;
-    for (let j = 0; j <= n; j++) dp[0][j] = j;
-    for (let i = 1; i <= m; i++) {
-        for (let j = 1; j <= n; j++) {
-            const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-            dp[i][j] = Math.min(
-                dp[i - 1][j] + 1,
-                dp[i][j - 1] + 1,
-                dp[i - 1][j - 1] + cost
-            );
-        }
-    }
-    const dist = dp[m][n];
-    return 1 - dist / Math.max(m, n);
 };
 
 /** Invalid scientific notation like "0 x 10^-5" instead of "1.0 × 10⁻⁵". */
@@ -410,9 +476,9 @@ const detectMalformedScientificNotationOptions = (q) => {
         return {
             questionNumber: q.sampleNumber,
             issue: `Option formatting error; use standard scientific notation (e.g. 1.0 × 10⁻⁵), not "${malformed[0]}".`,
-            severity: "minor",
+            severity: "major",
             confidence: "confirmed",
-            category: ISSUE_CATEGORY.STYLE,
+            category: ISSUE_CATEGORY.FACTUAL,
         };
     }
     const leadingZero = opts.filter((o) => /^0(?:\s|$|\.)/.test(o) && !/^0\.\d/.test(o));
@@ -699,6 +765,7 @@ const DETECTORS = [
     detectExplanationMetaCommentary,
     detectExplanationOptionClaimMismatch,
     detectExplanationConclusionMismatch,
+    detectExplanationNamedConclusionMismatch,
     detectExplanationSelfCorrection,
     detectExplanationCorrectionContradiction,
     detectExplanationNumericMismatch,
@@ -803,6 +870,23 @@ const isStrippableCorrectnessIssue = (issue) => {
         return true;
     }
     return false;
+};
+
+/** Block flawed MCQs at generation time — no separate correctness repair pass. */
+export const assertGenerationCorrectness = (q, sampleNumber = 1) => {
+    const entries = flattenQuestionBankForCorrectnessAudit([q]);
+    if (!entries.length) {
+        throw new Error("Empty or invalid question");
+    }
+    const audit = runDeterministicCorrectnessAudit([
+        { ...entries[0].auditItem, sampleNumber },
+    ]);
+    const blocking = (audit.confirmedIssues || []).filter(
+        isStrippableCorrectnessIssue
+    );
+    if (blocking.length) {
+        throw new Error(blocking.map((i) => i.issue).join("; "));
+    }
 };
 
 /** Find entries with critical/major correctness defects (for repair / strip). */

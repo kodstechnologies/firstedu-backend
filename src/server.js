@@ -158,12 +158,16 @@ const startServer = async () => {
     const port = process.env.PORT || 8001;
     const host = process.env.HOST || '127.0.0.1';
 
-    // Increase timeouts for large file uploads (up to 500MB)
-    // Default Node.js timeout is 2 minutes — not enough for large video/audio uploads
-    server.timeout = 10 * 60 * 1000;         // 10 minutes
-    server.headersTimeout = 10 * 60 * 1000;   // 10 minutes
-    server.keepAliveTimeout = 10 * 60 * 1000; // 10 minutes
-    server.requestTimeout = 10 * 60 * 1000;   // 10 minutes
+    const requestTimeoutMs = Math.max(
+        60_000,
+        Number(process.env.AI_QB_REQUEST_TIMEOUT_MS) || 30 * 60 * 1000
+    );
+
+    // Increase timeouts for large file uploads and long AI generation pipelines
+    server.timeout = requestTimeoutMs;
+    server.headersTimeout = requestTimeoutMs;
+    server.keepAliveTimeout = requestTimeoutMs;
+    server.requestTimeout = requestTimeoutMs;
 
     server.listen(port, host, () => {
       const when = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });

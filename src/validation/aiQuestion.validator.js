@@ -191,9 +191,13 @@ export const generateQuestionBankSuggestionsSchema = Joi.object({
     generateIntent: Joi.string()
         .valid(GENERATE_INTENTS.INITIAL, GENERATE_INTENTS.EVALUATION_REGEN)
         .default(GENERATE_INTENTS.INITIAL),
-    /** default = solve-first / one-shot pipeline; prompt_first = exam-setter prompt then Gemini */
+    /** default = solve-first / one-shot pipeline; prompt_first = exam-setter prompt then Gemini; paper_reference = topics/difficulty grounded in a stored reference paper */
     generationMode: Joi.string()
-        .valid(GENERATION_MODES.DEFAULT, GENERATION_MODES.PROMPT_FIRST)
+        .valid(
+            GENERATION_MODES.DEFAULT,
+            GENERATION_MODES.PROMPT_FIRST,
+            GENERATION_MODES.PAPER_REFERENCE
+        )
         .default(GENERATION_MODES.DEFAULT),
     topicRelevanceEvaluated: Joi.boolean().default(false),
     topicRelevanceRegenerated: Joi.boolean().default(false),
@@ -201,7 +205,7 @@ export const generateQuestionBankSuggestionsSchema = Joi.object({
     allowContinuation: Joi.boolean().default(false),
     /** Client workflow id — ties multi-chunk generation + validation into one ai-api-log file */
     workflowLogKey: Joi.string().trim().max(80).optional().allow(''),
-    generationProvider: Joi.string().valid('gemini', 'openai').default('gemini'),
+    generationProvider: Joi.string().valid('gemini', 'openai', 'claude').default('gemini'),
     /** When true (default), return after generation and validate in background. */
     deferValidation: Joi.boolean().optional(),
     /** Provider used for background validation after deferred generation. */

@@ -238,6 +238,7 @@ import {
 import {
   generateQuestions,
   generateQuestionBankSuggestions,
+  getQuestionBankGenerationJobStatus,
   getQuestionBankBackgroundValidation,
   getPipelineEventsStatus,
   generateImageQuestion,
@@ -246,6 +247,7 @@ import {
   generateQuestionImageOpenAI,
   listGeminiImageModels,
   listGeminiTextModels,
+  listClaudeTextModels,
   saveGeneratedQuestions,
   validateQuestionTopicRelevance,
   logConfirmedQuestions,
@@ -715,6 +717,12 @@ router.post(
 );
 
 router.get(
+  '/ai/question-bank-generation/:jobId',
+  verifyJWT,
+  getQuestionBankGenerationJobStatus
+);
+
+router.get(
   '/ai/question-bank-background-validation/:jobId',
   verifyJWT,
   getQuestionBankBackgroundValidation
@@ -754,6 +762,12 @@ router.get(
   '/ai/gemini-text-models',
   verifyJWT,
   listGeminiTextModels
+);
+
+router.get(
+  '/ai/claude-text-models',
+  verifyJWT,
+  listClaudeTextModels
 );
 
 router.post(

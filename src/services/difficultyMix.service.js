@@ -292,6 +292,14 @@ const formatTierCalibration = (tier, examProfile) => {
 const tierCalibrationSnippet = (tier, examProfile) =>
     formatTierCalibration(tier, examProfile);
 
+/** Return at most `maxSlots` questions when bank cap is set (0 = no cap). */
+export const capQuestionsToMaxSlots = (questions = [], maxSlots = 0) => {
+    if (!Array.isArray(questions)) return [];
+    const cap = Number(maxSlots);
+    if (!Number.isFinite(cap) || cap < 1) return questions;
+    return questions.slice(0, Math.floor(cap));
+};
+
 /** Count selectable question slots (standalones + passage sub-questions). */
 export const countSelectableSlots = ({
     singleCount = 0,
@@ -414,7 +422,7 @@ Set \`"difficultyTier": "hard"\` on every item. Do not author easy or medium ite
     const lines = tierSlots
         .map((tier, i) => {
             const n = slotOffset + i + 1;
-            return `${n}. **[${tier}-tier]** — ${tierCalibrationSnippet(tier, examProfile)}`;
+            return `${n}. **[${tier}-tier]** — author to the **${tier}-tier** definition in DIFFICULTY MIX / tier calibration above`;
         })
         .join("\n");
 
@@ -428,6 +436,64 @@ Author question *i* at exactly the tier shown for slot *i*. Do not downgrade tie
 };
 
 export { tierCalibrationSnippet, getTierExamCalibration, formatTierCalibration };
+
+/**
+ * Single-tier scoring rubric for LLM difficulty audit — mirrors getTierExamCalibration.
+ */
+export const buildTierDifficultyScoringRubric = (
+    tier = "medium",
+    examProfile = "competitive"
+) => {
+    const t = normalizeQuestionTier(tier) || "medium";
+    const c = getTierExamCalibration(t, examProfile);
+    return `**${t}-tier scoring**
+- **80–100 (meets tier):** ${c.target}; REQUIRED: ${c.required.join("; ")}
+- **65–79 (borderline):** Close but missing one REQUIRED element; not a BANNED pattern
+- **Below 65 (too easy for ${t}-tier):** ${c.tooEasy}
+- **Below 50 (reject):** BANNED — ${c.banned.join("; ")}
+- **Above-tier depth:** If harder than ${t}-tier (${c.tooHard}) but still meets ${t} REQUIRED → score 80+; do not penalize`;
+};
+
+/**
+ * Shared tier definitions + per-tier scoring — used in generation prompts and validation/audit.
+ */
+export const buildDifficultyAuditRubricsBlock = ({
+    examProfile = "competitive",
+    tiers = ["easy", "medium", "hard"],
+    hardOnly = false,
+} = {}) => {
+    const unique = [
+        ...new Set(
+            (tiers || [])
+                .map((t) => normalizeQuestionTier(t))
+                .filter(Boolean)
+        ),
+    ];
+    const ordered = ["easy", "medium", "hard"].filter((t) => unique.includes(t));
+    const useHardOnly =
+        hardOnly || (ordered.length === 1 && ordered[0] === "hard");
+
+    const definitionsBlock = buildPerTierExamCalibrationBlock({
+        examProfile,
+        hardOnly: useHardOnly,
+    });
+
+    const scoringTiers = useHardOnly ? ["hard"] : ordered.length ? ordered : ["easy", "medium", "hard"];
+    const scoringBlock = scoringTiers
+        .map((t) => buildTierDifficultyScoringRubric(t, examProfile))
+        .join("\n\n");
+
+    return `${definitionsBlock}
+
+**VALIDATION SCORING — same tier bands as generation (score each item against its assigned difficultyTier):**
+${scoringBlock}
+
+**Scoring rules (generation and audit must agree):**
+- Score against the item's **assigned difficultyTier**, not subjective "feels hard"
+- Lengthy single-formula calculation ≠ hard-tier unless it meets that tier's REQUIRED bars
+- Multi-concept analytical fusion with hidden constraints = hard-tier even if the stem is compact
+- easy-tier = exam medium band · medium-tier = exam hard band · hard-tier = extra hard (upscaled map)`;
+};
 
 /**
  * Prompt block: bank difficulty → per-question tier mix (mandatory).
@@ -450,6 +516,12 @@ export const buildDifficultyMixGenerationBlock = ({
               ? "JEE Main"
               : String(examProfile || "competitive").replace(/_/g, " ");
 
+    const tierCriteriaBlock = buildDifficultyAuditRubricsBlock({
+        examProfile,
+        tiers: isAllHardMix(mix) ? ["hard"] : ["easy", "medium", "hard"],
+        hardOnly: isAllHardMix(mix),
+    });
+
     if (isAllHardMix(mix)) {
         return `
 **DIFFICULTY — ${examCalibrated ? `exam-native (${examLabel})` : `bank profile "${bank}"`}: ALL HARD**
@@ -460,19 +532,29 @@ This batch has **${batchSize}** question slot(s). **Every** slot is **hard** —
 - Multi-condition stems, linked concepts, or non-obvious planning — not naked formula drills.
 - No NCERT in-chapter exercises, Section A one-liners, or homework worksheets.
 
-**JSON requirement:** Every standalone item and passage sub-question MUST include \`"difficultyTier": "hard"\`.`;
+**JSON requirement:** Every standalone item and passage sub-question MUST include \`"difficultyTier": "hard"\`.
+
+${tierCriteriaBlock}`;
     }
 
+    const easyPct = Math.round((mix.easy / Math.max(1, batchSize)) * 100);
+    const mediumPct = Math.round((mix.medium / Math.max(1, batchSize)) * 100);
+    const hardPct = Math.round((mix.hard / Math.max(1, batchSize)) * 100);
+
     return `
-**DIFFICULTY MIX — bank profile "${bank}" (ratio ${mix.ratioLabel} easy:medium:hard per 10):**
+**DIFFICULTY MIX — bank profile "${bank}" (ratio ${mix.ratioLabel} easy:medium:hard per 10 ≈ ${easyPct}% easy · ${mediumPct}% medium · ${hardPct}% hard):**
 This batch has **${batchSize}** question slot(s). Author **exactly** this tier distribution:
-- **${mix.easy}** question(s) at **easy-tier**
-- **${mix.medium}** question(s) at **medium-tier**
-- **${mix.hard}** question(s) at **hard-tier**
+- **${mix.easy}** question(s) at **easy-tier** — must meet easy-tier criteria below (NOT school easy / old exam Section A)
+- **${mix.medium}** question(s) at **medium-tier** — must meet medium-tier criteria below
+- **${mix.hard}** question(s) at **hard-tier** — must meet hard-tier criteria below
 
 **JSON requirement:** Every standalone item and every passage sub-question MUST include:
 \`"difficultyTier": "easy" | "medium" | "hard"\`
-matching the assigned slot.`;
+matching the assigned slot.
+
+${tierCriteriaBlock}
+
+**Authoring rule:** Match each slot to the tier definitions above — validation uses the **same** criteria.`;
 };
 
 /** Assign difficulty labels to parsed questions when AI omitted difficultyTier. */

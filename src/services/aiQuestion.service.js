@@ -80,14 +80,17 @@ import {
 import {
     buildPromptFirstQuestionBankPrompt,
     isPromptFirstGenerationMode,
+    isPaperReferenceGenerationMode,
 } from "./examPromptFirst.service.js";
 import {
     appendJsonOutputToComposedPrompt,
     resolveComposedGenerationPrompt,
 } from "./examPromptComposer.service.js";
+import { extractReferencePaperGuidance } from "./referencePaperLibrary.service.js";
 import {
     stripFlawedQuestionBankEntries,
     flattenQuestionBankForCorrectnessAudit,
+    assertGenerationCorrectness,
 } from "./correctnessPreAudit.service.js";
 import { resolveConceptArchetypeSteering } from "./conceptArchetypePlanner.service.js";
 import {
@@ -104,6 +107,7 @@ import {
 import {
     applyDifficultySelfAuditGate,
     applySkeletonDifficultySelfAuditGate,
+    shouldSkipLlmDifficultySelfAudit,
     DIFFICULTY_SELF_AUDIT_MIN_SCORE,
     SKELETON_DIFFICULTY_SELF_AUDIT_MIN_SCORE,
 } from "./difficultySelfAudit.service.js";
@@ -119,6 +123,7 @@ import {
     isVeteranDifficultyEnabled,
     isExamNativeVeteranGeneration,
     isRepairOnFailEnabled,
+    isMandateRepairEnabled,
     isFinalizeDifficultyRegenEnabled,
     isFinalizeTopUpEnabled,
     getFinalizeTopUpMaxWaves,
@@ -141,8 +146,8 @@ import {
     normalizeQuestionTier,
     buildBankDifficultyProfileBlock,
     buildAssignedTierSlotsBlock,
-    buildPerTierExamCalibrationBlock,
     countSelectableSlots,
+    capQuestionsToMaxSlots,
 } from "./difficultyMix.service.js";
 import {
     resolveGenerationDifficulty,
@@ -195,6 +200,18 @@ import {
     getGeminiTextModelOptions,
     resolveGeminiTextModel,
 } from "./geminiTextModels.js";
+import {
+    CLAUDE_TEXT_MODEL_IDS,
+    CLAUDE_TEXT_MODEL_OPTIONS,
+    getClaudeTextModelOptions,
+    resolveClaudeTextModel,
+} from "./claudeTextModels.js";
+import {
+    assertGenerationProviderConfigured,
+    getAnthropicApiKey,
+    normalizeGenerationProvider,
+    resolveGenerationTemperature,
+} from "./generationProvider.service.js";
 
 export {
     GEMINI_IMAGE_MODEL_IDS,
@@ -203,6 +220,9 @@ export {
     GEMINI_TEXT_MODEL_IDS,
     GEMINI_TEXT_MODEL_OPTIONS,
     getGeminiTextModelOptions,
+    CLAUDE_TEXT_MODEL_IDS,
+    CLAUDE_TEXT_MODEL_OPTIONS,
+    getClaudeTextModelOptions,
 };
 
 // Initialize Gemini client (model from GEMINI_TEXT_MODEL)
@@ -222,6 +242,9 @@ const mixOptionsFromResolution = (difficultyResolution) => {
 
 if (process.env.GEMINI_API_KEY) {
   console.log(`[gemini] text model: ${geminiTextModel()}`);
+}
+if (getAnthropicApiKey()) {
+  console.log(`[claude] text model: ${resolveClaudeTextModel()}`);
 }
 
 /**
@@ -296,7 +319,7 @@ const geminiJsonConfig = (temperature = GEMINI_QB_GENERATION_TEMPERATURE) => ({
 
 const GEMINI_QB_MAX_ATTEMPTS = Math.max(
     1,
-    Number(process.env.GEMINI_QB_MAX_ATTEMPTS) || 6
+    Number(process.env.GEMINI_QB_MAX_ATTEMPTS) || 4
 );
 const GEMINI_RETRY_DELAY_MS = Math.max(
     500,
@@ -304,7 +327,7 @@ const GEMINI_RETRY_DELAY_MS = Math.max(
 );
 const GEMINI_RETRY_MAX_DELAY_MS = Math.max(
     GEMINI_RETRY_DELAY_MS,
-    Number(process.env.GEMINI_RETRY_MAX_DELAY_MS) || 45000
+    Number(process.env.GEMINI_RETRY_MAX_DELAY_MS) || 20000
 );
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -759,10 +782,6 @@ const buildQuestionBankPrompt = ({
         examProfile,
         slotOffset: tierSlotOffset,
     });
-    const perTierExamCalibrationBlock = buildPerTierExamCalibrationBlock({
-        examProfile,
-        hardOnly: difficultyResolution?.examCalibrated || false,
-    });
     const calibration = isEvaluationRegen
         ? ""
         : buildDifficultyCalibrationBlock({
@@ -950,7 +969,6 @@ Generate exactly ${total} top-level items for a question bank with these specifi
 **Bank difficulty profile:** ${effectiveDifficulty}${difficultyResolution?.examCalibrated ? " (exam-native — all questions hard; UI difficulty ignored)" : " (controls per-question tier mix below — NOT one uniform tier for all items)"}
 ${difficultyMixBlock}
 ${bankDifficultyProfileBlock}
-${perTierExamCalibrationBlock}
 ${assignedTierSlotsBlock}
 ${subjectBlock}
 ${examContextBlock}
@@ -1455,19 +1473,17 @@ const inferredPlanToExpectedCounts = (plan) => ({
 
 const upscaleRegenerationCountsToSlots = resolveTargetedRegenerationCounts;
 
-const GEMINI_QB_CORRECTNESS_REPAIR_PASSES = isRepairOnFailEnabled()
-    ? Math.min(
-          3,
-          Math.max(
-              0,
-              Number(
-                  process.env.AI_QB_CORRECTNESS_REPAIR_PASSES ??
-                      process.env.GEMINI_QB_CORRECTNESS_REPAIR_PASSES ??
-                      3
-              )
-          )
-      )
-    : 0;
+const GEMINI_QB_CORRECTNESS_REPAIR_PASSES = Math.min(
+    5,
+    Math.max(
+        0,
+        Number(
+            process.env.AI_QB_CORRECTNESS_REPAIR_PASSES ??
+                process.env.GEMINI_QB_CORRECTNESS_REPAIR_PASSES ??
+                0
+        )
+    )
+);
 const GEMINI_QB_REPAIR_BATCH_SIZE = Math.min(
     12,
     Math.max(1, Number(process.env.GEMINI_QB_REPAIR_BATCH_SIZE ?? 6))
@@ -1608,7 +1624,7 @@ const repairFlawedEntriesBatch = async ({
 }) => {
     if (!flawedEntries?.length) return questions;
 
-    const provider = generationProvider === "openai" ? "openai" : "gemini";
+    const provider = normalizeGenerationProvider(generationProvider);
     const examProfile = detectExamProfile({ topic, bankName });
     let current = questions;
     let repairedAny = false;
@@ -1729,7 +1745,7 @@ export const finalizeQuestionBankSuggestions = async ({
     topUpWave = 0,
     skipDifficultyAudit = false,
 }) => {
-    const provider = generationProvider === "openai" ? "openai" : "gemini";
+    const provider = normalizeGenerationProvider(generationProvider);
     const effectiveDifficulty =
         difficultyResolution?.generationDifficulty || difficulty;
     const mixOpts = mixOptionsFromResolution(difficultyResolution);
@@ -1790,10 +1806,10 @@ export const finalizeQuestionBankSuggestions = async ({
                 examReferenceBlock,
                 competitiveExamPlan,
                 provider,
-                genTemperature: provider === "openai" ? 0.15 : 0.1,
+                genTemperature: resolveGenerationTemperature(provider),
                 allowTopUp: false,
-                forceOneShot: true,
-                skipFinalizeDifficultyAudit: true,
+                forceOneShot: !difficultyResolution?.examCalibrated,
+                skipFinalizeDifficultyAudit: !difficultyResolution?.examCalibrated,
                 topUpWave: topUpWave + topUpWavesUsed + 1,
                 difficultyResolution,
             });
@@ -1848,7 +1864,10 @@ export const finalizeQuestionBankSuggestions = async ({
     }
 
     let selfAuditResult = { questions: sanitizedInput, rejectedCount: 0, rejected: [] };
-    if (!skipDifficultyAudit) {
+    const effectiveSkipDifficultyAudit =
+        skipDifficultyAudit ||
+        shouldSkipLlmDifficultySelfAudit(difficultyResolution);
+    if (!effectiveSkipDifficultyAudit) {
         selfAuditResult = await applyDifficultySelfAuditGate(
             sanitizedInput,
             {
@@ -1897,7 +1916,8 @@ export const finalizeQuestionBankSuggestions = async ({
                 });
             }
         } else if (
-            isFinalizeDifficultyRegenEnabled() &&
+            (isFinalizeDifficultyRegenEnabled() ||
+                difficultyResolution?.examCalibrated) &&
             selfAuditResult.rejectedCount <=
                 Math.max(1, GEMINI_QB_REPAIR_BATCH_SIZE)
         ) {
@@ -1943,18 +1963,19 @@ export const finalizeQuestionBankSuggestions = async ({
         issueCount: reconcileAudit.confirmedIssues?.length ?? 0,
     });
 
-    const repairFn = GEMINI_QB_CORRECTNESS_REPAIR_PASSES
-        ? (current, flawedEntries, pass) =>
-              repairFlawedEntriesBatch({
-                  questions: current,
-                  flawedEntries,
-                  topic,
-                  bankName,
-                  difficulty: effectiveDifficulty,
-                  generationProvider: provider,
-                  pass,
-              })
-        : null;
+    const repairFn =
+        GEMINI_QB_CORRECTNESS_REPAIR_PASSES > 0
+            ? (current, flawedEntries, pass) =>
+                  repairFlawedEntriesBatch({
+                      questions: current,
+                      flawedEntries,
+                      topic,
+                      bankName,
+                      difficulty: effectiveDifficulty,
+                      generationProvider: provider,
+                      pass,
+                  })
+            : null;
 
     let { questions: cleaned, strippedCount, repairedPasses, audit } =
         await stripFlawedQuestionBankEntries(normalized, {
@@ -1994,7 +2015,21 @@ export const finalizeQuestionBankSuggestions = async ({
             traceEvent: "FINALIZE_TOP_UP",
         });
         if (topUpQuestions.length) {
-            cleaned = [...cleaned, ...topUpQuestions];
+            const acceptedTopUp = topUpQuestions.filter((q) => {
+                try {
+                    assertGenerationCorrectness(q);
+                    return true;
+                } catch (err) {
+                    pipelineTrace("FINALIZE_TOP_UP_REJECT", {
+                        error: err?.message || String(err),
+                        stem: String(q?.questionText || "").slice(0, 120),
+                    });
+                    return false;
+                }
+            });
+            if (acceptedTopUp.length) {
+                cleaned = [...cleaned, ...acceptedTopUp];
+            }
         }
     }
 
@@ -2269,6 +2304,29 @@ export const inferCompetitiveExamPlan = async (params) => {
     }
 };
 
+const FINALIZE_DIFFICULTY_AUDIT_SKIP_MARGIN = Math.max(
+    0,
+    Number(process.env.AI_QB_FINALIZE_AUDIT_SKIP_MARGIN ?? 8)
+);
+
+/**
+ * If the skeleton-level difficulty audit already ran cleanly (nothing
+ * rejected that attempt) and scored comfortably above the finalize-level
+ * bar, the finalize-stage LLM difficulty audit is redundant re-checking the
+ * same thing — skip it to save a round-trip. Falls back to the caller's own
+ * skip decision otherwise (never runs the audit MORE than the existing logic
+ * already would).
+ */
+const shouldSkipFinalizeDifficultyAudit = (baseSkip, auditStats) => {
+    if (baseSkip) return true;
+    if (!auditStats?.ranSkeletonAudit) return false;
+    if (auditStats.minKeptScore == null) return false;
+    return (
+        auditStats.minKeptScore >=
+        DIFFICULTY_SELF_AUDIT_MIN_SCORE + FINALIZE_DIFFICULTY_AUDIT_SKIP_MARGIN
+    );
+};
+
 /**
  * Solve-first path: LLM skeletons → code-built options → verify → MCQs.
  */
@@ -2292,10 +2350,17 @@ const generateSolveFirstSingles = async ({
     difficultyResolution = null,
     maxSelectableSlots = 0,
     skipSkeletonDifficultyAudit = false,
+    streamPartials = true,
+    presetSteering = null,
+    referenceCalibrationBlock = "",
+    auditStats = null,
 }) => {
     const effectiveDifficulty =
         difficultyResolution?.generationDifficulty || difficulty;
     const examNativeVeteran = isExamNativeVeteranGeneration(difficultyResolution);
+    const skipLlmDifficultyAudit =
+        skipSkeletonDifficultyAudit ||
+        shouldSkipLlmDifficultySelfAudit(difficultyResolution);
     const mixOpts = mixOptionsFromResolution(difficultyResolution);
     const callRepairLlm = (repairPrompt) =>
         callQuestionBankGenerationLLM(repairPrompt, {
@@ -2328,7 +2393,9 @@ const generateSolveFirstSingles = async ({
     });
     const archetypeOffset =
         slotOffset + Math.max(0, excludeQuestionTexts?.length || 0);
-    const steering = await resolveConceptArchetypeSteering(
+    const steering = presetSteering
+        ? presetSteering
+        : await resolveConceptArchetypeSteering(
         {
             count: singleCount,
             topic,
@@ -2370,17 +2437,29 @@ const generateSolveFirstSingles = async ({
     let runningExclude = [...excludeQuestionTexts];
     const batchSeenStems = [];
     let attempts = 0;
-    const llmTemperature =
-        genTemperature ?? (provider === "openai" ? 0.15 : 0.1);
+    const llmTemperature = resolveGenerationTemperature(provider, {
+        genTemperature,
+    });
 
     if (examNativeVeteran) {
         pipelineTrace("VETERAN_GENERATION_STRATEGY", {
-            skeletonDifficultyAudit: !skipSkeletonDifficultyAudit,
+            skeletonDifficultyAudit: !skipLlmDifficultyAudit,
+            mandateRepair: isMandateRepairEnabled(),
+            llmDifficultyAudit: !skipLlmDifficultyAudit,
             repairOnFail: isRepairOnFailEnabled(),
             regenOnFail: !isRepairOnFailEnabled(),
             maxAttempts: SOLVE_FIRST_MAX_ATTEMPTS,
         });
+        if (skipLlmDifficultyAudit) {
+            pipelineTrace("SKIP_LLM_DIFFICULTY_AUDIT", {
+                reason: "exam_native_trust_generation",
+                examProfile,
+            });
+        }
     }
+
+    let skeletonAuditRan = false;
+    let minKeptSkeletonScore = Infinity;
 
     while (
         questions.length < singleCount &&
@@ -2424,6 +2503,7 @@ const generateSolveFirstSingles = async ({
             generateIntent,
             topicRelevanceFeedback,
             maxSelectableSlots,
+            referenceCalibrationBlock,
         });
 
         const rawText = await callQuestionBankGenerationLLM(prompt, {
@@ -2456,7 +2536,7 @@ const generateSolveFirstSingles = async ({
             continue;
         }
 
-        const skeletonAudit = skipSkeletonDifficultyAudit
+        const skeletonAudit = skipLlmDifficultyAudit
             ? {
                   skeletons,
                   keptIndices: skeletons.map((_, i) => i),
@@ -2471,6 +2551,8 @@ const generateSolveFirstSingles = async ({
                 difficulty: effectiveDifficulty,
                 examProfile,
                 minScore: SKELETON_DIFFICULTY_SELF_AUDIT_MIN_SCORE,
+                tierSlots: tiers,
+                isLastAttempt: attempts >= SOLVE_FIRST_MAX_ATTEMPTS,
             },
             {
                 callLlm: (auditPrompt) =>
@@ -2480,6 +2562,26 @@ const generateSolveFirstSingles = async ({
                     }),
             }
         );
+
+        if (!skipLlmDifficultyAudit && Array.isArray(skeletonAudit.scores)) {
+            skeletonAuditRan = true;
+            // Only count this attempt's scores toward the margin when nothing
+            // was rejected — in that case every scored item is a kept item,
+            // so there's no index mismatch between `scores` and `keptIndices`.
+            // A mixed attempt (some rejected) is left out of the margin signal
+            // entirely rather than risk crediting a rejected item's low score
+            // (or a kept item's) to the wrong bucket.
+            if (skeletonAudit.rejectedCount === 0) {
+                for (const row of skeletonAudit.scores) {
+                    if (Number.isFinite(row?.difficultyScore)) {
+                        minKeptSkeletonScore = Math.min(
+                            minKeptSkeletonScore,
+                            row.difficultyScore
+                        );
+                    }
+                }
+            }
+        }
 
         const alignSlotsForIndices = (indices) => ({
             alignedSlots: indices.map((i) => slots[i] ?? ""),
@@ -2507,7 +2609,7 @@ const generateSolveFirstSingles = async ({
                 {
                     batchSeenStems,
                     examCalibrated: difficultyResolution?.examCalibrated || false,
-                    publishPartials: true,
+                    publishPartials: streamPartials,
                 },
                 { callLlm: callRepairLlm, examProfile }
             );
@@ -2539,7 +2641,7 @@ const generateSolveFirstSingles = async ({
                             batchSeenStems,
                             examCalibrated:
                                 difficultyResolution?.examCalibrated || false,
-                            publishPartials: true,
+                            publishPartials: streamPartials,
                         },
                         { callLlm: callRepairLlm, examProfile }
                     );
@@ -2562,6 +2664,32 @@ const generateSolveFirstSingles = async ({
 
         if (!batchQuestions.length) {
             pipelineTrace("SKELETON_BUILD_EMPTY", {
+                attempt: attempts,
+                parsed: skeletons.length,
+            });
+            continue;
+        }
+
+        const verifiedBatch = [];
+        for (const q of batchQuestions) {
+            try {
+                assertGenerationCorrectness(
+                    q,
+                    questions.length + verifiedBatch.length + 1
+                );
+                verifiedBatch.push(q);
+            } catch (err) {
+                pipelineTrace("GENERATION_CORRECTNESS_REJECT", {
+                    attempt: attempts,
+                    error: err?.message || String(err),
+                    stem: String(q?.questionText || "").slice(0, 120),
+                });
+            }
+        }
+        batchQuestions = verifiedBatch;
+
+        if (!batchQuestions.length) {
+            pipelineTrace("SKELETON_CORRECTNESS_EMPTY", {
                 attempt: attempts,
                 parsed: skeletons.length,
             });
@@ -2665,8 +2793,37 @@ const generateSolveFirstSingles = async ({
                 fallbackRaw,
                 fallbackExpected
             );
-            questions = questions.concat(fallbackParsed);
+
+            const verifiedFallback = [];
+            for (const q of fallbackParsed) {
+                try {
+                    assertGenerationCorrectness(
+                        q,
+                        questions.length + verifiedFallback.length + 1
+                    );
+                    verifiedFallback.push(q);
+                } catch (err) {
+                    pipelineTrace("GENERATION_CORRECTNESS_REJECT", {
+                        attempt: attempts,
+                        source: "solve_first_fallback",
+                        error: err?.message || String(err),
+                        stem: String(q?.questionText || "").slice(0, 120),
+                    });
+                }
+            }
+            pipelineTrace("SOLVE_FIRST_FALLBACK_VERIFIED", {
+                produced: fallbackParsed.length,
+                accepted: verifiedFallback.length,
+            });
+            questions = questions.concat(verifiedFallback);
         }
+    }
+
+    if (auditStats) {
+        auditStats.ranSkeletonAudit = skeletonAuditRan;
+        auditStats.minKeptScore = Number.isFinite(minKeptSkeletonScore)
+            ? minKeptSkeletonScore
+            : null;
     }
 
     return assignDifficultyTiersToQuestions(
@@ -2718,6 +2875,10 @@ const generateQuestionBankBatch = async ({
     promptBasedGenRun = null,
 }) => {
     const promptFirst = isPromptFirstGenerationMode(generationMode);
+    const skipLlmDifficultyAudit =
+        deferValidation ||
+        skipFinalizeDifficultyAudit ||
+        shouldSkipLlmDifficultySelfAudit(difficultyResolution);
 
     if (promptFirst) {
         pipelineTrace("PROMPT_FIRST_BATCH", {
@@ -2924,6 +3085,102 @@ const generateQuestionBankBatch = async ({
         };
     }
 
+    if (isPaperReferenceGenerationMode(generationMode)) {
+        const referenceExamProfile = detectExamProfile({
+            topic,
+            bankName,
+            subject,
+            sectionName,
+            categoryPaths,
+        });
+
+        pipelineTrace("PAPER_REFERENCE_BATCH", {
+            singleCount,
+            examProfile: referenceExamProfile,
+            chunk: `${chunkIndex + 1}/${chunkTotal}`,
+        });
+
+        const { difficultyCalibration } = await extractReferencePaperGuidance({
+            examProfile: referenceExamProfile,
+            callLlmText: (extractionPrompt, opts = {}) =>
+                callQuestionBankGenerationLLMText(extractionPrompt, {
+                    generationProvider: provider,
+                    ...opts,
+                }),
+        });
+
+        // Topic/concept-slot planning stays fully AI-driven here — same
+        // archetype planner as the default solve-first path. The reference
+        // paper contributes ONLY the difficulty-floor text below; it never
+        // defines or constrains which slots/topics get generated.
+        const paperReferenceAuditStats = {};
+        const questions = await generateSolveFirstSingles({
+            topic,
+            bankName,
+            difficulty,
+            singleCount,
+            excludeQuestionTexts,
+            excludeArchetypes,
+            categoryPaths,
+            sectionName,
+            subject,
+            topicRelevanceFeedback,
+            generateIntent,
+            examReferenceBlock,
+            competitiveExamPlan,
+            provider,
+            genTemperature,
+            slotOffset: tierSlotOffset,
+            difficultyResolution,
+            maxSelectableSlots,
+            skipSkeletonDifficultyAudit: skipLlmDifficultyAudit,
+            streamPartials: topUpWave === 0,
+            referenceCalibrationBlock: difficultyCalibration,
+            auditStats: paperReferenceAuditStats,
+        });
+
+        if (deferValidation) {
+            const fastQuestions = prepareFastPathQuestions(questions, {
+                examCalibrated: difficultyResolution?.examCalibrated,
+            });
+            pipelineTrace("BATCH_DONE", {
+                mode: "paper-reference-deferred",
+                chunk: `${chunkIndex + 1}/${chunkTotal}`,
+                outputCount: fastQuestions.length,
+            });
+            return { questions: fastQuestions, stats: { mode: "deferred" } };
+        }
+
+        const finalized = await finalizeQuestionBankSuggestions({
+            questions,
+            topic,
+            bankName,
+            difficulty,
+            generationProvider: provider,
+            excludeQuestionTexts,
+            categoryPaths,
+            sectionName,
+            subject,
+            examReferenceBlock,
+            competitiveExamPlan,
+            generateIntent,
+            maxSelectableSlots,
+            allowTopUp,
+            difficultyResolution,
+            skipDifficultyAudit: shouldSkipFinalizeDifficultyAudit(
+                skipLlmDifficultyAudit,
+                paperReferenceAuditStats
+            ),
+            topUpWave,
+        });
+        pipelineTrace("BATCH_DONE", {
+            mode: "paper-reference",
+            chunk: `${chunkIndex + 1}/${chunkTotal}`,
+            outputCount: unwrapFinalizedQuestions(finalized).length,
+        });
+        return finalized;
+    }
+
     const useSolveFirst =
         !forceOneShot &&
         shouldUseSolveFirstGeneration({
@@ -2948,6 +3205,7 @@ const generateQuestionBankBatch = async ({
         console.log(
             `[ai-qb] solve-first generation: ${singleCount} single(s) (chunk ${chunkIndex + 1}/${chunkTotal})`
         );
+        const solveFirstAuditStats = {};
         const questions = await generateSolveFirstSingles({
             topic,
             bankName,
@@ -2967,7 +3225,9 @@ const generateQuestionBankBatch = async ({
             slotOffset: tierSlotOffset,
             difficultyResolution,
             maxSelectableSlots,
-            skipSkeletonDifficultyAudit: deferValidation,
+            skipSkeletonDifficultyAudit: skipLlmDifficultyAudit,
+            streamPartials: topUpWave === 0,
+            auditStats: solveFirstAuditStats,
         });
 
         if (deferValidation) {
@@ -2998,7 +3258,10 @@ const generateQuestionBankBatch = async ({
             maxSelectableSlots,
             allowTopUp,
             difficultyResolution,
-            skipDifficultyAudit: skipFinalizeDifficultyAudit,
+            skipDifficultyAudit: shouldSkipFinalizeDifficultyAudit(
+                skipLlmDifficultyAudit,
+                solveFirstAuditStats
+            ),
             topUpWave,
         });
         pipelineTrace('BATCH_DONE', {
@@ -3108,7 +3371,7 @@ const generateQuestionBankBatch = async ({
         maxSelectableSlots,
         allowTopUp,
         difficultyResolution,
-        skipDifficultyAudit: skipFinalizeDifficultyAudit,
+        skipDifficultyAudit: skipLlmDifficultyAudit,
         topUpWave,
     });
     pipelineTrace('BATCH_DONE', {
@@ -3169,13 +3432,7 @@ export const generateQuestionBankSuggestions = async (params) => {
         allowContinuation,
     });
 
-    const provider = generationProvider === "openai" ? "openai" : "gemini";
-    if (provider === "gemini" && !process.env.GEMINI_API_KEY) {
-        throw new ApiError(500, "Gemini API key is not configured (GEMINI_API_KEY)");
-    }
-    if (provider === "openai" && !process.env.OPENAI_API_KEY) {
-        throw new ApiError(500, "OpenAI API key is not configured (OPENAI_API_KEY)");
-    }
+    const provider = assertGenerationProviderConfigured(generationProvider);
 
     const difficultyResolution = promptFirst
         ? {
@@ -3358,16 +3615,22 @@ export const generateQuestionBankSuggestions = async (params) => {
             sectionName,
             categoryPaths,
         });
-        const { block: examReferenceBlock } = await fetchExamReferenceBrief({
-            bankName,
-            topic,
-            sectionName,
-            categoryPaths,
-            subject: resolvedSubject.id || subject,
-            difficulty: generationDifficulty,
-            examProfile: examCtx.examProfile,
-            catSection: examCtx.catSection,
-        });
+        // prompt_first never reads examReferenceBlock (confirmed: neither the
+        // composer meta-prompt nor the per-chunk generation prompt reference
+        // it) — skip the research call entirely rather than pay its latency
+        // for a result that gets discarded.
+        const { block: examReferenceBlock } = promptFirst
+            ? { block: "" }
+            : await fetchExamReferenceBrief({
+                  bankName,
+                  topic,
+                  sectionName,
+                  categoryPaths,
+                  subject: resolvedSubject.id || subject,
+                  difficulty: generationDifficulty,
+                  examProfile: examCtx.examProfile,
+                  catSection: examCtx.catSection,
+              });
 
         const regenTemperature =
             generateIntent === "evaluation_regen" ? 0.15 : undefined;
@@ -3381,7 +3644,15 @@ export const generateQuestionBankSuggestions = async (params) => {
                           Number(process.env.OPENAI_QB_GENERATION_TEMPERATURE ?? 0.2)
                       )
                   )
-                : undefined);
+                : provider === "claude"
+                  ? Math.min(
+                        1,
+                        Math.max(
+                            0,
+                            Number(process.env.CLAUDE_QB_GENERATION_TEMPERATURE ?? 0.1)
+                        )
+                    )
+                  : undefined);
 
         const countChunks = splitQuestionBankCountsIntoChunks(
             {
@@ -3544,7 +3815,9 @@ export const generateQuestionBankSuggestions = async (params) => {
 
         let chunkResults;
         const useParallelChunks =
-            countChunks.length > 1 && isParallelChunkGenerationEnabled();
+            countChunks.length > 1 &&
+            isParallelChunkGenerationEnabled() &&
+            !difficultyResolution?.examCalibrated;
 
         if (useParallelChunks) {
             pipelineTrace("PARALLEL_CHUNK_GENERATION", {
@@ -3642,14 +3915,30 @@ export const generateQuestionBankSuggestions = async (params) => {
             };
         }
 
+        const outputQuestions = promptFirst
+            ? preparePromptFirstQuestions(repairedQuestions)
+            : deferValidation
+              ? prepareFastPathQuestions(repairedQuestions, {
+                    examCalibrated: difficultyResolution?.examCalibrated,
+                })
+              : repairedQuestions;
+        const cappedQuestions = capQuestionsToMaxSlots(
+            outputQuestions,
+            effectiveMaxSelectableSlots
+        );
+        if (
+            effectiveMaxSelectableSlots > 0 &&
+            cappedQuestions.length < outputQuestions.length
+        ) {
+            pipelineTrace("GENERATION_SLOT_CAP_APPLIED", {
+                before: outputQuestions.length,
+                after: cappedQuestions.length,
+                maxSelectableSlots: effectiveMaxSelectableSlots,
+            });
+        }
+
         return {
-            questions: promptFirst
-                ? preparePromptFirstQuestions(repairedQuestions)
-                : deferValidation
-                  ? prepareFastPathQuestions(repairedQuestions, {
-                        examCalibrated: difficultyResolution?.examCalibrated,
-                    })
-                  : repairedQuestions,
+            questions: cappedQuestions,
             detectedSubject: resolvedSubject,
             inferredCounts,
             generationProvider: provider,
@@ -4144,6 +4433,153 @@ const extractOpenAIImageBytes = (responseData) => {
 const OPENAI_MAX_ATTEMPTS = 3;
 const OPENAI_RETRY_DELAY_MS = 3000;
 
+const ANTHROPIC_MESSAGES_URL =
+    process.env.ANTHROPIC_API_URL?.trim() || "https://api.anthropic.com/v1/messages";
+const ANTHROPIC_API_VERSION =
+    process.env.ANTHROPIC_API_VERSION?.trim() || "2023-06-01";
+const CLAUDE_QB_MAX_ATTEMPTS = Math.max(
+    1,
+    Number(process.env.CLAUDE_QB_MAX_ATTEMPTS) || 6
+);
+const CLAUDE_RETRY_DELAY_MS = Math.max(
+    500,
+    Number(process.env.CLAUDE_RETRY_DELAY_MS) || 4000
+);
+const CLAUDE_RETRY_MAX_DELAY_MS = Math.max(
+    CLAUDE_RETRY_DELAY_MS,
+    Number(process.env.CLAUDE_RETRY_MAX_DELAY_MS) || 45000
+);
+const CLAUDE_QB_GENERATION_TEMPERATURE = Math.min(
+    1,
+    Math.max(0, Number(process.env.CLAUDE_QB_GENERATION_TEMPERATURE ?? 0.1))
+);
+const CLAUDE_QB_MAX_OUTPUT_TOKENS = Math.max(
+    1024,
+    Number(process.env.CLAUDE_QB_MAX_OUTPUT_TOKENS) || 16384
+);
+const CLAUDE_REQUEST_TIMEOUT_MS = Math.max(
+    30_000,
+    Number(process.env.CLAUDE_REQUEST_TIMEOUT_MS) || 120_000
+);
+
+const claudeTextModel = () => resolveClaudeTextModel();
+
+const getAnthropicRequestHeaders = (apiKey) => ({
+    "x-api-key": apiKey,
+    "anthropic-version": ANTHROPIC_API_VERSION,
+    "Content-Type": "application/json",
+});
+
+const extractAnthropicMessageText = (payload) => {
+    const blocks = Array.isArray(payload?.content) ? payload.content : [];
+    return blocks
+        .filter((block) => block?.type === "text" && block?.text)
+        .map((block) => String(block.text))
+        .join("\n")
+        .trim();
+};
+
+const parseAnthropicApiError = (error) => {
+    const status = error?.response?.status;
+    const body = error?.response?.data?.error || error?.response?.data || {};
+    const message =
+        body.message ||
+        body.error?.message ||
+        error?.message ||
+        "Unknown Anthropic error";
+    const type = String(body.type || body.error?.type || "").toLowerCase();
+    return { status, message, type };
+};
+
+const isAnthropicRateLimitError = ({ status, message, type }) =>
+    status === 429 ||
+    type.includes("rate_limit") ||
+    /rate limit/i.test(message);
+
+const isAnthropicRetryableError = (error) => {
+    const parsed = parseAnthropicApiError(error);
+    const msg = collectErrorText(error);
+    if (parsed.status === 401 || parsed.status === 403) return false;
+    return (
+        isAnthropicRateLimitError(parsed) ||
+        parsed.status === 500 ||
+        parsed.status === 502 ||
+        parsed.status === 503 ||
+        parsed.status === 529 ||
+        parsed.status === 504 ||
+        isNetworkGeminiError(error) ||
+        msg.includes("overloaded")
+    );
+};
+
+const getClaudeRetryDelayMs = (error, attempt) => {
+    const parsed = parseAnthropicApiError(error);
+    const rateLimited = isAnthropicRateLimitError(parsed);
+    const network = isNetworkGeminiError(error);
+    const base = network
+        ? CLAUDE_RETRY_DELAY_MS * 2
+        : rateLimited
+          ? CLAUDE_RETRY_DELAY_MS * 3
+          : CLAUDE_RETRY_DELAY_MS;
+    const exponential = base * 2 ** (attempt - 1);
+    const jitter = Math.floor(Math.random() * 1000);
+    return Math.min(exponential + jitter, CLAUDE_RETRY_MAX_DELAY_MS);
+};
+
+const toClaudeQuestionBankError = (error) => {
+    if (error instanceof ApiError) return error;
+    const parsed = parseAnthropicApiError(error);
+    const { status, message } = parsed;
+
+    if (status === 401 || status === 403) {
+        return new ApiError(
+            500,
+            "Anthropic API key is invalid (ANTHROPIC_API_KEY)"
+        );
+    }
+    if (isAnthropicRateLimitError(parsed)) {
+        return new ApiError(
+            429,
+            "Claude rate limit exceeded. Please wait a moment and try again."
+        );
+    }
+    if (isAnthropicRetryableError(error)) {
+        const network = isNetworkGeminiError(error);
+        return new ApiError(
+            503,
+            network
+                ? "Could not reach the Anthropic API (network error). Check your connection and try again."
+                : "Claude is busy right now. Please wait a moment and try again."
+        );
+    }
+    return new ApiError(500, `Claude question generation failed: ${message}`);
+};
+
+const callClaudeWithRetries = async (generateOnce) => {
+    let lastError;
+    for (let attempt = 1; attempt <= CLAUDE_QB_MAX_ATTEMPTS; attempt++) {
+        try {
+            return await generateOnce();
+        } catch (error) {
+            lastError = error;
+            if (
+                attempt < CLAUDE_QB_MAX_ATTEMPTS &&
+                isAnthropicRetryableError(error)
+            ) {
+                const delayMs = getClaudeRetryDelayMs(error, attempt);
+                console.warn(
+                    `[claude] attempt ${attempt}/${CLAUDE_QB_MAX_ATTEMPTS} failed — retrying in ${delayMs}ms:`,
+                    collectErrorText(error).slice(0, 200)
+                );
+                await sleep(delayMs);
+                continue;
+            }
+            throw toClaudeQuestionBankError(error);
+        }
+    }
+    throw toClaudeQuestionBankError(lastError);
+};
+
 const parseOpenAIApiError = (error) => {
     const status = error?.response?.status;
     const body = error?.response?.data?.error || {};
@@ -4298,6 +4734,71 @@ const callOpenAIChatForJson = async (prompt, { model: modelOverride } = {}) => {
     }
 };
 
+const callClaudeChatForJson = async (prompt, { temperature, model } = {}) => {
+    const apiKey = getAnthropicApiKey();
+    if (!apiKey) {
+        throw new ApiError(500, "Anthropic API key is not configured (ANTHROPIC_API_KEY)");
+    }
+
+    return callClaudeWithRetries(async () => {
+        const response = await axios.post(
+            ANTHROPIC_MESSAGES_URL,
+            {
+                model: resolveClaudeTextModel(model),
+                max_tokens: CLAUDE_QB_MAX_OUTPUT_TOKENS,
+                temperature:
+                    temperature ??
+                    CLAUDE_QB_GENERATION_TEMPERATURE,
+                messages: [{ role: "user", content: prompt }],
+            },
+            {
+                headers: getAnthropicRequestHeaders(apiKey),
+                timeout: CLAUDE_REQUEST_TIMEOUT_MS,
+            }
+        );
+
+        const text = extractAnthropicMessageText(response.data);
+        if (!text.trim()) {
+            throw new ApiError(500, "Claude returned empty response");
+        }
+        return text;
+    });
+};
+
+const callClaudeChatForText = async (
+    prompt,
+    { temperature, model } = {}
+) => {
+    const apiKey = getAnthropicApiKey();
+    if (!apiKey) {
+        throw new ApiError(500, "Anthropic API key is not configured (ANTHROPIC_API_KEY)");
+    }
+
+    return callClaudeWithRetries(async () => {
+        const response = await axios.post(
+            ANTHROPIC_MESSAGES_URL,
+            {
+                model: resolveClaudeTextModel(model),
+                max_tokens: CLAUDE_QB_MAX_OUTPUT_TOKENS,
+                temperature:
+                    temperature ??
+                    CLAUDE_QB_GENERATION_TEMPERATURE,
+                messages: [{ role: "user", content: prompt }],
+            },
+            {
+                headers: getAnthropicRequestHeaders(apiKey),
+                timeout: CLAUDE_REQUEST_TIMEOUT_MS,
+            }
+        );
+
+        const text = extractAnthropicMessageText(response.data);
+        if (!text.trim()) {
+            throw new ApiError(500, "Claude returned empty response");
+        }
+        return text;
+    });
+};
+
 const callGeminiChatForJson = async (prompt, { temperature } = {}) => {
     if (!process.env.GEMINI_API_KEY) {
         throw new ApiError(500, "Gemini API key is not configured (GEMINI_API_KEY)");
@@ -4317,11 +4818,68 @@ const callGeminiChatForJson = async (prompt, { temperature } = {}) => {
     });
 };
 
-const callQuestionBankGenerationLLMText = async (
-    prompt,
-    { generationProvider = "gemini", temperature = 0.2 } = {}
-) => {
-    if (generationProvider === "openai") {
+/** 429/500/502/503/504 — provider is overloaded/unavailable, not a content/validation problem. */
+const isProviderAvailabilityError = (error) =>
+    error instanceof ApiError &&
+    [429, 500, 502, 503, 504].includes(error.statusCode);
+
+const PROVIDER_FALLBACK_ORDER = ["gemini", "claude", "openai"];
+
+const isProviderConfigured = (provider) => {
+    if (provider === "openai") return !!process.env.OPENAI_API_KEY;
+    if (provider === "claude") return !!getAnthropicApiKey();
+    return !!process.env.GEMINI_API_KEY;
+};
+
+const isProviderFallbackEnabled = () =>
+    process.env.AI_QB_PROVIDER_FALLBACK !== "0";
+
+const buildProviderFallbackChain = (primaryProvider) =>
+    PROVIDER_FALLBACK_ORDER.filter(
+        (p) => p !== primaryProvider && isProviderConfigured(p)
+    );
+
+/**
+ * Runs `attemptFn(provider)` against the requested provider; on an
+ * availability-class failure (busy/rate-limited/unavailable — never on
+ * content-safety or validation errors), automatically retries the same
+ * call against the next configured provider instead of failing the whole
+ * generation. Each provider still exhausts its own internal retry/backoff
+ * first — this only kicks in once a provider is genuinely down.
+ */
+const withProviderFallback = async (primaryProvider, attemptFn) => {
+    try {
+        return await attemptFn(primaryProvider);
+    } catch (error) {
+        if (!isProviderFallbackEnabled() || !isProviderAvailabilityError(error)) {
+            throw error;
+        }
+        const chain = buildProviderFallbackChain(primaryProvider);
+        let lastError = error;
+        for (const nextProvider of chain) {
+            pipelineTrace("PROVIDER_FALLBACK", {
+                from: primaryProvider,
+                to: nextProvider,
+                reason: lastError?.message || String(lastError),
+            });
+            console.warn(
+                `[ai-qb] ${primaryProvider} unavailable — falling back to ${nextProvider}: ${collectErrorText(lastError).slice(0, 200)}`
+            );
+            try {
+                return await attemptFn(nextProvider);
+            } catch (nextError) {
+                lastError = nextError;
+                if (!isProviderAvailabilityError(nextError)) {
+                    throw nextError;
+                }
+            }
+        }
+        throw lastError;
+    }
+};
+
+const dispatchGenerationLLMText = async (provider, prompt, temperature) => {
+    if (provider === "openai") {
         if (!process.env.OPENAI_API_KEY) {
             throw new ApiError(
                 500,
@@ -4332,6 +4890,10 @@ const callQuestionBankGenerationLLMText = async (
             process.env.OPENAI_QB_GENERATION_MODEL?.trim() ||
             getOpenAIChatConfig().model;
         return callOpenAIChatForText(prompt, { model, temperature });
+    }
+
+    if (provider === "claude") {
+        return callClaudeChatForText(prompt, { temperature });
     }
 
     if (!process.env.GEMINI_API_KEY) {
@@ -4352,11 +4914,18 @@ const callQuestionBankGenerationLLMText = async (
     });
 };
 
-const callQuestionBankGenerationLLM = async (
+const callQuestionBankGenerationLLMText = async (
     prompt,
-    { generationProvider = "gemini", temperature } = {}
+    { generationProvider = "gemini", temperature = 0.2 } = {}
 ) => {
-    if (generationProvider === "openai") {
+    const provider = normalizeGenerationProvider(generationProvider);
+    return withProviderFallback(provider, (p) =>
+        dispatchGenerationLLMText(p, prompt, temperature)
+    );
+};
+
+const dispatchGenerationLLM = async (provider, prompt, temperature) => {
+    if (provider === "openai") {
         if (!process.env.OPENAI_API_KEY) {
             throw new ApiError(
                 500,
@@ -4367,6 +4936,14 @@ const callQuestionBankGenerationLLM = async (
             process.env.OPENAI_QB_GENERATION_MODEL?.trim() ||
             getOpenAIChatConfig().model;
         return callOpenAIChatForJson(prompt, { model });
+    }
+
+    if (provider === "claude") {
+        return callClaudeChatForJson(prompt, {
+            temperature: resolveGenerationTemperature(provider, {
+                genTemperature: temperature,
+            }),
+        });
     }
 
     if (!process.env.GEMINI_API_KEY) {
@@ -4385,6 +4962,16 @@ const callQuestionBankGenerationLLM = async (
         }
         return text;
     });
+};
+
+const callQuestionBankGenerationLLM = async (
+    prompt,
+    { generationProvider = "gemini", temperature } = {}
+) => {
+    const provider = normalizeGenerationProvider(generationProvider);
+    return withProviderFallback(provider, (p) =>
+        dispatchGenerationLLM(p, prompt, temperature)
+    );
 };
 
 /**

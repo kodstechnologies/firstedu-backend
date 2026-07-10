@@ -71,9 +71,13 @@ const countNumericGivens = (stem = "") => {
 export const isVeteranDifficultyEnabled = () =>
     process.env.AI_QB_VETERAN_DIFFICULTY !== "0";
 
-/** When off (default), failed audits trigger fresh regeneration — not in-place LLM repair. */
+/** When off (default), failed LLM difficulty audits trigger regen — not in-place repair. */
 export const isRepairOnFailEnabled = () =>
     process.env.AI_QB_REPAIR_ON_FAIL === "1";
+
+/** When on (default), mandate / correctness failures repair one skeleton — not full batch regen. */
+export const isMandateRepairEnabled = () =>
+    process.env.AI_QB_MANDATE_REPAIR !== "0";
 
 /**
  * When off (default), finalize strips low-difficulty questions instead of spawning

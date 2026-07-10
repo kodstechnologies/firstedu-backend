@@ -9,11 +9,16 @@ import { getExamLabel } from "./examPromptContext.service.js";
 export const GENERATION_MODES = {
     DEFAULT: "default",
     PROMPT_FIRST: "prompt_first",
+    PAPER_REFERENCE: "paper_reference",
 };
 
 export const isPromptFirstGenerationMode = (mode) =>
     String(mode || GENERATION_MODES.DEFAULT).toLowerCase() ===
     GENERATION_MODES.PROMPT_FIRST;
+
+export const isPaperReferenceGenerationMode = (mode) =>
+    String(mode || GENERATION_MODES.DEFAULT).toLowerCase() ===
+    GENERATION_MODES.PAPER_REFERENCE;
 
 export const passageWordRangeFor = (examProfile, catSection) => {
     if (examProfile === "clat") return "380–500";
@@ -111,7 +116,18 @@ const buildExamSpecificRules = ({
 - One unambiguous correct option per single-choice item.`;
 };
 
-const buildDifficultyCalibrationBlock = (examProfile) => {
+const buildDifficultyCalibrationBlock = (examProfile, difficulty = "medium") => {
+    const isHard = String(difficulty || "").toLowerCase() === "hard";
+
+    if (isHard) {
+        // Hard-tier requests must not be diluted by "spread it out" language —
+        // the HARD-TIER QUALITY GATES in the JSON appendix are the controlling
+        // instruction for this batch; keep this block short and non-contradictory.
+        return `
+**DIFFICULTY CALIBRATION:**
+This batch is HARD tier — skew the distribution toward hard, multi-step items. See the mandatory HARD-TIER QUALITY GATES below for the exact bar; do not soften it with an easy/moderate spread.`;
+    }
+
     if (examProfile === "clat" || examProfile === "cat" || examProfile === "upsc") {
         return `
 **DIFFICULTY CALIBRATION (do NOT make everything maximally hard):**
@@ -257,7 +273,7 @@ TASK: Generate exam questions for the bank below as a single JSON array (see OUT
 - Reading passages: ${passageCount}
 - Questions per passage: ${passageSingleCount} single, ${passageMultipleCount} multiple, ${passageTrueFalseCount} true/false
 ${buildExamSpecificRules({ examProfile, catSection, sectionName, passageCount })}
-${buildDifficultyCalibrationBlock(examProfile)}
+${buildDifficultyCalibrationBlock(examProfile, difficulty)}
 
 **QUESTION CONSTRUCTION RULES:**
 - Write each question as a real exam item. Do NOT invent an answer and reverse-engineer the passage to fit it.

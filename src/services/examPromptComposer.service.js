@@ -96,6 +96,10 @@ export const buildPromptComposerMetaPrompt = ({
             ? `This batch uses ${passageCount} reading passage(s), each with ${passageSubPerPassage} sub-question(s) (${passageSingleCount} single, ${passageMultipleCount} multiple, ${passageTrueFalseCount} true/false per passage). Target ~${passageWordRange} words per passage where applicable.`
             : `This batch uses ${singleCount} standalone single, ${multipleCount} multiple, ${trueFalseCount} true/false items (no reading passages).`;
     const normalizedDifficulty = String(difficulty || "medium").toLowerCase();
+    const isHard = normalizedDifficulty === "hard";
+    const difficultyCalibrationRequirement = isHard
+        ? "DIFFICULTY CALIBRATION (this batch is HARD tier — skew toward hard, multi-step items; do not soften with an easy/moderate spread — the explicit hard-tier gates below are the controlling instruction)"
+        : "DIFFICULTY CALIBRATION (gradient — not flat max hard)";
     const hardMetaGates =
         normalizedDifficulty === "hard"
             ? `
@@ -129,7 +133,7 @@ ${referenceText}
 - Therefore, in your composed prompt, do NOT hardcode any totals (do not say “Total questions: X” / “Target selectable: X” / “Passages: Y” with concrete numbers). Refer to the counts as “see JSON appendix”.
 
 **Requirements for your composed prompt:**
-1. Keep sections analogous to the reference: ROLE, TASK, BLUEPRINT (with real numbers), sourcing/rules, DIFFICULTY CALIBRATION (gradient — not flat max hard), QUESTION CONSTRUCTION RULES.
+1. Keep sections analogous to the reference: ROLE, TASK, BLUEPRINT (with real numbers), sourcing/rules, ${difficultyCalibrationRequirement}, QUESTION CONSTRUCTION RULES.
 2. Adapt rules to ${examLabel} authentically (e.g. CLAT = principle-in-passage; JEE = solve-then-write numerics; CAT VARC = inference RC; UPSC = analytical elimination).
 3. Instruct the generator to write questions **first**, not reverse-engineer from a pre-chosen answer.
 4. Require verification of distractors and unambiguous single correct options.

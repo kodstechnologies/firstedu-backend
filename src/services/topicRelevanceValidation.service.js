@@ -3,7 +3,8 @@ import { parseJsonObjectFromAIText } from "../utils/aiJsonRepair.js";
 import { detectExamProfile } from "./examDifficultyCalibration.js";
 import { buildGenerationCorrectnessMandatesBlock } from "./examPromptContext.service.js";
 import { buildEvaluationConstraintsBlock } from "./competitiveExamPlan.service.js";
-import { stripMetaCommentary } from "./questionSolveFirst.service.js";
+import { normalizeQuestionTier } from "./difficultyMix.service.js";
+import { stripMetaCommentary } from "../utils/stripMetaCommentary.js";
 import { extractRegenerationTargetNumbers } from "./regenerationTargeting.service.js";
 
 export const TOPIC_RELEVANCE_MAX_SAMPLE = 50;
@@ -714,6 +715,10 @@ const truncate = (text, maxLen) => {
 
 const formatQuestionBlock = (q) => {
     const lines = [`#${q.sampleNumber} [${q.questionType || "single"}]`];
+    const assignedTier = normalizeQuestionTier(q.difficultyTier || q.difficulty);
+    if (assignedTier) {
+        lines.push(`Assigned difficultyTier: ${assignedTier}`);
+    }
     if (q.passage) {
         lines.push(`Passage excerpt: ${truncate(q.passage, 600)}`);
     }
@@ -1507,7 +1512,7 @@ ${questionBlocks}
 
 1. **patternMixScore** — does the sample's question types (single / multiple / connected) match what was **requested** in GENERATION CONSTRAINTS?
 
-2. **difficultyScore** — UPSCALED tiers: easy-tier = exam medium band, medium-tier = exam hard, hard-tier = extra hard. When GENERATION CONSTRAINTS say **exam-native ALL HARD**, **every** hard item MUST satisfy: **≥2 concepts**, **≥3 solving steps**, **≥4 derivation lines**, **no direct substitution**. If **Solve steps (N)** shows N≥4 with linked reasoning, score that item **80+** unless the stem is a naked formula drill. Score **85+** only if majority meet ALL four gates. Score **below 60** if formula plug-ins, single-step solves, or chapter-test templates dominate. **Near-duplicate stems** (same archetype/logic) count as too-easy repetition — penalize under difficulty AND diversity.
+2. **difficultyScore** — Use the **tier definitions and scoring rubrics** in GENERATION CONSTRAINTS above. Score each item against its **Assigned difficultyTier** (shown per question), NOT subjective length or calculation heaviness alone. Lengthy single-formula work ≠ hard-tier unless it meets that tier's REQUIRED bars. Multi-concept fusion with hidden constraints = hard-tier when criteria are met. When constraints say **exam-native ALL HARD**, every item is hard-tier. **Near-duplicate stems** (same archetype/logic) count as too-easy repetition — penalize under difficulty AND diversity.
 
 3. **multiConceptScore** — depth appropriate to ${examLabel}; penalize formula-only drills when depth was requested.
 

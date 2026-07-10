@@ -35,7 +35,6 @@ import {
     buildDifficultyTierSlots,
     buildBankDifficultyProfileBlock,
     buildAssignedTierSlotsBlock,
-    buildPerTierExamCalibrationBlock,
 } from "./difficultyMix.service.js";
 import { buildExamNativeDifficultyAuthorityBlock } from "./examGenerationDifficulty.service.js";
 import {
@@ -65,43 +64,21 @@ import {
     validateHardSkeletonMandate,
     isVeteranDifficultyEnabled,
     isExamNativeVeteranGeneration,
-    isRepairOnFailEnabled,
+    isMandateRepairEnabled,
     getHardMandateFloors,
 } from "./hardQuestionMandate.service.js";
 import {
     isBatchStemNearDuplicate,
     registerBatchStem,
+    assertGenerationCorrectness,
 } from "./correctnessPreAudit.service.js";
 import {
     repairSkeleton,
     repairSkeletonAuditRejections,
 } from "./skeletonRepair.service.js";
+import { stripMetaCommentary } from "../utils/stripMetaCommentary.js";
 
-/** Strip LLM draft/meta phrases — used by all generation paths. */
-export const stripMetaCommentary = (text = "") =>
-    String(text || "")
-        .replace(/\(?\s*re-?calculat(?:ing|e)[^.)]*\)?/gi, "")
-        .replace(/\(?\s*re-?evaluat(?:ing|e)[^.)]*\)?/gi, "")
-        .replace(/\(?\s*correcting[^.)]*\)?/gi, "")
-        .replace(/\bCorrection:\s*[^.]*\./gi, "")
-        .replace(/\bwait\b[^.]*\./gi, "")
-        .replace(/\?\s*No,[^.]*\./gi, "")
-        .replace(
-            /\(?\s*(?:Let'?s|let us)\s+(?:adjust|use|recalculate|recompute|try|assume|pick|choose|set|take)[^.)]*\)?/gi,
-            ""
-        )
-        .replace(
-            /\bhowever,?\s+considering\b[^.]*\bcalculated\s+as\b[^.]*\./gi,
-            ""
-        )
-        .replace(/\bhowever,?\s+considering\b[^.]*\./gi, "")
-        .replace(/\bcalculated\s+as\s+[^.]*\b(?:instead|but)\b[^.]*\./gi, "")
-        .replace(/\(?\s*(?:Let'?s|Adjusting|adjust)\s+(?:mass|to match|parameters|F\s+to)[^.)]*\)?/gi, "")
-        .replace(/\bFinal check:[^.]*\./gi, "")
-        .replace(/\bis incorrect\b[^.]*\./gi, "")
-        .replace(/\busing\s+standard\s+constants[^.]*\./gi, "")
-        .replace(/\b(?:let us|let's)\s+use\s+option\s+[A-D][^.]*\./gi, "")
-        .trim();
+export { stripMetaCommentary };
 
 export const SOLVE_FIRST_MAX_ATTEMPTS = Math.min(
     8,
@@ -109,9 +86,15 @@ export const SOLVE_FIRST_MAX_ATTEMPTS = Math.min(
         1,
             Number(
                 process.env.AI_QB_SOLVE_FIRST_MAX_ATTEMPTS ??
-                    (isRepairOnFailEnabled() ? 3 : 4)
+                    (isMandateRepairEnabled() ? 3 : 4)
             )
     )
+);
+
+/** Caps per-skeleton repair LLM calls within a single skeletonsToQuestions() pass — bounds worst-case tail latency on a bad batch instead of one call per failure. */
+const MAX_SKELETON_REPAIR_CALLS_PER_BATCH = Math.max(
+    1,
+    Number(process.env.AI_QB_MAX_SKELETON_REPAIR_CALLS ?? 4)
 );
 
 export const isSolveFirstEnabled = () => {
@@ -226,7 +209,11 @@ export const buildSolveFirstSkeletonPrompt = ({
     generateIntent = GENERATE_INTENTS.INITIAL,
     topicRelevanceFeedback = null,
     maxSelectableSlots = 0,
+    referenceCalibrationBlock = "",
 }) => {
+    const referencePaperGroundingBlock = referenceCalibrationBlock
+        ? `\n**REFERENCE PAPER — DIFFICULTY FLOOR TO EXCEED:** an actual past paper for this exam was analyzed; observed difficulty pattern: ${referenceCalibrationBlock}\nThis is a FLOOR, not a target — every question you write must be strictly MORE difficult than that observed pattern (deeper concept fusion, tighter time pressure, less telegraphed setups). Do not merely replicate the reference paper's level, and do not use it to constrain which topics/slots you write about — the concept slots above are independently planned.\n`
+        : "";
     const mixOpts = difficultyResolution?.examCalibrated
         ? { examProfile, examCalibrated: true }
         : {};
@@ -260,29 +247,26 @@ Each new skeleton must use a **different problem structure** from every excluded
         topicRelevanceFeedback;
 
     const chemBlock =
-        !isEvaluationRegen &&
-        (examProfile === "jee_main" ||
-            examProfile === "jee_advanced" ||
-            examProfile === "neet" ||
-            String(subject || "").toLowerCase().includes("chem"))
+        examProfile === "jee_main" ||
+        examProfile === "jee_advanced" ||
+        examProfile === "neet" ||
+        String(subject || "").toLowerCase().includes("chem")
             ? buildChemistryNumericalAuthoringBlock({ examProfile })
             : "";
 
     const physicsBlock =
-        !isEvaluationRegen &&
-        (examProfile === "jee_main" ||
-            examProfile === "jee_advanced" ||
-            examProfile === "neet" ||
-            String(subject || "").toLowerCase().includes("phys"))
+        examProfile === "jee_main" ||
+        examProfile === "jee_advanced" ||
+        examProfile === "neet" ||
+        String(subject || "").toLowerCase().includes("phys")
             ? buildPhysicsNumericalAuthoringBlock({ examProfile })
             : "";
 
     const isJeeStem =
         examProfile === "jee_main" || examProfile === "jee_advanced";
-    const jeeHardBlock =
-        !isEvaluationRegen && isJeeStem
-            ? buildJeeHardStemAuthoringBlock(examProfile)
-            : "";
+    const jeeHardBlock = isJeeStem
+        ? buildJeeHardStemAuthoringBlock(examProfile)
+        : "";
 
     const aiSteered =
         archetypeSteeringSource === "ai" ||
@@ -312,22 +296,20 @@ Each new skeleton must use a **different problem structure** from every excluded
 **AI ARCHETYPE STEERING:** Slots and blueprints for this batch were planned for "${topic || bankName}" — use the assigned slot id in each skeleton's \`conceptSlot\` field. Do not swap to an easier archetype.`
           : "";
 
-    const jeeHardAntiTemplate =
-        !isEvaluationRegen && isJeeStem ? buildJeeMainHardAntiTemplateBlock(examProfile) : "";
+    const jeeHardAntiTemplate = isJeeStem
+        ? buildJeeMainHardAntiTemplateBlock(examProfile)
+        : "";
 
-    const jeeAuthenticityBlock =
-        !isEvaluationRegen && isJeeStem
-            ? buildJeeAuthenticityGenerationBlock({
-                  examProfile,
-                  difficulty,
-                  batchSize: count,
-                  sectionName,
-              })
-            : "";
+    const jeeAuthenticityBlock = isJeeStem
+        ? buildJeeAuthenticityGenerationBlock({
+              examProfile,
+              difficulty,
+              batchSize: count,
+              sectionName,
+          })
+        : "";
 
-    const difficultyCalibrationBlock = isEvaluationRegen
-        ? ""
-        : buildDifficultyCalibrationBlock({
+    const difficultyCalibrationBlock = buildDifficultyCalibrationBlock({
               bankName,
               topic,
               subject,
@@ -405,10 +387,6 @@ ${
           })}
 ${examNativeBlock}
 ${buildBankDifficultyProfileBlock({ bankDifficulty: difficulty, examProfile })}
-${buildPerTierExamCalibrationBlock({
-    examProfile,
-    hardOnly: difficultyResolution?.examCalibrated || false,
-})}
 ${buildAssignedTierSlotsBlock({
     tierSlots: difficultyTierSlots.slice(0, count),
     examProfile,
@@ -416,6 +394,7 @@ ${buildAssignedTierSlotsBlock({
 }
 **Exam profile:** ${examProfile}
 ${examReferenceBlock}
+${referencePaperGroundingBlock}
 ${jeeAuthenticityBlock}
 ${difficultyCalibrationBlock}
 ${jeeHardBlock}
@@ -642,6 +621,13 @@ const sanitizePhOptions = (options, correctIndex) => {
 const assertBuiltMcqConsistency = ({ questionText, options, correctIndex, explanation }) => {
     const marked = options[correctIndex];
     if (!marked) throw new Error("Missing marked option");
+
+    const normOpts = options
+        .map((o) => String(o || "").trim().toLowerCase())
+        .filter(Boolean);
+    if (normOpts.length >= 2 && new Set(normOpts).size !== normOpts.length) {
+        throw new Error("Two or more options are identical");
+    }
 
     if (isPhStem(questionText)) {
         for (let i = 0; i < options.length; i++) {
@@ -876,6 +862,7 @@ export const buildMcqFromSkeleton = (
     };
 
     assertBuiltMcqConsistency(built);
+    assertGenerationCorrectness(built, index + 1);
 
     return built;
 };
@@ -913,7 +900,7 @@ export const skeletonsToQuestions = async (
     const callRepairLlm = repairDeps?.callLlm;
     const examProfile = repairDeps?.examProfile || "jee_main";
     const repairOnFail =
-        repairDeps?.repairOnFail !== false && isRepairOnFailEnabled();
+        repairDeps?.repairOnFail !== false && isMandateRepairEnabled();
     const questions = [];
     const repairQueue = [];
 
@@ -1015,8 +1002,27 @@ export const skeletonsToQuestions = async (
     }
 
     if (repairQueue.length && repairOnFail && typeof callRepairLlm === "function") {
-        pipelineTrace("SKELETON_REPAIR_BATCH", { count: repairQueue.length });
-        for (const item of repairQueue) {
+        // Unbounded repair (one LLM call per failed skeleton) can blow up
+        // worst-case latency on a bad batch. Cap it per attempt — anything
+        // beyond the cap is deferred (traced, not silently dropped) so the
+        // caller's own retry loop regenerates the deficit instead of paying
+        // for a long tail of repair calls in a single attempt.
+        const itemsToRepair = repairQueue.slice(0, MAX_SKELETON_REPAIR_CALLS_PER_BATCH);
+        const deferredItems = repairQueue.slice(MAX_SKELETON_REPAIR_CALLS_PER_BATCH);
+        pipelineTrace("SKELETON_REPAIR_BATCH", {
+            count: itemsToRepair.length,
+            deferred: deferredItems.length,
+        });
+        for (const item of deferredItems) {
+            pipelineTrace("SKELETON_REPAIR_CAPPED", {
+                index: item.i + 1,
+                conceptSlot: item.assignedSlot,
+                reason: (item.mandateIssues || [item.buildError])
+                    .filter(Boolean)
+                    .join("; "),
+            });
+        }
+        for (const item of itemsToRepair) {
             const fixed = await repairSkeleton(
                 item.sk,
                 {
@@ -1119,6 +1125,7 @@ export const sanitizeMcqForPipeline = (q) => {
         _solveSteps: solveSteps,
     };
     assertBuiltMcqConsistency(built);
+    assertGenerationCorrectness(built, 1);
     return built;
 };
 

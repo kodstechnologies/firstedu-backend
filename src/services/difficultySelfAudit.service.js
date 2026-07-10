@@ -6,7 +6,11 @@
 import { parseJsonObjectFromAIText } from "../utils/aiJsonRepair.js";
 import { pipelineTrace } from "../utils/aiApiCallLogger.js";
 import { getExamLabel } from "./examPromptContext.service.js";
-import { isVeteranDifficultyEnabled } from "./hardQuestionMandate.service.js";
+import { isVeteranDifficultyEnabled, isExamNativeVeteranGeneration } from "./hardQuestionMandate.service.js";
+import {
+    buildDifficultyAuditRubricsBlock,
+    normalizeQuestionTier,
+} from "./difficultyMix.service.js";
 
 export const DIFFICULTY_SELF_AUDIT_MIN_SCORE = Number(
     process.env.AI_QB_DIFFICULTY_SELF_AUDIT_MIN ||
@@ -34,6 +38,17 @@ export const isDifficultySelfAuditEnabled = () => {
     return true;
 };
 
+/**
+ * Exam-native JEE/NEET: trust generation prompts + code mandates — skip LLM difficulty scoring.
+ * Set AI_QB_DIFFICULTY_SELF_AUDIT=1 to force audit; =0 to disable globally.
+ */
+export const shouldSkipLlmDifficultySelfAudit = (difficultyResolution) => {
+    const flag = process.env.AI_QB_DIFFICULTY_SELF_AUDIT;
+    if (flag === "1" || flag === "true") return false;
+    if (flag === "0" || flag === "false") return true;
+    return isExamNativeVeteranGeneration(difficultyResolution);
+};
+
 const truncate = (text, max = 320) => {
     const s = String(text || "").trim();
     return s.length <= max ? s : `${s.slice(0, max - 1)}…`;
@@ -41,6 +56,11 @@ const truncate = (text, max = 320) => {
 
 const formatQuestionForAudit = (q, index) => {
     const lines = [`#${index + 1}`];
+    const assignedTier =
+        normalizeQuestionTier(q.difficultyTier || q.difficulty) || null;
+    if (assignedTier) {
+        lines.push(`Assigned difficultyTier: **${assignedTier}**`);
+    }
     lines.push(`Stem: ${truncate(q.questionText, 500)}`);
     const steps = q._solveSteps || q.solveSteps;
     if (Array.isArray(steps) && steps.length) {
@@ -66,33 +86,37 @@ export const buildDifficultySelfAuditPrompt = ({
 } = {}) => {
     const examLabel = getExamLabel(examProfile);
     const blocks = questions.map((q, i) => formatQuestionForAudit(q, i)).join("\n\n");
+    const tiersInBatch = questions
+        .map(
+            (q) =>
+                normalizeQuestionTier(q.difficultyTier || q.difficulty) ||
+                normalizeQuestionTier(difficulty)
+        )
+        .filter(Boolean);
+    const rubricsBlock = buildDifficultyAuditRubricsBlock({
+        examProfile,
+        tiers: tiersInBatch.length ? tiersInBatch : ["easy", "medium", "hard"],
+        hardOnly:
+            tiersInBatch.length > 0 &&
+            tiersInBatch.every((t) => t === "hard"),
+    });
 
-    const veteran = isVeteranDifficultyEnabled();
-    const veteranRubric = veteran
-        ? `
-**Veteran examinee bar (repeaters / droppers who solved 1000+ mocks):**
-- **90+** — veteran needs 4+ careful minutes; hidden constraint; ≥2 concepts fused; ≥4 linked solve steps; non-obvious distractors
-- **80–89** — respectable but one step is formula-heavy or missing a hidden link
-- **65–79** — coaching-fresh student could solve; veteran finishes in 2–3 min — **too easy for hard tier**
-- **Below 65** — NCERT drill / new-aspirant template / single-formula plug-in — **reject**`
-        : `
-**Scoring (0–100 per question):**
-- **80+** — multi-concept dependency, hidden constraints, indirect inference; ≥3 linked solve steps; no single-formula plug-in
-- **60–79** — adequate but one formula-heavy step, thin reasoning, or missing hidden constraint
-- **Below 60** — chapter-test / NCERT drill / single-step template`;
-
-    return `You are a ${examLabel} difficulty auditor. Score each question's **exam-native difficulty** for tier **${difficulty}**.
+    return `You are a ${examLabel} difficulty auditor. Score each question against its **assigned difficultyTier** using the **same tier criteria used during generation**.
 
 **Topic:** ${topic || bankName}
-${veteranRubric}
+**Bank difficulty profile:** ${difficulty} (overall paper weighting — each question is scored against its own assigned tier)
 
-**Reasoning depth (weight heavily):**
-- Hidden constraints or implicit assumptions in the stem
-- Two+ syllabus concepts that must be linked (not sequential plug-ins)
-- Indirect inference — answer not readable from one formula substitution
-- If a coaching veteran would dismiss it as "standard homework" → score ≤60
+${rubricsBlock}
 
-Penalize: meta draft text ("adjusting", "re-evaluating"), formula-only stems, duplicate template logic.
+**How to score each question:**
+1. Read the **Assigned difficultyTier** line for that question
+2. Apply the matching **tier scoring** rubric above (not a generic "hard" feel)
+3. **80+** = clearly meets that tier's Target + REQUIRED bars
+4. **65–79** = borderline for that tier
+5. **Below 65** = too easy for the assigned tier (see "too easy" note for that tier)
+6. **Below 50** = BANNED pattern for that tier
+
+Penalize: meta draft text ("adjusting", "re-evaluating"), formula-only stems when tier requires fusion, duplicate template logic.
 
 **Questions:**
 ${blocks}
@@ -100,7 +124,7 @@ ${blocks}
 Return ONLY valid JSON:
 {
   "scores": [
-    { "questionNumber": 1, "difficultyScore": 72, "reason": "one-line reason" }
+    { "questionNumber": 1, "difficultyScore": 72, "reason": "one-line reason referencing assigned tier criteria" }
   ]
 }`;
 };
@@ -232,10 +256,14 @@ export const applySkeletonDifficultySelfAuditGate = async (
         };
     }
 
-    const asAuditItems = list.map((sk) => ({
+    const asAuditItems = list.map((sk, i) => ({
         questionText: String(sk.stem || sk.questionStem || sk.questionText || "").trim(),
         _solveSteps: sk.solveSteps || sk._solveSteps || [],
         _conceptSlot: sk.conceptSlot,
+        difficultyTier:
+            ctx.tierSlots?.[i] ||
+            sk.difficultyTier ||
+            ctx.difficulty,
     }));
 
     const result = await applyDifficultySelfAuditGate(asAuditItems, ctx, { callLlm });
@@ -251,15 +279,30 @@ export const applySkeletonDifficultySelfAuditGate = async (
         asAuditItems.length >= 3 &&
         rejectRatio >= SKELETON_SELF_AUDIT_RELAX_THRESHOLD
     ) {
-        effectiveMin = Math.min(minScore, SKELETON_SELF_AUDIT_RELAXED_FLOOR);
-        pipelineTrace("SKELETON_SELF_AUDIT_RELAXED", {
-            inputCount: asAuditItems.length,
-            wouldReject,
-            rejectRatio: Math.round(rejectRatio * 100),
-            minScore,
-            effectiveMin,
-            scoredCount,
-        });
+        if (ctx.isLastAttempt) {
+            // Last-resort safety net only — regenerating further isn't possible,
+            // so admit near-bar skeletons rather than return nothing. On any
+            // earlier attempt, leave the bar intact and let the caller's retry
+            // loop regenerate the deficit at full quality instead.
+            effectiveMin = Math.min(minScore, SKELETON_SELF_AUDIT_RELAXED_FLOOR);
+            pipelineTrace("SKELETON_SELF_AUDIT_RELAXED", {
+                inputCount: asAuditItems.length,
+                wouldReject,
+                rejectRatio: Math.round(rejectRatio * 100),
+                minScore,
+                effectiveMin,
+                scoredCount,
+            });
+        } else {
+            pipelineTrace("SKELETON_SELF_AUDIT_RELAX_SKIPPED", {
+                inputCount: asAuditItems.length,
+                wouldReject,
+                rejectRatio: Math.round(rejectRatio * 100),
+                minScore,
+                scoredCount,
+                reason: "not_last_attempt",
+            });
+        }
     }
 
     const kept = [];
@@ -308,6 +351,7 @@ export default {
     DIFFICULTY_SELF_AUDIT_MIN_SCORE,
     SKELETON_DIFFICULTY_SELF_AUDIT_MIN_SCORE,
     isDifficultySelfAuditEnabled,
+    shouldSkipLlmDifficultySelfAudit,
     buildDifficultySelfAuditPrompt,
     parseDifficultySelfAuditResponse,
     applyDifficultySelfAuditGate,

@@ -11,6 +11,7 @@ import {
     runWithPipelineTrace,
 } from '../utils/aiApiCallLogger.js';
 import { resolveGeminiTextModel } from '../services/geminiTextModels.js';
+import { resolveClaudeTextModel } from '../services/claudeTextModels.js';
 import { QB_GENERATION_CHUNK_SIZE } from '../services/aiQuestionCountInference.service.js';
 import { isSolveFirstEnabled } from '../services/questionSolveFirst.service.js';
 import {
@@ -22,6 +23,11 @@ import {
     startQuestionBankBackgroundValidation,
     getQuestionBankBackgroundValidationStatus,
 } from '../services/questionBankBackgroundValidation.service.js';
+import {
+    createGenerationJob,
+    updateGenerationJob,
+    getGenerationJob,
+} from '../services/questionBankGenerationJobStore.js';
 import { getPipelineEvents } from '../utils/pipelineEventStore.js';
 
 /**
@@ -60,7 +66,10 @@ export const generateQuestions = asyncHandler(async (req, res) => {
  * @access Admin/Teacher
  */
 /**
- * Generate question-bank suggestions (single, multiple, true/false) via Gemini
+ * Generate question-bank suggestions (single, multiple, true/false) via Gemini.
+ * Starts a background job and returns immediately — the pipeline can take
+ * several minutes, so it must not hold the HTTP connection open. Poll
+ * getQuestionBankGenerationJobStatus for progress/result.
  * @route POST /api/admin/ai/generate-question-bank-suggestions
  */
 export const generateQuestionBankSuggestions = asyncHandler(async (req, res) => {
@@ -75,6 +84,51 @@ export const generateQuestionBankSuggestions = asyncHandler(async (req, res) => 
         );
     }
 
+    const jobId = `qbg-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    const workflowLogKey = value.workflowLogKey?.trim() || '';
+
+    createGenerationJob(jobId, {
+        topic: value.topic || value.bankName || '',
+        bankName: value.bankName || value.topic || '',
+        workflowLogKey,
+    });
+
+    setImmediate(() => {
+        runQuestionBankGenerationJob(req, value)
+            .then((responseBody) => {
+                updateGenerationJob(jobId, {
+                    status: 'completed',
+                    phase: 'done',
+                    // Store just the payload (ApiResponse.data), not the whole
+                    // ApiResponse envelope — the axios interceptor already
+                    // unwraps one envelope layer, so this keeps job.result
+                    // shaped exactly like the old synchronous res.data was.
+                    result: responseBody?.data ?? responseBody,
+                });
+            })
+            .catch((err) => {
+                updateGenerationJob(jobId, {
+                    status: 'failed',
+                    phase: 'error',
+                    error: err?.message || String(err),
+                });
+            });
+    });
+
+    return res.status(202).json(
+        ApiResponse.success(
+            { jobId, workflowLogKey },
+            'Question bank generation started'
+        )
+    );
+});
+
+/**
+ * Runs the actual (potentially long-running) generation pipeline off the
+ * request/response cycle. Errors are caught by the setImmediate caller above
+ * and stored on the job — this must not throw into an HTTP response.
+ */
+const runQuestionBankGenerationJob = async (req, value) => {
     const difficulty = String(value.difficulty).toLowerCase();
     const passageCount =
         value.passageCount > 0 ? value.passageCount : value.connectedCount || 0;
@@ -181,6 +235,7 @@ export const generateQuestionBankSuggestions = asyncHandler(async (req, res) => 
             passageCount: resolvedPassageCount,
             solveFirstEnabled: isSolveFirstEnabled(),
             chunkSize: QB_GENERATION_CHUNK_SIZE,
+            maxSelectableSlots: value.maxSelectableSlots || 0,
         },
         () =>
             aiQuestionService.generateQuestionBankSuggestions({
@@ -273,7 +328,27 @@ export const generateQuestionBankSuggestions = asyncHandler(async (req, res) => 
 
     void logGenerateQuestionBankSuggestions(req, value, responseBody);
 
-    return res.status(200).json(responseBody);
+    return responseBody;
+};
+
+/**
+ * Poll question-bank generation started by generateQuestionBankSuggestions.
+ * @route GET /api/admin/ai/question-bank-generation/:jobId
+ */
+export const getQuestionBankGenerationJobStatus = asyncHandler(async (req, res) => {
+    const jobId = String(req.params.jobId || '').trim();
+    if (!jobId) {
+        throw new ApiError(400, 'jobId is required');
+    }
+
+    const job = getGenerationJob(jobId);
+    if (!job) {
+        throw new ApiError(404, 'Generation job not found or expired');
+    }
+
+    return res.status(200).json(
+        ApiResponse.success(job, 'Generation job status retrieved')
+    );
 });
 
 /**
@@ -436,6 +511,21 @@ export const listGeminiTextModels = asyncHandler(async (req, res) => {
         ApiResponse.success(
             { models, active },
             'Gemini text models retrieved successfully'
+        )
+    );
+});
+
+/**
+ * List selectable Claude text models (question generation)
+ * @route GET /api/admin/ai/claude-text-models
+ */
+export const listClaudeTextModels = asyncHandler(async (req, res) => {
+    const models = aiQuestionService.getClaudeTextModelOptions();
+    const active = resolveClaudeTextModel();
+    return res.status(200).json(
+        ApiResponse.success(
+            { models, active },
+            'Claude text models retrieved successfully'
         )
     );
 });

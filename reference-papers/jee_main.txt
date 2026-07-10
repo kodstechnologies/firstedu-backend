@@ -1,0 +1,471 @@
+JEE Main 2019 (09 Jan Shift 1) — AI Generated Questions
+============================================================
+Bank: JEE Main 2019 (09 Jan Shift 1) Previous Year Paper
+Difficulty: hard
+Count: 20 single-answer MCQs
+Generated: 2026-06-22T08:45:20.029Z
+Elapsed: 437.2s
+Question 1
+Type: single
+Stem: Let L be the value of the limit given by L = lim (n→∞) [ (1/n) Σ_{k=1}^{n} (k/n) ∫_{0}^{1} x^(k/n) dx ]. The value of L is:
+  A. 1 + ln 2
+  B. ln 2
+  C. ln 2
+  D. 1
+Correct: B
+Explanation: The inner integral is ∫_{0}^{1} x^(k/n) dx. Using the power rule for integration, [ x^((k/n)+1) / ((k/n)+1) ] from 0 to 1 evaluates to 1 / ((k/n)+1), which simplifies to n / (k+n). Substituting this back into the limit expression: L = lim (n→∞) [ (1/n) Σ_{k=1}^{n} (k/n) * (n / (k+n)) ] L = lim (n→∞) [ (1/n) Σ_{k=1}^{n} (k / (k+n)) ] To convert this into a Riemann sum, we divide the numerator and denominator of the term (k/(k+n)) by n: L = lim (n→∞) [ (1/n) Σ_{k=1}^{n} ( (k/n) / ((k/n)+1) ) ] This limit represents the definite integral ∫_{0}^{1} (x / (x+1)) dx. Now, we evaluate the integral: ∫_{0}^{1} (x / (x+1)) dx = ∫_{0}^{1} ( (x+1 - 1) / (x+1) ) dx = ∫_{0}^{1} (1 - 1/(x+1)) dx = [x - ln|x+1|]_{0}^{1} Applying the limits: = (1 - ln|1+1|) - (0 - ln|0+1|) = (1 - ln 2) - (0 - 0) = 1 - ln 2. Thus, the value of L is 1 - ln 2.
+
+Question 2
+Type: single
+Stem: Consider the ellipse E: x²/16 + y²/9 = 1. A tangent to the ellipse at a point P on the ellipse intersects the director circle of the ellipse at points Q and R. If the normal to the ellipse at point P passes through the center of the director circle, then the area of triangle CQR, where C is the center of the ellipse, is:
+  A. 12 sq units
+  B. 24 sq units
+  C. 15 sq units
+  D. 9 sq units
+Correct: A
+Explanation: The equation of the ellipse is x²/16 + y²/9 = 1, so a² = 16 and b² = 9. The center of the ellipse C is (0,0). The director circle for an ellipse x²/a² + y²/b² = 1 has the equation x² + y² = a² + b². For the given ellipse, the director circle is x² + y² = 16 + 9 = 25. Its center is also (0,0). The equation of the normal to the ellipse at a point P(x₁, y₁) is (a²x/x₁) - (b²y/y₁) = a² - b². We are given that this normal passes through the center of the director circle, which is (0,0). Substituting (0,0) into the normal equation gives 0 = a² - b², which implies a² = b². This means the ellipse would be a circle, which is not the case (16 ≠ 9). This condition implies that P must be one of the vertices on the major or minor axis, where the standard normal equation derived for general points might not apply in a way that allows (0,0) to be a general point on the normal unless x₁ or y₁ is zero. Let's test the vertices: P = (±a, 0) or P = (0, ±b). If P = (a, 0) = (4, 0): The tangent at (4,0) to the ellipse is x*4/16 + y*0/9 = 1, which simplifies to x/4 = 1, or x = 4. The normal at (4,0) is y=0 (the x-axis), which passes through C(0,0), the center of the director circle. So, P=(4,0) is a valid point. Now, find the intersection points Q and R of the tangent line x=4 with the director circle x² + y² = 25. Substitute x=4 into the director circle equation: 4² + y² = 25 => 16 + y² = 25 => y² = 9 => y = ±3. So, the intersection points are Q(4, 3) and R(4, -3). The triangle CQR has vertices C(0,0), Q(4,3), and R(4,-3). The base QR is a vertical line segment. Its length is the distance between (4,3) and (4,-3), which is |3 - (-3)| = 6 units. The height of the triangle from C(0,0) to the base QR (which lies on the line x=4) is the perpendicular distance from (0,0) to the line x=4, which is 4 units. Area of triangle CQR = (1/2) × base × height = (1/2) × 6 × 4 = 12 square units. (If we chose P=(0,3), the tangent would be y=3. The normal would be x=0 (the y-axis), passing through (0,0). Intersections with x²+y²=25 would be (±4,3). The base would be 8, height 3, area (1/2)*8*3=12, consistent.)
+
+Question 3
+Type: single
+Stem: Let P be a plane that passes through the point (3, 7, -2) and contains the line L given by (x-1)/2 = (y+1)/-1 = (z-3)/4. If R(α, β, γ) is the projection of the point Q(2, 4, 3) onto the plane P, then the value of α+β+γ is:
+  A. 146/17
+  B. 123/17
+  C. 151/17
+  D. 130/17
+Correct: A
+Explanation: 1. Find the equation of the plane P: The plane passes through A(3, 7, -2). The line L passes through B(1, -1, 3) and has a direction vector d = (2, -1, 4). A vector lying in the plane, connecting B to A, is BA = A - B = (3-1, 7-(-1), -2-3) = (2, 8, -5). The normal vector n to the plane P is perpendicular to both BA and d. So, n = BA × d. n = | i j k | | 2 8 -5 | | 2 -1 4 | n = i(8*4 - (-5)*(-1)) - j(2*4 - (-5)*2) + k(2*(-1) - 8*2) n = i(32 - 5) - j(8 + 10) + k(-2 - 16) n = 27i - 18j - 18k. We can use a simplified normal vector by dividing by 9: n' = (3, -2, -2). The equation of the plane P passing through A(3, 7, -2) with normal (3, -2, -2) is: 3(x-3) - 2(y-7) - 2(z-(-2)) = 0 3x - 9 - 2y + 14 - 2z - 4 = 0 3x - 2y - 2z + 1 = 0. 2. Find the projection R(α, β, γ) of Q(2, 4, 3) onto plane P: The line segment QR connecting Q to its projection R on the plane is perpendicular to the plane P. Therefore, the direction vector of line QR is the normal vector of the plane, (3, -2, -2). The equation of the line QR is: (x - 2)/3 = (y - 4)/(-2) = (z - 3)/(-2) = λ (say). Any point on this line can be written as (3λ + 2, -2λ + 4, -2λ + 3). Since R(α, β, γ) is the projection, it lies on the plane P. Substitute the coordinates of R into the plane equation: 3(3λ + 2) - 2(-2λ + 4) - 2(-2λ + 3) + 1 = 0 9λ + 6 + 4λ - 8 + 4λ - 6 + 1 = 0 (9 + 4 + 4)λ + (6 - 8 - 6 + 1) = 0 17λ - 7 = 0 λ = 7/17. 3. Determine the coordinates of R(α, β, γ): α = 3(7/17) + 2 = 21/17 + 34/17 = 55/17. β = -2(7/17) + 4 = -14/17 + 68/17 = 54/17. γ = -2(7/17) + 3 = -14/17 + 51/17 = 37/17. 4. Calculate α+β+γ: α+β+γ = 55/17 + 54/17 + 37/17 = (55 + 54 + 37)/17 = 146/17.
+
+Question 4
+Type: single
+Stem: Three distinct numbers are chosen randomly from the set S = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10}. The probability that their sum is divisible by 3 is:
+  A. 7/20
+  B. 1/3
+  C. 3/10
+  D. 11/30
+Correct: A
+Explanation: The total number of ways to choose 3 distinct numbers from a set of 10 numbers is given by the combination formula ¹⁰C₃. ¹⁰C₃ = (10 × 9 × 8) / (3 × 2 × 1) = 10 × 3 × 4 = 120. Now, we need to find the number of ways such that the sum of the three chosen numbers is divisible by 3. We classify the numbers in the set S based on their remainder when divided by 3: Group A (numbers ≡ 0 mod 3): {3, 6, 9} (3 numbers) Group B (numbers ≡ 1 mod 3): {1, 4, 7, 10} (4 numbers) Group C (numbers ≡ 2 mod 3): {2, 5, 8} (3 numbers) For the sum of three numbers (n₁, n₂, n₃) to be divisible by 3, the sum of their remainders (r₁, r₂, r₃) when divided by 3 must be divisible by 3. This can happen in four possible cases: Case 1: All three numbers are chosen from Group A (0+0+0 ≡ 0 mod 3). Number of ways = ³C₃ = 1. Case 2: All three numbers are chosen from Group B (1+1+1 = 3 ≡ 0 mod 3). Number of ways = ⁴C₃ = 4. Case 3: All three numbers are chosen from Group C (2+2+2 = 6 ≡ 0 mod 3). Number of ways = ³C₃ = 1. Case 4: One number is chosen from each group (0+1+2 = 3 ≡ 0 mod 3). Number of ways = ³C₁ × ⁴C₁ × ³C₁ = 3 × 4 × 3 = 36. Total number of favorable ways = 1 (Case 1) + 4 (Case 2) + 1 (Case 3) + 36 (Case 4) = 42. The probability is the ratio of favorable ways to the total number of ways: Probability = 42 / 120. Simplifying the fraction, we divide both numerator and denominator by 6: 42/120 = 7/20.
+
+Question 5
+Type: single
+Stem: Let P(x) = x⁴ + ax³ + bx² + cx + d be a polynomial with real coefficients. If P(1+i) = 0 and P(1-2i) = 0, and P(0) = 10, then the value of P(2) is:
+  A. 10
+  B. 20
+  C. 5
+  D. -10
+Correct: A
+Explanation: Since P(x) is a polynomial with real coefficients, if a complex number is a root, its conjugate must also be a root. Given P(1+i) = 0, it implies that (1-i) must also be a root. Given P(1-2i) = 0, it implies that (1+2i) must also be a root. Thus, the four roots of the quartic polynomial P(x) are (1+i), (1-i), (1-2i), and (1+2i). Since the leading coefficient of x⁴ in P(x) is 1, the polynomial can be written in factored form as: P(x) = (x - (1+i)) (x - (1-i)) (x - (1-2i)) (x - (1+2i)) Now, we group the conjugate pairs to form quadratic factors with real coefficients: Factor 1: (x - (1+i))(x - (1-i)) = ((x-1) - i)((x-1) + i) = (x-1)² - i² = (x-1)² + 1 = x² - 2x + 1 + 1 = x² - 2x + 2 Factor 2: (x - (1-2i))(x - (1+2i)) = ((x-1) - 2i)((x-1) + 2i) = (x-1)² - (2i)² = (x-1)² - (-4) = (x-1)² + 4 = x² - 2x + 1 + 4 = x² - 2x + 5 So, P(x) can be written as the product of these two quadratic factors: P(x) = (x² - 2x + 2)(x² - 2x + 5). We are given P(0) = 10. Let's verify this using our factored form: P(0) = (0² - 2*0 + 2)(0² - 2*0 + 5) P(0) = (2)(5) = 10. This matches the given condition, confirming our polynomial expression is correct. Finally, we need to find the value of P(2): P(2) = (2² - 2*2 + 2)(2² - 2*2 + 5) P(2) = (4 - 4 + 2)(4 - 4 + 5) P(2) = (2)(5) P(2) = 10. Thus, the value of P(2) is 10.
+
+Question 6
+Type: single
+Stem: A plane P passes through the intersection of the planes x + 2y - z = 1 and 2x - y + z = 3, and is parallel to the line whose direction ratios are proportional to (2, 1, -1). Find the perpendicular distance of the origin from the plane P.
+  A. 13/sqrt(194)
+  B. 13/sqrt(146)
+  C. 13/sqrt(218)
+  D. 13/sqrt(171)
+Correct: A
+Explanation: The equation of a plane passing through the intersection of planes P₁: x + 2y - z - 1 = 0 and P₂: 2x - y + z - 3 = 0 is given by P₁ + λP₂ = 0. So, (x + 2y - z - 1) + λ(2x - y + z - 3) = 0. Rearranging terms, we get (1+2λ)x + (2-λ)y + (-1+λ)z - (1+3λ) = 0. The normal vector to this plane is n = (1+2λ, 2-λ, -1+λ). The plane P is parallel to the line with direction ratios (2, 1, -1). This means the normal to the plane P must be perpendicular to the direction vector of the line. Their dot product must be zero. n ⋅ (2, 1, -1) = 0 (1+2λ)(2) + (2-λ)(1) + (-1+λ)(-1) = 0 2 + 4λ + 2 - λ + 1 - λ = 0 5 + 2λ = 0 λ = -5/2. Substitute λ = -5/2 back into the plane equation: (1 + 2(-5/2))x + (2 - (-5/2))y + (-1 + (-5/2))z - (1 + 3(-5/2)) = 0 (1 - 5)x + (2 + 5/2)y + (-1 - 5/2)z - (1 - 15/2) = 0 -4x + (9/2)y - (7/2)z - (-13/2) = 0 Multiplying by 2, we get -8x + 9y - 7z + 13 = 0, or 8x - 9y + 7z - 13 = 0. The perpendicular distance of the origin (0,0,0) from this plane is given by the formula |Ax₀ + By₀ + Cz₀ + D| / sqrt(A² + B² + C²). Distance = |8(0) - 9(0) + 7(0) - 13| / sqrt(8² + (-9)² + 7²) = |-13| / sqrt(64 + 81 + 49) = 13 / sqrt(194).
+
+Question 7
+Type: single
+Stem: Let f(x) be a differentiable function satisfying the equation f'(x) = f(x) + C, where C is a constant given by C = ∫₀¹ f(t) dt. If f(0) = 1, then the value of f(ln 2) is:
+  A. (e-5)/(3-e)
+  B. (5+e)/(3-e)
+  C. (5-e)/(3-e)
+  D. (e-1)/(3-e)
+Correct: C
+Explanation: The given differential equation is f'(x) - f(x) = C. This is a linear first-order differential equation. The integrating factor is e^(∫(-1)dx) = e^(-x). Multiplying by the integrating factor: e^(-x)f'(x) - e^(-x)f(x) = C e^(-x). This can be written as d/dx (f(x)e^(-x)) = C e^(-x). Integrating both sides with respect to x: f(x)e^(-x) = ∫C e^(-x) dx = -C e^(-x) + K, where K is the integration constant. So, f(x) = -C + K e^x. Given f(0) = 1, substitute x=0: 1 = -C + K e⁰ => 1 = -C + K => K = 1 + C. Thus, f(x) = -C + (1+C)e^x. Now, we use the definition of C: C = ∫₀¹ f(t) dt. C = ∫₀¹ [-C + (1+C)e^t] dt C = [-Ct + (1+C)e^t] from t=0 to t=1 C = [(-C(1) + (1+C)e¹) - (-C(0) + (1+C)e⁰)] C = (-C + (1+C)e) - (0 + (1+C)) C = -C + e + Ce - 1 - C C = -2C - 1 + e + Ce 3C + 1 = e + Ce 3C - Ce = e - 1 C(3 - e) = e - 1 C = (e - 1) / (3 - e). Now substitute C back into the expression for f(x) and K: K = 1 + C = 1 + (e-1)/(3-e) = (3-e + e-1)/(3-e) = 2/(3-e). So, f(x) = -(e-1)/(3-e) + (2/(3-e))e^x. We need to find f(ln 2): f(ln 2) = -(e-1)/(3-e) + (2/(3-e))e^(ln 2) f(ln 2) = -(e-1)/(3-e) + (2/(3-e)) * 2 f(ln 2) = (-e + 1 + 4)/(3-e) f(ln 2) = (5 - e)/(3-e).
+
+Question 8
+Type: single
+Stem: Let α be a non-real fifth root of unity. If S = 1 + 2α + 3α² + 4α³ + 5α⁴, then the value of |S| is:
+  A. (1/2)sqrt(50-10sqrt(5))
+  B. (1/2)sqrt(50+10sqrt(5))
+  C. (1/2)sqrt(10+2sqrt(5))
+  D. sqrt(10)
+Correct: B
+Explanation: The given series is an arithmetico-geometric progression: S = 1 + 2α + 3α² + 4α³ + 5α⁴. Multiply S by α: αS = α + 2α² + 3α³ + 4α⁴ + 5α⁵. Subtracting the second equation from the first: S - αS = (1 + 2α + 3α² + 4α³ + 5α⁴) - (α + 2α² + 3α³ + 4α⁴ + 5α⁵) (1-α)S = 1 + α + α² + α³ + α⁴ - 5α⁵. Since α is a non-real fifth root of unity, we know two important properties: 1. α⁵ = 1 2. 1 + α + α² + α³ + α⁴ = 0 (sum of roots of unity) Substitute these properties into the equation for (1-α)S: (1-α)S = 0 - 5(1) = -5. So, S = -5 / (1-α). We need to find the magnitude |S|: |S| = |-5 / (1-α)| = |-5| / |1-α| = 5 / |1-α|. Let α = cos(θ) + i sin(θ) where θ = 2πk/5 for k = 1, 2, 3, 4. For simplicity, let's take k=1, so θ = 2π/5. |1-α|² = |1 - (cos(2π/5) + i sin(2π/5))|² = (1 - cos(2π/5))² + (-sin(2π/5))² = 1 - 2cos(2π/5) + cos²(2π/5) + sin²(2π/5) = 1 - 2cos(2π/5) + 1 = 2 - 2cos(2π/5) Using the half-angle identity 1 - cos(2x) = 2sin²(x): = 2(1 - cos(2π/5)) = 2(2sin²(π/5)) = 4sin²(π/5). So, |1-α| = sqrt(4sin²(π/5)) = 2|sin(π/5)|. Since π/5 is in the first quadrant, sin(π/5) > 0, so |1-α| = 2sin(π/5). We know that sin(π/5) = sin(36°) = sqrt(10 - 2sqrt(5))/4. Therefore, |1-α| = 2 * (sqrt(10 - 2sqrt(5))/4) = sqrt(10 - 2sqrt(5))/2. Now, substitute this back into the expression for |S|: |S| = 5 / (sqrt(10 - 2sqrt(5))/2) |S| = 10 / sqrt(10 - 2sqrt(5)). To rationalize and simplify: |S| = 10 * sqrt(10 + 2sqrt(5)) / (sqrt(10 - 2sqrt(5)) * sqrt(10 + 2sqrt(5))) |S| = 10 * sqrt(10 + 2sqrt(5)) / sqrt(100 - (2sqrt(5))²) |S| = 10 * sqrt(10 + 2sqrt(5)) / sqrt(100 - 20) |S| = 10 * sqrt(10 + 2sqrt(5)) / sqrt(80) |S| = 10 * sqrt(10 + 2sqrt(5)) / (4sqrt(5)) |S| = (10 / (4sqrt(5))) * sqrt(10 + 2sqrt(5)) |S| = (5 / (2sqrt(5))) * sqrt(10 + 2sqrt(5)) |S| = (sqrt(5)/2) * sqrt(10 + 2sqrt(5)) (Multiplying numerator and denominator by sqrt(5)) |S| = (1/2) * sqrt(5 * (10 + 2sqrt(5))) |S| = (1/2) * sqrt(50 + 10sqrt(5)).
+
+Question 9
+Type: single
+Stem: A tangent to the parabola y² = 4ax at a point P(at², 2at) intersects the directrix at point Q and the latus rectum at point R. If S is the focus of the parabola, and the x-coordinate of Q is -a, then the area of triangle SQR is:
+  A. a²(1+t²)/t
+  B. a²(t²-1)/t
+  C. 2a²(1+t²)/t
+  D. a²(1+t²)/|t|
+Correct: D
+Explanation: The equation of the parabola is y² = 4ax. Its focus is S(a, 0) and directrix is x = -a. The latus rectum is the line x = a. The equation of the tangent to the parabola at a point P(at², 2at) is ty = x + at². 1. Find Q (intersection of tangent and directrix): The directrix is x = -a. Substitute x = -a into the tangent equation: ty = -a + at² => y_Q = a(t²-1)/t. So, Q(-a, a(t²-1)/t). 2. Find R (intersection of tangent and latus rectum): The latus rectum is x = a. Substitute x = a into the tangent equation: ty = a + at² => y_R = a(t²+1)/t. So, R(a, a(t²+1)/t). 3. The focus is S(a, 0). 4. Calculate the area of triangle SQR using the determinant formula: Area = 1/2 |x_S(y_Q - y_R) + x_Q(y_R - y_S) + x_R(y_S - y_Q)|. Area = 1/2 |a(a(t²-1)/t - a(t²+1)/t) + (-a)(a(t²+1)/t - 0) + a(0 - a(t²-1)/t)| Area = 1/2 |a(a(-2/t)) - a(a(t²+1)/t) - a(a(t²-1)/t)| Area = 1/2 | -2a²/t - a²(t²+1)/t - a²(t²-1)/t | Factor out a²/t: Area = 1/2 | (a²/t) [-2 - (t²+1) - (t²-1)] | Area = 1/2 | (a²/t) [-2 - t² - 1 - t² + 1] | Area = 1/2 | (a²/t) [-2 - 2t²] | Area = 1/2 | -2a²/t (1 + t²) | Area = | -a²/t (1 + t²) | Since area must be positive, Area = a²(1+t²)/|t|. If the context implies t>0 (e.g., P is in the first quadrant), then it would be a²(1+t²)/t. The most general form is with absolute value.
+
+Question 10
+Type: single
+Stem: A line segment of length L is divided into three parts by two randomly chosen points. The probability that these three parts can form a triangle is:
+  A. 1/2
+  B. 1/3
+  C. 1/4
+  D. 1/8
+Correct: C
+Explanation: Let the length of the line segment be L. Let the two randomly chosen points be at distances x and y from one end of the segment. We can assume 0 ≤ x ≤ L and 0 ≤ y ≤ L. The sample space for (x, y) is a square of side L, with area L². Without loss of generality, assume x < y. The three parts of the line segment are then x, (y-x), and (L-y). For these three parts to form a triangle, they must satisfy the triangle inequality conditions: 1. x + (y-x) > L-y => y > L-y => 2y > L => y > L/2 2. x + (L-y) > y-x => L+2x > 2y => y < x + L/2 3. (y-x) + (L-y) > x => L-x > x => L > 2x => x < L/2 Now, we need to find the area of the region in the sample space where these conditions are met, considering the possibility that x and y can be chosen in any order. Let x₁ and x₂ be the positions of the two points on the interval [0, L]. The sample space is a square (L, L) with area L². The three parts are a = min(x₁, x₂), b = |x₁ - x₂|, c = L - max(x₁, x₂). The triangle inequalities are: a + b > c b + c > a a + c > b These translate to: 1. min(x₁, x₂) + |x₁ - x₂| > L - max(x₁, x₂) This simplifies to 2 * max(x₁, x₂) > L, or max(x₁, x₂) > L/2. 2. |x₁ - x₂| + L - max(x₁, x₂) > min(x₁, x₂) This simplifies to L > 2 * min(x₁, x₂), or min(x₁, x₂) < L/2. 3. min(x₁, x₂) + L - max(x₁, x₂) > |x₁ - x₂| This simplifies to L - (max(x₁, x₂) - min(x₁, x₂)) > |x₁ - x₂| L - |x₁ - x₂| > |x₁ - x₂| => L > 2|x₁ - x₂| => |x₁ - x₂| < L/2. So, the favorable region (x₁, x₂) within the L x L square must satisfy: (i) max(x₁, x₂) > L/2 (ii) min(x₁, x₂) < L/2 (iii) |x₁ - x₂| < L/2 Let's visualize this in the square [0, L] x [0, L]: - Condition (i) max(x₁, x₂) > L/2 means that at least one of x₁ or x₂ must be greater than L/2. This excludes the square region [0, L/2] x [0, L/2] in the bottom-left corner, which has area (L/2)² = L²/4. The remaining area is L² - L²/4 = 3L²/4. - Condition (ii) min(x₁, x₂) < L/2 means that at least one of x₁ or x₂ must be less than L/2. This excludes the square region [L/2, L] x [L/2, L] in the top-right corner, which has area (L/2)² = L²/4. - Condition (iii) |x₁ - x₂| < L/2 means that the points x₁ and x₂ must be within L/2 distance of each other. This implies that the region between the lines x₂ = x₁ + L/2 and x₂ = x₁ - L/2 is the favorable region. The area of the excluded regions (where |x₁ - x₂| ≥ L/2) forms two triangles: one in the top-left (vertices (0,L/2), (0,L), (L/2,L)) and one in the bottom-right (vertices (L/2,0), (L,0), (L,L/2)). Each triangle has area (1/2)*(L/2)*(L/2) = L²/8. So total excluded area from this condition is L²/4. Combining these conditions: Draw the square from (0,0) to (L,L). Draw lines x=L/2 and y=L/2. These divide the square into four smaller squares. Draw lines x-y=L/2 and y-x=L/2. The region satisfying all three conditions is a hexagon. The corners excluded are: - (0,0) to (L/2, L/2) (bottom-left square) - this is excluded by (i) and (iii) when x1, x2 < L/2 - (L/2, L/2) to (L, L) (top-right square) - this is excluded by (ii) and (iii) when x1, x2 > L/2. Let's use a simpler visualization. The sample space is a square of side L (area L²). The excluded region consists of two triangles, each of area (1/2) * (L/2) * (L/2) = L²/8. One triangle has vertices (0, L), (0, L/2), (L/2, L). The other has vertices (L/2, 0), (L, 0), (L, L/2). These correspond to L < 2x_1 or L < 2x_2 (min(x1,x2) > L/2) or L < 2|x1-x2|. The total area of the sample space is L². The area of the favorable region is found by subtracting the areas where conditions are not met. The area of the favorable region is (L/2)² - 2 * (1/2) * (L/4) * (L/4) from (x,y) perspective. A simpler method is to assume the lengths of the parts are x, y, z where x+y+z=L. This can be mapped to a point (x,y) in the triangle with vertices (0,0), (L,0), (0,L) in the xy-plane, where x>0, y>0, and x+y<L. The area of this sample space is (1/2)L². The conditions for forming a triangle are: 1. x < L/2 2. y < L/2 3. z < L/2, which means L - (x+y) < L/2 => x+y > L/2. The favorable region within the sample space triangle (0,0), (L,0), (0,L) is defined by x < L/2, y < L/2, and x+y > L/2. This region is a smaller triangle with vertices (L/2, 0), (0, L/2), and (L/2, L/2). (This is a common method for this problem). The base of this favorable triangle is L/2 (from (L/2,0) to (0,L/2)). The height is L/2. No. The vertices of the favorable region are (L/2,0) (on x-axis), (0,L/2) (on y-axis), and (L/2,L/2) (intersection of x=L/2 and y=L/2). No, this is incorrect. The region bounded by x=0, y=0, x+y=L contains the favorable region. The lines x=L/2, y=L/2, and x+y=L/2 define a smaller triangle inside. The vertices of the favorable region are (L/2, L/2) from x=L/2, y=L/2. Points (L/2, 0) and (0, L/2) are on the boundaries x+y=L/2. The region is a triangle with vertices (L/2,L/2), (L/2,0), (0,L/2). This region has an area of (1/2) * (L/2) * (L/2) = L²/8. The total sample space (the region x>0, y>0, x+y<L) has an area of (1/2)L². The probability is the ratio of the favorable area to the total sample space area: (L²/8) / (L²/2) = 1/4.
+
+Question 11
+Type: single
+Stem: Let f(x) be a continuous function such that f(x) = f(a-x) for all x ∈ [0, a]. If ∫₀ᵃ x f(x) dx = 24 and ∫₀ᵃ f(x) dx = 8, then the value of 'a' is:
+  A. 3
+  B. 4
+  C. 6
+  D. 8
+Correct: C
+Explanation: We use the property of definite integrals: If f(x) = f(a-x), then ∫₀ᵃ x f(x) dx = (a/2) ∫₀ᵃ f(x) dx. Given ∫₀ᵃ x f(x) dx = 24 and ∫₀ᵃ f(x) dx = 8. Substituting these values into the property: 24 = (a/2) × 8 24 = 4a a = 24/4 a = 6.
+
+Question 12
+Type: single
+Stem: Let the equation of the circle be x² + y² = 4. P is a variable point on the line y = x + 4. From P, two tangents PA and PB are drawn to the circle. If O is the origin (0,0), then the locus of the circumcenter of triangle PAB is a straight line. The equation of this line is:
+  A. y = x + 2
+  B. y = x + 1
+  C. y = x - 2
+  D. y = x - 1
+Correct: A
+Explanation: Let P be the point (h, k). The tangents PA and PB are drawn from P to the circle x² + y² = 4. The points O (origin), A, P, and B are concyclic, lying on a circle with diameter OP. This is because ∠OAP = ∠OBP = 90° (radius is perpendicular to tangent at point of contact). The circumcenter of triangle PAB is the center of the circle that passes through P, A, and B. Since O, A, P, B are concyclic and OP is the diameter, the circumcenter of ΔPAB is the midpoint of OP. Let the circumcenter be (X, Y). Then X = (h+0)/2 = h/2 and Y = (k+0)/2 = k/2. So h = 2X and k = 2Y. Given that P(h, k) lies on the line y = x + 4, we substitute the coordinates of P: k = h + 4 Now substitute h = 2X and k = 2Y: 2Y = 2X + 4 Y = X + 2 Thus, the locus of the circumcenter of triangle PAB is the straight line y = x + 2.
+
+Question 13
+Type: single
+Stem: Let A be a 3×3 matrix with real entries such that AAᵀ = 4I, where I is the identity matrix. If det(A) > 0, then the value of det(adj(A⁻¹) A) is:
+  A. 1/8
+  B. 1/4
+  C. 1/2
+  D. 2
+Correct: A
+Explanation: Given AAᵀ = 4I. Taking the determinant of both sides: det(AAᵀ) = det(4I) det(A) det(Aᵀ) = 4³ det(I) Since det(Aᵀ) = det(A) and det(I) = 1: det(A)² = 64 det(A) = ±8. Given det(A) > 0, so det(A) = 8. We need to find det(adj(A⁻¹) A). Using the property det(XY) = det(X) det(Y): det(adj(A⁻¹) A) = det(adj(A⁻¹)) det(A). Now, use the property det(adj(X)) = (det(X))ⁿ⁻¹, where n is the order of the matrix. For a 3×3 matrix, n=3. det(adj(A⁻¹)) = (det(A⁻¹))³⁻¹ = (det(A⁻¹))². We know det(A⁻¹) = 1/det(A). So, det(A⁻¹) = 1/8. Therefore, det(adj(A⁻¹)) = (1/8)² = 1/64. Finally, det(adj(A⁻¹) A) = (1/64) × 8 = 1/8.
+
+Question 14
+Type: single
+Stem: A plane passes through the point P(1, 2, 3) and cuts off positive intercepts a, b, c on the coordinate axes. If the volume of the tetrahedron formed by the plane and the coordinate planes is minimum, then the sum a+b+c is:
+  A. 12
+  B. 18
+  C. 24
+  D. 36
+Correct: B
+Explanation: The equation of the plane in intercept form is x/a + y/b + z/c = 1. Since the plane passes through P(1, 2, 3), we have: 1/a + 2/b + 3/c = 1. The volume of the tetrahedron formed by the plane and the coordinate planes is V = (1/6)abc. To minimize V, we need to minimize the product abc. Using the AM-GM inequality for positive numbers 1/a, 2/b, 3/c: (1/a + 2/b + 3/c) / 3 ≥ ³√((1/a) × (2/b) × (3/c)) Substitute the given sum: 1/3 ≥ ³√(6 / abc) Cubing both sides: (1/3)³ ≥ 6 / abc 1/27 ≥ 6 / abc abc ≥ 6 × 27 abc ≥ 162. The minimum volume occurs when the equality in AM-GM holds, which means: 1/a = 2/b = 3/c = k (say) From the plane equation: 1/a + 2/b + 3/c = 1 => k + k + k = 1 => 3k = 1 => k = 1/3. So, 1/a = 1/3 => a = 3. 2/b = 1/3 => b = 6. 3/c = 1/3 => c = 9. The minimum sum a+b+c = 3 + 6 + 9 = 18.
+
+Question 15
+Type: single
+Stem: Let (1+x)ⁿ = C₀ + C₁x + C₂x² + ... + Cnxⁿ. If the sum C₀ + 2C₁ + 3C₂ + ... + (n+1)Cn = 2816, then the value of n is:
+  A. 7
+  B. 8
+  C. 9
+  D. 10
+Correct: C
+Explanation: Let S = C₀ + 2C₁ + 3C₂ + ... + (n+1)Cn. We can split the sum into two parts: S = (C₀ + C₁ + C₂ + ... + Cn) + (C₁ + 2C₂ + 3C₃ + ... + nCn). We know that the sum of all binomial coefficients, C₀ + C₁ + ... + Cn = 2ⁿ. For the second part, consider the binomial expansion: (1+x)ⁿ = C₀ + C₁x + C₂x² + ... + Cnxⁿ. Differentiating both sides with respect to x: n(1+x)ⁿ⁻¹ = C₁ + 2C₂x + 3C₃x² + ... + nCnxⁿ⁻¹. Now, set x=1 in this differentiated equation: n(1+1)ⁿ⁻¹ = C₁ + 2C₂ + 3C₃ + ... + nCn n2ⁿ⁻¹ = C₁ + 2C₂ + 3C₃ + ... + nCn. So, the original sum S becomes: S = 2ⁿ + n2ⁿ⁻¹. Factor out 2ⁿ⁻¹: S = 2ⁿ⁻¹(2 + n). Given S = 2816. 2ⁿ⁻¹(2 + n) = 2816. We need to find n. Let's find the prime factorization of 2816: 2816 = 2 × 1408 = 2² × 704 = 2³ × 352 = 2⁴ × 176 = 2⁵ × 88 = 2⁶ × 44 = 2⁷ × 22 = 2⁸ × 11. So, 2ⁿ⁻¹(2 + n) = 2⁸ × 11. Comparing the factors: For the powers of 2, n-1 = 8, which implies n = 9. For the other factor, 2+n = 11. Substituting n=9, we get 2+9 = 11, which matches. Thus, the value of n is 9.
+
+Question 16
+Type: single
+Stem: Let {x} denote the fractional part of x. If ∫₀ⁿ 4({x}² - {x}) dx = -14/3, where n is a positive integer, then the value of n is:
+  A. 3
+  B. 4
+  C. 5
+  D. 7
+Correct: D
+Explanation: Let f(x) = 4({x}² - {x}). The function f(x) is periodic with period 1, i.e., f(x+1) = 4({x+1}² - {x+1}) = 4({x}² - {x}) = f(x). Therefore, for a positive integer n, we can use the property ∫₀ⁿ f(x) dx = n ∫₀¹ f(x) dx. For x ∈ [0, 1), {x} = x. So we evaluate the integral from 0 to 1: ∫₀¹ f(x) dx = ∫₀¹ 4(x² - x) dx = 4 [x³/3 - x²/2]₀¹ = 4 [(1/3 - 1/2) - (0)] = 4 [ (2 - 3)/6 ] = 4 (-1/6) = -2/3. Given the integral value is -14/3: n * (-2/3) = -14/3. Dividing both sides by -1/3, we get 2n = 14. Therefore, n = 7.
+
+Question 17
+Type: single
+Stem: Consider two skew lines L₁: (x-1)/2 = (y-2)/3 = (z-3)/4 and L₂: (x-2)/3 = (y-4)/4 = (z-5)/5. If P is the point on L₁ and Q is the point on L₂ such that PQ is the shortest distance between L₁ and L₂, then find the equation of the plane containing L₁ and parallel to L₂.
+  A. x - 2y + z = 0
+  B. x - 2y + z + 6 = 0
+  C. x + 2y - z - 6 = 0
+  D. x + 2y - z = 0
+Correct: A
+Explanation: The plane containing line L₁ and parallel to line L₂ must have a normal vector that is perpendicular to the direction vectors of both L₁ and L₂. The direction vector of L₁ is v₁ = (2, 3, 4). The direction vector of L₂ is v₂ = (3, 4, 5). The normal vector n to the plane is parallel to v₁ × v₂. n = v₁ × v₂ = | i j k 2 3 4 3 4 5 | = i(3×5 - 4×4) - j(2×5 - 4×3) + k(2×4 - 3×3) = i(15 - 16) - j(10 - 12) + k(8 - 9) = -i + 2j - k = (-1, 2, -1). So the equation of the plane is of the form -x + 2y - z + d = 0, or equivalently x - 2y + z - d = 0. Since the plane contains L₁, it must pass through any point on L₁. Let's use the point A₁(1, 2, 3) from L₁. Substitute (1, 2, 3) into the plane equation x - 2y + z - d = 0: 1 - 2(2) + 3 - d = 0 1 - 4 + 3 - d = 0 0 - d = 0 => d = 0. Thus, the equation of the plane is x - 2y + z = 0. The information about points P and Q for the shortest distance is a distractor for this specific question.
+
+Question 18
+Type: single
+Stem: Let z be a complex number satisfying |z - (1+i)| = 2√2 + 1. If M is the maximum value of |z - i| and m is the minimum value of |z - i|, then the value of M + m is:
+  A. 2√2 + 2
+  B. 2√2 + 4
+  C. 4√2 + 2
+  D. 4√2 + 4
+Correct: C
+Explanation: The given condition |z - (1+i)| = 2√2 + 1 describes a circle in the complex plane. Its center is C = (1, 1) and its radius is R = 2√2 + 1. We need to find the maximum and minimum values of |z - i|. This represents the distance from a point z on the circle to the fixed point P = i, which is (0, 1) in the Argand plane. First, calculate the distance between the center of the circle C(1, 1) and the point P(0, 1): Distance PC = √((1 - 0)² + (1 - 1)²) = √(1² + 0²) = √1 = 1. Now, we find the maximum and minimum distances from point P to any point z on the circle: Maximum distance M = PC + R = 1 + (2√2 + 1) = 2√2 + 2. Minimum distance m = |PC - R|. Since R = 2√2 + 1 ≈ 3.828 and PC = 1, we have R > PC. So, m = R - PC = (2√2 + 1) - 1 = 2√2. Finally, we need to find the value of M + m: M + m = (2√2 + 2) + (2√2) = 4√2 + 2.
+
+Question 19
+Type: single
+Stem: Six distinct books are arranged randomly on a shelf. Given that two particular books (say, A and B) are not adjacent, what is the probability that books A and B are separated by exactly two other books?
+  A. 1/5
+  B. 1/10
+  C. 2/15
+  D. 3/10
+Correct: D
+Explanation: Total number of ways to arrange 6 distinct books on a shelf is 6! = 720. Let E₁ be the event that books A and B are not adjacent. To find the number of arrangements where A and B are adjacent, treat (AB) as a single block. Now we arrange 5 entities (the block (AB) and the 4 other books). This can be done in 5! ways. Similarly, for (BA) as a block, there are 5! ways. So, the number of ways where A and B are adjacent is 2 × 5! = 2 × 120 = 240. Number of ways for E₁ (A and B are not adjacent) = Total arrangements - (Arrangements where A and B are adjacent) = 6! - 240 = 720 - 240 = 480. Let E₂ be the event that A and B are separated by exactly two other books. This means the arrangement looks like A _ _ B or B _ _ A. 1. Choose 2 books from the remaining 4 books (excluding A and B) to place between A and B. This can be done in C(4,2) = 6 ways. 2. Arrange these 2 chosen books in 2! = 2 ways. So, there are C(4,2) × 2! = 6 × 2 = 12 ways to select and arrange the two books in the middle. Now, consider the block (A _ _ B). This block along with the remaining 2 books (6 - 4 = 2 books) can be arranged in 3! = 6 ways. So, the number of ways for the pattern A _ _ B is 12 × 3! = 12 × 6 = 72. Similarly, for the pattern B _ _ A, there are 72 ways. Total number of ways for E₂ = 72 + 72 = 144. We need to find the conditional probability P(E₂ | E₁) = P(E₂ ∩ E₁) / P(E₁). If A and B are separated by exactly two other books (E₂ occurs), they are necessarily not adjacent. Therefore, the event E₂ is a subset of E₁, which implies E₂ ∩ E₁ = E₂. So, P(E₂ | E₁) = (Number of ways for E₂) / (Number of ways for E₁) = 144 / 480. Simplifying the fraction: 144 / 480 = (12 × 12) / (12 × 40) = 12 / 40 = (4 × 3) / (4 × 10) = 3/10.
+
+Question 20
+Type: single
+Stem: A tangent to the hyperbola x²/9 - y²/16 = 1 at a point P in the first quadrant intersects the asymptotes at points A and B. If O is the origin (0,0), then the area of triangle OAB is:
+  A. 12 sq. units
+  B. 24 sq. units
+  C. 36 sq. units
+  D. 48 sq. units
+Correct: A
+Explanation: The equation of the hyperbola is x²/9 - y²/16 = 1. Comparing this with the standard form x²/a² - y²/b² = 1, we have a²=9 and b²=16, so a=3 and b=4. The equations of the asymptotes of this hyperbola are y = ±(b/a)x, which are y = (4/3)x and y = -(4/3)x. Let the point of tangency P in the first quadrant be (a secθ, b tanθ) = (3 secθ, 4 tanθ). The equation of the tangent to the hyperbola at point P(x₁, y₁) is (xx₁)/a² - (yy₁)/b² = 1. Substituting P's coordinates: (x(3 secθ))/9 - (y(4 tanθ))/16 = 1 Simplifying: (x secθ)/3 - (y tanθ)/4 = 1. Now, we find the intersection points A and B of this tangent with the asymptotes: 1. Intersection with the asymptote y = (4/3)x: Substitute y = (4/3)x into the tangent equation: (x secθ)/3 - ((4/3)x tanθ)/4 = 1 (x secθ)/3 - (x tanθ)/3 = 1 x/3 (secθ - tanθ) = 1 x = 3 / (secθ - tanθ) = 3(secθ + tanθ) (using 1/(secθ - tanθ) = secθ + tanθ). Then y = (4/3)x = 4(secθ + tanθ). So, point A = (3(secθ + tanθ), 4(secθ + tanθ)). 2. Intersection with the asymptote y = -(4/3)x: Substitute y = -(4/3)x into the tangent equation: (x secθ)/3 - (-(4/3)x tanθ)/4 = 1 (x secθ)/3 + (x tanθ)/3 = 1 x/3 (secθ + tanθ) = 1 x = 3 / (secθ + tanθ) = 3(secθ - tanθ). Then y = -(4/3)x = -4(secθ - tanθ). So, point B = (3(secθ - tanθ), -4(secθ - tanθ)). The area of triangle OAB, with O(0,0), A(x₁, y₁), and B(x₂, y₂), is given by (1/2) |x₁y₂ - x₂y₁|. x₁y₂ = [3(secθ + tanθ)] × [-4(secθ - tanθ)] = -12 (secθ + tanθ)(secθ - tanθ) = -12 (sec²θ - tan²θ) = -12 × 1 = -12. x₂y₁ = [3(secθ - tanθ)] × [4(secθ + tanθ)] = 12 (secθ - tanθ)(secθ + tanθ) = 12 (sec²θ - tan²θ) = 12 × 1 = 12. Area = (1/2) |(-12) - (12)| = (1/2) |-24| = (1/2) × 24 = 12 sq. units. Alternatively, a standard property of hyperbolas states that the area of the triangle formed by a tangent to the hyperbola x²/a² - y²/b² = 1 and its asymptotes is always equal to 'ab'. In this case, a=3 and b=4. So, Area = ab = 3 × 4 = 12 sq. units.
+
+============================================================
+Raw JSON:
+[
+  {
+    "questionType": "single",
+    "questionText": "Let L be the value of the limit given by L = lim (n→∞) [ (1/n) Σ_{k=1}^{n} (k/n) ∫_{0}^{1} x^(k/n) dx ]. The value of L is:",
+    "options": [
+      "1 + ln 2",
+      "ln 2",
+      "ln 2",
+      "1"
+    ],
+    "correctIndex": 1,
+    "multipleCorrectIndexes": [],
+    "explanation": "The inner integral is ∫_{0}^{1} x^(k/n) dx. Using the power rule for integration, [ x^((k/n)+1) / ((k/n)+1) ] from 0 to 1 evaluates to 1 / ((k/n)+1), which simplifies to n / (k+n). Substituting this back into the limit expression: L = lim (n→∞) [ (1/n) Σ_{k=1}^{n} (k/n) * (n / (k+n)) ] L = lim (n→∞) [ (1/n) Σ_{k=1}^{n} (k / (k+n)) ] To convert this into a Riemann sum, we divide the numerator and denominator of the term (k/(k+n)) by n: L = lim (n→∞) [ (1/n) Σ_{k=1}^{n} ( (k/n) / ((k/n)+1) ) ] This limit represents the definite integral ∫_{0}^{1} (x / (x+1)) dx. Now, we evaluate the integral: ∫_{0}^{1} (x / (x+1)) dx = ∫_{0}^{1} ( (x+1 - 1) / (x+1) ) dx = ∫_{0}^{1} (1 - 1/(x+1)) dx = [x - ln|x+1|]_{0}^{1} Applying the limits: = (1 - ln|1+1|) - (0 - ln|0+1|) = (1 - ln 2) - (0 - 0) = 1 - ln 2. Thus, the value of L is 1 - ln 2."
+  },
+  {
+    "questionType": "single",
+    "questionText": "Consider the ellipse E: x²/16 + y²/9 = 1. A tangent to the ellipse at a point P on the ellipse intersects the director circle of the ellipse at points Q and R. If the normal to the ellipse at point P passes through the center of the director circle, then the area of triangle CQR, where C is the center of the ellipse, is:",
+    "options": [
+      "12 sq units",
+      "24 sq units",
+      "15 sq units",
+      "9 sq units"
+    ],
+    "correctIndex": 0,
+    "multipleCorrectIndexes": [],
+    "explanation": "The equation of the ellipse is x²/16 + y²/9 = 1, so a² = 16 and b² = 9. The center of the ellipse C is (0,0). The director circle for an ellipse x²/a² + y²/b² = 1 has the equation x² + y² = a² + b². For the given ellipse, the director circle is x² + y² = 16 + 9 = 25. Its center is also (0,0). The equation of the normal to the ellipse at a point P(x₁, y₁) is (a²x/x₁) - (b²y/y₁) = a² - b². We are given that this normal passes through the center of the director circle, which is (0,0). Substituting (0,0) into the normal equation gives 0 = a² - b², which implies a² = b². This means the ellipse would be a circle, which is not the case (16 ≠ 9). This condition implies that P must be one of the vertices on the major or minor axis, where the standard normal equation derived for general points might not apply in a way that allows (0,0) to be a general point on the normal unless x₁ or y₁ is zero. Let's test the vertices: P = (±a, 0) or P = (0, ±b). If P = (a, 0) = (4, 0): The tangent at (4,0) to the ellipse is x*4/16 + y*0/9 = 1, which simplifies to x/4 = 1, or x = 4. The normal at (4,0) is y=0 (the x-axis), which passes through C(0,0), the center of the director circle. So, P=(4,0) is a valid point. Now, find the intersection points Q and R of the tangent line x=4 with the director circle x² + y² = 25. Substitute x=4 into the director circle equation: 4² + y² = 25 => 16 + y² = 25 => y² = 9 => y = ±3. So, the intersection points are Q(4, 3) and R(4, -3). The triangle CQR has vertices C(0,0), Q(4,3), and R(4,-3). The base QR is a vertical line segment. Its length is the distance between (4,3) and (4,-3), which is |3 - (-3)| = 6 units. The height of the triangle from C(0,0) to the base QR (which lies on the line x=4) is the perpendicular distance from (0,0) to the line x=4, which is 4 units. Area of triangle CQR = (1/2) × base × height = (1/2) × 6 × 4 = 12 square units. (If we chose P=(0,3), the tangent would be y=3. The normal would be x=0 (the y-axis), passing through (0,0). Intersections with x²+y²=25 would be (±4,3). The base would be 8, height 3, area (1/2)*8*3=12, consistent.)"
+  },
+  {
+    "questionType": "single",
+    "questionText": "Let P be a plane that passes through the point (3, 7, -2) and contains the line L given by (x-1)/2 = (y+1)/-1 = (z-3)/4. If R(α, β, γ) is the projection of the point Q(2, 4, 3) onto the plane P, then the value of α+β+γ is:",
+    "options": [
+      "146/17",
+      "123/17",
+      "151/17",
+      "130/17"
+    ],
+    "correctIndex": 0,
+    "multipleCorrectIndexes": [],
+    "explanation": "1. Find the equation of the plane P: The plane passes through A(3, 7, -2). The line L passes through B(1, -1, 3) and has a direction vector d = (2, -1, 4). A vector lying in the plane, connecting B to A, is BA = A - B = (3-1, 7-(-1), -2-3) = (2, 8, -5). The normal vector n to the plane P is perpendicular to both BA and d. So, n = BA × d. n = | i j k | | 2 8 -5 | | 2 -1 4 | n = i(8*4 - (-5)*(-1)) - j(2*4 - (-5)*2) + k(2*(-1) - 8*2) n = i(32 - 5) - j(8 + 10) + k(-2 - 16) n = 27i - 18j - 18k. We can use a simplified normal vector by dividing by 9: n' = (3, -2, -2). The equation of the plane P passing through A(3, 7, -2) with normal (3, -2, -2) is: 3(x-3) - 2(y-7) - 2(z-(-2)) = 0 3x - 9 - 2y + 14 - 2z - 4 = 0 3x - 2y - 2z + 1 = 0. 2. Find the projection R(α, β, γ) of Q(2, 4, 3) onto plane P: The line segment QR connecting Q to its projection R on the plane is perpendicular to the plane P. Therefore, the direction vector of line QR is the normal vector of the plane, (3, -2, -2). The equation of the line QR is: (x - 2)/3 = (y - 4)/(-2) = (z - 3)/(-2) = λ (say). Any point on this line can be written as (3λ + 2, -2λ + 4, -2λ + 3). Since R(α, β, γ) is the projection, it lies on the plane P. Substitute the coordinates of R into the plane equation: 3(3λ + 2) - 2(-2λ + 4) - 2(-2λ + 3) + 1 = 0 9λ + 6 + 4λ - 8 + 4λ - 6 + 1 = 0 (9 + 4 + 4)λ + (6 - 8 - 6 + 1) = 0 17λ - 7 = 0 λ = 7/17. 3. Determine the coordinates of R(α, β, γ): α = 3(7/17) + 2 = 21/17 + 34/17 = 55/17. β = -2(7/17) + 4 = -14/17 + 68/17 = 54/17. γ = -2(7/17) + 3 = -14/17 + 51/17 = 37/17. 4. Calculate α+β+γ: α+β+γ = 55/17 + 54/17 + 37/17 = (55 + 54 + 37)/17 = 146/17."
+  },
+  {
+    "questionType": "single",
+    "questionText": "Three distinct numbers are chosen randomly from the set S = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10}. The probability that their sum is divisible by 3 is:",
+    "options": [
+      "7/20",
+      "1/3",
+      "3/10",
+      "11/30"
+    ],
+    "correctIndex": 0,
+    "multipleCorrectIndexes": [],
+    "explanation": "The total number of ways to choose 3 distinct numbers from a set of 10 numbers is given by the combination formula ¹⁰C₃. ¹⁰C₃ = (10 × 9 × 8) / (3 × 2 × 1) = 10 × 3 × 4 = 120. Now, we need to find the number of ways such that the sum of the three chosen numbers is divisible by 3. We classify the numbers in the set S based on their remainder when divided by 3: Group A (numbers ≡ 0 mod 3): {3, 6, 9} (3 numbers) Group B (numbers ≡ 1 mod 3): {1, 4, 7, 10} (4 numbers) Group C (numbers ≡ 2 mod 3): {2, 5, 8} (3 numbers) For the sum of three numbers (n₁, n₂, n₃) to be divisible by 3, the sum of their remainders (r₁, r₂, r₃) when divided by 3 must be divisible by 3. This can happen in four possible cases: Case 1: All three numbers are chosen from Group A (0+0+0 ≡ 0 mod 3). Number of ways = ³C₃ = 1. Case 2: All three numbers are chosen from Group B (1+1+1 = 3 ≡ 0 mod 3). Number of ways = ⁴C₃ = 4. Case 3: All three numbers are chosen from Group C (2+2+2 = 6 ≡ 0 mod 3). Number of ways = ³C₃ = 1. Case 4: One number is chosen from each group (0+1+2 = 3 ≡ 0 mod 3). Number of ways = ³C₁ × ⁴C₁ × ³C₁ = 3 × 4 × 3 = 36. Total number of favorable ways = 1 (Case 1) + 4 (Case 2) + 1 (Case 3) + 36 (Case 4) = 42. The probability is the ratio of favorable ways to the total number of ways: Probability = 42 / 120. Simplifying the fraction, we divide both numerator and denominator by 6: 42/120 = 7/20."
+  },
+  {
+    "questionType": "single",
+    "questionText": "Let P(x) = x⁴ + ax³ + bx² + cx + d be a polynomial with real coefficients. If P(1+i) = 0 and P(1-2i) = 0, and P(0) = 10, then the value of P(2) is:",
+    "options": [
+      "10",
+      "20",
+      "5",
+      "-10"
+    ],
+    "correctIndex": 0,
+    "multipleCorrectIndexes": [],
+    "explanation": "Since P(x) is a polynomial with real coefficients, if a complex number is a root, its conjugate must also be a root. Given P(1+i) = 0, it implies that (1-i) must also be a root. Given P(1-2i) = 0, it implies that (1+2i) must also be a root. Thus, the four roots of the quartic polynomial P(x) are (1+i), (1-i), (1-2i), and (1+2i). Since the leading coefficient of x⁴ in P(x) is 1, the polynomial can be written in factored form as: P(x) = (x - (1+i)) (x - (1-i)) (x - (1-2i)) (x - (1+2i)) Now, we group the conjugate pairs to form quadratic factors with real coefficients: Factor 1: (x - (1+i))(x - (1-i)) = ((x-1) - i)((x-1) + i) = (x-1)² - i² = (x-1)² + 1 = x² - 2x + 1 + 1 = x² - 2x + 2 Factor 2: (x - (1-2i))(x - (1+2i)) = ((x-1) - 2i)((x-1) + 2i) = (x-1)² - (2i)² = (x-1)² - (-4) = (x-1)² + 4 = x² - 2x + 1 + 4 = x² - 2x + 5 So, P(x) can be written as the product of these two quadratic factors: P(x) = (x² - 2x + 2)(x² - 2x + 5). We are given P(0) = 10. Let's verify this using our factored form: P(0) = (0² - 2*0 + 2)(0² - 2*0 + 5) P(0) = (2)(5) = 10. This matches the given condition, confirming our polynomial expression is correct. Finally, we need to find the value of P(2): P(2) = (2² - 2*2 + 2)(2² - 2*2 + 5) P(2) = (4 - 4 + 2)(4 - 4 + 5) P(2) = (2)(5) P(2) = 10. Thus, the value of P(2) is 10."
+  },
+  {
+    "questionType": "single",
+    "questionText": "A plane P passes through the intersection of the planes x + 2y - z = 1 and 2x - y + z = 3, and is parallel to the line whose direction ratios are proportional to (2, 1, -1). Find the perpendicular distance of the origin from the plane P.",
+    "options": [
+      "13/sqrt(194)",
+      "13/sqrt(146)",
+      "13/sqrt(218)",
+      "13/sqrt(171)"
+    ],
+    "correctIndex": 0,
+    "multipleCorrectIndexes": [],
+    "explanation": "The equation of a plane passing through the intersection of planes P₁: x + 2y - z - 1 = 0 and P₂: 2x - y + z - 3 = 0 is given by P₁ + λP₂ = 0. So, (x + 2y - z - 1) + λ(2x - y + z - 3) = 0. Rearranging terms, we get (1+2λ)x + (2-λ)y + (-1+λ)z - (1+3λ) = 0. The normal vector to this plane is n = (1+2λ, 2-λ, -1+λ). The plane P is parallel to the line with direction ratios (2, 1, -1). This means the normal to the plane P must be perpendicular to the direction vector of the line. Their dot product must be zero. n ⋅ (2, 1, -1) = 0 (1+2λ)(2) + (2-λ)(1) + (-1+λ)(-1) = 0 2 + 4λ + 2 - λ + 1 - λ = 0 5 + 2λ = 0 λ = -5/2. Substitute λ = -5/2 back into the plane equation: (1 + 2(-5/2))x + (2 - (-5/2))y + (-1 + (-5/2))z - (1 + 3(-5/2)) = 0 (1 - 5)x + (2 + 5/2)y + (-1 - 5/2)z - (1 - 15/2) = 0 -4x + (9/2)y - (7/2)z - (-13/2) = 0 Multiplying by 2, we get -8x + 9y - 7z + 13 = 0, or 8x - 9y + 7z - 13 = 0. The perpendicular distance of the origin (0,0,0) from this plane is given by the formula |Ax₀ + By₀ + Cz₀ + D| / sqrt(A² + B² + C²). Distance = |8(0) - 9(0) + 7(0) - 13| / sqrt(8² + (-9)² + 7²) = |-13| / sqrt(64 + 81 + 49) = 13 / sqrt(194)."
+  },
+  {
+    "questionType": "single",
+    "questionText": "Let f(x) be a differentiable function satisfying the equation f'(x) = f(x) + C, where C is a constant given by C = ∫₀¹ f(t) dt. If f(0) = 1, then the value of f(ln 2) is:",
+    "options": [
+      "(e-5)/(3-e)",
+      "(5+e)/(3-e)",
+      "(5-e)/(3-e)",
+      "(e-1)/(3-e)"
+    ],
+    "correctIndex": 2,
+    "multipleCorrectIndexes": [],
+    "explanation": "The given differential equation is f'(x) - f(x) = C. This is a linear first-order differential equation. The integrating factor is e^(∫(-1)dx) = e^(-x). Multiplying by the integrating factor: e^(-x)f'(x) - e^(-x)f(x) = C e^(-x). This can be written as d/dx (f(x)e^(-x)) = C e^(-x). Integrating both sides with respect to x: f(x)e^(-x) = ∫C e^(-x) dx = -C e^(-x) + K, where K is the integration constant. So, f(x) = -C + K e^x. Given f(0) = 1, substitute x=0: 1 = -C + K e⁰ => 1 = -C + K => K = 1 + C. Thus, f(x) = -C + (1+C)e^x. Now, we use the definition of C: C = ∫₀¹ f(t) dt. C = ∫₀¹ [-C + (1+C)e^t] dt C = [-Ct + (1+C)e^t] from t=0 to t=1 C = [(-C(1) + (1+C)e¹) - (-C(0) + (1+C)e⁰)] C = (-C + (1+C)e) - (0 + (1+C)) C = -C + e + Ce - 1 - C C = -2C - 1 + e + Ce 3C + 1 = e + Ce 3C - Ce = e - 1 C(3 - e) = e - 1 C = (e - 1) / (3 - e). Now substitute C back into the expression for f(x) and K: K = 1 + C = 1 + (e-1)/(3-e) = (3-e + e-1)/(3-e) = 2/(3-e). So, f(x) = -(e-1)/(3-e) + (2/(3-e))e^x. We need to find f(ln 2): f(ln 2) = -(e-1)/(3-e) + (2/(3-e))e^(ln 2) f(ln 2) = -(e-1)/(3-e) + (2/(3-e)) * 2 f(ln 2) = (-e + 1 + 4)/(3-e) f(ln 2) = (5 - e)/(3-e)."
+  },
+  {
+    "questionType": "single",
+    "questionText": "Let α be a non-real fifth root of unity. If S = 1 + 2α + 3α² + 4α³ + 5α⁴, then the value of |S| is:",
+    "options": [
+      "(1/2)sqrt(50-10sqrt(5))",
+      "(1/2)sqrt(50+10sqrt(5))",
+      "(1/2)sqrt(10+2sqrt(5))",
+      "sqrt(10)"
+    ],
+    "correctIndex": 1,
+    "multipleCorrectIndexes": [],
+    "explanation": "The given series is an arithmetico-geometric progression: S = 1 + 2α + 3α² + 4α³ + 5α⁴. Multiply S by α: αS = α + 2α² + 3α³ + 4α⁴ + 5α⁵. Subtracting the second equation from the first: S - αS = (1 + 2α + 3α² + 4α³ + 5α⁴) - (α + 2α² + 3α³ + 4α⁴ + 5α⁵) (1-α)S = 1 + α + α² + α³ + α⁴ - 5α⁵. Since α is a non-real fifth root of unity, we know two important properties: 1. α⁵ = 1 2. 1 + α + α² + α³ + α⁴ = 0 (sum of roots of unity) Substitute these properties into the equation for (1-α)S: (1-α)S = 0 - 5(1) = -5. So, S = -5 / (1-α). We need to find the magnitude |S|: |S| = |-5 / (1-α)| = |-5| / |1-α| = 5 / |1-α|. Let α = cos(θ) + i sin(θ) where θ = 2πk/5 for k = 1, 2, 3, 4. For simplicity, let's take k=1, so θ = 2π/5. |1-α|² = |1 - (cos(2π/5) + i sin(2π/5))|² = (1 - cos(2π/5))² + (-sin(2π/5))² = 1 - 2cos(2π/5) + cos²(2π/5) + sin²(2π/5) = 1 - 2cos(2π/5) + 1 = 2 - 2cos(2π/5) Using the half-angle identity 1 - cos(2x) = 2sin²(x): = 2(1 - cos(2π/5)) = 2(2sin²(π/5)) = 4sin²(π/5). So, |1-α| = sqrt(4sin²(π/5)) = 2|sin(π/5)|. Since π/5 is in the first quadrant, sin(π/5) > 0, so |1-α| = 2sin(π/5). We know that sin(π/5) = sin(36°) = sqrt(10 - 2sqrt(5))/4. Therefore, |1-α| = 2 * (sqrt(10 - 2sqrt(5))/4) = sqrt(10 - 2sqrt(5))/2. Now, substitute this back into the expression for |S|: |S| = 5 / (sqrt(10 - 2sqrt(5))/2) |S| = 10 / sqrt(10 - 2sqrt(5)). To rationalize and simplify: |S| = 10 * sqrt(10 + 2sqrt(5)) / (sqrt(10 - 2sqrt(5)) * sqrt(10 + 2sqrt(5))) |S| = 10 * sqrt(10 + 2sqrt(5)) / sqrt(100 - (2sqrt(5))²) |S| = 10 * sqrt(10 + 2sqrt(5)) / sqrt(100 - 20) |S| = 10 * sqrt(10 + 2sqrt(5)) / sqrt(80) |S| = 10 * sqrt(10 + 2sqrt(5)) / (4sqrt(5)) |S| = (10 / (4sqrt(5))) * sqrt(10 + 2sqrt(5)) |S| = (5 / (2sqrt(5))) * sqrt(10 + 2sqrt(5)) |S| = (sqrt(5)/2) * sqrt(10 + 2sqrt(5)) (Multiplying numerator and denominator by sqrt(5)) |S| = (1/2) * sqrt(5 * (10 + 2sqrt(5))) |S| = (1/2) * sqrt(50 + 10sqrt(5))."
+  },
+  {
+    "questionType": "single",
+    "questionText": "A tangent to the parabola y² = 4ax at a point P(at², 2at) intersects the directrix at point Q and the latus rectum at point R. If S is the focus of the parabola, and the x-coordinate of Q is -a, then the area of triangle SQR is:",
+    "options": [
+      "a²(1+t²)/t",
+      "a²(t²-1)/t",
+      "2a²(1+t²)/t",
+      "a²(1+t²)/|t|"
+    ],
+    "correctIndex": 3,
+    "multipleCorrectIndexes": [],
+    "explanation": "The equation of the parabola is y² = 4ax. Its focus is S(a, 0) and directrix is x = -a. The latus rectum is the line x = a. The equation of the tangent to the parabola at a point P(at², 2at) is ty = x + at². 1. Find Q (intersection of tangent and directrix): The directrix is x = -a. Substitute x = -a into the tangent equation: ty = -a + at² => y_Q = a(t²-1)/t. So, Q(-a, a(t²-1)/t). 2. Find R (intersection of tangent and latus rectum): The latus rectum is x = a. Substitute x = a into the tangent equation: ty = a + at² => y_R = a(t²+1)/t. So, R(a, a(t²+1)/t). 3. The focus is S(a, 0). 4. Calculate the area of triangle SQR using the determinant formula: Area = 1/2 |x_S(y_Q - y_R) + x_Q(y_R - y_S) + x_R(y_S - y_Q)|. Area = 1/2 |a(a(t²-1)/t - a(t²+1)/t) + (-a)(a(t²+1)/t - 0) + a(0 - a(t²-1)/t)| Area = 1/2 |a(a(-2/t)) - a(a(t²+1)/t) - a(a(t²-1)/t)| Area = 1/2 | -2a²/t - a²(t²+1)/t - a²(t²-1)/t | Factor out a²/t: Area = 1/2 | (a²/t) [-2 - (t²+1) - (t²-1)] | Area = 1/2 | (a²/t) [-2 - t² - 1 - t² + 1] | Area = 1/2 | (a²/t) [-2 - 2t²] | Area = 1/2 | -2a²/t (1 + t²) | Area = | -a²/t (1 + t²) | Since area must be positive, Area = a²(1+t²)/|t|. If the context implies t>0 (e.g., P is in the first quadrant), then it would be a²(1+t²)/t. The most general form is with absolute value."
+  },
+  {
+    "questionType": "single",
+    "questionText": "A line segment of length L is divided into three parts by two randomly chosen points. The probability that these three parts can form a triangle is:",
+    "options": [
+      "1/2",
+      "1/3",
+      "1/4",
+      "1/8"
+    ],
+    "correctIndex": 2,
+    "multipleCorrectIndexes": [],
+    "explanation": "Let the length of the line segment be L. Let the two randomly chosen points be at distances x and y from one end of the segment. We can assume 0 ≤ x ≤ L and 0 ≤ y ≤ L. The sample space for (x, y) is a square of side L, with area L². Without loss of generality, assume x < y. The three parts of the line segment are then x, (y-x), and (L-y). For these three parts to form a triangle, they must satisfy the triangle inequality conditions: 1. x + (y-x) > L-y => y > L-y => 2y > L => y > L/2 2. x + (L-y) > y-x => L+2x > 2y => y < x + L/2 3. (y-x) + (L-y) > x => L-x > x => L > 2x => x < L/2 Now, we need to find the area of the region in the sample space where these conditions are met, considering the possibility that x and y can be chosen in any order. Let x₁ and x₂ be the positions of the two points on the interval [0, L]. The sample space is a square (L, L) with area L². The three parts are a = min(x₁, x₂), b = |x₁ - x₂|, c = L - max(x₁, x₂). The triangle inequalities are: a + b > c b + c > a a + c > b These translate to: 1. min(x₁, x₂) + |x₁ - x₂| > L - max(x₁, x₂) This simplifies to 2 * max(x₁, x₂) > L, or max(x₁, x₂) > L/2. 2. |x₁ - x₂| + L - max(x₁, x₂) > min(x₁, x₂) This simplifies to L > 2 * min(x₁, x₂), or min(x₁, x₂) < L/2. 3. min(x₁, x₂) + L - max(x₁, x₂) > |x₁ - x₂| This simplifies to L - (max(x₁, x₂) - min(x₁, x₂)) > |x₁ - x₂| L - |x₁ - x₂| > |x₁ - x₂| => L > 2|x₁ - x₂| => |x₁ - x₂| < L/2. So, the favorable region (x₁, x₂) within the L x L square must satisfy: (i) max(x₁, x₂) > L/2 (ii) min(x₁, x₂) < L/2 (iii) |x₁ - x₂| < L/2 Let's visualize this in the square [0, L] x [0, L]: - Condition (i) max(x₁, x₂) > L/2 means that at least one of x₁ or x₂ must be greater than L/2. This excludes the square region [0, L/2] x [0, L/2] in the bottom-left corner, which has area (L/2)² = L²/4. The remaining area is L² - L²/4 = 3L²/4. - Condition (ii) min(x₁, x₂) < L/2 means that at least one of x₁ or x₂ must be less than L/2. This excludes the square region [L/2, L] x [L/2, L] in the top-right corner, which has area (L/2)² = L²/4. - Condition (iii) |x₁ - x₂| < L/2 means that the points x₁ and x₂ must be within L/2 distance of each other. This implies that the region between the lines x₂ = x₁ + L/2 and x₂ = x₁ - L/2 is the favorable region. The area of the excluded regions (where |x₁ - x₂| ≥ L/2) forms two triangles: one in the top-left (vertices (0,L/2), (0,L), (L/2,L)) and one in the bottom-right (vertices (L/2,0), (L,0), (L,L/2)). Each triangle has area (1/2)*(L/2)*(L/2) = L²/8. So total excluded area from this condition is L²/4. Combining these conditions: Draw the square from (0,0) to (L,L). Draw lines x=L/2 and y=L/2. These divide the square into four smaller squares. Draw lines x-y=L/2 and y-x=L/2. The region satisfying all three conditions is a hexagon. The corners excluded are: - (0,0) to (L/2, L/2) (bottom-left square) - this is excluded by (i) and (iii) when x1, x2 < L/2 - (L/2, L/2) to (L, L) (top-right square) - this is excluded by (ii) and (iii) when x1, x2 > L/2. Let's use a simpler visualization. The sample space is a square of side L (area L²). The excluded region consists of two triangles, each of area (1/2) * (L/2) * (L/2) = L²/8. One triangle has vertices (0, L), (0, L/2), (L/2, L). The other has vertices (L/2, 0), (L, 0), (L, L/2). These correspond to L < 2x_1 or L < 2x_2 (min(x1,x2) > L/2) or L < 2|x1-x2|. The total area of the sample space is L². The area of the favorable region is found by subtracting the areas where conditions are not met. The area of the favorable region is (L/2)² - 2 * (1/2) * (L/4) * (L/4) from (x,y) perspective. A simpler method is to assume the lengths of the parts are x, y, z where x+y+z=L. This can be mapped to a point (x,y) in the triangle with vertices (0,0), (L,0), (0,L) in the xy-plane, where x>0, y>0, and x+y<L. The area of this sample space is (1/2)L². The conditions for forming a triangle are: 1. x < L/2 2. y < L/2 3. z < L/2, which means L - (x+y) < L/2 => x+y > L/2. The favorable region within the sample space triangle (0,0), (L,0), (0,L) is defined by x < L/2, y < L/2, and x+y > L/2. This region is a smaller triangle with vertices (L/2, 0), (0, L/2), and (L/2, L/2). (This is a common method for this problem). The base of this favorable triangle is L/2 (from (L/2,0) to (0,L/2)). The height is L/2. No. The vertices of the favorable region are (L/2,0) (on x-axis), (0,L/2) (on y-axis), and (L/2,L/2) (intersection of x=L/2 and y=L/2). No, this is incorrect. The region bounded by x=0, y=0, x+y=L contains the favorable region. The lines x=L/2, y=L/2, and x+y=L/2 define a smaller triangle inside. The vertices of the favorable region are (L/2, L/2) from x=L/2, y=L/2. Points (L/2, 0) and (0, L/2) are on the boundaries x+y=L/2. The region is a triangle with vertices (L/2,L/2), (L/2,0), (0,L/2). This region has an area of (1/2) * (L/2) * (L/2) = L²/8. The total sample space (the region x>0, y>0, x+y<L) has an area of (1/2)L². The probability is the ratio of the favorable area to the total sample space area: (L²/8) / (L²/2) = 1/4."
+  },
+  {
+    "questionType": "single",
+    "questionText": "Let f(x) be a continuous function such that f(x) = f(a-x) for all x ∈ [0, a]. If ∫₀ᵃ x f(x) dx = 24 and ∫₀ᵃ f(x) dx = 8, then the value of 'a' is:",
+    "options": [
+      "3",
+      "4",
+      "6",
+      "8"
+    ],
+    "correctIndex": 2,
+    "multipleCorrectIndexes": [],
+    "explanation": "We use the property of definite integrals: If f(x) = f(a-x), then ∫₀ᵃ x f(x) dx = (a/2) ∫₀ᵃ f(x) dx. Given ∫₀ᵃ x f(x) dx = 24 and ∫₀ᵃ f(x) dx = 8. Substituting these values into the property: 24 = (a/2) × 8 24 = 4a a = 24/4 a = 6."
+  },
+  {
+    "questionType": "single",
+    "questionText": "Let the equation of the circle be x² + y² = 4. P is a variable point on the line y = x + 4. From P, two tangents PA and PB are drawn to the circle. If O is the origin (0,0), then the locus of the circumcenter of triangle PAB is a straight line. The equation of this line is:",
+    "options": [
+      "y = x + 2",
+      "y = x + 1",
+      "y = x - 2",
+      "y = x - 1"
+    ],
+    "correctIndex": 0,
+    "multipleCorrectIndexes": [],
+    "explanation": "Let P be the point (h, k). The tangents PA and PB are drawn from P to the circle x² + y² = 4. The points O (origin), A, P, and B are concyclic, lying on a circle with diameter OP. This is because ∠OAP = ∠OBP = 90° (radius is perpendicular to tangent at point of contact). The circumcenter of triangle PAB is the center of the circle that passes through P, A, and B. Since O, A, P, B are concyclic and OP is the diameter, the circumcenter of ΔPAB is the midpoint of OP. Let the circumcenter be (X, Y). Then X = (h+0)/2 = h/2 and Y = (k+0)/2 = k/2. So h = 2X and k = 2Y. Given that P(h, k) lies on the line y = x + 4, we substitute the coordinates of P: k = h + 4 Now substitute h = 2X and k = 2Y: 2Y = 2X + 4 Y = X + 2 Thus, the locus of the circumcenter of triangle PAB is the straight line y = x + 2."
+  },
+  {
+    "questionType": "single",
+    "questionText": "Let A be a 3×3 matrix with real entries such that AAᵀ = 4I, where I is the identity matrix. If det(A) > 0, then the value of det(adj(A⁻¹) A) is:",
+    "options": [
+      "1/8",
+      "1/4",
+      "1/2",
+      "2"
+    ],
+    "correctIndex": 0,
+    "multipleCorrectIndexes": [],
+    "explanation": "Given AAᵀ = 4I. Taking the determinant of both sides: det(AAᵀ) = det(4I) det(A) det(Aᵀ) = 4³ det(I) Since det(Aᵀ) = det(A) and det(I) = 1: det(A)² = 64 det(A) = ±8. Given det(A) > 0, so det(A) = 8. We need to find det(adj(A⁻¹) A). Using the property det(XY) = det(X) det(Y): det(adj(A⁻¹) A) = det(adj(A⁻¹)) det(A). Now, use the property det(adj(X)) = (det(X))ⁿ⁻¹, where n is the order of the matrix. For a 3×3 matrix, n=3. det(adj(A⁻¹)) = (det(A⁻¹))³⁻¹ = (det(A⁻¹))². We know det(A⁻¹) = 1/det(A). So, det(A⁻¹) = 1/8. Therefore, det(adj(A⁻¹)) = (1/8)² = 1/64. Finally, det(adj(A⁻¹) A) = (1/64) × 8 = 1/8."
+  },
+  {
+    "questionType": "single",
+    "questionText": "A plane passes through the point P(1, 2, 3) and cuts off positive intercepts a, b, c on the coordinate axes. If the volume of the tetrahedron formed by the plane and the coordinate planes is minimum, then the sum a+b+c is:",
+    "options": [
+      "12",
+      "18",
+      "24",
+      "36"
+    ],
+    "correctIndex": 1,
+    "multipleCorrectIndexes": [],
+    "explanation": "The equation of the plane in intercept form is x/a + y/b + z/c = 1. Since the plane passes through P(1, 2, 3), we have: 1/a + 2/b + 3/c = 1. The volume of the tetrahedron formed by the plane and the coordinate planes is V = (1/6)abc. To minimize V, we need to minimize the product abc. Using the AM-GM inequality for positive numbers 1/a, 2/b, 3/c: (1/a + 2/b + 3/c) / 3 ≥ ³√((1/a) × (2/b) × (3/c)) Substitute the given sum: 1/3 ≥ ³√(6 / abc) Cubing both sides: (1/3)³ ≥ 6 / abc 1/27 ≥ 6 / abc abc ≥ 6 × 27 abc ≥ 162. The minimum volume occurs when the equality in AM-GM holds, which means: 1/a = 2/b = 3/c = k (say) From the plane equation: 1/a + 2/b + 3/c = 1 => k + k + k = 1 => 3k = 1 => k = 1/3. So, 1/a = 1/3 => a = 3. 2/b = 1/3 => b = 6. 3/c = 1/3 => c = 9. The minimum sum a+b+c = 3 + 6 + 9 = 18."
+  },
+  {
+    "questionType": "single",
+    "questionText": "Let (1+x)ⁿ = C₀ + C₁x + C₂x² + ... + Cnxⁿ. If the sum C₀ + 2C₁ + 3C₂ + ... + (n+1)Cn = 2816, then the value of n is:",
+    "options": [
+      "7",
+      "8",
+      "9",
+      "10"
+    ],
+    "correctIndex": 2,
+    "multipleCorrectIndexes": [],
+    "explanation": "Let S = C₀ + 2C₁ + 3C₂ + ... + (n+1)Cn. We can split the sum into two parts: S = (C₀ + C₁ + C₂ + ... + Cn) + (C₁ + 2C₂ + 3C₃ + ... + nCn). We know that the sum of all binomial coefficients, C₀ + C₁ + ... + Cn = 2ⁿ. For the second part, consider the binomial expansion: (1+x)ⁿ = C₀ + C₁x + C₂x² + ... + Cnxⁿ. Differentiating both sides with respect to x: n(1+x)ⁿ⁻¹ = C₁ + 2C₂x + 3C₃x² + ... + nCnxⁿ⁻¹. Now, set x=1 in this differentiated equation: n(1+1)ⁿ⁻¹ = C₁ + 2C₂ + 3C₃ + ... + nCn n2ⁿ⁻¹ = C₁ + 2C₂ + 3C₃ + ... + nCn. So, the original sum S becomes: S = 2ⁿ + n2ⁿ⁻¹. Factor out 2ⁿ⁻¹: S = 2ⁿ⁻¹(2 + n). Given S = 2816. 2ⁿ⁻¹(2 + n) = 2816. We need to find n. Let's find the prime factorization of 2816: 2816 = 2 × 1408 = 2² × 704 = 2³ × 352 = 2⁴ × 176 = 2⁵ × 88 = 2⁶ × 44 = 2⁷ × 22 = 2⁸ × 11. So, 2ⁿ⁻¹(2 + n) = 2⁸ × 11. Comparing the factors: For the powers of 2, n-1 = 8, which implies n = 9. For the other factor, 2+n = 11. Substituting n=9, we get 2+9 = 11, which matches. Thus, the value of n is 9."
+  },
+  {
+    "questionType": "single",
+    "questionText": "Let {x} denote the fractional part of x. If ∫₀ⁿ 4({x}² - {x}) dx = -14/3, where n is a positive integer, then the value of n is:",
+    "options": [
+      "3",
+      "4",
+      "5",
+      "7"
+    ],
+    "correctIndex": 3,
+    "multipleCorrectIndexes": [],
+    "explanation": "Let f(x) = 4({x}² - {x}). The function f(x) is periodic with period 1, i.e., f(x+1) = 4({x+1}² - {x+1}) = 4({x}² - {x}) = f(x). Therefore, for a positive integer n, we can use the property ∫₀ⁿ f(x) dx = n ∫₀¹ f(x) dx. For x ∈ [0, 1), {x} = x. So we evaluate the integral from 0 to 1: ∫₀¹ f(x) dx = ∫₀¹ 4(x² - x) dx = 4 [x³/3 - x²/2]₀¹ = 4 [(1/3 - 1/2) - (0)] = 4 [ (2 - 3)/6 ] = 4 (-1/6) = -2/3. Given the integral value is -14/3: n * (-2/3) = -14/3. Dividing both sides by -1/3, we get 2n = 14. Therefore, n = 7."
+  },
+  {
+    "questionType": "single",
+    "questionText": "Consider two skew lines L₁: (x-1)/2 = (y-2)/3 = (z-3)/4 and L₂: (x-2)/3 = (y-4)/4 = (z-5)/5. If P is the point on L₁ and Q is the point on L₂ such that PQ is the shortest distance between L₁ and L₂, then find the equation of the plane containing L₁ and parallel to L₂.",
+    "options": [
+      "x - 2y + z = 0",
+      "x - 2y + z + 6 = 0",
+      "x + 2y - z - 6 = 0",
+      "x + 2y - z = 0"
+    ],
+    "correctIndex": 0,
+    "multipleCorrectIndexes": [],
+    "explanation": "The plane containing line L₁ and parallel to line L₂ must have a normal vector that is perpendicular to the direction vectors of both L₁ and L₂. The direction vector of L₁ is v₁ = (2, 3, 4). The direction vector of L₂ is v₂ = (3, 4, 5). The normal vector n to the plane is parallel to v₁ × v₂. n = v₁ × v₂ = | i j k 2 3 4 3 4 5 | = i(3×5 - 4×4) - j(2×5 - 4×3) + k(2×4 - 3×3) = i(15 - 16) - j(10 - 12) + k(8 - 9) = -i + 2j - k = (-1, 2, -1). So the equation of the plane is of the form -x + 2y - z + d = 0, or equivalently x - 2y + z - d = 0. Since the plane contains L₁, it must pass through any point on L₁. Let's use the point A₁(1, 2, 3) from L₁. Substitute (1, 2, 3) into the plane equation x - 2y + z - d = 0: 1 - 2(2) + 3 - d = 0 1 - 4 + 3 - d = 0 0 - d = 0 => d = 0. Thus, the equation of the plane is x - 2y + z = 0. The information about points P and Q for the shortest distance is a distractor for this specific question."
+  },
+  {
+    "questionType": "single",
+    "questionText": "Let z be a complex number satisfying |z - (1+i)| = 2√2 + 1. If M is the maximum value of |z - i| and m is the minimum value of |z - i|, then the value of M + m is:",
+    "options": [
+      "2√2 + 2",
+      "2√2 + 4",
+      "4√2 + 2",
+      "4√2 + 4"
+    ],
+    "correctIndex": 2,
+    "multipleCorrectIndexes": [],
+    "explanation": "The given condition |z - (1+i)| = 2√2 + 1 describes a circle in the complex plane. Its center is C = (1, 1) and its radius is R = 2√2 + 1. We need to find the maximum and minimum values of |z - i|. This represents the distance from a point z on the circle to the fixed point P = i, which is (0, 1) in the Argand plane. First, calculate the distance between the center of the circle C(1, 1) and the point P(0, 1): Distance PC = √((1 - 0)² + (1 - 1)²) = √(1² + 0²) = √1 = 1. Now, we find the maximum and minimum distances from point P to any point z on the circle: Maximum distance M = PC + R = 1 + (2√2 + 1) = 2√2 + 2. Minimum distance m = |PC - R|. Since R = 2√2 + 1 ≈ 3.828 and PC = 1, we have R > PC. So, m = R - PC = (2√2 + 1) - 1 = 2√2. Finally, we need to find the value of M + m: M + m = (2√2 + 2) + (2√2) = 4√2 + 2."
+  },
+  {
+    "questionType": "single",
+    "questionText": "Six distinct books are arranged randomly on a shelf. Given that two particular books (say, A and B) are not adjacent, what is the probability that books A and B are separated by exactly two other books?",
+    "options": [
+      "1/5",
+      "1/10",
+      "2/15",
+      "3/10"
+    ],
+    "correctIndex": 3,
+    "multipleCorrectIndexes": [],
+    "explanation": "Total number of ways to arrange 6 distinct books on a shelf is 6! = 720. Let E₁ be the event that books A and B are not adjacent. To find the number of arrangements where A and B are adjacent, treat (AB) as a single block. Now we arrange 5 entities (the block (AB) and the 4 other books). This can be done in 5! ways. Similarly, for (BA) as a block, there are 5! ways. So, the number of ways where A and B are adjacent is 2 × 5! = 2 × 120 = 240. Number of ways for E₁ (A and B are not adjacent) = Total arrangements - (Arrangements where A and B are adjacent) = 6! - 240 = 720 - 240 = 480. Let E₂ be the event that A and B are separated by exactly two other books. This means the arrangement looks like A _ _ B or B _ _ A. 1. Choose 2 books from the remaining 4 books (excluding A and B) to place between A and B. This can be done in C(4,2) = 6 ways. 2. Arrange these 2 chosen books in 2! = 2 ways. So, there are C(4,2) × 2! = 6 × 2 = 12 ways to select and arrange the two books in the middle. Now, consider the block (A _ _ B). This block along with the remaining 2 books (6 - 4 = 2 books) can be arranged in 3! = 6 ways. So, the number of ways for the pattern A _ _ B is 12 × 3! = 12 × 6 = 72. Similarly, for the pattern B _ _ A, there are 72 ways. Total number of ways for E₂ = 72 + 72 = 144. We need to find the conditional probability P(E₂ | E₁) = P(E₂ ∩ E₁) / P(E₁). If A and B are separated by exactly two other books (E₂ occurs), they are necessarily not adjacent. Therefore, the event E₂ is a subset of E₁, which implies E₂ ∩ E₁ = E₂. So, P(E₂ | E₁) = (Number of ways for E₂) / (Number of ways for E₁) = 144 / 480. Simplifying the fraction: 144 / 480 = (12 × 12) / (12 × 40) = 12 / 40 = (4 × 3) / (4 × 10) = 3/10."
+  },
+  {
+    "questionType": "single",
+    "questionText": "A tangent to the hyperbola x²/9 - y²/16 = 1 at a point P in the first quadrant intersects the asymptotes at points A and B. If O is the origin (0,0), then the area of triangle OAB is:",
+    "options": [
+      "12 sq. units",
+      "24 sq. units",
+      "36 sq. units",
+      "48 sq. units"
+    ],
+    "correctIndex": 0,
+    "multipleCorrectIndexes": [],
+    "explanation": "The equation of the hyperbola is x²/9 - y²/16 = 1. Comparing this with the standard form x²/a² - y²/b² = 1, we have a²=9 and b²=16, so a=3 and b=4. The equations of the asymptotes of this hyperbola are y = ±(b/a)x, which are y = (4/3)x and y = -(4/3)x. Let the point of tangency P in the first quadrant be (a secθ, b tanθ) = (3 secθ, 4 tanθ). The equation of the tangent to the hyperbola at point P(x₁, y₁) is (xx₁)/a² - (yy₁)/b² = 1. Substituting P's coordinates: (x(3 secθ))/9 - (y(4 tanθ))/16 = 1 Simplifying: (x secθ)/3 - (y tanθ)/4 = 1. Now, we find the intersection points A and B of this tangent with the asymptotes: 1. Intersection with the asymptote y = (4/3)x: Substitute y = (4/3)x into the tangent equation: (x secθ)/3 - ((4/3)x tanθ)/4 = 1 (x secθ)/3 - (x tanθ)/3 = 1 x/3 (secθ - tanθ) = 1 x = 3 / (secθ - tanθ) = 3(secθ + tanθ) (using 1/(secθ - tanθ) = secθ + tanθ). Then y = (4/3)x = 4(secθ + tanθ). So, point A = (3(secθ + tanθ), 4(secθ + tanθ)). 2. Intersection with the asymptote y = -(4/3)x: Substitute y = -(4/3)x into the tangent equation: (x secθ)/3 - (-(4/3)x tanθ)/4 = 1 (x secθ)/3 + (x tanθ)/3 = 1 x/3 (secθ + tanθ) = 1 x = 3 / (secθ + tanθ) = 3(secθ - tanθ). Then y = -(4/3)x = -4(secθ - tanθ). So, point B = (3(secθ - tanθ), -4(secθ - tanθ)). The area of triangle OAB, with O(0,0), A(x₁, y₁), and B(x₂, y₂), is given by (1/2) |x₁y₂ - x₂y₁|. x₁y₂ = [3(secθ + tanθ)] × [-4(secθ - tanθ)] = -12 (secθ + tanθ)(secθ - tanθ) = -12 (sec²θ - tan²θ) = -12 × 1 = -12. x₂y₁ = [3(secθ - tanθ)] × [4(secθ + tanθ)] = 12 (secθ - tanθ)(secθ + tanθ) = 12 (sec²θ - tan²θ) = 12 × 1 = 12. Area = (1/2) |(-12) - (12)| = (1/2) |-24| = (1/2) × 24 = 12 sq. units. Alternatively, a standard property of hyperbolas states that the area of the triangle formed by a tangent to the hyperbola x²/a² - y²/b² = 1 and its asymptotes is always equal to 'ab'. In this case, a=3 and b=4. So, Area = ab = 3 × 4 = 12 sq. units."
+  }
+]

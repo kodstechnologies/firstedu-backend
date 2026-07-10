@@ -2,6 +2,7 @@ import { detectCatSection, detectExamProfile } from "./examDifficultyCalibration
 import {
     allocateDifficultyMix,
     normalizeBankDifficulty,
+    buildDifficultyAuditRubricsBlock,
 } from "./difficultyMix.service.js";
 import { resolveGenerationDifficulty } from "./examGenerationDifficulty.service.js";
 import {
@@ -755,10 +756,12 @@ export const buildEvaluationConstraintsBlock = (plan = null) => {
         .map((s) => `${s.count} ${s.label}`)
         .join(", ");
     const mix = plan.difficultyMix;
+    const allHardMix =
+        mix && Number(mix.easy) === 0 && Number(mix.medium) === 0 && Number(mix.hard) > 0;
     const mixLine = mix
-        ? plan.examCalibrated && mix.easy === 0 && mix.medium === 0
+        ? plan.examCalibrated && allHardMix
             ? `- **Difficulty:** exam-native **ALL HARD** (${mix.hard} slot(s) at peak ${profile === "jee_advanced" ? "Advanced" : "Main"} shift-paper caliber — no easy/medium slots)`
-            : `- **Difficulty mix (bank "${plan.bankDifficulty || "medium"}"):** ${mix.ratioLabel} easy:medium:hard → ${mix.easy} easy-tier + ${mix.medium} medium-tier + ${mix.hard} hard-tier`
+            : `- **Difficulty mix (bank "${plan.bankDifficulty || "medium"}"):** ${mix.ratioLabel} easy:medium:hard → ${mix.easy} easy-tier + ${mix.medium} medium-tier + ${mix.hard} hard-tier (see tier definitions below)`
         : plan.bankDifficulty
           ? `- **Bank difficulty profile:** ${plan.bankDifficulty}`
           : "";
@@ -809,12 +812,26 @@ export const buildEvaluationConstraintsBlock = (plan = null) => {
 - If only singles were requested, do NOT require multi-correct or passages.`
               : "";
 
+    const tierDefinitionsBlock =
+        profile.startsWith("jee") || profile === "neet" || profile === "cat"
+            ? buildDifficultyAuditRubricsBlock({
+                  examProfile: profile,
+                  tiers: allHardMix
+                      ? ["hard"]
+                      : mix
+                        ? ["easy", "medium", "hard"]
+                        : ["easy", "medium", "hard"],
+                  hardOnly: Boolean(plan.examCalibrated && allHardMix),
+              })
+            : "";
+
     return `
 **GENERATION CONSTRAINTS (authoritative — evaluate ONLY against what was requested below):**
 ${typeLines}
 ${profileRules}
 **Pattern compliance:** Compare delivered question types in the sample to the counts above. Mismatch = style/pattern issue, not topic issue.
-**Difficulty mix compliance:** If a mix was requested, check upscaled tiers — easy-tier = exam medium (not old exam-easy), medium-tier = exam hard, hard-tier = extra hard. Reject homework / Section A items on easy slots.`;
+**Difficulty mix compliance:** Score each item against its **assigned difficultyTier** using the tier definitions below — same criteria used during generation. easy-tier = exam medium band · medium-tier = exam hard · hard-tier = extra hard.
+${tierDefinitionsBlock}`;
 };
 
 /** Count top-level and sub-question types in a validation payload. */

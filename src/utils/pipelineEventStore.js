@@ -86,9 +86,15 @@ export const appendPartialQuestions = (workflowLogKey, questions = [], meta = {}
         partialQuestionSessions.set(key, session);
     }
 
+    const maxSlots = Number(meta.maxSlots) > 0 ? Math.floor(Number(meta.maxSlots)) : 0;
+    if (maxSlots > 0 && session.entries.length >= maxSlots) {
+        return [];
+    }
+
     const added = [];
     for (const question of questions) {
         if (!question || typeof question !== "object") continue;
+        if (maxSlots > 0 && session.entries.length >= maxSlots) break;
         const entry = {
             index: session.nextIndex++,
             ts: now,

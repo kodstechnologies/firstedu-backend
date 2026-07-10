@@ -149,6 +149,13 @@ export const getActiveWorkflowLogKey = () => {
     return String(ctx?.meta?.workflowLogKey || "").trim();
 };
 
+/** Bank empty-slot cap for the active generation run (0 = uncapped). */
+export const getPipelineMaxSelectableSlots = () => {
+    const ctx = pipelineStore.getStore();
+    const n = Number(ctx?.meta?.maxSelectableSlots);
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+};
+
 const pipelineMetaRows = (meta = {}) =>
   [
     ['intent', meta.intent],
@@ -162,6 +169,7 @@ const pipelineMetaRows = (meta = {}) =>
     ['workflowLogKey', meta.workflowLogKey],
     ['solveFirst', meta.solveFirstEnabled !== false ? 'enabled' : 'disabled'],
     ['chunkSize', meta.chunkSize],
+    ['maxSelectableSlots', meta.maxSelectableSlots],
     ['questionCount', meta.questionCount],
   ]
     .filter(([, v]) => v !== undefined && v !== null && v !== '')
