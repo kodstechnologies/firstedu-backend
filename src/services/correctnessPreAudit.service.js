@@ -511,6 +511,27 @@ const detectDuplicateOptions = (q) => {
     return null;
 };
 
+/** A "multiple correct" MCQ where every option is marked correct has no wrong answer at all — not a valid question. */
+const detectAllOptionsMarkedCorrect = (q) => {
+    if (String(q.questionType || "").toLowerCase() !== "multiple") return null;
+    const opts = q.options || [];
+    const correctIdx = Array.isArray(q.multipleCorrectIndexes)
+        ? q.multipleCorrectIndexes
+        : [];
+    if (opts.length < 2 || !correctIdx.length) return null;
+    const uniqueCorrect = new Set(correctIdx.map(Number));
+    if (uniqueCorrect.size >= opts.length) {
+        return {
+            questionNumber: q.sampleNumber,
+            issue: `All ${opts.length} options are marked correct — a multiple-correct question needs at least one wrong option, otherwise it isn't a valid question.`,
+            severity: "major",
+            confidence: "confirmed",
+            category: ISSUE_CATEGORY.FACTUAL,
+        };
+    }
+    return null;
+};
+
 /** Explanation self-corrects (Wait / nearest option) to a value that ≠ marked answer. */
 const detectExplanationSelfCorrection = (q) => {
     const explanation = String(q.explanation || "");
@@ -758,6 +779,7 @@ const DETECTORS = [
     detectInvalidOptions,
     detectMalformedScientificNotationOptions,
     detectDuplicateOptions,
+    detectAllOptionsMarkedCorrect,
     detectNearDuplicateOptions,
     detectTrivialOptionInStem,
     detectExplanationVagueJustification,
