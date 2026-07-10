@@ -1,4 +1,4 @@
-name: Deploy FirstEdu Backend
+name: Deploy FirstEdu Backendd
 
 on:
   push:
