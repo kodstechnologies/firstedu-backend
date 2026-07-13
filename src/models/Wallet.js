@@ -14,7 +14,7 @@ const walletSchema = new mongoose.Schema(
     },
     monetaryBalance: {
       type: Number,
-      default: 0,
+      default: 500,
       min: 0,
     },
     rewardPoints: {
