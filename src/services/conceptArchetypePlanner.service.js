@@ -3,6 +3,26 @@
  * for each generation batch. Falls back to the static catalog when disabled or on failure.
  */
 
+/**
+ * Known-deleted / out-of-scope topics per subject+exam, seeded into the planning
+ * prompt so the model doesn't rely solely on its own (possibly stale) syllabus
+ * knowledge. Keyed by subjectId; applies to JEE-style engineering entrances.
+ */
+const SYLLABUS_EXCLUSION_SEED = {
+    physics: [
+        "Carnot engine / Carnot cycle efficiency (deleted from rationalized NCERT)",
+        "Radioactivity — decay law, half-life, activity (deleted from rationalized NCERT)",
+        "Doppler effect in sound/waves (deleted from rationalized NCERT)",
+        "Earth's magnetism — dip, declination, neutral points (deleted from rationalized NCERT)",
+        "Special relativity — time dilation, length contraction, relativistic momentum (outside JEE syllabus)",
+        "Advanced ordinary differential equations as a solving method (college-level, outside JEE syllabus)",
+        "Infinite 2D resistor/capacitor networks (college-level, outside JEE syllabus)",
+    ],
+};
+
+const getSyllabusExclusionSeed = (subjectId = "") =>
+    SYLLABUS_EXCLUSION_SEED[String(subjectId).toLowerCase().trim()] || [];
+
 import { parseJsonObjectFromAIText } from "../utils/aiJsonRepair.js";
 import {
     allocateRankedConceptSlots,
@@ -69,6 +89,8 @@ export const buildArchetypePlanningPrompt = ({
     examCalibrated = false,
     topicRelevanceFeedback = null,
     generateIntent = "initial",
+    planningFeedback = "",
+    adminExcludeTopics = [],
 } = {}) => {
     const n = Math.max(1, count);
     const subjectLabel = getSubjectLabelForArchetypes(subjectId || subject);
@@ -102,22 +124,47 @@ export const buildArchetypePlanningPrompt = ({
               ).slice(0, 1500)}\nDifficulty match was ${topicRelevanceFeedback.difficultyMatchScore ?? topicRelevanceFeedback?.dimensionScores?.difficultyMatch ?? "low"} — plan slots that score 80+ on shift-paper depth.\n`
             : "";
 
+    const exclusionSeed = getSyllabusExclusionSeed(subjectId || subject);
+    const adminExcluded = [
+        ...new Set((adminExcludeTopics || []).map(String).map((t) => t.trim()).filter(Boolean)),
+    ].slice(0, 40);
+    const seededExclusions = [...exclusionSeed, ...adminExcluded];
+    const syllabusExclusionBlock = seededExclusions.length
+        ? `\n**Known excluded topics (never plan a slot on these):**\n${seededExclusions
+              .map((t) => `- ${t}`)
+              .join("\n")}\n`
+        : "";
+
+    // Admin re-planning: the reviewer looked at the last topic plan and asked
+    // for changes (include X, drop Y, more of Z). This overrides the model's
+    // own topic choices where it conflicts.
+    const planningFeedbackBlock = String(planningFeedback || "").trim()
+        ? `\n**REVIEWER FEEDBACK — re-plan the topic list to honor this (highest priority):**\n${String(
+              planningFeedback
+          )
+              .trim()
+              .slice(0, 1500)}\nApply it exactly: add any topics the reviewer asked for, drop any they rejected (also add rejected ones to \`excludedTopics\`), and keep the rest of the plan fresh — do not simply repeat the previous slots.\n`
+        : "";
+
     return `You are a senior ${examLabel} ${subjectLabel} paper setter. Plan **${n} distinct hard question archetypes** for the next generation batch.
 
 **Topic / syllabus context:** ${topic || bankName}
-**Subject:** ${subjectLabel}
+**Subject: ${subjectLabel}** — every slot must be pure ${subjectLabel} content. Do NOT invent a slot from a different subject (e.g. no Physics archetype/conceptFusion in a Chemistry plan, no Chemistry in a Maths plan) even though this is a combined exam — the bank being planned is ${subjectLabel}-only.
 **Exam:** ${examLabel}
 ${tierNote}
 ${buildVeteranExamineeCaliberBlock({ examProfile })}
 
 Your output steers a downstream question writer. Plan **hard, exam-native items** spread across the **full syllabus** for this topic — not one chapter only.
 
+**Step 0 — determine syllabus scope first:**
+Before planning any slot, work out what is actually in-scope for the **current ${examLabel} syllabus** on this topic (rationalized NCERT / current exam pattern). List any topic you are deliberately leaving out — recently deleted chapters, or topics that read as this subject but are outside this exam's syllabus (e.g. college-level material) — in \`excludedTopics\`. Then plan every slot ONLY from what remains in scope. If you are unsure whether a topic was deleted, treat it as excluded rather than risk an out-of-syllabus question.
+${syllabusExclusionBlock}${planningFeedbackBlock}
 ${excludeArchetypeBlock}${excludeStemBlock}${regenBlock}
 
 **Planning rules:**
 1. **${n} unique slots** — different micro-topic, setup, and solving chain; no near-duplicate templates.
 2. **Hard-first + full coverage:** ~70% slots = peak-difficulty / multi-step; ~30% = other syllabus bands so **all major topic areas** get at least one slot when batch size allows.
-3. **Syllabus breadth** — spread across major ${subjectLabel} areas appropriate to the topic and exam (do not cluster on one unit).
+3. **Syllabus breadth** — spread across major ${subjectLabel} areas appropriate to the topic and exam (do not cluster on one unit), and only within the in-scope topics from Step 0.
 4. **Hard-tier depth per slot:** ≥2 linked concepts (state fusion explicitly in \`conceptFusion\`), ≥3 solve steps, no single-formula plug-in.
 5. **conceptFusion** = the two syllabus ideas fused (e.g. "rotation + friction", "ratio + percentage traps").
 6. **conceptSlot** = short snake_case id you invent (e.g. \`rolling_threshold_mu\`, \`rc_inference_tone\`).
@@ -128,6 +175,7 @@ ${excludeArchetypeBlock}${excludeStemBlock}${regenBlock}
 
 Return ONLY valid JSON:
 {
+  "excludedTopics": ["Carnot engine — deleted from rationalized NCERT", "Special relativity — outside JEE syllabus"],
   "slots": [
     {
       "conceptSlot": "rolling_threshold_mu",
@@ -149,6 +197,9 @@ export const parseArchetypePlanResponse = (rawText, expectedCount = 1) => {
         : Array.isArray(parsed)
           ? parsed
           : [];
+    const excludedTopics = Array.isArray(parsed?.excludedTopics)
+        ? parsed.excludedTopics.map(String).filter(Boolean).slice(0, 30)
+        : [];
     const plans = rows
         .map((row, i) => normalizeSlotPlan(row, i))
         .filter((p) => p.blueprint.pattern || p.blueprint.required);
@@ -160,7 +211,9 @@ export const parseArchetypePlanResponse = (rawText, expectedCount = 1) => {
         seen.add(key);
         unique.push(plan);
     }
-    return unique.slice(0, Math.max(1, expectedCount));
+    const result = unique.slice(0, Math.max(1, expectedCount));
+    result.excludedTopics = excludedTopics;
+    return result;
 };
 
 const buildFallbackSteering = ({
@@ -235,6 +288,8 @@ export const resolveConceptArchetypeSteering = async (
         preferPeak = false,
         topicRelevanceFeedback = null,
         generateIntent = "initial",
+        planningFeedback = "",
+        adminExcludeTopics = [],
     },
     { callLlm } = {}
 ) => {
@@ -276,9 +331,12 @@ export const resolveConceptArchetypeSteering = async (
             examCalibrated,
             topicRelevanceFeedback,
             generateIntent,
+            planningFeedback,
+            adminExcludeTopics,
         });
         const rawText = await callLlm(prompt);
         let slotPlans = parseArchetypePlanResponse(rawText, n);
+        const excludedTopics = slotPlans.excludedTopics || [];
 
         if (slotPlans.length < n) {
             const need = n - slotPlans.length;
@@ -303,10 +361,12 @@ export const resolveConceptArchetypeSteering = async (
             source: "ai",
             slotCount: conceptSlots.length,
             slots: conceptSlots.slice(0, 12),
+            excludedTopics,
         });
         return {
             conceptSlots,
             slotPlans: slotPlans.slice(0, n),
+            excludedTopics,
             source: "ai",
         };
     } catch (err) {

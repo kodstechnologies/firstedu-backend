@@ -30,7 +30,10 @@ export const passageWordRangeFor = (examProfile, catSection) => {
     return "300–450";
 };
 
-const buildExamSpecificRules = ({
+/** Exported so solve-first (standalone, non-passage generation) can reuse
+ * the same CLAT/CAT/UPSC/NEET/JEE authoring guidance instead of duplicating
+ * this text — this module's one-shot prompt was the only caller before. */
+export const buildExamSpecificRules = ({
     examProfile,
     catSection,
     sectionName,

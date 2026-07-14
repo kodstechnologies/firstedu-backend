@@ -219,16 +219,6 @@ const PHYSICS_CONCEPT_FUSION_BLUEPRINTS = {
         stemHint:
             "A rod hinged at one end is struck by a bullet at its free end — find angular velocity immediately after inelastic impact.",
     },
-    relativistic_collision_momentum_energy: {
-        pattern:
-            "Relativistic collision — conserve four-momentum and energy with invariant mass.",
-        required:
-            "FUSE (A) relativistic energy-momentum AND (B) collision geometry or threshold energy.",
-        banned: "Classical ½mv² only; bare E = mc² plug-in.",
-        conceptFusion: "special relativity + collision kinematics",
-        stemHint:
-            "A photon collides with a stationary electron — find Compton wavelength shift and recoil electron energy.",
-    },
 };
 
 const CHEMISTRY_HARD_BLUEPRINTS = {
@@ -565,12 +555,35 @@ export const allocateRankedConceptSlots = (
         return slots;
     }
 
-    let pool = getSubjectArchetypePool("chemistry", { preferPeak: usePeak });
     const sid = String(subjectId || "").toLowerCase();
+    const isStemSubject =
+        sid === "physics" || /physics/.test(sid) ||
+        sid === "mathematics" || /math/.test(sid) ||
+        sid === "chemistry" || /chem/.test(sid) ||
+        examProfile === "jee_main" || examProfile === "jee_advanced" ||
+        examProfile === "neet";
+
+    if (!isStemSubject) {
+        // No hand-curated archetype catalog exists for non-STEM domains
+        // (law/GK/reasoning/etc.) — this is a last-resort path (the AI-first
+        // planner in conceptArchetypePlanner.service.js is tried first), so
+        // return generic numbered slots instead of silently defaulting to
+        // chemistry archetypes for an unrelated subject.
+        return Array.from({ length: n }, (_, i) => `concept_slot_${offset + i + 1}`);
+    }
+
+    // Subject must be pinned to its own pool whenever it's explicitly known —
+    // the mixed PCM pool below is only for a genuinely unset subject (e.g. a
+    // full-paper JEE bank spanning all three). Previously "chemistry" fell
+    // through to the mixed branch below (it only matched physics/math),
+    // silently pulling in Physics/Maths archetypes for a Chemistry-only bank.
+    let pool = getSubjectArchetypePool("chemistry", { preferPeak: usePeak });
     if (sid === "physics" || /physics/.test(sid)) {
         pool = getSubjectArchetypePool("physics", { preferPeak: usePeak });
     } else if (sid === "mathematics" || /math/.test(sid)) {
         pool = getSubjectArchetypePool("mathematics", { preferPeak: usePeak });
+    } else if (sid === "chemistry" || /chem/.test(sid)) {
+        pool = getSubjectArchetypePool("chemistry", { preferPeak: usePeak });
     } else if (examProfile === "jee_main" || examProfile === "jee_advanced") {
         pool = [
             ...getSubjectArchetypePool("chemistry", { preferPeak: usePeak }),
@@ -625,10 +638,11 @@ Each new skeleton must use its **assigned slot archetype** and a **fresh setup**
 };
 
 export const getSubjectLabelForArchetypes = (subjectId = "") => {
-    const key = normalizeSubjectPoolKey(subjectId);
-    if (key === "physics") return "Physics";
-    if (key === "mathematics") return "Mathematics";
-    return "Chemistry";
+    const sid = String(subjectId || "").trim();
+    if (/physics/i.test(sid)) return "Physics";
+    if (/math/i.test(sid)) return "Mathematics";
+    if (/chem/i.test(sid)) return "Chemistry";
+    return sid || "the subject";
 };
 
 /** Tells the LLM each slot is a peak archetype — choose hard pattern, not easy template. */

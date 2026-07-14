@@ -995,8 +995,17 @@ export const stripFlawedQuestionBankEntries = async (
 ) => {
     let current = questions;
     let strippedCount = 0;
+    const strippedByType = { single: 0, multiple: 0, true_false: 0, connected: 0 };
     let repairedPasses = 0;
     let audit = null;
+
+    const tallyStripped = (flawedEntries) => {
+        for (const e of flawedEntries) {
+            if (e.ref?.subIndex != null) continue; // passage sub-question, not top-level count
+            const t = e.auditItem?.questionType || "single";
+            strippedByType[t] = (strippedByType[t] || 0) + 1;
+        }
+    };
 
     for (let pass = 0; pass <= maxRepairPasses; pass++) {
         const { flawedEntries, hasFlaws, audit: passAudit } =
@@ -1014,6 +1023,7 @@ export const stripFlawedQuestionBankEntries = async (
         }
 
         strippedCount = flawedEntries.length;
+        tallyStripped(flawedEntries);
         current = stripFlawedQuestionsOnly(current, flawedEntries);
         break;
     }
@@ -1021,6 +1031,7 @@ export const stripFlawedQuestionBankEntries = async (
     const finalCheck = findFlawedQuestionBankEntries(current);
     if (finalCheck.hasFlaws && finalCheck.flawedEntries.length) {
         strippedCount += finalCheck.flawedEntries.length;
+        tallyStripped(finalCheck.flawedEntries);
         current = stripFlawedQuestionsOnly(
             current,
             finalCheck.flawedEntries
@@ -1031,6 +1042,7 @@ export const stripFlawedQuestionBankEntries = async (
     return {
         questions: current,
         strippedCount,
+        strippedByType,
         repairedPasses,
         audit,
     };

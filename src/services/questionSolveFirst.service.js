@@ -29,6 +29,7 @@ import {
 } from "./questionNumericVerify.service.js";
 import { detectExamProfile } from "./examDifficultyCalibration.js";
 import { isJeeFullPaperTopic } from "./examPromptContext.service.js";
+import { buildExamSpecificRules } from "./examPromptFirst.service.js";
 import { resolveSubjectForGeneration } from "./subjectDetection.js";
 import {
     buildDifficultyMixGenerationBlock,
@@ -66,6 +67,7 @@ import {
     isExamNativeVeteranGeneration,
     isMandateRepairEnabled,
     getHardMandateFloors,
+    isStemProfile,
 } from "./hardQuestionMandate.service.js";
 import {
     isBatchStemNearDuplicate,
@@ -167,24 +169,10 @@ export const shouldUseSolveFirstGeneration = ({
         return false;
     }
 
-    const hay = `${topic} ${bankName} ${sectionName} ${subject} ${(categoryPaths || []).join(" ")}`.toLowerCase();
-
-    // Non-STEM exams — solve-first archetypes are PCM numerical only
-    if (
-        /\bupsc\b|\bcsat\b|\bcivil\s*services\b|\bgeneral\s*studies\b|\bips\b|\bias\s*exam\b|\bcat\b|\bvarc\b|\bdilr\b/i.test(
-            hay
-        )
-    ) {
-        return false;
-    }
-
-    const isStem =
-        /\bchem|physics|math|mathematics|engineering|jee|iit|pcm|nta\b/i.test(hay) ||
-        profile === "jee_main" ||
-        profile === "jee_advanced" ||
-        profile === "neet";
-    if (!isStem) return false;
-
+    // Standalone (non-passage) requests always go through solve-first now —
+    // exam-domain rigor (STEM concept clusters vs. generic reasoning-depth
+    // checks) is decided downstream by validateHardQuestionMandate via
+    // isStemProfile(), not here.
     return true;
 };
 
@@ -261,6 +249,22 @@ Each new skeleton must use a **different problem structure** from every excluded
         String(subject || "").toLowerCase().includes("phys")
             ? buildPhysicsNumericalAuthoringBlock({ examProfile })
             : "";
+
+    const isNonStemDomain = !isStemProfile(examProfile, subject);
+
+    const nonStemAnswerTypeBlock = isNonStemDomain
+        ? `\n**NON-NUMERIC ANSWER TYPE:** If this subject has no numeric solve, set \`finalAnswer.type = "text"\`, \`finalAnswer.display\` = the correct statement/option text (not a number), and \`distractorValues\` = exactly 3 plausible but wrong statements on the same point of law/fact/reasoning (not vague filler — a well-prepared candidate should have to actually eliminate them). If the stem IS quantitative (e.g. CAT Quantitative Ability), keep \`finalAnswer.type = "numeric"\` as usual.\n`
+        : "";
+
+    // Standalone (non-passage) generation only reaches here, so the passage-
+    // oriented CLAT/CAT VARC/DILR guidance in buildExamSpecificRules mostly
+    // falls through to its generic branches for these profiles — still
+    // useful for register/difficulty framing on the standalone items that
+    // DO reach solve-first (e.g. CLAT Legal Reasoning principle-application,
+    // CAT QA, UPSC Prelims standalone facts).
+    const nonStemExamRulesBlock = isNonStemDomain
+        ? buildExamSpecificRules({ examProfile, sectionName, passageCount: 0 })
+        : "";
 
     const isJeeStem =
         examProfile === "jee_main" || examProfile === "jee_advanced";
@@ -412,6 +416,8 @@ ${buildSolveFirstSkeletonCorrectnessBlock({
 ${buildExplanationOptionLockBlock({ examProfile })}
 ${chemBlock}
 ${physicsBlock}
+${nonStemExamRulesBlock}
+${nonStemAnswerTypeBlock}
 ${buildExamSolveThenWriteBlock()}
 
 **MANDATORY concept slots (one distinct problem per slot — no duplicates; ${aiSteered ? "AI-planned" : "catalog"} archetypes assigned):**
@@ -425,7 +431,7 @@ ${bankArchetypeExcludeBlock}
 
 **Rules (every skeleton):**
 1. Match the slot's **${examProfile === "jee_main" || examProfile === "jee_advanced" ? "shift-paper hard" : "entrance hard"}** blueprint — multi-condition stem, linked concepts, realistic givens.
-2. **finalAnswer** = exact solved result (numeric with unit, hybridization string, or molecule formula).
+2. **finalAnswer** = exact solved result (numeric with unit, hybridization string, molecule formula, or — for non-numeric subjects — \`type: "text"\` with the correct statement as \`display\`).
 3. **solveSteps** = **≥${mandateFloors.minSolutionLines}** substantive sentences for hard tier (minimum **${mandateFloors.minSolveSteps}** steps); each step advances the solve; the **last sentence must state the same value as \`finalAnswer.display\`** (full derivation — these become the explanation).
 4. **distractorValues** = exactly 3 plausible wrong values (same unit/type as finalAnswer); pH distractors 0–14 only.
 5. For hybridization: finalAnswer.display like "sp³d²" (Unicode superscripts OK).
@@ -732,6 +738,28 @@ const buildNumericDistractors = (display, distractorValues = [], unit = "") => {
     return shuffleWithSeed([correct, ...unique.slice(0, 3)]);
 };
 
+/** Non-numeric (non-STEM) answers — the model's own distractorValues are the
+ * wrong options directly; there's no arithmetic offset to synthesize for a
+ * legal/GK statement, so unlike buildNumericDistractors this never invents
+ * filler options. Throws if fewer than 3 usable distractors survive, which
+ * routes the skeleton to the existing repair queue like any other build failure. */
+const buildTextDistractors = (display, distractorValues = []) => {
+    const correct = String(display || "").trim();
+    const unique = [
+        ...new Set(
+            distractorValues
+                .map((d) => String(d || "").trim())
+                .filter((d) => d && d.toLowerCase() !== correct.toLowerCase())
+        ),
+    ];
+    if (unique.length < 3) {
+        throw new Error(
+            `text answer needs 3 distinct distractorValues (found ${unique.length})`
+        );
+    }
+    return shuffleWithSeed([correct, ...unique.slice(0, 3)]);
+};
+
 export const buildMcqFromSkeleton = (
     skeleton,
     index = 0,
@@ -769,14 +797,24 @@ export const buildMcqFromSkeleton = (
     const unit = String(fa.unit || "").trim();
     const distractorValues = skeleton.distractorValues || [];
 
+    // Anchored to actual hybridization notation (sp, sp², sp³d² …) — a loose
+    // /sp/ substring test also matches ordinary English words ("response",
+    // "special", "disproportionation"), which corrupted non-STEM text
+    // answers into chemistry notation. type !== "text" keeps explicit text
+    // answers out of this branch even if their display happens to match.
+    const looksLikeHybridizationNotation =
+        type !== "text" && /^sp[¹²³⁰-⁹\d]{0,3}(?:d[¹²³⁰-⁹\d]{0,2})?$/i.test(display);
+
     let options;
-    if (type === "hybridization" || /sp/.test(display)) {
+    if (type === "hybridization" || looksLikeHybridizationNotation) {
         const mol = stem.match(/\b([A-Z][A-Za-z₀-₉\d]{1,8})\b/)?.[1];
         const verified = mol ? getHybridizationForFormula(mol) : null;
         const correct = verified || display;
         options = buildHybridizationDistractors(correct);
     } else if (type === "molecule") {
         options = buildMoleculeDistractors(display);
+    } else if (type === "text") {
+        options = buildTextDistractors(display, distractorValues);
     } else {
         const formatted =
             display || formatValueForOption(parseNumber(fa.value), unit);
@@ -790,6 +828,9 @@ export const buildMcqFromSkeleton = (
                 String(o).replace(/\s/g, "").toUpperCase() ===
                 display.replace(/\s/g, "").toUpperCase()
             );
+        }
+        if (type === "text") {
+            return String(o).trim().toLowerCase() === display.toLowerCase();
         }
         const on = parseNumber(o);
         const dn = parseNumber(display);
@@ -899,6 +940,7 @@ export const skeletonsToQuestions = async (
     const veteran = isVeteranDifficultyEnabled() && examCalibrated;
     const callRepairLlm = repairDeps?.callLlm;
     const examProfile = repairDeps?.examProfile || "jee_main";
+    const subject = repairDeps?.subject || "";
     const repairOnFail =
         repairDeps?.repairOnFail !== false && isMandateRepairEnabled();
     const questions = [];
@@ -973,6 +1015,8 @@ export const skeletonsToQuestions = async (
         }
         const mandate = validateHardSkeletonMandate(sk, assignedTier, {
             examCalibrated: examCalibrated || assignedTier === "hard",
+            examProfile,
+            subject,
         });
         if (!mandate.ok) {
             repairQueue.push({

@@ -358,6 +358,7 @@ export const runDeterministicDifficultyAudit = (
         examProfile = "competitive",
         examCalibrated = false,
         tierSlots = [],
+        subject = "",
     } = {}
 ) => {
     const confirmedIssues = [];
@@ -385,6 +386,8 @@ export const runDeterministicDifficultyAudit = (
         for (const extra of detectHardMandateIssues(q, {
             assignedTier,
             examCalibrated,
+            examProfile,
+            subject,
         })) {
             const key = `${extra.questionNumber}::${extra.issue}`;
             if (seen.has(key)) continue;

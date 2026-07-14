@@ -250,6 +250,7 @@ import {
   listClaudeTextModels,
   saveGeneratedQuestions,
   validateQuestionTopicRelevance,
+  planQuestionBankTopics,
   logConfirmedQuestions,
 } from '../controllers/aiQuestion.controller.js';
 
@@ -707,6 +708,13 @@ router.post(
   '/ai/generate-questions',
   verifyJWT,
   generateQuestions
+);
+
+// Question bank: plan topics/syllabus (no generation) — step 1 of the split flow
+router.post(
+  '/ai/plan-question-topics',
+  verifyJWT,
+  planQuestionBankTopics
 );
 
 // Question bank: single / multiple / true-false suggestions (Gemini)

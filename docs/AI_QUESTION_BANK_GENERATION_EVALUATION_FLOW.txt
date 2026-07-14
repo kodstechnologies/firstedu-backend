@@ -1,8 +1,18 @@
 ================================================================================
 FIRSTEDU — AI QUESTION BANK: GENERATION → EVALUATION → REGENERATION
 Full pipeline map (functions, files, LLM calls, scores)
-Updated: 2026-07-06
+Updated: 2026-07-13
 ================================================================================
+
+NOTE ON THIS REVISION: the 2026-07-06 version of this document described a
+"STEM-only solve-first" design that was never actually merged into the code
+running at the time (a prior session reported it as shipped; it wasn't —
+the routing gate still excluded UPSC/CLAT/CAT and gated on isStem right up
+until this revision). That work has now actually been implemented and
+verified live (see PART F and PART M). This revision also documents three
+things the code already had that the old doc never mentioned: the
+paper_reference generation mode (PART A/E), the provider-fallback wrapper
+(PART E), and the async generation-job pattern (PART B).
 
 PART A — HOW TO REACH difficultyMatchScore 80+ (PRACTICAL GUIDE)
 ================================================================================
@@ -59,7 +69,15 @@ ALTERNATIVE: ADD A 4TH AI CALL (IMPLEMENTED)
   Post-skeleton, pre-finalize:
     applySkeletonDifficultySelfAuditGate() → LLM scores each skeleton 0–100
     applyDifficultySelfAuditGate() on finalize for built MCQs
-  Env: AI_QB_DIFFICULTY_SELF_AUDIT=1 (default on), AI_QB_DIFFICULTY_SELF_AUDIT_MIN=75
+  Env: AI_QB_DIFFICULTY_SELF_AUDIT=1 (default on), AI_QB_DIFFICULTY_SELF_AUDIT_MIN
+       (default: veteran 80 / non-veteran 75; skeleton bar veteran 78 / non-veteran 70)
+  NOTE (2026-07-14): veteran finalize gate lowered 85 → 80 to match the audit
+       rubric's own "80+ = clearly meets tier" line. The old 85 bar rejected
+       questions the rubric rated fully tier-compliant, dropping good hard items
+       on single-shot LLM scoring noise and forcing needless regens. Log analysis
+       (runs 07-06→07-10) showed ~52 questions scoring 80–84 dropped solely due to
+       the 85 bar, plus frequent 4–8-per-batch rejection waves; validation-side
+       difficultyMatch was already mostly 88–100, i.e. not the bottleneck.
 
 ENV VARS THAT AFFECT DIFFICULTY
 -------------------------------
@@ -71,6 +89,50 @@ ENV VARS THAT AFFECT DIFFICULTY
   OPENAI_CORRECTNESS_AUDIT_MODEL=gpt-4o
   GEMINI_TEXT_MODEL / OPENAI_QB_GENERATION_MODEL
 
+ENV VARS THAT AFFECT SPEED / RELIABILITY
+-----------------------------------------
+  GEMINI_REQUEST_TIMEOUT_MS=90000     — Gemini SDK client httpOptions.timeout
+                                         (was unset; defaulted to undici's ~5min,
+                                         which is what UND_ERR_HEADERS_TIMEOUT was)
+  AI_QB_MAX_SKELETON_REPAIR_CALLS     — caps per-skeleton repair LLM calls per
+                                         batch (default 4); items beyond the cap
+                                         are deferred, not retried indefinitely
+  GEMINI_QB_MAX_ATTEMPTS=4            — retry attempts before provider fallback
+  GEMINI_RETRY_MAX_DELAY_MS=20000     — backoff cap between retries
+
+THREE GENERATION MODES (generationMode field)
+------------------------------------------------
+  "default" (aka solve-first / topic-first) — code plans concept slots, LLM
+    solves each into a skeleton, code builds the MCQ. See PART F.
+
+  "prompt_first" — one composed exam-setter prompt, one-shot LLM call, no
+    topic-diversity/archetype/difficulty-audit machinery. Skips the exam-
+    reference-brief LLM call entirely (wasted for this mode — nothing in
+    the prompt uses it). FILE: examPromptFirst.service.js,
+    examPromptComposer.service.js.
+
+  "paper_reference" — a stored past-paper text file
+    (firstedu-backend/reference-papers/<profile>.txt) is analyzed for a
+    DIFFICULTY CALIBRATION ONLY (never a topic/slot source — topics stay
+    100% AI-planned, identical to "default"). Injected into the solve-first
+    skeleton prompt as a floor-to-exceed, not a target to replicate:
+    "every question you write must be strictly MORE difficult than that
+    observed pattern... do not use it to constrain which topics/slots you
+    write about." FILE: referencePaperLibrary.service.js
+    (loadReferencePaper, extractReferencePaperGuidance — returns only
+    { difficultyCalibration }, nothing else).
+
+PROVIDER FALLBACK
+------------------
+  aiQuestion.service.js: withProviderFallback() / dispatchGenerationLLM() /
+  dispatchGenerationLLMText() wrap callQuestionBankGenerationLLM /
+  callQuestionBankGenerationLLMText. On a provider-availability error
+  (isProviderAvailabilityError — rate limits, 503s, quota exhaustion), the
+  call is retried on the next provider in buildProviderFallbackChain()
+  instead of failing the batch. Traced as PROVIDER_FALLBACK { from, to,
+  reason }. Verified live 2026-07-13: a Gemini 429 (quota exhausted)
+  fell through to OpenAI mid-batch without the caller noticing.
+
 
 ================================================================================
 PART B — HTTP API ENTRY POINTS
@@ -80,6 +142,15 @@ ROUTE FILE: firstedu-backend/src/routes/admin.routes.js
 
   POST /admin/ai/generate-question-bank-suggestions
     → aiQuestion.controller.generateQuestionBankSuggestions
+    Returns 202 { jobId, workflowLogKey } IMMEDIATELY — does not block on
+    generation. The actual LLM pipeline runs in the background via
+    setImmediate(runQuestionBankGenerationJob). See ASYNC JOB PATTERN below.
+
+  GET /admin/ai/question-bank-generation/:jobId
+    → aiQuestion.controller.getQuestionBankGenerationJobStatus
+    Frontend polls this until status is done/error to get the actual
+    questions/stats payload that generate-question-bank-suggestions used
+    to return synchronously.
 
   POST /admin/ai/validate-question-topic-relevance
     → aiQuestion.controller.validateQuestionTopicRelevance
@@ -87,8 +158,26 @@ ROUTE FILE: firstedu-backend/src/routes/admin.routes.js
   POST /admin/ai/log-confirmed-questions
     → aiQuestion.controller.logConfirmedQuestions
 
+ASYNC JOB PATTERN (generation only — validate/log-confirmed stay synchronous)
+------------------------------------------------------------------------------
+FILE: firstedu-backend/src/services/questionBankGenerationJobStore.js
+  In-memory Map + disk JSON mirror under temp/generation-jobs/, mirrors the
+  pre-existing questionBankValidationJobStore.js pattern.
+
+FILE: firstedu-backend/src/controllers/aiQuestion.controller.js
+  generateQuestionBankSuggestions(req, res) — fast handler: validates,
+  creates a job, returns 202, then kicks off runQuestionBankGenerationJob()
+  via setImmediate (does not await it).
+  runQuestionBankGenerationJob(...) — the actual generation work, writes
+  progress/result into the job store as it runs.
+
+FRONTEND: AiSuggestionModal.jsx — awaitGenerationJob(jobId) polls the GET
+  endpoint until done/error; both generation call sites (initial and
+  evaluation_regen) start-then-poll instead of blocking on one long request.
+
 FRONTEND API: -firstedu-frontend/src/api/api.endpoints.js
   generateQuestionBankSuggestions → /admin/ai/generate-question-bank-suggestions
+  QUESTION_BANK_GENERATION_JOB(jobId) → /admin/ai/question-bank-generation/:jobId
   validateQuestionTopicRelevance  → /admin/ai/validate-question-topic-relevance
 
 FRONTEND UI: -firstedu-frontend/src/features/admin/question-bank/components/
@@ -105,13 +194,47 @@ FILE: firstedu-backend/src/validation/aiQuestion.validator.js
   generateQuestionBankSuggestionsSchema
     Fields: topic, bankName, difficulty, singleCount, multipleCount,
             trueFalseCount, passageCount, generateIntent (initial|evaluation_regen),
+            generationMode (default|prompt_first|paper_reference),
             topicRelevanceFeedback, topicRelevanceEvaluated,
             topicRelevanceRegenerated, allowContinuation, workflowLogKey,
             generationProvider (gemini|openai), competitiveExamPlan, ...
+    singleCount/multipleCount/trueFalseCount/subjects[].count: max 100
+      (raised from 30 — was hit repeatedly at 30/45-question banks; passage
+      sub-counts (passageSingleCount etc.) stay at max 30 intentionally,
+      that's per-passage not per-bank).
 
   validateQuestionTopicRelevanceSchema
     Fields: topic, bankName, difficulty, questions[], evaluationProvider,
             singleCount, multipleCount, ... (for pattern compliance audit)
+    Has its OWN copies of the count-limit fields (top-level AND nested
+    competitiveExamPlan) — these are separate Joi definitions from the
+    generation schema's, so a cap raised in one place does not raise it here.
+
+  logConfirmedQuestionsSchema
+    Fields: topic, bankName, sectionName, sectionIndex, questions[] (max 100).
+    confirmedQuestionItemSchema.options[] rejects empty strings — the
+    frontend must trim true_false's UI padding (['True','False','','']) to
+    ['True','False'] before calling this endpoint (aiSuggestion.utils.js
+    trimTrailingEmptyOptions()), or this 400s on "options[N] is not allowed
+    to be empty".
+
+MULTIPLE-CHOICE "MULTIPLE" TYPE — EXACTLY 2 CORRECT ANSWERS
+---------------------------------------------------------------
+  Enforced in THREE places, all in aiQuestion.service.js unless noted:
+    1. Generation prompt text: "correctAnswer is an array of EXACTLY 2
+       letters" (not "up to 4").
+    2. parseQuestionBankAIItem(): multipleCorrectIndexes.length must be
+       exactly 2 — outside that range throws DroppableQuestionError (not a
+       plain Error). The batch parser (parseQuestionBankAIItems) catches
+       this per-item and DROPS just that one question instead of failing
+       the whole batch; an undercount of "multiple" questions from dropped
+       items is tolerated (an overcount still throws — that would mean a
+       different bug). Same tolerance applied to the correctness-repair
+       loop (applyRepairedQuestions).
+    3. correctnessPreAudit.service.js: detectAllOptionsMarkedCorrect()
+       flags questions where uniqueCorrect.size > 2 as a deterministic
+       correctness issue (belt-and-suspenders against anything that slips
+       past #1/#2, e.g. items built via a different path).
 
 
 ================================================================================
@@ -182,15 +305,35 @@ FILE: firstedu-backend/src/services/aiQuestion.service.js
   generateQuestionBankBatch(params)
     │
     ├─ shouldUseSolveFirstGeneration()          [questionSolveFirst.service.js]
-    │     TRUE when: singles only, no passages, STEM exam, not evaluation_regen
+    │     TRUE for ANY standalone (non-passage, single-question-type) request
+    │     as of 2026-07-13 — the old STEM-only gate (isStem regex + UPSC/
+    │     CSAT/CLAT/CAT exclusion) has been REMOVED. Every exam now goes
+    │     through solve-first; exam-domain rigor differences (STEM concept
+    │     clusters vs. generic reasoning-depth checks) are decided
+    │     downstream by hardQuestionMandate.service.js's isStemProfile(),
+    │     not by this routing gate. Still FALSE for: passageCount > 0,
+    │     multipleCount/trueFalseCount > 0 (solve-first only builds
+    │     singles), full-paper/multi-subject competitiveExamPlan, JEE
+    │     full-paper topics.
     │
-    ├─ PATH A — SOLVE-FIRST (default for JEE Physics singles):
+    ├─ generationMode dispatch (examPromptFirst.service.js GENERATION_MODES):
+    │     "prompt_first" → skips solve-first entirely regardless of the
+    │       gate above, uses buildQuestionBankPrompt() one-shot instead.
+    │     "paper_reference" → extractReferencePaperGuidance() then routes
+    │       through the SAME generateSolveFirstSingles() as "default", with
+    │       an extra referenceCalibrationBlock (difficulty floor, not a
+    │       topic source — see PART A).
+    │
+    ├─ PATH A — SOLVE-FIRST (generationMode "default" or "paper_reference",
+    │     gate above TRUE — this is now the default path for essentially
+    │     all standalone single-question generation, not just JEE Physics):
     │     generateSolveFirstSingles()
     │     finalizeQuestionBankSuggestions()
     │
-    └─ PATH B — ONE-SHOT:
+    └─ PATH B — ONE-SHOT (gate FALSE, or generationMode "prompt_first"):
           buildQuestionBankPrompt()
-          callQuestionBankGenerationLLM()
+          callQuestionBankGenerationLLM()   — wrapped by
+            dispatchGenerationLLM() for provider fallback (PART A)
           parseQuestionBankAIResponse()
           finalizeQuestionBankSuggestions()
 
@@ -244,6 +387,19 @@ FILE: firstedu-backend/src/services/questionSolveFirst.service.js
       buildPhysicsNumericalAuthoringBlock()           [examPromptContext.service.js]
       buildCorrectnessFirstGenerationBlock()         [examPromptContext.service.js]
       buildSolveFirstSkeletonCorrectnessBlock()      [examPromptContext.service.js]
+      chemBlock/physicsBlock — conditioned on examProfile/subject (STEM
+        only), NOT suppressed during evaluation_regen (was a bug: the
+        chem/physics/JEE-hard blocks used to disappear on regen requests).
+      nonStemExamRulesBlock — buildExamSpecificRules() imported from
+        examPromptFirst.service.js [NEW], injected when
+        !isStemProfile(examProfile, subject). Reuses the same CLAT Legal
+        Reasoning / CAT QA / UPSC Prelims authoring guidance the
+        prompt_first mode already had, instead of solve-first getting none
+        of it for non-STEM subjects.
+      nonStemAnswerTypeBlock — tells the model to use
+        finalAnswer.type = "text" (statement, not a number) for subjects
+        with no numeric solve, but to keep "numeric" if the stem IS
+        quantitative (e.g. CAT QA) even though CAT isn't classified STEM.
 
 STEP F3 — SKELETON LLM + PARSE (LLM call #2)
 --------------------------------------------
@@ -260,18 +416,39 @@ STEP F4 — SKELETON → MCQ (CODE, NO LLM)
 ---------------------------------------
 FILE: firstedu-backend/src/services/questionSolveFirst.service.js
 
-  skeletonsToQuestions(skeletons, tierSlots, conceptSlots)
+  skeletonsToQuestions(skeletons, tierSlots, conceptSlots, batchOpts, repairDeps)
+    repairDeps carries { examProfile, subject } through to the mandate check
+    below — this is what lets validateHardSkeletonMandate() apply the right
+    rigor tier per exam instead of always assuming JEE.
     FOR each skeleton:
-      validateHardSkeletonMandate()         [hardQuestionMandate.service.js]
+      validateHardSkeletonMandate(sk, tier, { examCalibrated, examProfile, subject })
+                                             [hardQuestionMandate.service.js]
       verifySkeletonAnswer()                [questionSolveFirst.service.js]
       buildMcqFromSkeleton(sk, i, tier, assignedSlot)
         stripMetaCommentary() on solveSteps
         independentlyVerifyQuestion()       [questionNumericVerify.service.js]
-        buildNumericDistractors() / hybridization / molecule builders
+        buildNumericDistractors() / hybridization / molecule / TEXT builders
+          — finalAnswer.type "text" (non-STEM) uses buildTextDistractors(),
+            the model's own distractorValues used directly as wrong options
+            (no arithmetic offset synthesis, unlike numeric). Throws (routes
+            to repair queue) if fewer than 3 distinct usable distractors.
+          — hybridization detection is now ANCHORED to actual notation
+            shape (/^sp[superscripts]?(?:d[superscripts]?)?$/i) with a
+            type !== "text" guard. Was a loose /sp/.test(display) substring
+            match that also matched ordinary English words containing "sp"
+            ("response", "special", "disproportionation"), silently
+            corrupting non-STEM text-answer options into chemistry
+            notation whenever one happened to contain "sp".
         lockExplanationToMarkedOption()     — numbered Step 1: Step 2: ...
         assertBuiltMcqConsistency()
         Sets: questionText, options, correctIndex, explanation,
               _solveSteps, _conceptSlot
+
+  MAX_SKELETON_REPAIR_CALLS_PER_BATCH (default 4, env
+  AI_QB_MAX_SKELETON_REPAIR_CALLS) caps per-skeleton repair LLM calls per
+  batch — items beyond the cap are deferred (traced SKELETON_REPAIR_CAPPED)
+  rather than each getting its own repair call, bounding worst-case tail
+  latency on a batch where many skeletons fail.
 
   IF batch < target after SOLVE_FIRST_MAX_ATTEMPTS:
     one-shot fallback via buildQuestionBankPrompt()
@@ -301,16 +478,39 @@ FILE: firstedu-backend/src/services/conceptArchetypeGuidance.service.js
 
   PHYSICS_HARD_BLUEPRINTS, CHEMISTRY_HARD_BLUEPRINTS, MATH_HARD_BLUEPRINTS
   PHYSICS_ARCHETYPES, PHYSICS_PEAK_ARCHETYPES
-  allocateRankedConceptSlots(count, { excludeArchetypes, maxPerArchetype })
-  getArchetypeBlueprint(conceptSlot)
+  allocateRankedConceptSlots(count, { examProfile, subjectId, excludeArchetypes, maxPerArchetype })
+    Non-STEM subjectId/examProfile (no physics/math/chem/jee/neet match) now
+    returns generic numbered slots ("concept_slot_1", "concept_slot_2", ...)
+    instead of silently defaulting to the chemistry archetype pool — this
+    was a live bug: this catalog fallback only runs when the AI-first
+    planner (resolveConceptArchetypeSteering) fails or under-delivers, but
+    when it did, a UPSC/CLAT bank would get chemistry archetypes like
+    "buffer_henderson_hasselbalch" with no domain relevance at all.
+  getArchetypeBlueprint(conceptSlot) — returns null for unknown/generic
+    slots (safe); buildFallbackSteering() already had a generic-blueprint
+    fallback for that case.
+  getSubjectLabelForArchetypes(subjectId) — no longer defaults unmatched
+    subjects to "Chemistry"; returns the subject string itself or
+    "the subject" as a neutral fallback.
   buildBatchArchetypeGuidanceBlock({ conceptSlots, slotPlans, aiSteered })
   buildBankArchetypeExcludeBlock(usedArchetypes)
 
 FILE: firstedu-backend/src/services/hardQuestionMandate.service.js
-  validateHardSkeletonMandate()
-  validateHardQuestionMandate()
-  detectHardMandateIssues()
-  countConceptClusters(), detectDirectSubstitution()
+  isStemProfile(examProfile, subject) [NEW] — the same STEM-detection regex
+    that used to gate the solve-first ROUTING decision (removed from there,
+    see PART E) now only decides mandate RIGOR: STEM gets the full
+    concept-cluster / direct-substitution / veteran-tier gauntlet below;
+    non-STEM gets NON_STEM_HARD_MIN_SOLVE_STEPS (default 2) generic
+    reasoning-depth checks only (no fabricated legal/GK concept-cluster
+    catalog — building one well needs real domain review, not a guess).
+    NOTE: CAT is classified non-STEM even for its Quantitative Ability
+    section (no per-subsection signal available here) — QA still gets
+    correctly-typed numeric answers (see nonStemAnswerTypeBlock in PART F),
+    it just uses the generic rigor check rather than concept clusters.
+  validateHardSkeletonMandate(skeleton, tier, { examCalibrated, examProfile, subject })
+  validateHardQuestionMandate(q, { assignedTier, examCalibrated, examProfile, subject })
+  detectHardMandateIssues(q, { assignedTier, examCalibrated, examProfile, subject })
+  countConceptClusters(), detectDirectSubstitution() — STEM-only path, unchanged
 
 
 ================================================================================
@@ -433,7 +633,8 @@ FILE: firstedu-backend/src/services/aiQuestion.service.js
     resolveTargetedRegenerationCounts()     [regenerationTargeting.service.js]
       → replacement count = failed question numbers only (not full bank upscale)
 
-    shouldUseSolveFirstGeneration() → TRUE for STEM singles (same as initial)
+    shouldUseSolveFirstGeneration() → TRUE for any standalone singles
+      request (same as initial — no longer STEM-only, see PART E)
     → applySkeletonDifficultySelfAuditGate() before MCQ build
     → NO one-shot fallback on regen deficit (partial batch returned for client merge)
 
@@ -490,8 +691,23 @@ ARCHETYPE HISTORY
 
 EXAM / PROMPT CONTEXT
   examPromptContext.service.js         → JEE blocks, physics/chem authoring
+  examPromptFirst.service.js           → GENERATION_MODES, buildExamSpecificRules()
+                                          [shared CLAT/CAT/UPSC/NEET/JEE text,
+                                           now also used by solve-first — PART F]
   competitiveExamPlan.service.js       → inferCompetitiveExamPlan(), auditPatternCompliance()
-  examReferenceResearch.service.js     → fetchExamReferenceBrief()
+  examReferenceResearch.service.js     → fetchExamReferenceBrief() [skipped
+                                          entirely for prompt_first — nothing
+                                          in that prompt uses it]
+  referencePaperLibrary.service.js     → loadReferencePaper(), hasReferencePaper(),
+                                          extractReferencePaperGuidance()
+                                          [paper_reference mode — PART A]
+
+PROVIDER FALLBACK / ASYNC JOBS
+  aiQuestion.service.js                → withProviderFallback(), dispatchGenerationLLM(),
+                                          dispatchGenerationLLMText(), buildProviderFallbackChain(),
+                                          isProviderAvailabilityError()
+  questionBankGenerationJobStore.js    → in-memory + disk-mirrored job store
+                                          for the async generation endpoint (PART B)
 
 SUBJECT DETECTION
   subjectDetection.js                  → resolveSubjectForGeneration()
@@ -535,11 +751,56 @@ PART K — TYPICAL 25-QUESTION JEE PHYSICS RUN (YOUR 15:00 LOG)
 
 
 ================================================================================
-PART L — FUNCTION INDEX (ALPHABETICAL BY FILE)
+PART L — VERIFIED: NON-STEM SOLVE-FIRST ROUTING (2026-07-13)
+================================================================================
+
+Context: a UPSC generation run had produced FINALIZE_DIFFICULTY_SCORE
+difficultyMatchScore 0–40 despite requesting "hard" — root cause was
+shouldUseSolveFirstGeneration() excluding UPSC by regex, sending it down
+the one-shot path with no archetype planning, no hard-question mandate, and
+no difficulty-audit gate, while the (STEM-only, unconditional) deterministic
+difficulty auditor still ran on the output and could never pass a law/GK
+stem against physics/chem concept clusters.
+
+Fix implemented and verified live (see PART E/F/G above for the code
+changes). Verification performed 2026-07-13:
+
+  1. shouldUseSolveFirstGeneration({ topic: "Competitive › Government ›
+     UPSC", ... }) → true (was false before this fix; JEE Physics still →
+     true, confirming no regression to the STEM path).
+
+  2. isStemProfile('jee_main', 'Physics') → true (unchanged rigor for JEE).
+     isStemProfile('upsc', '') → false. isStemProfile('cat', 'Quantitative
+     Ability') → false (see the CAT QA caveat in PART G).
+
+  3. Live 5-question UPSC hard-singles generation via
+     generateQuestionBankSuggestions(): pipeline trace confirmed
+     mode: 'solve-first' (not one-shot), archetype steering ran
+     (AI-planned slots: vote_distribution_strategy,
+     foreign_aid_impact_analysis, legal_precedent_analysis,
+     national_security_policy_interplay, resource_allocation_sustainability),
+     and FINALIZE_DIFFICULTY_SCORE difficultyMatchScore: 100 (target 92) —
+     up from the 0–40 that motivated this fix. Zero correctness/mandate
+     issues on the sample. Provider fallback also triggered correctly mid-
+     run (Gemini quota 429 → OpenAI) without failing the batch.
+
+  4. hardQuestionMandate mandate check spot-tested directly: a STEM stem
+     with 1 weak solve step still fails all 4 STEM gates (concept count,
+     solve steps, solution lines, direct-substitution) exactly as before;
+     a non-STEM stem with 1 solve step (the exact "state fact → restate as
+     answer" shape from the original UPSC failure) now correctly fails the
+     single generic reasoning-depth check instead of being unscorable
+     against a concept-cluster catalog it was never going to match.
+
+
+================================================================================
+PART M — FUNCTION INDEX (ALPHABETICAL BY FILE)
 ================================================================================
 
 aiQuestion.controller.js
-  generateQuestionBankSuggestions
+  generateQuestionBankSuggestions     (fast handler — starts job, returns 202)
+  runQuestionBankGenerationJob        (internal — the actual generation work)
+  getQuestionBankGenerationJobStatus
   validateQuestionTopicRelevance
   logConfirmedQuestions
 
@@ -550,18 +811,38 @@ aiQuestion.service.js
   finalizeQuestionBankSuggestions    (internal)
   validateQuestionTopicRelevance
   callQuestionBankGenerationLLM      (internal)
+  withProviderFallback, dispatchGenerationLLM,
+    dispatchGenerationLLMText, buildProviderFallbackChain,
+    isProviderAvailabilityError      (internal — provider fallback wrapper)
+  parseQuestionBankAIItem, parseQuestionBankAIItems,
+    parseQuestionBankAIResponse, parseQuestionBankAIResponseSoft (internal)
+  DroppableQuestionError             (internal — see PART C, dropped not thrown)
   inferCompetitiveExamPlan
   inferQuestionBankCounts
+
+questionBankGenerationJobStore.js
+  createJob, getJob, updateJob (or equivalent) — mirrors
+  questionBankValidationJobStore.js's in-memory+disk pattern
+
+examPromptFirst.service.js
+  GENERATION_MODES, isPromptFirstGenerationMode, isPaperReferenceGenerationMode
+  buildExamSpecificRules             (exported — now shared with solve-first)
+  passageWordRangeFor
+
+referencePaperLibrary.service.js
+  loadReferencePaper, hasReferencePaper, extractReferencePaperGuidance
 
 conceptArchetypePlanner.service.js
   isAiArchetypeSteeringEnabled
   buildArchetypePlanningPrompt
   parseArchetypePlanResponse
   resolveConceptArchetypeSteering
+  buildFallbackSteering              (internal)
 
 conceptArchetypeGuidance.service.js
-  allocateRankedConceptSlots
+  allocateRankedConceptSlots         (non-STEM → generic numbered slots, not chemistry)
   getArchetypeBlueprint
+  getSubjectLabelForArchetypes       (non-STEM → subject string, not "Chemistry")
   buildBatchArchetypeGuidanceBlock
   buildBankArchetypeExcludeBlock
   buildSubjectArchetypeSelectionBlock
@@ -570,12 +851,14 @@ conceptArchetypeGuidance.service.js
 
 questionSolveFirst.service.js
   isSolveFirstEnabled
-  shouldUseSolveFirstGeneration
+  shouldUseSolveFirstGeneration      (STEM gate removed — see PART E)
   allocateConceptSlots
-  buildSolveFirstSkeletonPrompt
+  buildSolveFirstSkeletonPrompt      (+ nonStemExamRulesBlock, nonStemAnswerTypeBlock)
   parseSolveFirstSkeletons
-  skeletonsToQuestions
-  buildMcqFromSkeleton
+  skeletonsToQuestions               (+ examProfile/subject threaded through)
+  buildMcqFromSkeleton               (+ finalAnswer.type "text" path,
+                                        fixed hybridization false-positive)
+  buildTextDistractors               (internal)
   sanitizeQuestionStemEmbeddedOptions
 
 topicRelevanceValidation.service.js
@@ -608,10 +891,13 @@ correctnessPreAudit.service.js
   stripFlawedQuestionBankEntries
 
 difficultyPreAudit.service.js
-  runDeterministicDifficultyAudit
+  runDeterministicDifficultyAudit    (+ subject param, threaded to detectHardMandateIssues)
+  detectHardMandateIssues            (+ examProfile/subject forwarded)
   INITIAL_GEN_DIFFICULTY_MATCH_TARGET
 
 hardQuestionMandate.service.js
+  isStemProfile                      (NEW — see PART G)
+  NON_STEM_HARD_MIN_SOLVE_STEPS      (NEW constant, default 2)
   validateHardSkeletonMandate
   validateHardQuestionMandate
   buildHardQuestionMandateBlock

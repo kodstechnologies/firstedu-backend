@@ -111,6 +111,25 @@ const topicRelevanceIssueSchema = Joi.object({
 
 const optionalRelevanceScore = Joi.number().min(0).max(100).optional().allow(null);
 
+/** Confirmed concept-slot steering echoed back from /ai/plan-question-topics. */
+const presetSteeringSchema = Joi.object({
+    conceptSlots: Joi.array().items(Joi.string().trim().max(120)).max(200).optional(),
+    slotPlans: Joi.array()
+        .items(
+            Joi.object({
+                conceptSlot: Joi.string().trim().max(120).optional(),
+                label: Joi.string().trim().max(200).optional().allow(''),
+                blueprint: Joi.object().unknown(true).optional(),
+            }).unknown(true)
+        )
+        .max(200)
+        .optional(),
+    source: Joi.string().trim().max(40).optional(),
+})
+    .unknown(true)
+    .optional()
+    .allow(null);
+
 export const generateQuestionBankSuggestionsSchema = Joi.object({
     topic: Joi.string().required().trim().min(2).max(300).messages({
         'string.empty': 'Topic is required',
@@ -245,6 +264,8 @@ export const generateQuestionBankSuggestionsSchema = Joi.object({
     })
         .unknown(true)
         .optional(),
+    /** Confirmed topic plan from /ai/plan-question-topics — hard-locks generation to these topics. */
+    presetSteering: presetSteeringSchema,
 })
     .custom((value, helpers) => {
         const passageCount =
@@ -326,6 +347,46 @@ export const generateQuestionBankSuggestionsSchema = Joi.object({
     .messages({
         'any.custom': '{{#message}}',
     });
+
+export const planQuestionBankTopicsSchema = Joi.object({
+    topic: Joi.string().required().trim().min(2).max(300).messages({
+        'string.empty': 'Topic is required',
+        'any.required': 'Topic is required',
+    }),
+    bankName: Joi.string().trim().max(200).optional().allow(''),
+    difficulty: Joi.string()
+        .valid('easy', 'medium', 'hard', 'Easy', 'Medium', 'Hard')
+        .default('medium'),
+    singleCount: Joi.number().integer().min(0).max(100).default(0),
+    multipleCount: Joi.number().integer().min(0).max(100).default(0),
+    trueFalseCount: Joi.number().integer().min(0).max(100).default(0),
+    connectedCount: Joi.number().integer().min(0).max(10).default(0),
+    passageCount: Joi.number().integer().min(0).max(10).default(0),
+    passageSingleCount: Joi.number().integer().min(0).max(30).default(0),
+    passageMultipleCount: Joi.number().integer().min(0).max(30).default(0),
+    passageTrueFalseCount: Joi.number().integer().min(0).max(30).default(0),
+    sectionName: Joi.string().trim().max(200).optional().allow(''),
+    categoryPaths: Joi.array()
+        .items(Joi.string().trim().min(1).max(500))
+        .max(20)
+        .default([]),
+    subject: Joi.string().trim().max(100).optional().allow(''),
+    generationProvider: Joi.string().valid('gemini', 'openai', 'claude').default('gemini'),
+    inferCountsIfMissing: Joi.boolean().default(false),
+    maxSelectableSlots: Joi.number().integer().min(1).max(500).optional(),
+    /** Reviewer's free-text guidance to re-plan (include X, drop Y, more of Z). */
+    planningFeedback: Joi.string().trim().max(2000).optional().allow(''),
+    /** Topics the reviewer explicitly rejected — seeded as hard exclusions. */
+    adminExcludeTopics: Joi.array()
+        .items(Joi.string().trim().min(1).max(300))
+        .max(60)
+        .default([]),
+    excludeArchetypes: Joi.array()
+        .items(Joi.string().trim().min(1).max(120))
+        .max(100)
+        .default([]),
+    competitiveExamPlan: Joi.object().unknown(true).optional().allow(null),
+});
 
 export const generateImageQuestionTextSchema = Joi.object({
     topic: Joi.string().required().trim().min(2).max(300),
@@ -508,13 +569,14 @@ export const logConfirmedQuestionsSchema = Joi.object({
     bankName: Joi.string().trim().max(300).optional().allow(''),
     sectionName: Joi.string().trim().max(200).optional().allow(''),
     sectionIndex: Joi.number().integer().min(0).max(50).optional().allow(null),
-    questions: Joi.array().items(confirmedQuestionItemSchema).min(1).max(50).required(),
+    questions: Joi.array().items(confirmedQuestionItemSchema).min(1).max(100).required(),
 });
 
 export default {
     generateQuestions: generateQuestionsSchema,
     saveGeneratedQuestions: saveGeneratedQuestionsSchema,
     generateQuestionBankSuggestions: generateQuestionBankSuggestionsSchema,
+    planQuestionBankTopics: planQuestionBankTopicsSchema,
     generateImageQuestionText: generateImageQuestionTextSchema,
     generateQuestionImage: generateQuestionImageSchema,
     validateQuestionTopicRelevance: validateQuestionTopicRelevanceSchema,

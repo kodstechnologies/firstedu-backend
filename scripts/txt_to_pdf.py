@@ -3,7 +3,8 @@
 txt_to_pdf.py — Convert exam-question .txt files into a formatted PDF.
 
 Expects each input .txt file to contain questions in this format
-(the "[difficulty]" tag is optional):
+(the "[difficulty]" tag and "Type:" line are both optional — Type
+defaults to "single" if omitted):
 
     Question 1 [medium]
     Type: single
@@ -14,6 +15,21 @@ Expects each input .txt file to contain questions in this format
       D. Rome
     Correct: C
     Explanation: Paris has been the capital of France since ...
+
+Supports single, multiple (2 correct answers), and true_false question
+types. For "multiple", give a comma-separated answer key:
+
+    Question 2 [hard]
+    Type: multiple
+    Stem: Select all that apply. Which of these are noble gases?
+      A. Helium
+      B. Nitrogen
+      C. Argon
+      D. Oxygen
+    Correct: A, C
+    Explanation: Helium and argon are noble gases; nitrogen and oxygen are not.
+
+true_false questions just use 2 options (A/B) instead of 4.
 
 Everything after a line starting with "Raw JSON" or a line of "===="
 is ignored, so you can feed it the full raw generator output (including
@@ -80,9 +96,19 @@ BASE_FONT, BOLD_FONT = register_fonts()
 QUESTION_SPLIT_RE = re.compile(r'\n(?=Question\s+\d+\b)')
 STEM_RE = re.compile(r'Stem:\s*(.+?)\n\s*A\.', re.S)
 OPTION_RE = re.compile(r'^\s*([A-F])\.\s*(.+)$', re.M)
-CORRECT_RE = re.compile(r'Correct:\s*([A-F])')
+# One or more letters after "Correct:" — "Correct: C" (single/true_false) or
+# "Correct: B, C" (multiple-correct, capped at 2 per the generation pipeline).
+CORRECT_RE = re.compile(r'Correct:\s*([A-F](?:\s*,\s*[A-F])*)')
 EXPLANATION_RE = re.compile(r'Explanation:\s*(.+)$', re.S)
 DIFFICULTY_RE = re.compile(r'Question\s+\d+\s*\[(\w+)\]')
+TYPE_RE = re.compile(r'Type:\s*(\S+)')
+
+TYPE_LABELS = {
+    "single": "Single Correct",
+    "multiple": "Multiple Correct",
+    "true_false": "True / False",
+    "connected": "Passage-Based",
+}
 
 
 def strip_trailing_junk(text: str) -> str:
@@ -115,17 +141,25 @@ def parse_questions(text: str):
             continue  # skip malformed / incomplete blocks
         stem = stem_m.group(1).strip()
         options = [opt.strip() for _, opt in OPTION_RE.findall(block)]
-        correct_idx = LETTER_TO_IDX[correct_m.group(1)]
+        correct_letters = [l.strip() for l in correct_m.group(1).split(',')]
+        correct_indexes = [LETTER_TO_IDX[l] for l in correct_letters if l in LETTER_TO_IDX]
+        if not correct_indexes:
+            continue  # malformed answer key, skip
         exp_m = EXPLANATION_RE.search(block)
         explanation = exp_m.group(1).strip() if exp_m else ""
         diff_m = DIFFICULTY_RE.search(block)
         difficulty = diff_m.group(1) if diff_m else None
+        type_m = TYPE_RE.search(block)
+        qtype = type_m.group(1).strip().lower() if type_m else "single"
+        if qtype not in TYPE_LABELS:
+            qtype = "single"
         questions.append({
             "q": escape(stem),
             "options": [escape(o) for o in options],
-            "correct": correct_idx,
+            "correct": correct_indexes,
             "exp": escape(explanation),
             "difficulty": difficulty,
+            "type": qtype,
         })
     return questions
 
@@ -195,16 +229,22 @@ def build_section_header(title, styles):
 
 
 def build_question_block(idx, item, styles):
-    story = [Paragraph(f"Q{idx}.", styles["qnum"]),
+    qtype = item.get("type", "single")
+    correct_set = set(item["correct"])
+    type_label = TYPE_LABELS.get(qtype, "Single Correct")
+    story = [Paragraph(f"Q{idx}.&nbsp;&nbsp;<font size=8.5 color='#777777'>[{type_label}]</font>",
+                        styles["qnum"]),
              Paragraph(item["q"], styles["question"])]
     for i, opt in enumerate(item["options"]):
         label = LETTERS[i]
         text = f"({label})&nbsp;&nbsp;{opt}"
-        if i == item["correct"]:
+        if i in correct_set:
             story.append(Paragraph(text + "&nbsp;&nbsp;&#10003;", styles["option_correct"]))
         else:
             story.append(Paragraph(text, styles["option"]))
-    story.append(Paragraph(f"Correct Answer: ({LETTERS[item['correct']]})", styles["answer"]))
+    correct_labels = ", ".join(f"({LETTERS[i]})" for i in sorted(correct_set))
+    answer_word = "Correct Answers" if len(correct_set) > 1 else "Correct Answer"
+    story.append(Paragraph(f"{answer_word}: {correct_labels}", styles["answer"]))
     if item["exp"]:
         story.append(Paragraph("Explanation:", styles["expl_label"]))
         story.append(Paragraph(item["exp"], styles["explanation"]))
@@ -218,6 +258,17 @@ def build_question_block(idx, item, styles):
 # Main build
 # ---------------------------------------------------------------------------
 
+def section_type_summary(qs):
+    """e.g. 'Single (32), Multiple (9), True/False (4)' for a mixed section."""
+    counts = {}
+    for item in qs:
+        t = item.get("type", "single")
+        counts[t] = counts.get(t, 0) + 1
+    order = ["single", "multiple", "true_false", "connected"]
+    parts = [f"{TYPE_LABELS[t]} ({counts[t]})" for t in order if counts.get(t)]
+    return ", ".join(parts) if parts else "Single Correct"
+
+
 def build_pdf(sections, output_path, title, subtitle):
     styles = build_styles()
     doc = SimpleDocTemplate(output_path, pagesize=A4,
@@ -226,17 +277,29 @@ def build_pdf(sections, output_path, title, subtitle):
     story = [Paragraph(escape(title), styles["title"])]
     if subtitle:
         story.append(Paragraph(escape(subtitle), styles["subtitle"]))
-    story.append(Paragraph("Single Correct Answer MCQs &bull; With Explanations",
-                            styles["subtitle"]))
+
+    all_types = {item.get("type", "single") for _, qs in sections for item in qs}
+    if all_types <= {"single"}:
+        type_line = "Single Correct Answer MCQs &bull; With Explanations"
+    else:
+        type_line = "Single, Multiple &amp; True/False MCQs &bull; With Explanations"
+    story.append(Paragraph(type_line, styles["subtitle"]))
     story.append(Spacer(1, 16))
+
+    type_cell_style = ParagraphStyle('TypeCell', fontSize=9, fontName=BASE_FONT,
+                                      leading=11.5, textColor=colors.HexColor("#333333"))
 
     total_q = sum(len(qs) for _, qs in sections)
     summary_data = [["Section", "No. of Questions", "Question Type"]]
     for name, qs in sections:
-        summary_data.append([name, str(len(qs)), "Single Correct MCQ"])
+        summary_data.append([
+            name,
+            str(len(qs)),
+            Paragraph(escape(section_type_summary(qs)), type_cell_style),
+        ])
     summary_data.append(["Total", str(total_q), ""])
 
-    summary_table = Table(summary_data, colWidths=[7 * cm, 5 * cm, 5 * cm])
+    summary_table = Table(summary_data, colWidths=[5.5 * cm, 3.5 * cm, 8 * cm])
     summary_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#1a1a2e")),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
@@ -245,7 +308,8 @@ def build_pdf(sections, output_path, title, subtitle):
         ('FONTNAME', (0, -1), (-1, -1), BOLD_FONT),
         ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor("#f0f0f5")),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#cccccc")),
-        ('ALIGN', (1, 0), (-1, -1), 'CENTER'),
+        ('ALIGN', (1, 0), (1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('TOPPADDING', (0, 0), (-1, -1), 6),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
         ('FONTSIZE', (0, 0), (-1, -1), 10.5),

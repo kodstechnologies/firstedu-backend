@@ -11,6 +11,24 @@ export const HARD_MIN_CONCEPTS = 2;
 export const HARD_MIN_SOLVE_STEPS = 3;
 export const HARD_MIN_SOLUTION_LINES = 4;
 
+/** Non-STEM (UPSC/CLAT/CAT/GK/law/etc.) hard tier has no concept-cluster
+ * catalog to check against — the only generic proxy for real elimination
+ * depth is having more than one reasoning step. */
+export const NON_STEM_HARD_MIN_SOLVE_STEPS = 2;
+
+/** Same STEM detector the solve-first routing gate used to gate on, now
+ * relocated here to decide mandate *rigor* (concept clusters vs. generic
+ * reasoning-depth checks) rather than whether solve-first runs at all. */
+export const isStemProfile = (examProfile = "", subject = "") => {
+    const profile = String(examProfile || "").toLowerCase();
+    if (profile === "jee_main" || profile === "jee_advanced" || profile === "neet") {
+        return true;
+    }
+    return /\bchem|physics|math|mathematics|engineering|jee|iit|pcm|nta\b/i.test(
+        `${examProfile} ${subject}`.toLowerCase()
+    );
+};
+
 export const VETERAN_HARD_MIN_CONCEPTS = 2;
 export const VETERAN_HARD_MIN_SOLVE_STEPS = 4;
 export const VETERAN_HARD_MIN_SOLUTION_LINES = 5;
@@ -300,14 +318,13 @@ export const detectDirectSubstitution = (stem = "", solveSteps = []) => {
  */
 export const validateHardQuestionMandate = (
     q,
-    { assignedTier = "hard", examCalibrated = false } = {}
+    { assignedTier = "hard", examCalibrated = false, examProfile = "", subject = "" } = {}
 ) => {
     const tier = normalizeQuestionTier(assignedTier) || "medium";
     const isHard = tier === "hard" || examCalibrated;
     if (!isHard) return { ok: true, issues: [] };
 
     const stem = String(q.questionText || q.stem || "").trim();
-    const conceptSlot = q.conceptSlot || q._conceptSlot || "";
     let solveSteps = q.solveSteps || q._solveSteps || [];
     if (!solveSteps.length && q.explanation) {
         solveSteps = String(q.explanation)
@@ -316,6 +333,24 @@ export const validateHardQuestionMandate = (
             .map((s) => s.trim())
             .filter((s) => s.length > 12);
     }
+
+    if (!isStemProfile(examProfile, subject)) {
+        // No hand-curated concept-cluster catalog exists for non-STEM
+        // domains (law/GK/reasoning/etc.) — fabricating one isn't something
+        // to do without real domain review. The only generic proxy for real
+        // elimination/synthesis depth is having more than one solve step;
+        // a single restated fact (the UPSC 0/40 failure mode) fails this.
+        const stepCount = Array.isArray(solveSteps) ? solveSteps.length : 0;
+        const issues = [];
+        if (stepCount > 0 && stepCount < NON_STEM_HARD_MIN_SOLVE_STEPS) {
+            issues.push(
+                `Hard question needs ≥${NON_STEM_HARD_MIN_SOLVE_STEPS} reasoning/elimination steps, not a single fact restated as the answer (found ${stepCount}).`
+            );
+        }
+        return { ok: issues.length === 0, issues };
+    }
+
+    const conceptSlot = q.conceptSlot || q._conceptSlot || "";
     const issues = [];
     const floors = getHardMandateFloors({ examCalibrated });
 
@@ -374,7 +409,7 @@ export const validateHardQuestionMandate = (
 export const validateHardSkeletonMandate = (
     skeleton,
     assignedTier = "hard",
-    { examCalibrated = false } = {}
+    { examCalibrated = false, examProfile = "", subject = "" } = {}
 ) => {
     return validateHardQuestionMandate(
         {
@@ -385,6 +420,8 @@ export const validateHardSkeletonMandate = (
         {
             assignedTier,
             examCalibrated: examCalibrated || assignedTier === "hard",
+            examProfile,
+            subject,
         }
     );
 };
@@ -529,6 +566,8 @@ export const detectHardMandateIssues = (q, ctx = {}) => {
     const { ok, issues } = validateHardQuestionMandate(q, {
         assignedTier: tier,
         examCalibrated: ctx.examCalibrated,
+        examProfile: ctx.examProfile,
+        subject: ctx.subject,
     });
     if (ok) return [];
 
@@ -546,6 +585,7 @@ export default {
     buildSkeletonGenerationComplianceBlock,
     buildVeteranExamNativeGenerationBlock,
     isExamNativeVeteranGeneration,
+    isStemProfile,
     validateHardQuestionMandate,
     validateHardSkeletonMandate,
     detectHardMandateIssues,

@@ -12,9 +12,13 @@ import {
     normalizeQuestionTier,
 } from "./difficultyMix.service.js";
 
+// Veteran gate aligned to the audit rubric's own "clearly meets tier" line (80,
+// see buildDifficultySelfAuditPrompt). A higher bar (was 85) rejected questions
+// the rubric itself rates as fully tier-compliant — dropping good hard items on
+// single-shot LLM scoring noise (±5-10) and forcing needless regens.
 export const DIFFICULTY_SELF_AUDIT_MIN_SCORE = Number(
     process.env.AI_QB_DIFFICULTY_SELF_AUDIT_MIN ||
-        (isVeteranDifficultyEnabled() ? 85 : 75)
+        (isVeteranDifficultyEnabled() ? 80 : 75)
 );
 
 /** Skeletons are rougher than built MCQs — use a lower bar; finalize uses DIFFICULTY_SELF_AUDIT_MIN_SCORE. */
