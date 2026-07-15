@@ -624,7 +624,146 @@ const sanitizePhOptions = (options, correctIndex) => {
     return list;
 };
 
-const assertBuiltMcqConsistency = ({ questionText, options, correctIndex, explanation }) => {
+/**
+ * Parse a numeric value from a string, handling ×10^n superscript notation
+ * (e.g. "1.70×10⁵") in addition to whatever parseNumber already handles.
+ */
+const parseNumericWithSuperscript = (str) => {
+    const s = String(str || "").trim();
+    const sciMatch = s.match(/^(-?\d+(?:\.\d+)?)\s*[×x\*]\s*10([⁰¹²³⁴⁵⁶⁷⁸⁹⁻\-\d]+)/i);
+    if (sciMatch) {
+        const base = parseFloat(sciMatch[1]);
+        const expStr = sciMatch[2];
+        const expMap = { '⁰':'0','¹':'1','²':'2','³':'3','⁴':'4','⁵':'5',
+                         '⁶':'6','⁷':'7','⁸':'8','⁹':'9','⁻':'-' };
+        const exponent = parseInt(
+            expStr.split('').map(c => expMap[c] ?? c).join(''),
+            10
+        );
+        const result = base * Math.pow(10, exponent);
+        if (Number.isFinite(result)) return result;
+    }
+    return parseNumber(s);
+};
+
+/**
+ * Extract final-result candidates from a solve-step string array.
+ *
+ * Two tiers:
+ *
+ *   HIGH-PRIORITY — conclusion keywords: "therefore/thus/hence/the answer is …"
+ *   These are the strongest signal that a value is the final answer, regardless
+ *   of what variable name precedes it. Domain-agnostic.
+ *
+ *   LOW-PRIORITY (fallback) — the last "= VALUE" assignment in the last step.
+ *   Used only when no conclusion keyword is present. We take the LAST step's
+ *   last numeric assignment, not every intermediate "a = 9.8" across all steps,
+ *   to avoid treating setup constants as final answers.
+ *
+ * Returns { highPri: [{value, display}], lastEq: {value, display} | null }.
+ */
+const extractSolveStepResults = (solveSteps) => {
+    const NUM_TOKEN_SRC = '(-?\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?(?:\\s*[×x\\*]\\s*10[⁰¹²³⁴⁵⁶⁷⁸⁹⁻\\-\\d]+)?)';
+
+    // High-priority: conclusion keywords anywhere across all steps
+    const allText = solveSteps.map(s => String(s || "")).join(" ");
+    const conclusionRe = new RegExp(
+        `\\b(?:therefore|thus|hence|the\\s+(?:correct\\s+)?(?:answer|result|value)\\s+is|gives?|yields?|equals?)\\s*(?:is|are|=)?\\s*${NUM_TOKEN_SRC}`,
+        'gi'
+    );
+    const highPri = [];
+    for (const m of allText.matchAll(conclusionRe)) {
+        const v = parseNumericWithSuperscript(m[1]);
+        if (Number.isFinite(v)) highPri.push({ value: v, display: m[1].trim() });
+    }
+
+    // Low-priority fallback: last "= VALUE" in the last step only
+    const lastStepText = String(solveSteps[solveSteps.length - 1] || "");
+    const eqRe = new RegExp(`=${NUM_TOKEN_SRC}`, 'g');
+    let lastEq = null;
+    for (const m of lastStepText.matchAll(eqRe)) {
+        const v = parseNumericWithSuperscript(m[1]);
+        if (Number.isFinite(v)) lastEq = { value: v, display: m[1].trim() };
+    }
+
+    return { highPri, lastEq };
+};
+
+/**
+ * Returns true if `computed` is close enough (within 2 % or 0.05 absolute)
+ * to any of the provided numeric option values.
+ */
+const computedMatchesAnyOption = (computed, optionNumerics) => {
+    const tol = Math.max(0.05, Math.abs(computed) * 0.02);
+    return optionNumerics.some(n => Number.isFinite(n) && Math.abs(n - computed) <= tol);
+};
+
+const assertSolveStepsConsistency = ({ _solveSteps, options, correctIndex }) => {
+    if (!Array.isArray(_solveSteps) || !_solveSteps.length) return;
+
+    const marked = options[correctIndex];
+    const markedNumeric = parseNumber(marked);
+    if (!Number.isFinite(markedNumeric)) return;
+
+    const optionNumerics = options.map(o => parseNumber(o));
+    const { highPri, lastEq } = extractSolveStepResults(_solveSteps);
+
+    // Pick best candidate: conclusion keywords beat last-step fallback
+    const candidate = highPri.length ? highPri[highPri.length - 1] : lastEq;
+    if (!candidate) return;
+
+    const tol = Math.max(0.05, Math.abs(candidate.value) * 0.02);
+    const markedMatchesCandidate = Math.abs(markedNumeric - candidate.value) <= tol;
+
+    // --- Failure A: candidate matches a DIFFERENT option (wrong key) ---
+    if (!markedMatchesCandidate) {
+        const matchesOther = options.some((opt, idx) => {
+            if (idx === correctIndex) return false;
+            const n = parseNumber(opt);
+            return Number.isFinite(n) && Math.abs(n - candidate.value) <= tol;
+        });
+        if (matchesOther) {
+            throw new Error(
+                `Solve steps compute ${candidate.display} but marked answer is ${marked} — wrong option marked`
+            );
+        }
+    }
+
+    // --- Failure B: candidate (high-priority only) differs from marked by > 15%
+    //     and doesn't match any option — calculation doesn't support the key ---
+    if (!markedMatchesCandidate && highPri.length &&
+        !computedMatchesAnyOption(candidate.value, optionNumerics)) {
+        const relDiff = markedNumeric !== 0
+            ? Math.abs(candidate.value - markedNumeric) / Math.abs(markedNumeric)
+            : Math.abs(candidate.value);
+        if (relDiff > 0.15 && Math.abs(candidate.value - markedNumeric) > 1) {
+            throw new Error(
+                `Solve steps compute ${candidate.display} but marked answer is ${marked} — calculation does not match any option`
+            );
+        }
+    }
+
+    // --- Failure C: explicit "therefore/thus/hence NUMBER" != marked ---
+    const allText = _solveSteps.map(s => String(s || "")).join(" ");
+    const NUM_TOKEN_SRC = '(-?\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?(?:\\s*[×x\\*]\\s*10[⁰¹²³⁴⁵⁶⁷⁸⁹⁻\\-\\d]+)?)';
+    const conclusionRe = new RegExp(
+        `\\b(?:therefore|thus|hence)\\s*(?:the\\s+(?:correct\\s+)?(?:answer|result|value)\\s+is\\s+)?${NUM_TOKEN_SRC}`,
+        'gi'
+    );
+    for (const m of allText.matchAll(conclusionRe)) {
+        const asserted = parseNumericWithSuperscript(m[1]);
+        if (!Number.isFinite(asserted)) continue;
+        const assertTol = Math.max(0.05, Math.abs(asserted) * 0.02);
+        if (Math.abs(asserted - markedNumeric) > assertTol &&
+            computedMatchesAnyOption(asserted, optionNumerics)) {
+            throw new Error(
+                `Solve steps assert "${m[1].trim()}" via conclusion keyword but marked answer is ${marked}`
+            );
+        }
+    }
+};
+
+const assertBuiltMcqConsistency = ({ questionText, options, correctIndex, explanation, _solveSteps }) => {
     const marked = options[correctIndex];
     if (!marked) throw new Error("Missing marked option");
 
@@ -645,6 +784,9 @@ const assertBuiltMcqConsistency = ({ questionText, options, correctIndex, explan
             }
         }
     }
+
+    // NEW: Deep validation of solve steps before explanation text checks
+    assertSolveStepsConsistency({ _solveSteps, options, correctIndex });
 
     const tail = String(explanation || "").slice(-220);
     const bodyBeforeTherefore = String(explanation || "").split(/\bTherefore\b/i)[0] || "";

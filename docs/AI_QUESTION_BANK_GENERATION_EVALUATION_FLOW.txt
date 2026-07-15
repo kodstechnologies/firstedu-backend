@@ -440,7 +440,18 @@ FILE: firstedu-backend/src/services/questionSolveFirst.service.js
             corrupting non-STEM text-answer options into chemistry
             notation whenever one happened to contain "sp".
         lockExplanationToMarkedOption()     — numbered Step 1: Step 2: ...
-        assertBuiltMcqConsistency()
+        assertBuiltMcqConsistency()         — validates answer-explanation consistency
+          → NEW (2026-07-15): assertSolveStepsConsistency() performs deep
+            validation of ALL intermediate computed values in _solveSteps
+            against the marked answer, catching the "computes X, marks Y"
+            failure mode where LLM solves correctly but marks wrong option.
+            Extracts equations (v₂ = 8, P₂ = 170000), result statements
+            (therefore k = 3), and verifies the final computed value matches
+            the marked option within tolerance. Also detects contradictory
+            intermediate calculations (k² = 11 followed by k = 3 instead of
+            k ≈ 3.317). Questions failing this check are thrown to the repair
+            queue instead of being built with wrong answer keys.
+        assertGenerationCorrectness()
         Sets: questionText, options, correctIndex, explanation,
               _solveSteps, _conceptSlot
 
