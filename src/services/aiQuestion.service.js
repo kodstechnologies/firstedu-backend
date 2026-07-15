@@ -206,6 +206,7 @@ import {
     CLAUDE_TEXT_MODEL_OPTIONS,
     getClaudeTextModelOptions,
     resolveClaudeTextModel,
+    claudeModelSupportsTemperature,
 } from "./claudeTextModels.js";
 import {
     assertGenerationProviderConfigured,
@@ -4114,10 +4115,17 @@ export const generateQuestionBankSuggestions = async (params) => {
         };
 
         let chunkResults;
+        // Parallel chunking is normally off for exam-calibrated (JEE/NEET) banks
+        // because sequential runs thread used-topics/archetypes forward so later
+        // chunks don't repeat earlier ones. But when the topic plan is pre-locked
+        // (presetSteering), each chunk already owns a DISTINCT slice of topics
+        // (sliceChunkPresetSteering), so there's no cross-chunk overlap to guard
+        // against — making parallel generation safe even for exam-calibrated banks.
+        const topicsPreAssigned = Boolean(presetSteering?.slotPlans?.length);
         const useParallelChunks =
             countChunks.length > 1 &&
             isParallelChunkGenerationEnabled() &&
-            !difficultyResolution?.examCalibrated;
+            (!difficultyResolution?.examCalibrated || topicsPreAssigned);
 
         if (useParallelChunks) {
             pipelineTrace("PARALLEL_CHUNK_GENERATION", {
@@ -4759,7 +4767,10 @@ const CLAUDE_QB_MAX_OUTPUT_TOKENS = Math.max(
 );
 const CLAUDE_REQUEST_TIMEOUT_MS = Math.max(
     30_000,
-    Number(process.env.CLAUDE_REQUEST_TIMEOUT_MS) || 120_000
+    // Claude Sonnet 5 generates ~45 tok/s, so a full batch can take several
+    // minutes — 120s default caused constant timeouts. Default now 5 min;
+    // override with CLAUDE_REQUEST_TIMEOUT_MS in .env.
+    Number(process.env.CLAUDE_REQUEST_TIMEOUT_MS) || 300_000
 );
 
 const claudeTextModel = () => resolveClaudeTextModel();
@@ -5034,6 +5045,30 @@ const callOpenAIChatForJson = async (prompt, { model: modelOverride } = {}) => {
     }
 };
 
+/**
+ * Build the Anthropic Messages request body.
+ * - `temperature` is only included for models that still accept it — newer
+ *   models (Sonnet 5, Opus 4.8) deprecated the param and reject it.
+ * - Extended thinking is DISABLED: Sonnet 5 runs thinking by default, and
+ *   thinking tokens count against max_tokens. Left on, it burned ~15k of the
+ *   16k budget reasoning and returned an empty/truncated answer ("Claude
+ *   returned empty response"). Disabling it made generation ~20x faster and
+ *   reliable — we need JSON questions, not a reasoning trace.
+ */
+const buildClaudeMessagesBody = (prompt, { temperature, model } = {}) => {
+    const resolvedModel = resolveClaudeTextModel(model);
+    const body = {
+        model: resolvedModel,
+        max_tokens: CLAUDE_QB_MAX_OUTPUT_TOKENS,
+        thinking: { type: "disabled" },
+        messages: [{ role: "user", content: prompt }],
+    };
+    if (claudeModelSupportsTemperature(resolvedModel)) {
+        body.temperature = temperature ?? CLAUDE_QB_GENERATION_TEMPERATURE;
+    }
+    return body;
+};
+
 const callClaudeChatForJson = async (prompt, { temperature, model } = {}) => {
     const apiKey = getAnthropicApiKey();
     if (!apiKey) {
@@ -5043,14 +5078,7 @@ const callClaudeChatForJson = async (prompt, { temperature, model } = {}) => {
     return callClaudeWithRetries(async () => {
         const response = await axios.post(
             ANTHROPIC_MESSAGES_URL,
-            {
-                model: resolveClaudeTextModel(model),
-                max_tokens: CLAUDE_QB_MAX_OUTPUT_TOKENS,
-                temperature:
-                    temperature ??
-                    CLAUDE_QB_GENERATION_TEMPERATURE,
-                messages: [{ role: "user", content: prompt }],
-            },
+            buildClaudeMessagesBody(prompt, { temperature, model }),
             {
                 headers: getAnthropicRequestHeaders(apiKey),
                 timeout: CLAUDE_REQUEST_TIMEOUT_MS,
@@ -5077,14 +5105,7 @@ const callClaudeChatForText = async (
     return callClaudeWithRetries(async () => {
         const response = await axios.post(
             ANTHROPIC_MESSAGES_URL,
-            {
-                model: resolveClaudeTextModel(model),
-                max_tokens: CLAUDE_QB_MAX_OUTPUT_TOKENS,
-                temperature:
-                    temperature ??
-                    CLAUDE_QB_GENERATION_TEMPERATURE,
-                messages: [{ role: "user", content: prompt }],
-            },
+            buildClaudeMessagesBody(prompt, { temperature, model }),
             {
                 headers: getAnthropicRequestHeaders(apiKey),
                 timeout: CLAUDE_REQUEST_TIMEOUT_MS,
