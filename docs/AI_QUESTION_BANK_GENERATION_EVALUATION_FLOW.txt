@@ -1,8 +1,18 @@
 ================================================================================
 FIRSTEDU — AI QUESTION BANK: GENERATION → EVALUATION → REGENERATION
 Full pipeline map (functions, files, LLM calls, scores)
-Updated: 2026-07-13
+Updated: 2026-07-16
 ================================================================================
+
+NOTE ON THE 2026-07-16 REVISION: added the per-slot QUESTION-KIND COMPOSITION
+feature — the planner now tags every concept slot with one of three kinds
+(theory / direct / multi_concept) and sets the mix per real-paper norms for the
+detected exam, so a bank is no longer 100% peak-hard calculative. See the new
+PART N for the full taxonomy, threading, and kind-aware gate behavior. Inline
+touchpoints updated: PART F1 (planner prompt), PART F2/G
+(buildBatchArchetypeGuidanceBlock), PART G (validateHardQuestionMandate +
+questionKind), PART H/J (difficulty audits are kind-aware), and the topic-plan
+step now fetches fetchExamReferenceBrief() to ground the composition.
 
 NOTE ON THIS REVISION: the 2026-07-06 version of this document described a
 "STEM-only solve-first" design that was never actually merged into the code
@@ -353,14 +363,18 @@ FILE: firstedu-backend/src/services/conceptArchetypePlanner.service.js
 
   resolveConceptArchetypeSteering(params, { callLlm })
     TRY:
-      buildArchetypePlanningPrompt()
+      buildArchetypePlanningPrompt()   — now also asks the model to set the
+        QUESTION-KIND COMPOSITION (theory/direct/multi_concept per real-paper
+        norms) and tag every slot's questionKind. Accepts optional
+        examReferenceBlock to ground the mix. See PART N.
       callLlm() → callQuestionBankGenerationLLM()
-      parseArchetypePlanResponse()
-      Returns: { conceptSlots[], slotPlans[], source: "ai" }
+      parseArchetypePlanResponse()     — carries slotPlans[].questionKind
+      Returns: { conceptSlots[], slotPlans[] (each with questionKind), source: "ai" }
     CATCH / disabled:
       buildFallbackSteering()
         allocateRankedConceptSlots()        [conceptArchetypeGuidance.service.js]
         getArchetypeBlueprint() per slot
+        + assigns questionKind per slot to match DEFAULT_COMPOSITION (PART N)
       Returns: { source: "catalog" | "catalog_fallback" }
 
 STEP F2 — BUILD SKELETON PROMPT
@@ -453,7 +467,9 @@ FILE: firstedu-backend/src/services/questionSolveFirst.service.js
             queue instead of being built with wrong answer keys.
         assertGenerationCorrectness()
         Sets: questionText, options, correctIndex, explanation,
-              _solveSteps, _conceptSlot
+              _solveSteps, _conceptSlot, _questionKind
+              (_questionKind stamped from the slot's kind — PART N — and read by
+               the kind-aware hard gate + difficulty audits downstream)
 
   MAX_SKELETON_REPAIR_CALLS_PER_BATCH (default 4, env
   AI_QB_MAX_SKELETON_REPAIR_CALLS) caps per-skeleton repair LLM calls per
@@ -518,10 +534,15 @@ FILE: firstedu-backend/src/services/hardQuestionMandate.service.js
     section (no per-subsection signal available here) — QA still gets
     correctly-typed numeric answers (see nonStemAnswerTypeBlock in PART F),
     it just uses the generic rigor check rather than concept clusters.
-  validateHardSkeletonMandate(skeleton, tier, { examCalibrated, examProfile, subject })
-  validateHardQuestionMandate(q, { assignedTier, examCalibrated, examProfile, subject })
-  detectHardMandateIssues(q, { assignedTier, examCalibrated, examProfile, subject })
-  countConceptClusters(), detectDirectSubstitution() — STEM-only path, unchanged
+  validateHardSkeletonMandate(skeleton, tier, { examCalibrated, examProfile, subject, questionKind })
+  validateHardQuestionMandate(q, { assignedTier, examCalibrated, examProfile, subject, questionKind })
+    KIND-AWARE (PART N): questionKind "theory" → reasoning-depth-only check
+    (no numeric givens / solve-step gates); "direct" → gate SKIPPED entirely
+    (single-formula is legitimate; correctness still enforced by numeric-verify
+    + correctness audits); "multi_concept"/absent → full STEM gauntlet below.
+    Kind is read from the arg or q._questionKind (stamped in buildMcqFromSkeleton).
+  detectHardMandateIssues(q, { assignedTier, examCalibrated, examProfile, subject, questionKind })
+  countConceptClusters(), detectDirectSubstitution() — STEM multi_concept path, unchanged
 
 
 ================================================================================
@@ -684,13 +705,21 @@ CORRECTNESS PRE-AUDIT
 
 DIFFICULTY PRE-AUDIT
   difficultyPreAudit.service.js        → runDeterministicDifficultyAudit()
-                                       → detectTooEasyForTier()
+                                       → detectTooEasyForTier()  [KIND-AWARE:
+                                          returns null for questionKind
+                                          "theory"/"direct" so single-step /
+                                          conceptual items aren't stripped as
+                                          "too easy" — PART N]
                                        → scoreReasoningDepth()
                                        → INITIAL_GEN_DIFFICULTY_MATCH_TARGET
 
 DIFFICULTY SELF-AUDIT (LLM)
   difficultySelfAudit.service.js       → applySkeletonDifficultySelfAuditGate()
                                        → applyDifficultySelfAuditGate()
+                                          [KIND-AWARE: theory/direct items are
+                                           annotated in the audit prompt so they
+                                           aren't scored against multi-step
+                                           numerical rubrics — PART N]
 
 TARGETED REGENERATION
   regenerationTargeting.service.js     → resolveTargetedRegenerationCounts()
@@ -817,8 +846,12 @@ aiQuestion.controller.js
 
 aiQuestion.service.js
   generateQuestionBankSuggestions
+  planQuestionBankTopics             (topic-plan step; returns includedTopics
+                                      with questionKind + kindRatio; fetches
+                                      fetchExamReferenceBrief for grounding — PART N)
+  summarizeKindComposition           (internal — theory/direct/multi counts, PART N)
   generateQuestionBankBatch          (internal)
-  generateSolveFirstSingles          (internal)
+  generateSolveFirstSingles          (internal — builds kindBySlot, PART N)
   finalizeQuestionBankSuggestions    (internal)
   validateQuestionTopicRelevance
   callQuestionBankGenerationLLM      (internal)
@@ -845,16 +878,19 @@ referencePaperLibrary.service.js
 
 conceptArchetypePlanner.service.js
   isAiArchetypeSteeringEnabled
-  buildArchetypePlanningPrompt
+  normalizeQuestionKind              (NEW — theory/direct/multi_concept, PART N)
+  QUESTION_KINDS                     (NEW export)
+  DEFAULT_COMPOSITION / getDefaultComposition / compositionToCounts (NEW, PART N)
+  buildArchetypePlanningPrompt       (+ composition block, + examReferenceBlock)
   parseArchetypePlanResponse
-  resolveConceptArchetypeSteering
-  buildFallbackSteering              (internal)
+  resolveConceptArchetypeSteering    (+ examReferenceBlock param)
+  buildFallbackSteering              (internal — now kind-allocating)
 
 conceptArchetypeGuidance.service.js
   allocateRankedConceptSlots         (non-STEM → generic numbered slots, not chemistry)
   getArchetypeBlueprint
   getSubjectLabelForArchetypes       (non-STEM → subject string, not "Chemistry")
-  buildBatchArchetypeGuidanceBlock
+  buildBatchArchetypeGuidanceBlock   (+ per-kind THEORY/DIRECT/MULTI blocks, PART N)
   buildBankArchetypeExcludeBlock
   buildSubjectArchetypeSelectionBlock
   buildJeeHardStemAuthoringBlock
@@ -866,9 +902,11 @@ questionSolveFirst.service.js
   allocateConceptSlots
   buildSolveFirstSkeletonPrompt      (+ nonStemExamRulesBlock, nonStemAnswerTypeBlock)
   parseSolveFirstSkeletons
-  skeletonsToQuestions               (+ examProfile/subject threaded through)
+  skeletonsToQuestions               (+ examProfile/subject/kindBySlot threaded;
+                                        stamps sk.questionKind — PART N)
   buildMcqFromSkeleton               (+ finalAnswer.type "text" path,
-                                        fixed hybridization false-positive)
+                                        fixed hybridization false-positive,
+                                        + sets built._questionKind — PART N)
   buildTextDistractors               (internal)
   sanitizeQuestionStemEmbeddedOptions
 
@@ -903,14 +941,20 @@ correctnessPreAudit.service.js
 
 difficultyPreAudit.service.js
   runDeterministicDifficultyAudit    (+ subject param, threaded to detectHardMandateIssues)
-  detectHardMandateIssues            (+ examProfile/subject forwarded)
+  detectTooEasyForTier               (KIND-AWARE — null for theory/direct, PART N)
   INITIAL_GEN_DIFFICULTY_MATCH_TARGET
+
+difficultySelfAudit.service.js
+  applySkeletonDifficultySelfAuditGate (+ kindSlots in ctx — PART N)
+  applyDifficultySelfAuditGate
+  formatQuestionForAudit             (annotates THEORY/DIRECT items — PART N)
 
 hardQuestionMandate.service.js
   isStemProfile                      (NEW — see PART G)
   NON_STEM_HARD_MIN_SOLVE_STEPS      (NEW constant, default 2)
-  validateHardSkeletonMandate
-  validateHardQuestionMandate
+  validateHardSkeletonMandate        (+ questionKind — theory/direct branches)
+  validateHardQuestionMandate        (+ questionKind — theory/direct branches, PART N)
+  detectHardMandateIssues            (+ questionKind forwarded)
   buildHardQuestionMandateBlock
 
 questionNumericVerify.service.js
@@ -928,6 +972,98 @@ aiSuggestion.utils.js (frontend)
   resolveGenerateIntentFromEvaluation
   buildTopicRelevanceFeedbackPayload
   GENERATE_INTENTS
+
+
+================================================================================
+PART N — QUESTION-KIND COMPOSITION (theory / direct / multi_concept)
+================================================================================
+
+WHY: real papers are not 100% peak-hard calculative. A JEE Main paper is roughly
+a few pure-theory conceptual items, a bulk of direct single-formula numericals,
+and a tail of multi-step multi-concept problems. Before this feature every slot
+was authored as peak-hard calculative (the hard mandate actively BANNED
+single-formula items), so banks came out all-calculative. Now the AI determines
+the realistic mix per exam and tags each slot; generation + the difficulty/hard
+gates are kind-aware so each kind is authored and kept correctly.
+
+THE TAXONOMY (questionKind — one per slot)
+------------------------------------------
+  theory        — pure conceptual / qualitative: assertion-reason,
+                  statement-correctness, match-column, mechanism/definition
+                  discrimination. NO numeric givens, NO solve steps.
+  direct        — direct single-formula / single-concept numerical MCQ; one
+                  clean ~1–2 step solve. A single-formula item is CORRECT here.
+  multi_concept — moderate/multi-step, ≥2 fused concepts, ≥3 solve steps.
+                  This is the legacy "calculative" peak-hard behavior and the
+                  default when questionKind is absent (back-compat: a legacy
+                  "calculative" tag also maps here).
+
+WHERE THE MIX IS DECIDED
+------------------------
+FILE: conceptArchetypePlanner.service.js
+  DEFAULT_COMPOSITION            — per-exam {theory,direct,multi_concept}
+    fractions (e.g. jee_main 0.12/0.5/0.38, neet 0.3/0.45/0.25, board
+    0.35/0.4/0.25) + CAT_SECTION_COMPOSITION overrides (varc/qa/dilr).
+  getDefaultComposition(), compositionToCounts()  — resolve + integer split.
+  normalizeQuestionKind(raw)     — maps aliases → the 3 values; unknown →
+    multi_concept.
+  buildArchetypePlanningPrompt() — emits the composition block: "determine the
+    mix from authentic recent papers, tag every slot's questionKind, author
+    pattern/required/banned per kind." JSON example shows all three kinds.
+    Accepts examReferenceBlock (AI-researched, web-grounded — see below) to
+    ground the mix. Planning rules 2 & 4 are now per-kind (not "all hard").
+  buildFallbackSteering()        — when AI steering is off/failed, assigns kinds
+    deterministically across slots to match DEFAULT_COMPOSITION, with
+    theory/direct catalog-free blueprints.
+
+GROUNDING ON REAL PAPERS (no fed-in data)
+-----------------------------------------
+  planQuestionBankTopics() [aiQuestion.service.js] now calls
+  fetchExamReferenceBrief() [examReferenceResearch.service.js — googleSearch,
+  cached ~1h] and passes the brief into resolveConceptArchetypeSteering as
+  examReferenceBlock. This is the AI researching real papers, not us feeding a
+  dataset. Never throws (falls back to the static brief); when unavailable the
+  planner relies on model knowledge + DEFAULT_COMPOSITION.
+
+HOW THE KIND FLOWS TO GENERATION + GATES
+----------------------------------------
+  slotPlans[].questionKind  (planner)
+    → includedTopics[].questionKind + kindRatio/meta.kindRatio
+        (planQuestionBankTopics → summarizeKindComposition; shown in the
+         reviewer's topic-plan UI, PART B frontend)
+    → echoed back on confirm as presetSteering.slotPlans (unchanged round-trip)
+    → generateSolveFirstSingles builds kindBySlot {conceptSlot → kind}
+    → buildBatchArchetypeGuidanceBlock() [conceptArchetypeGuidance.service.js]
+        emits a per-slot THEORY / DIRECT / MULTI_CONCEPT authoring block +
+        per-kind footer rules
+    → skeletonsToQuestions() stamps sk.questionKind (from kindBySlot/kindSlots)
+    → buildMcqFromSkeleton() sets built._questionKind
+    → validateHardSkeletonMandate / validateHardQuestionMandate (kind-aware,
+        PART G) + detectTooEasyForTier + difficultySelfAudit (kind-aware, PART J)
+
+KIND → GATE BEHAVIOR (summary)
+------------------------------
+  theory        : hard gate = reasoning-depth only; difficulty pre-audit
+                  skipped; self-audit annotated conceptual.
+  direct        : hard gate SKIPPED (single-formula legitimate); difficulty
+                  pre-audit skipped; self-audit annotated direct. Correctness
+                  (numeric-verify + correctness pre-audit) still fully applies.
+  multi_concept : unchanged — full STEM hard gauntlet + difficulty audits.
+
+FRONTEND (-firstedu-frontend/.../AiSuggestionModal.jsx)
+-------------------------------------------------------
+  renderKindBadge() — Theory (sky) / Direct (amber) / Multi (emerald) chip per
+    topic in both the kept and set-aside lists.
+  Header "Mix:" line shows live theory/direct/multi counts of the KEPT topics
+    (recomputed as the reviewer curates). Curating (keep/set-aside) is how the
+    reviewer adjusts the mix; the kept slotPlans (with questionKind) drive
+    generation.
+
+ENV / BACK-COMPAT
+-----------------
+  AI_QB_ARCHETYPE_STEERING=0 → static-catalog fallback still applies the
+    composition via DEFAULT_COMPOSITION. Any slot/plan without questionKind
+    behaves as multi_concept (i.e. exactly the pre-feature peak-hard path).
 
 
 ================================================================================

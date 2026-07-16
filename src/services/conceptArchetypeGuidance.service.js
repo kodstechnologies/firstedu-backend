@@ -772,6 +772,26 @@ export const buildBatchArchetypeGuidanceBlock = ({
         const slotTitle = plan?.label
             ? `${slot} (${plan.label})`
             : slot;
+        const kind = plan?.questionKind || "multi_concept";
+        if (kind === "theory") {
+            // Theory slot: conceptual/assertion-reason — hard via concept depth and
+            // close distractors, NOT numeric givens or solve-step count.
+            return `**Slot ${n} [${tier}] — ${slotTitle} · THEORY (conceptual, no computation):**
+- Pattern: ${bp?.pattern || "Assertion–reason / statement-correctness item probing deep understanding."}
+- Required: ${bp?.required || "Discriminate close concepts; correctness hinges on understanding, not a formula."}
+${bp?.conceptFusion ? `- **Concept fusion:** ${bp.conceptFusion}` : ""}
+- Banned: ${bp?.banned || "Any numeric given or single-formula solve; trivially-true restatement."}
+- **No numeric givens, no solveSteps requirement** — difficulty comes from subtle distractors and concept depth.${bp?.stemHint ? `\n- Stem shape: ${bp.stemHint}` : ""}`;
+        }
+        if (kind === "direct") {
+            // Direct slot: one clean single-formula / single-concept numerical MCQ.
+            // A single-step solve is CORRECT here — do NOT force multi-step fusion.
+            return `**Slot ${n} [${tier}] — ${slotTitle} · DIRECT (single-formula numerical):**
+- Pattern: ${bp?.pattern || "Direct application of one formula/concept — a clean ~1–2 step numerical MCQ."}
+- Required: ${bp?.required || "One formula/concept, clear numeric answer among the options; state units."}
+- Banned: ${bp?.banned || "Multi-concept fusion, ≥3-step derivations, or contrived linked setups."}
+- **One direct solve is fine** — do NOT force ≥3 solve steps or concept fusion; keep it a genuine (not trick) single-step item.${bp?.stemHint ? `\n- Stem shape: ${bp.stemHint}` : ""}`;
+        }
         if (!bp) {
             return `**Slot ${n} [${tier}] — ${slotTitle}${proneTag}:** Multi-condition stem, ≥4 solve steps, no formula drill.`;
         }
@@ -784,6 +804,10 @@ ${redirect ? `- **Choose HARD (not easy):** ${redirect.hard}\n- **Reject easy te
 ${bp.stemHint ? `- Stem shape: ${bp.stemHint}` : ""}`;
     });
 
+    const kindOf = (slot) => planBySlot.get(slot)?.questionKind || "multi_concept";
+    const hasTheorySlot = conceptSlots.some((slot) => kindOf(slot) === "theory");
+    const hasDirectSlot = conceptSlots.some((slot) => kindOf(slot) === "direct");
+
     const examLabel =
         examProfile === "jee_advanced" ? "JEE Advanced" : "JEE Main shift-paper";
 
@@ -792,13 +816,31 @@ ${bp.stemHint ? `- Stem shape: ${bp.stemHint}` : ""}`;
         : "Blueprints below use the subject archetype catalog — follow each slot exactly.";
 
     return `
-**AUTHORING BLUEPRINT — one hard ${examLabel} question per slot (${steeringNote}):**
+**AUTHORING BLUEPRINT — one ${examLabel} question per slot, matching each slot's kind (${steeringNote}):**
 ${blocks.join("\n\n")}
 
-**Universal hard-tier rules (every slot):**
+**Rules for MULTI_CONCEPT slots (default / peak-hard):**
 - Stem: 3–4 sentences, ≥2 numerical givens with units, **≥2 linked concepts**, constraint before the ask.
 - solveSteps: **≥3** solving steps, **≥4** substantive derivation lines; no direct substitution; last sentence = finalAnswer.display.
-- Never write chapter-test / NCERT drill / single-formula plug-ins.`;
+- Never write chapter-test / NCERT drill / single-formula plug-ins.${
+        hasDirectSlot
+            ? `
+
+**Rules for DIRECT slots (marked "DIRECT" above):**
+- A **single formula/concept applied in ~1–2 steps is CORRECT** — do NOT force ≥3 solve steps or concept fusion.
+- Still a real numerical MCQ: state units, compute the answer, and make it appear among the options.
+- Keep it genuine (not a trick); these are the routine items that make up the bulk of a real paper.`
+            : ""
+    }${
+        hasTheorySlot
+            ? `
+
+**Rules for THEORY slots (marked "THEORY" above):**
+- Do **not** force numeric givens or a solveSteps count — a theory item may have none.
+- Difficulty must come from **conceptual depth and close, plausible distractors** (assertion–reason, statement analysis, mechanism/definition discrimination).
+- Reject anything that is a single trivially-true fact restated as the answer.`
+            : ""
+    }`;
 };
 
 export const buildJeeHardStemAuthoringBlock = (examProfile = "jee_main") => {

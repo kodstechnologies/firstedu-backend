@@ -251,6 +251,13 @@ export const detectTooEasyForTier = (
     const tier = normalizeQuestionTier(assignedTier) || "medium";
     const bank = normalizeBankDifficulty(bankDifficulty);
     const stem = String(q.questionText || q.text || "").trim();
+    // Theory (conceptual) and direct (single-formula numerical) items are not
+    // peak-hard drills — the too-easy templates, multi-step-marker requirement, and
+    // solve-step count all assume multi-step computation and would wrongly strip
+    // valid theory/direct questions. A direct item is *meant* to be single-step;
+    // theory has no computation. multi_concept keeps the full checks below.
+    const kind = String(q._questionKind || q.questionKind || "").toLowerCase();
+    if (kind === "theory" || kind === "direct") return null;
     const profile = String(examProfile || "competitive").toLowerCase();
     const isJee =
         profile === "jee_main" ||
@@ -439,6 +446,7 @@ export const stripDifficultyFlawedQuestionBankEntries = (
             ...e.auditItem,
             difficultyTier: tier,
             _solveSteps: q._solveSteps,
+            _questionKind: q._questionKind || q.questionKind,
         };
     });
 

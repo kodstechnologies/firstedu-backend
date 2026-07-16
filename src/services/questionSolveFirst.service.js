@@ -1042,6 +1042,7 @@ export const buildMcqFromSkeleton = (
         _conceptSlot:
             String(assignedConceptSlot || skeleton.conceptSlot || "").trim() ||
             undefined,
+        _questionKind: skeleton.questionKind || undefined,
     };
 
     assertBuiltMcqConsistency(built);
@@ -1083,6 +1084,9 @@ export const skeletonsToQuestions = async (
     const callRepairLlm = repairDeps?.callLlm;
     const examProfile = repairDeps?.examProfile || "jee_main";
     const subject = repairDeps?.subject || "";
+    const kindBySlot = repairDeps?.kindBySlot || {};
+    const kindForSlot = (slot) =>
+        kindBySlot[String(slot || "").trim()] || "calculative";
     const repairOnFail =
         repairDeps?.repairOnFail !== false && isMandateRepairEnabled();
     const questions = [];
@@ -1111,6 +1115,9 @@ export const skeletonsToQuestions = async (
         const sk = skeletons[i];
         const assignedTier = tierSlots[i] || sk.difficultyTier || "medium";
         const assignedSlot = String(conceptSlots[i] || sk.conceptSlot || "").trim();
+        // Tag the skeleton with its planned kind so the hard gate and the built MCQ
+        // both know whether numeric-depth checks apply (calculative) or not (theory).
+        if (!sk.questionKind) sk.questionKind = kindForSlot(assignedSlot);
         const stemPreview = String(sk.stem || "").trim();
 
         if (

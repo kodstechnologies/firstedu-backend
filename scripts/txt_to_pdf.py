@@ -2,10 +2,9 @@
 """
 txt_to_pdf.py — Convert exam-question .txt files into a formatted PDF.
 
-Expects each input .txt file to contain questions in this format
-(the "[difficulty]" tag and "Type:" line are both optional — Type
-defaults to "single" if omitted):
+Supports TWO input formats automatically:
 
+FORMAT 1 — generator/spec format (original):
     Question 1 [medium]
     Type: single
     Stem: What is the capital of France?
@@ -16,36 +15,27 @@ defaults to "single" if omitted):
     Correct: C
     Explanation: Paris has been the capital of France since ...
 
-Supports single, multiple (2 correct answers), and true_false question
-types. For "multiple", give a comma-separated answer key:
+FORMAT 2 — confirmed-questions log format:
+    --- Question 1 ---
+    <stem text on the next line(s) until options appear>
 
-    Question 2 [hard]
-    Type: multiple
-    Stem: Select all that apply. Which of these are noble gases?
-      A. Helium
-      B. Nitrogen
-      C. Argon
-      D. Oxygen
-    Correct: A, C
-    Explanation: Helium and argon are noble gases; nitrogen and oxygen are not.
+    A) Berlin
+    B) Madrid
+    C) Paris
+    D) Rome
 
-true_false questions just use 2 options (A/B) instead of 4.
+    Correct: C
+    Explanation: Paris has been the capital of France since ...
 
-Everything after a line starting with "Raw JSON" or a line of "===="
-is ignored, so you can feed it the full raw generator output (including
-the trailing JSON dump) without cleaning it up first.
-
-Each input file becomes its own section in the output PDF, titled using
-the first line of the file (or the filename if that fails).
+Both formats support single / multiple / true_false question types.
+For "multiple" (2 correct answers) use a comma-separated key: "Correct: A, C"
 
 USAGE
 -----
     python txt_to_pdf.py chemistry.txt physics.txt maths.txt \
         -o exam_paper.pdf -t "JEE Advanced — Full Sample Paper"
 
-    python txt_to_pdf.py gs_paper1.txt -o upsc.pdf -t "UPSC Prelims Paper I"
-
-Requires: reportlab   (pip install reportlab --break-system-packages)
+Requires: reportlab   (pip install reportlab)
 """
 
 import argparse
@@ -68,113 +58,176 @@ LETTERS = ["A", "B", "C", "D", "E", "F"]
 LETTER_TO_IDX = {L: i for i, L in enumerate(LETTERS)}
 
 # ---------------------------------------------------------------------------
-# Unicode font registration (so symbols like √ π α → ⇌ Σ ∫ render correctly)
+# Font registration
 # ---------------------------------------------------------------------------
 
 def register_fonts():
     candidates = [
         ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
          "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
-        ("C:/Windows/Fonts/arial.ttf", "C:/Windows/Fonts/arialbd.ttf"),
-        ("C:/Windows/Fonts/segoeui.ttf", "C:/Windows/Fonts/segoeuib.ttf"),
+        ("C:/Windows/Fonts/arial.ttf",    "C:/Windows/Fonts/arialbd.ttf"),
+        ("C:/Windows/Fonts/segoeui.ttf",  "C:/Windows/Fonts/segoeuib.ttf"),
     ]
     for regular, bold in candidates:
         if Path(regular).exists() and Path(bold).exists():
             pdfmetrics.registerFont(TTFont("Body", regular))
             pdfmetrics.registerFont(TTFont("Body-Bold", bold))
             return "Body", "Body-Bold"
-    # Fallback to built-in fonts (no exotic unicode support, but always works)
     return "Helvetica", "Helvetica-Bold"
 
 
 BASE_FONT, BOLD_FONT = register_fonts()
 
-# ---------------------------------------------------------------------------
-# Parsing
-# ---------------------------------------------------------------------------
-
-QUESTION_SPLIT_RE = re.compile(r'\n(?=Question\s+\d+\b)')
-STEM_RE = re.compile(r'Stem:\s*(.+?)\n\s*A\.', re.S)
-OPTION_RE = re.compile(r'^\s*([A-F])\.\s*(.+)$', re.M)
-# One or more letters after "Correct:" — "Correct: C" (single/true_false) or
-# "Correct: B, C" (multiple-correct, capped at 2 per the generation pipeline).
-CORRECT_RE = re.compile(r'Correct:\s*([A-F](?:\s*,\s*[A-F])*)')
-EXPLANATION_RE = re.compile(r'Explanation:\s*(.+)$', re.S)
-DIFFICULTY_RE = re.compile(r'Question\s+\d+\s*\[(\w+)\]')
-TYPE_RE = re.compile(r'Type:\s*(\S+)')
-
 TYPE_LABELS = {
-    "single": "Single Correct",
-    "multiple": "Multiple Correct",
-    "true_false": "True / False",
+    "single":    "Single Correct",
+    "multiple":  "Multiple Correct",
+    "true_false":"True / False",
     "connected": "Passage-Based",
 }
 
+# ---------------------------------------------------------------------------
+# Format detection & parsing
+# ---------------------------------------------------------------------------
 
-def strip_trailing_junk(text: str) -> str:
-    """Cut off anything after a 'Raw JSON' marker or a long '====' divider
-    that follows the last real question, so we don't try to parse JSON."""
-    cut_points = []
-    m = re.search(r'\n\s*Raw JSON', text)
+def detect_format(text):
+    """Return 'log' if the file uses --- Question N --- style, else 'spec'."""
+    if re.search(r'---\s*Question\s+\d+\s*---', text):
+        return 'log'
+    return 'spec'
+
+
+def strip_trailing_junk(text):
+    cut = []
+    m = re.search(r'\nRaw JSON', text)
     if m:
-        cut_points.append(m.start())
-    # A line of 20+ '=' characters that appears after at least one "Question"
-    for m in re.finditer(r'\n=+\s*\n', text):
+        cut.append(m.start())
+    for m in re.finditer(r'\n={20,}', text):
         if re.search(r'Question\s+\d+', text[:m.start()]):
-            cut_points.append(m.start())
+            cut.append(m.start())
             break
-    if cut_points:
-        text = text[:min(cut_points)]
-    return text
+    return text[:min(cut)] if cut else text
 
 
-def parse_questions(text: str):
+def _make_question(stem, options, correct_letters, explanation, qtype=None):
+    """Build the canonical question dict shared by both parsers."""
+    correct_indexes = [LETTER_TO_IDX[l] for l in correct_letters if l in LETTER_TO_IDX]
+    if not correct_indexes:
+        return None
+    if qtype is None:
+        if len(correct_indexes) > 1:
+            qtype = "multiple"
+        elif len(options) == 2:
+            qtype = "true_false"
+        else:
+            qtype = "single"
+    if qtype not in TYPE_LABELS:
+        qtype = "single"
+    return {
+        "q":         escape(stem),
+        "options":   [escape(o) for o in options],
+        "correct":   correct_indexes,
+        "exp":       escape(explanation),
+        "type":      qtype,
+    }
+
+
+# ---- FORMAT 1: spec format (Question N [diff] / Stem: / A. B. C.) ----------
+
+_SPEC_SPLIT    = re.compile(r'\n(?=Question\s+\d+\b)')
+_SPEC_STEM     = re.compile(r'Stem:\s*(.+?)\n\s*[A-F]\.', re.S)
+_SPEC_OPTION   = re.compile(r'^\s*([A-F])\.\s*(.+)$', re.M)
+_SPEC_CORRECT  = re.compile(r'Correct:\s*([A-F](?:\s*,\s*[A-F])*)')
+_SPEC_EXP      = re.compile(r'Explanation:\s*(.+)$', re.S)
+_SPEC_TYPE     = re.compile(r'Type:\s*(\S+)')
+
+
+def parse_spec(text):
     text = strip_trailing_junk(text)
-    blocks = QUESTION_SPLIT_RE.split(text.strip())
     questions = []
-    for block in blocks:
+    for block in _SPEC_SPLIT.split(text.strip()):
         if not re.match(r'Question\s+\d+\b', block):
             continue
-        stem_m = STEM_RE.search(block)
-        correct_m = CORRECT_RE.search(block)
+        stem_m    = _SPEC_STEM.search(block)
+        correct_m = _SPEC_CORRECT.search(block)
         if not stem_m or not correct_m:
-            continue  # skip malformed / incomplete blocks
-        stem = stem_m.group(1).strip()
-        options = [opt.strip() for _, opt in OPTION_RE.findall(block)]
-        correct_letters = [l.strip() for l in correct_m.group(1).split(',')]
-        correct_indexes = [LETTER_TO_IDX[l] for l in correct_letters if l in LETTER_TO_IDX]
-        if not correct_indexes:
-            continue  # malformed answer key, skip
-        exp_m = EXPLANATION_RE.search(block)
-        explanation = exp_m.group(1).strip() if exp_m else ""
-        diff_m = DIFFICULTY_RE.search(block)
-        difficulty = diff_m.group(1) if diff_m else None
-        type_m = TYPE_RE.search(block)
-        qtype = type_m.group(1).strip().lower() if type_m else "single"
-        if qtype not in TYPE_LABELS:
-            qtype = "single"
-        questions.append({
-            "q": escape(stem),
-            "options": [escape(o) for o in options],
-            "correct": correct_indexes,
-            "exp": escape(explanation),
-            "difficulty": difficulty,
-            "type": qtype,
-        })
+            continue
+        stem    = stem_m.group(1).strip()
+        options = [o.strip() for _, o in _SPEC_OPTION.findall(block)]
+        letters = [l.strip() for l in correct_m.group(1).split(',')]
+        exp_m   = _SPEC_EXP.search(block)
+        exp     = exp_m.group(1).strip() if exp_m else ""
+        type_m  = _SPEC_TYPE.search(block)
+        qtype   = type_m.group(1).strip().lower() if type_m else None
+        q = _make_question(stem, options, letters, exp, qtype)
+        if q:
+            questions.append(q)
     return questions
 
 
-def derive_section_title(file_path: Path, raw_text: str) -> str:
-    first_line = raw_text.strip().splitlines()[0].strip() if raw_text.strip() else ""
-    # If the file starts directly with a question (no descriptive header line),
-    # fall back to the filename instead of using the question text as a title.
-    looks_like_question = bool(re.match(r'Question\s+\d+\b', first_line))
-    if first_line and len(first_line) < 120 and not looks_like_question:
-        # e.g. "JEE Mains Full Paper — Chemistry" -> "Chemistry"
-        parts = re.split(r'\s+—\s+|\s+-\s+', first_line)
-        if len(parts) > 1:
-            return parts[-1].strip()
-        return first_line
+# ---- FORMAT 2: log format (--- Question N --- / A) B) C) D) style) ---------
+
+_LOG_SPLIT   = re.compile(r'(?=--- Question\s+\d+\s*---)')
+_LOG_OPTION  = re.compile(r'^\s*([A-F])\)\s*(.+)$', re.M)
+_LOG_CORRECT = re.compile(r'Correct:\s*([A-F](?:\s*,\s*[A-F])*)')
+_LOG_EXP     = re.compile(r'Explanation:\s*(.+)$', re.S)
+
+
+def parse_log(text):
+    text = strip_trailing_junk(text)
+    questions = []
+    for block in _LOG_SPLIT.split(text):
+        if not re.match(r'--- Question\s+\d+', block):
+            continue
+        # Strip the "--- Question N ---" header line
+        body = re.sub(r'^---\s*Question\s+\d+\s*---\s*\n?', '', block).strip()
+
+        correct_m = _LOG_CORRECT.search(body)
+        if not correct_m:
+            continue
+
+        # Options: everything matching "A) ..." lines
+        options_found = _LOG_OPTION.findall(body)
+        if not options_found:
+            continue
+        options = [o.strip() for _, o in options_found]
+
+        # Stem: everything before the first option line
+        first_opt_pos = re.search(r'^\s*[A-F]\)', body, re.M)
+        stem = body[:first_opt_pos.start()].strip() if first_opt_pos else body.strip()
+
+        letters = [l.strip() for l in correct_m.group(1).split(',')]
+        exp_m   = _LOG_EXP.search(body)
+        exp     = exp_m.group(1).strip() if exp_m else ""
+        # Trim the duplicate "Therefore, the correct answer is X." tail added by the pipeline
+        exp = re.sub(r'(\. Therefore, the correct answer is [^.]+\.)\s*\1\s*$', r'\1', exp).strip()
+
+        q = _make_question(stem, options, letters, exp)
+        if q:
+            questions.append(q)
+    return questions
+
+
+def parse_questions(text):
+    fmt = detect_format(text)
+    return parse_log(text) if fmt == 'log' else parse_spec(text)
+
+
+def derive_section_title(file_path, raw_text):
+    # Try "Topic: ..." line first (log format)
+    m = re.search(r'^Topic:\s*(.+)$', raw_text, re.M)
+    if m:
+        # "Competitive › Engineering › JEE Mains › Physics 15-07-26" -> "Physics"
+        parts = re.split(r'\s*[›>|]\s*', m.group(1).strip())
+        last = parts[-1].strip() if parts else m.group(1).strip()
+        # Strip trailing date/timestamp like "15-07-26" or "15-06-26"
+        last = re.sub(r'\s+\d{2}-\d{2}-\d{2,4}\s*$', '', last).strip()
+        return last if last else m.group(1).strip()
+    # Try first non-empty, non-separator line
+    for line in raw_text.strip().splitlines():
+        line = line.strip()
+        if line and not re.match(r'^[=\-*]+$', line) and not re.match(r'Question\s+\d+', line):
+            parts = re.split(r'\s+[—-]\s+', line)
+            return parts[-1].strip() if len(parts) > 1 else line
     return file_path.stem.replace("_", " ").title()
 
 
@@ -232,9 +285,11 @@ def build_question_block(idx, item, styles):
     qtype = item.get("type", "single")
     correct_set = set(item["correct"])
     type_label = TYPE_LABELS.get(qtype, "Single Correct")
-    story = [Paragraph(f"Q{idx}.&nbsp;&nbsp;<font size=8.5 color='#777777'>[{type_label}]</font>",
-                        styles["qnum"]),
-             Paragraph(item["q"], styles["question"])]
+    story = [
+        Paragraph(f"Q{idx}.&nbsp;&nbsp;<font size=8.5 color='#777777'>[{type_label}]</font>",
+                  styles["qnum"]),
+        Paragraph(item["q"], styles["question"]),
+    ]
     for i, opt in enumerate(item["options"]):
         label = LETTERS[i]
         text = f"({label})&nbsp;&nbsp;{opt}"
@@ -255,11 +310,10 @@ def build_question_block(idx, item, styles):
 
 
 # ---------------------------------------------------------------------------
-# Main build
+# PDF assembly
 # ---------------------------------------------------------------------------
 
 def section_type_summary(qs):
-    """e.g. 'Single (32), Multiple (9), True/False (4)' for a mixed section."""
     counts = {}
     for item in qs:
         t = item.get("type", "single")
@@ -324,12 +378,15 @@ def build_pdf(sections, output_path, title, subtitle):
             story.extend(build_question_block(i, item, styles))
         story.append(PageBreak())
 
-    # Drop trailing page break flowable if present (avoids a blank last page)
     if story and isinstance(story[-1], PageBreak):
         story.pop()
 
     doc.build(story)
 
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__,
@@ -341,7 +398,7 @@ def main():
     parser.add_argument("-t", "--title", type=str, default="Sample Question Paper",
                          help="Main title printed at the top of the PDF")
     parser.add_argument("-s", "--subtitle", type=str, default=None,
-                         help="Optional subtitle line (defaults to section names joined by bullets)")
+                         help="Optional subtitle line")
     args = parser.parse_args()
 
     sections = []
@@ -350,13 +407,13 @@ def main():
             print(f"Warning: {path} not found, skipping.", file=sys.stderr)
             continue
         raw_text = path.read_text(encoding="utf-8")
-        title = derive_section_title(path, raw_text)
+        sec_title = derive_section_title(path, raw_text)
         qs = parse_questions(raw_text)
         if not qs:
             print(f"Warning: no questions parsed from {path}, skipping.", file=sys.stderr)
             continue
-        sections.append((title, qs))
-        print(f"Parsed {len(qs)} questions from {path.name} -> section '{title}'")
+        sections.append((sec_title, qs))
+        print(f"Parsed {len(qs)} questions from {path.name} -> section '{sec_title}'")
 
     if not sections:
         print("No questions parsed from any input file. Nothing to build.", file=sys.stderr)

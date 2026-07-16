@@ -78,6 +78,16 @@ const formatQuestionForAudit = (q, index) => {
     if (q._conceptSlot || q.conceptSlot) {
         lines.push(`Archetype: ${q._conceptSlot || q.conceptSlot}`);
     }
+    const kind = String(q._questionKind || q.questionKind || "").toLowerCase();
+    if (kind === "theory") {
+        lines.push(
+            "Question kind: **THEORY** (conceptual — score on concept depth and close distractors, NOT computation, numeric givens, or solve-step count)"
+        );
+    } else if (kind === "direct") {
+        lines.push(
+            "Question kind: **DIRECT** (single-formula numerical by design — a clean 1–2 step solve is correct; do NOT penalize for lacking multi-step depth or concept fusion)"
+        );
+    }
     return lines.join("\n");
 };
 
@@ -121,6 +131,10 @@ ${rubricsBlock}
 6. **Below 50** = BANNED pattern for that tier
 
 Penalize: meta draft text ("adjusting", "re-evaluating"), formula-only stems when tier requires fusion, duplicate template logic.
+
+**Theory items:** questions marked **Question kind: THEORY** are conceptual by design — do NOT penalize them for lacking numeric givens, calculation, or solve steps. Score their difficulty on concept depth, subtlety of distractors, and reasoning required.
+
+**Direct items:** questions marked **Question kind: DIRECT** are direct single-formula/single-concept numericals by design — a clean 1–2 step solve is correct. Do NOT penalize them for lacking multi-step depth or concept fusion; they are the routine items of a real paper.
 
 **Questions:**
 ${blocks}
@@ -260,10 +274,16 @@ export const applySkeletonDifficultySelfAuditGate = async (
         };
     }
 
+    const kindBySlot = ctx.kindBySlot || {};
     const asAuditItems = list.map((sk, i) => ({
         questionText: String(sk.stem || sk.questionStem || sk.questionText || "").trim(),
         _solveSteps: sk.solveSteps || sk._solveSteps || [],
         _conceptSlot: sk.conceptSlot,
+        _questionKind:
+            ctx.kindSlots?.[i] ||
+            sk.questionKind ||
+            kindBySlot[String(sk.conceptSlot || "").trim()] ||
+            "calculative",
         difficultyTier:
             ctx.tierSlots?.[i] ||
             sk.difficultyTier ||

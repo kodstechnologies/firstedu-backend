@@ -318,7 +318,13 @@ export const detectDirectSubstitution = (stem = "", solveSteps = []) => {
  */
 export const validateHardQuestionMandate = (
     q,
-    { assignedTier = "hard", examCalibrated = false, examProfile = "", subject = "" } = {}
+    {
+        assignedTier = "hard",
+        examCalibrated = false,
+        examProfile = "",
+        subject = "",
+        questionKind = "",
+    } = {}
 ) => {
     const tier = normalizeQuestionTier(assignedTier) || "medium";
     const isHard = tier === "hard" || examCalibrated;
@@ -332,6 +338,31 @@ export const validateHardQuestionMandate = (
             .split(/(?<=[.!?])\s+/)
             .map((s) => s.trim())
             .filter((s) => s.length > 12);
+    }
+
+    // Theory (conceptual) slots are hard via concept depth and close distractors, not
+    // computation — the numeric-given / solve-step / direct-substitution gates do not
+    // apply. Require only that it is not a single trivially-restated fact.
+    const kind = String(
+        questionKind || q._questionKind || q.questionKind || ""
+    ).toLowerCase();
+    if (kind === "theory") {
+        const stepCount = Array.isArray(solveSteps) ? solveSteps.length : 0;
+        const issues = [];
+        if (stepCount > 0 && stepCount < NON_STEM_HARD_MIN_SOLVE_STEPS) {
+            issues.push(
+                `Hard theory question needs ≥${NON_STEM_HARD_MIN_SOLVE_STEPS} reasoning/elimination steps, not a single fact restated as the answer (found ${stepCount}).`
+            );
+        }
+        return { ok: issues.length === 0, issues };
+    }
+
+    // Direct slots are meant to be single-formula / single-step numericals — the
+    // peak-hard gates (numeric-given count, ≥3 solve steps, no direct substitution)
+    // do NOT apply. Correctness is still enforced separately by the numeric-verify
+    // and correctness audits, which are kind-agnostic.
+    if (kind === "direct") {
+        return { ok: true, issues: [] };
     }
 
     if (!isStemProfile(examProfile, subject)) {
@@ -409,7 +440,7 @@ export const validateHardQuestionMandate = (
 export const validateHardSkeletonMandate = (
     skeleton,
     assignedTier = "hard",
-    { examCalibrated = false, examProfile = "", subject = "" } = {}
+    { examCalibrated = false, examProfile = "", subject = "", questionKind = "" } = {}
 ) => {
     return validateHardQuestionMandate(
         {
@@ -422,6 +453,11 @@ export const validateHardSkeletonMandate = (
             examCalibrated: examCalibrated || assignedTier === "hard",
             examProfile,
             subject,
+            questionKind:
+                questionKind ||
+                skeleton.questionKind ||
+                skeleton._questionKind ||
+                "",
         }
     );
 };
@@ -568,6 +604,8 @@ export const detectHardMandateIssues = (q, ctx = {}) => {
         examCalibrated: ctx.examCalibrated,
         examProfile: ctx.examProfile,
         subject: ctx.subject,
+        questionKind:
+            ctx.questionKind || q._questionKind || q.questionKind || "",
     });
     if (ok) return [];
 

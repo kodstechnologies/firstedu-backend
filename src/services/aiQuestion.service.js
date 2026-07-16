@@ -1287,6 +1287,9 @@ const parseQuestionBankAIItem = (q, index, labelPrefix = null) => {
         ...(q._conceptSlot || q.conceptSlot
             ? { _conceptSlot: q._conceptSlot || q.conceptSlot }
             : {}),
+        ...(q._questionKind || q.questionKind
+            ? { _questionKind: q._questionKind || q.questionKind }
+            : {}),
     };
     return built;
 };
@@ -2534,6 +2537,13 @@ const generateSolveFirstSingles = async ({
     );
     const conceptSlots = steering.conceptSlots;
     const slotPlans = steering.slotPlans;
+    // Slot → question kind (calculative | theory), so the hard-quality gate judges
+    // theory items on concept depth instead of numeric givens / solve steps.
+    const kindBySlot = Object.fromEntries(
+        (slotPlans || [])
+            .filter((p) => p?.conceptSlot)
+            .map((p) => [p.conceptSlot, p.questionKind || "multi_concept"])
+    );
     const difficultyTierSlots = buildDifficultyTierSlots(
         singleCount,
         effectiveDifficulty,
@@ -2659,6 +2669,7 @@ const generateSolveFirstSingles = async ({
                 examProfile,
                 minScore: SKELETON_DIFFICULTY_SELF_AUDIT_MIN_SCORE,
                 tierSlots: tiers,
+                kindSlots: slots.map((s) => kindBySlot[s] || "multi_concept"),
                 isLastAttempt: attempts >= SOLVE_FIRST_MAX_ATTEMPTS,
             },
             {
@@ -2718,7 +2729,7 @@ const generateSolveFirstSingles = async ({
                     examCalibrated: difficultyResolution?.examCalibrated || false,
                     publishPartials: streamPartials,
                 },
-                { callLlm: callRepairLlm, examProfile, subject }
+                { callLlm: callRepairLlm, examProfile, subject, kindBySlot }
             );
             batchQuestions = batchQuestions.concat(keptBatch);
         }
@@ -2750,7 +2761,7 @@ const generateSolveFirstSingles = async ({
                                 difficultyResolution?.examCalibrated || false,
                             publishPartials: streamPartials,
                         },
-                        { callLlm: callRepairLlm, examProfile, subject }
+                        { callLlm: callRepairLlm, examProfile, subject, kindBySlot }
                     );
                     batchQuestions = batchQuestions.concat(repairedBatch);
                 }
@@ -3516,6 +3527,21 @@ const humanizeTopicDescription = (slotPlan = {}) => {
     return text || "Multi-concept hard question on this topic.";
 };
 
+/** Summarize the theory/direct/multi_concept mix of a planned topic list (admin-facing). */
+const summarizeKindComposition = (includedTopics = []) => {
+    const counts = { theory: 0, direct: 0, multi_concept: 0 };
+    for (const t of includedTopics) {
+        const k = t.questionKind === "theory" || t.questionKind === "direct"
+            ? t.questionKind
+            : "multi_concept";
+        counts[k] += 1;
+    }
+    return {
+        ...counts,
+        label: `${counts.theory} theory · ${counts.direct} direct · ${counts.multi_concept} multi-concept`,
+    };
+};
+
 /**
  * Plan the topic/syllabus list for a bank WITHOUT generating questions.
  * Returns an admin-facing included/excluded topic view plus the full concept-slot
@@ -3595,6 +3621,20 @@ export const planQuestionBankTopics = async (params) => {
         singleCount ||
         10;
 
+    // AI-researched (web-grounded) reference brief on real papers for this exam — the
+    // planner uses it to set a realistic theory/direct/multi_concept composition. This is
+    // the AI researching, not us feeding data; it never throws (falls back internally).
+    const { block: planExamReferenceBlock } = await fetchExamReferenceBrief({
+        bankName,
+        topic,
+        sectionName,
+        categoryPaths,
+        subject: resolvedSubject.id || subject,
+        difficulty: difficultyResolution.generationDifficulty,
+        examProfile: examCtx.examProfile,
+        catSection: examCtx.catSection,
+    });
+
     const steering = await resolveConceptArchetypeSteering(
         {
             count: slotCount,
@@ -3611,6 +3651,7 @@ export const planQuestionBankTopics = async (params) => {
             preferPeak: difficultyResolution.examCalibrated,
             planningFeedback,
             adminExcludeTopics,
+            examReferenceBlock: planExamReferenceBlock,
         },
         {
             callLlm: (planPrompt) =>
@@ -3625,18 +3666,23 @@ export const planQuestionBankTopics = async (params) => {
         conceptSlot: p.conceptSlot,
         label: humanizeTopicLabel(p),
         description: humanizeTopicDescription(p),
+        questionKind: p.questionKind || "multi_concept",
     }));
+
+    const kindRatio = summarizeKindComposition(includedTopics);
 
     pipelineTrace("TOPIC_PLAN", {
         source: steering.source,
         slotCount: includedTopics.length,
         excludedCount: (steering.excludedTopics || []).length,
         replanned: Boolean(String(planningFeedback || "").trim()),
+        kindRatio: kindRatio.label,
     });
 
     return {
         includedTopics,
         excludedTopics: steering.excludedTopics || [],
+        kindRatio,
         steering: {
             conceptSlots: steering.conceptSlots,
             slotPlans: steering.slotPlans,
@@ -3651,6 +3697,7 @@ export const planQuestionBankTopics = async (params) => {
             examCalibrated: difficultyResolution.examCalibrated,
             examProfile: examCtx.examProfile,
             slotCount: includedTopics.length,
+            kindRatio,
         },
     };
 };
@@ -5587,6 +5634,7 @@ export const validateQuestionTopicRelevance = async (params) => {
             difficultyTier: q.difficulty || difficulty,
             _solveSteps: q._solveSteps,
             _conceptSlot: q._conceptSlot,
+            _questionKind: q._questionKind || q.questionKind,
         })),
         {
             bankDifficulty: difficulty || generationPlan?.bankDifficulty || "hard",
