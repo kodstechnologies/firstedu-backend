@@ -213,7 +213,11 @@ def parse_questions(text):
 
 
 def derive_section_title(file_path, raw_text):
-    # Try "Topic: ..." line first (log format)
+    # Try "Section: SubjectName (N)" line first — most specific
+    m = re.search(r'^Section:\s*(.+?)(?:\s*\(\d+\))?\s*$', raw_text, re.M)
+    if m:
+        return m.group(1).strip()
+    # Try "Topic: ..." line (log format)
     m = re.search(r'^Topic:\s*(.+)$', raw_text, re.M)
     if m:
         # "Competitive › Engineering › JEE Mains › Physics 15-07-26" -> "Physics"
@@ -266,6 +270,11 @@ def build_styles():
     s["explanation"] = ParagraphStyle('Explanation', fontSize=10, fontName=BASE_FONT,
                                        leading=14, textColor=colors.HexColor("#444444"),
                                        leftIndent=6, spaceAfter=2)
+    s["passage"] = ParagraphStyle('Passage', fontSize=10.5, fontName=BASE_FONT, leading=15,
+                                   textColor=colors.HexColor("#333333"), spaceAfter=0)
+    s["question_bold"] = ParagraphStyle('QuestionBold', fontSize=11, fontName=BOLD_FONT,
+                                         leading=15, spaceAfter=8,
+                                         textColor=colors.HexColor("#1a1a2e"))
     return s
 
 
@@ -281,15 +290,88 @@ def build_section_header(title, styles):
     return t
 
 
+def _split_passage_and_question(stem_text):
+    """
+    For CLAT-style stems: split the passage paragraph(s) from the final
+    question sentence. The question sentence is the last sentence that
+    ends with '?' or starts with a known interrogative/directive keyword.
+    Returns (passage_text, question_text). If no split is found, returns
+    ("", stem_text) so the whole thing renders as a plain question.
+    """
+    # Decode HTML entities back for splitting logic
+    raw = stem_text.replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>').replace('&#39;', "'").replace('&quot;', '"')
+
+    # Split into sentences on '. ' or '? ' boundaries, keeping delimiters
+    sentences = re.split(r'(?<=[.?!])\s+', raw.strip())
+    if len(sentences) < 2:
+        return "", stem_text
+
+    # The question sentence is the last sentence that ends with '?'
+    # or starts with a directive phrase
+    DIRECTIVES = re.compile(
+        r'^(which\b|what\b|how\b|why\b|determine\b|identify\b|analyze\b|'
+        r'analyse\b|calculate\b|select\b|choose\b|find\b|state\b|'
+        r'as used\b|based on\b|according to\b)',
+        re.I
+    )
+
+    # Walk backwards to find the question sentence
+    split_at = None
+    for i in range(len(sentences) - 1, 0, -1):
+        s = sentences[i].strip()
+        if s.endswith('?') or DIRECTIVES.match(s):
+            split_at = i
+            break
+
+    if split_at is None:
+        # Last sentence is always the question as fallback
+        split_at = len(sentences) - 1
+
+    passage = ' '.join(sentences[:split_at]).strip()
+    question = ' '.join(sentences[split_at:]).strip()
+
+    # Re-escape for XML/reportlab
+    return escape(passage), escape(question)
+
+
 def build_question_block(idx, item, styles):
     qtype = item.get("type", "single")
     correct_set = set(item["correct"])
     type_label = TYPE_LABELS.get(qtype, "Single Correct")
+    stem = item["q"]
+
+    # Detect if this looks like a passage-based question (long stem with
+    # multiple sentences — characteristic of CLAT / reading comprehension)
+    passage, question_sentence = _split_passage_and_question(stem)
+    is_passage = bool(passage) and len(passage) > 120
+
     story = [
-        Paragraph(f"Q{idx}.&nbsp;&nbsp;<font size=8.5 color='#777777'>[{type_label}]</font>",
-                  styles["qnum"]),
-        Paragraph(item["q"], styles["question"]),
+        Paragraph(
+            f"Q{idx}.&nbsp;&nbsp;<font size=8.5 color='#777777'>[{type_label}]</font>",
+            styles["qnum"]
+        ),
     ]
+
+    if is_passage:
+        # Passage in a shaded box
+        passage_table = Table(
+            [[Paragraph(passage, styles["passage"])]],
+            colWidths=[17 * cm]
+        )
+        passage_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor("#f5f5f0")),
+            ('BOX',        (0, 0), (-1, -1), 0.8, colors.HexColor("#bbbbaa")),
+            ('LEFTPADDING',  (0, 0), (-1, -1), 10),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 10),
+            ('TOPPADDING',   (0, 0), (-1, -1), 8),
+            ('BOTTOMPADDING',(0, 0), (-1, -1), 8),
+        ]))
+        story.append(passage_table)
+        story.append(Spacer(1, 6))
+        story.append(Paragraph(question_sentence, styles["question_bold"]))
+    else:
+        story.append(Paragraph(stem, styles["question"]))
+
     for i, opt in enumerate(item["options"]):
         label = LETTERS[i]
         text = f"({label})&nbsp;&nbsp;{opt}"
@@ -297,6 +379,7 @@ def build_question_block(idx, item, styles):
             story.append(Paragraph(text + "&nbsp;&nbsp;&#10003;", styles["option_correct"]))
         else:
             story.append(Paragraph(text, styles["option"]))
+
     correct_labels = ", ".join(f"({LETTERS[i]})" for i in sorted(correct_set))
     answer_word = "Correct Answers" if len(correct_set) > 1 else "Correct Answer"
     story.append(Paragraph(f"{answer_word}: {correct_labels}", styles["answer"]))

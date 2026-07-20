@@ -190,6 +190,60 @@ export const scoreReasoningDepth = (q = {}) => {
 
 const REASONING_DEPTH_FLOOR = { easy: 42, medium: 52, hard: 62 };
 
+/**
+ * Per-exam-profile difficulty calibration. The deterministic gate below is a
+ * STEM (multi-step numeric) heuristic; applying one set of thresholds to every
+ * exam pins non-JEE papers artificially low. Each exam gets floors scaled to
+ * how it actually tests:
+ *   - `stem: false` → verbal / reasoning exams (CLAT, CAT, UPSC, board): the
+ *     STEM reasoning-depth + formula-template checks don't apply at all.
+ *   - `applyTemplates` → whether the JEE/NEET too-easy formula templates and the
+ *     hard-tier "multi-concept setup" check run (NEET has legitimate single-step
+ *     application items, so it's off there).
+ * Tune per exam here rather than in the detector body.
+ */
+const DIFFICULTY_PROFILE_CALIBRATION = {
+    jee_advanced: {
+        stem: true,
+        applyTemplates: true,
+        reasoningFloor: { easy: 42, medium: 52, hard: 62 },
+        minChars: { easy: 85, medium: 130, hard: 180 },
+        minSentences: { easy: 2, medium: 2, hard: 4 },
+    },
+    jee_main: {
+        stem: true,
+        applyTemplates: true,
+        reasoningFloor: { easy: 36, medium: 44, hard: 52 },
+        minChars: { easy: 70, medium: 110, hard: 150 },
+        minSentences: { easy: 1, medium: 2, hard: 3 },
+    },
+    neet: {
+        // Recall / application heavy — much lower reasoning-depth expectation,
+        // and single-formula templates are legitimate at medium/hard.
+        stem: true,
+        applyTemplates: false,
+        reasoningFloor: { easy: 30, medium: 36, hard: 44 },
+        minChars: { easy: 60, medium: 95, hard: 130 },
+        minSentences: { easy: 1, medium: 1, hard: 2 },
+    },
+    competitive: {
+        stem: true,
+        applyTemplates: true,
+        reasoningFloor: { easy: 34, medium: 42, hard: 50 },
+        minChars: { easy: 70, medium: 110, hard: 150 },
+        minSentences: { easy: 1, medium: 2, hard: 3 },
+    },
+    // Non-STEM / verbal — judged on their own rubrics, not STEM depth.
+    clat: { stem: false },
+    cat: { stem: false },
+    upsc: { stem: false },
+    board: { stem: false },
+};
+
+export const getDifficultyCalibration = (examProfile) =>
+    DIFFICULTY_PROFILE_CALIBRATION[String(examProfile || "").toLowerCase()] ||
+    DIFFICULTY_PROFILE_CALIBRATION.competitive;
+
 /** Issues that indicate an obvious template drill — block at generation time. */
 const TEMPLATE_DRILL_ISSUE_RE =
     /plug-in|numerical drill|one-formula|one-step|definition-recall|chapter-test|template|too easy for medium/i;
@@ -258,33 +312,34 @@ export const detectTooEasyForTier = (
     // theory has no computation. multi_concept keeps the full checks below.
     const kind = String(q._questionKind || q.questionKind || "").toLowerCase();
     if (kind === "theory" || kind === "direct") return null;
-    const profile = String(examProfile || "competitive").toLowerCase();
-    const isJee =
-        profile === "jee_main" ||
-        profile === "jee_advanced" ||
-        profile === "neet" ||
-        profile === "competitive";
 
-    if (!stem || !isJee) return null;
+    // Exam-type-aware calibration: verbal/reasoning exams (CLAT, CAT, UPSC,
+    // board) skip the STEM difficulty heuristics entirely; STEM exams get floors
+    // scaled to how they actually test (see DIFFICULTY_PROFILE_CALIBRATION).
+    const cal = getDifficultyCalibration(examProfile);
+    if (!stem || !cal.stem) return null;
 
-    for (const tpl of TOO_EASY_TEMPLATES) {
-        const maxTier = examCalibrated
-            ? tier === "hard"
-                ? "medium"
-                : tpl.maxTier
-            : tpl.maxTier;
-        if (tpl.re.test(stem) && tierTooLow(tier, maxTier)) {
-            return {
-                questionNumber: q.sampleNumber,
-                issue: tpl.message,
-                severity: tier === "hard" || bank === "hard" ? "major" : "minor",
-                confidence: "confirmed",
-                category: ISSUE_CATEGORY.DIFFICULTY,
-            };
+    if (cal.applyTemplates) {
+        for (const tpl of TOO_EASY_TEMPLATES) {
+            const maxTier = examCalibrated
+                ? tier === "hard"
+                    ? "medium"
+                    : tpl.maxTier
+                : tpl.maxTier;
+            if (tpl.re.test(stem) && tierTooLow(tier, maxTier)) {
+                return {
+                    questionNumber: q.sampleNumber,
+                    issue: tpl.message,
+                    severity:
+                        tier === "hard" || bank === "hard" ? "major" : "minor",
+                    confidence: "confirmed",
+                    category: ISSUE_CATEGORY.DIFFICULTY,
+                };
+            }
         }
     }
 
-    const minChars = MIN_STEM_CHARS[tier] || MIN_STEM_CHARS.medium;
+    const minChars = cal.minChars?.[tier] || MIN_STEM_CHARS[tier] || MIN_STEM_CHARS.medium;
     if (stem.length < minChars) {
         return {
             questionNumber: q.sampleNumber,
@@ -296,7 +351,7 @@ export const detectTooEasyForTier = (
     }
 
     const sentences = countSentences(stem);
-    const minSent = MIN_SENTENCES[tier] || 2;
+    const minSent = cal.minSentences?.[tier] || MIN_SENTENCES[tier] || 2;
     if (sentences < minSent) {
         return {
             questionNumber: q.sampleNumber,
@@ -308,6 +363,7 @@ export const detectTooEasyForTier = (
     }
 
     if (
+        cal.applyTemplates &&
         tier === "hard" &&
         !MULTI_STEP_MARKERS.test(stem) &&
         !/(?:lens|mirror|passage|system|loop.*field|convex.*concave|placed|combination|respectively|accelerated|ratio|magnetic field|refractive|wavelength|inclined|rolling|pulley|interference|entropy|adiabatic|isothermal)/i.test(
@@ -341,7 +397,10 @@ export const detectTooEasyForTier = (
     }
 
     const reasoningDepth = scoreReasoningDepth(q);
-    const depthFloor = REASONING_DEPTH_FLOOR[tier] || REASONING_DEPTH_FLOOR.medium;
+    const depthFloor =
+        cal.reasoningFloor?.[tier] ||
+        REASONING_DEPTH_FLOOR[tier] ||
+        REASONING_DEPTH_FLOOR.medium;
     if (reasoningDepth < depthFloor) {
         return {
             questionNumber: q.sampleNumber,

@@ -234,19 +234,26 @@ Each new skeleton must use a **different problem structure** from every excluded
         generateIntent === GENERATE_INTENTS.EVALUATION_REGEN &&
         topicRelevanceFeedback;
 
+    const subjLower = String(subject || "").toLowerCase();
+
+    // NEET is multi-subject: only inject the physics / chemistry numeric
+    // authoring guidance for the matching subject. Biology sections (Botany /
+    // Zoology) must NOT receive numeric-STEM authoring — it makes the model
+    // manufacture calculation questions and bolt irrelevant physics/chemistry
+    // onto biology stems. JEE stays as-is (single combined PCM authoring).
     const chemBlock =
         examProfile === "jee_main" ||
         examProfile === "jee_advanced" ||
-        examProfile === "neet" ||
-        String(subject || "").toLowerCase().includes("chem")
+        (examProfile === "neet" && subjLower.includes("chem")) ||
+        subjLower.includes("chem")
             ? buildChemistryNumericalAuthoringBlock({ examProfile })
             : "";
 
     const physicsBlock =
         examProfile === "jee_main" ||
         examProfile === "jee_advanced" ||
-        examProfile === "neet" ||
-        String(subject || "").toLowerCase().includes("phys")
+        (examProfile === "neet" && subjLower.includes("phys")) ||
+        subjLower.includes("phys")
             ? buildPhysicsNumericalAuthoringBlock({ examProfile })
             : "";
 
@@ -326,23 +333,32 @@ Each new skeleton must use a **different problem structure** from every excluded
     const effectiveTier = difficultyResolution?.examCalibrated
         ? "hard"
         : difficulty;
-    const hardMandateBlock = buildHardQuestionMandateBlock({
-        examProfile,
-        tier: effectiveTier,
-        examCalibrated: difficultyResolution?.examCalibrated || false,
-    });
-    const skeletonComplianceBlock = examNativeVeteran
+    // The hard-mandate / skeleton-compliance / veteran blocks are physics-STEM
+    // authoring guidance (concept-cluster vocabulary, numeric givens, "JEE
+    // shift-paper"). They must not be injected for non-STEM domains — including
+    // NEET Biology (Botany/Zoology) — or the model manufactures calculation
+    // questions and bolts physics onto conceptual stems.
+    const hardMandateBlock = isNonStemDomain
         ? ""
-        : buildSkeletonGenerationComplianceBlock({
+        : buildHardQuestionMandateBlock({
               examProfile,
+              tier: effectiveTier,
               examCalibrated: difficultyResolution?.examCalibrated || false,
           });
-    const veteranExamNativeBlock = examNativeVeteran
-        ? buildVeteranExamNativeGenerationBlock({
-              examProfile,
-              batchSize: count,
-          })
-        : "";
+    const skeletonComplianceBlock =
+        examNativeVeteran || isNonStemDomain
+            ? ""
+            : buildSkeletonGenerationComplianceBlock({
+                  examProfile,
+                  examCalibrated: difficultyResolution?.examCalibrated || false,
+              });
+    const veteranExamNativeBlock =
+        examNativeVeteran && !isNonStemDomain
+            ? buildVeteranExamNativeGenerationBlock({
+                  examProfile,
+                  batchSize: count,
+              })
+            : "";
     const mandateFloors = getHardMandateFloors({
         examCalibrated: difficultyResolution?.examCalibrated || false,
     });

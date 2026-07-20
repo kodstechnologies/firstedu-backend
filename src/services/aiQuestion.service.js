@@ -92,7 +92,10 @@ import {
     flattenQuestionBankForCorrectnessAudit,
     assertGenerationCorrectness,
 } from "./correctnessPreAudit.service.js";
-import { resolveConceptArchetypeSteering } from "./conceptArchetypePlanner.service.js";
+import {
+    resolveConceptArchetypeSteering,
+    getKindCompositionCounts,
+} from "./conceptArchetypePlanner.service.js";
 import { getSubjectLabelForArchetypes } from "./conceptArchetypeGuidance.service.js";
 import {
     buildSolveFirstSkeletonPrompt,
@@ -724,6 +727,34 @@ const buildQuestionBankPrompt = ({
     });
     const examProfile = examCtx.examProfile;
     const catSection = examCtx.catSection;
+
+    // Passage length is decided by the planning AI (competitiveExamPlan.passageWordTarget)
+    // from the exam's authentic format; only fall back to letting the writer decide.
+    const plannedPassageWords =
+        String(competitiveExamPlan?.passageWordTarget || "").trim() || null;
+    const passageLengthInstruction = plannedPassageWords
+        ? `**${plannedPassageWords} words** (as planned for this exam — match this length; do NOT write a shorter paragraph)`
+        : `a length you determine from the authentic format of a real ${examProfile} paper for this section — reading-comprehension exams (CLAT, CAT VARC, UPSC, banking RC) use long multi-paragraph passages, so do NOT write a short paragraph`;
+
+    // Full-paper / combined generation bypasses solve-first's per-slot archetype
+    // steering, so it must carry the theory/direct/multi_concept composition here
+    // — otherwise the planned split is ignored and the model drifts to numeric.
+    const kindCounts =
+        standaloneTotal > 0
+            ? getKindCompositionCounts({
+                  examProfile,
+                  subject: resolvedSubject.id || subject,
+                  catSection,
+                  count: standaloneTotal,
+              })
+            : null;
+    const kindMixBlock = kindCounts
+        ? `\n**QUESTION-STYLE COMPOSITION (MANDATORY — match this split across the ${standaloneTotal} standalone question(s), spread over different topics):**
+- **${kindCounts.theory} theory** — purely conceptual/qualitative (assertion–reason, statement-correctness, mechanism/definition discrimination). NO numeric givens, NO calculation, NO solve steps.
+- **${kindCounts.direct} direct** — one clean single-formula / single-concept item solved in ~1–2 steps.
+- **${kindCounts.multi_concept} multi-concept** — two or more fused concepts, multi-step reasoning.
+Do NOT convert theory items into calculations, and do NOT inject numeric variables from other subjects. A theory-heavy subject (Biology, GK, Law, English, History) must stay overwhelmingly conceptual.\n`
+        : "";
     const regenEscalationBlock = isEvaluationRegen
         ? buildRegenerationEscalationBlock({
               topic,
@@ -1003,7 +1034,7 @@ ${calibration}
 - Single correct (one answer): ${singleCount}
 - Multiple correct (two or more answers): ${multipleCount}
 - True/False: ${trueFalseCount}
-
+${kindMixBlock}
 **Reading passages (passage-based questions only):**
 - Number of separate reading passages: ${resolvedPassageCount}
 - EACH passage must include exactly this mix of sub-questions (every passage gets the same types and counts — do NOT split types across passages):
@@ -1019,7 +1050,7 @@ ${relevanceFeedbackBlock}${excludeBlock}
 4. For "single": exactly 4 options; correctAnswer is one letter "A", "B", "C", or "D".
 5. For "multiple": exactly 4 options; correctAnswer is an array of EXACTLY 2 letters, e.g. ["A","C"]. Never mark 3 or all 4 options correct — a multiple-correct question always has exactly 2 right answers and 2 wrong ones.
 6. For "true_false": options must be ["True", "False"]; correctAnswer is "True" or "False".
-7. For "connected" (reading passage): include title (short label), passage (reading paragraph, 80–250 words), and subQuestions array with exactly ${passageSubPerPassage} sub-question(s) per passage (${passageSingleCount} single, ${passageMultipleCount} multiple, ${passageTrueFalseCount} true_false in EACH passage). Sub-questions must use only types single, multiple, or true_false. Each sub-question must be answerable ONLY from its passage. Do NOT repeat standalone questions as passage sub-questions. Do NOT put all singles in passage 1 and all true/false in passage 2 — every passage must follow the per-passage mix above.
+7. For "connected" (reading passage): include title (short label), passage (reading paragraph — ${passageLengthInstruction}), and subQuestions array with exactly ${passageSubPerPassage} sub-question(s) per passage (${passageSingleCount} single, ${passageMultipleCount} multiple, ${passageTrueFalseCount} true_false in EACH passage). Sub-questions must use only types single, multiple, or true_false. Each sub-question must be answerable ONLY from its passage. Do NOT repeat standalone questions as passage sub-questions. Do NOT put all singles in passage 1 and all true/false in passage 2 — every passage must follow the per-passage mix above.
 8. Every standalone question and every passage sub-question MUST have a clear explanation (minimum one sentence).
 9. Items must be unique within this response AND must not duplicate or closely paraphrase any question listed under "ALREADY SHOWN TO THE USER" above.
 10. Every question MUST match its assigned difficultyTier from the DIFFICULTY MIX block and satisfy the calibration above. Never output chapter-test, homework, or trivial one-step items at any tier — if a draft feels too easy for its tier, rewrite harder before output.

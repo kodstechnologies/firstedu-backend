@@ -53,12 +53,76 @@ const CAT_SECTION_COMPOSITION = {
     cat_dilr: { theory: 0.1, direct: 0.25, multi_concept: 0.65 },
 };
 
-const getDefaultComposition = (examProfile = "", catSection = "") => {
+/**
+ * Whether a paper is theory-heavy or calculation-heavy is driven by the
+ * SUBJECT, not just the exam. A NEET Botany paper is ~mostly theory while NEET
+ * Physics is calculation-heavy — yet both share the `neet` profile. These
+ * subject rules override the profile default so the composition (and the anchor
+ * the planner LLM is steered with) reflects the actual subject. First match wins.
+ */
+const SUBJECT_COMPOSITION_RULES = [
+    {
+        // Biology / life sciences — overwhelmingly conceptual.
+        re: /\b(botany|zoology|biolog(?:y|ical)?|life\s*science|micro\s*biolog|physiolog|anatomy|ecolog|genetics)\b/i,
+        comp: { theory: 0.8, direct: 0.12, multi_concept: 0.08 },
+    },
+    {
+        // Humanities / GK / verbal / law — theory-dominant.
+        re: /\b(history|polit(?:y|ical)|civics|geograph|econom|general\s*(?:knowledge|studies|awareness)|gk|current\s*affairs|law|legal|english|verbal|comprehension|literatur|environment)\b/i,
+        comp: { theory: 0.78, direct: 0.12, multi_concept: 0.1 },
+    },
+    {
+        // Math / quantitative — calculation-dominant.
+        re: /\b(math(?:s|ematic)?|quant(?:itative)?|aptitude|arithmetic|algebra|calculus|trigonometry|mensuration)\b/i,
+        comp: { theory: 0.05, direct: 0.45, multi_concept: 0.5 },
+    },
+    {
+        // Physics — calculation-heavy with a small conceptual tail.
+        re: /\b(physics|mechanics|electrodynamics|electrostatics|optics|thermodynamics)\b/i,
+        comp: { theory: 0.12, direct: 0.5, multi_concept: 0.38 },
+    },
+    {
+        // Chemistry — mixed: physical chem is numeric, organic/inorganic is theory.
+        re: /\b(chemistry|chemical|organic|inorganic)\b/i,
+        comp: { theory: 0.4, direct: 0.35, multi_concept: 0.25 },
+    },
+];
+
+const getSubjectComposition = (subject = "") => {
+    const s = String(subject || "");
+    if (!s.trim()) return null;
+    for (const rule of SUBJECT_COMPOSITION_RULES) {
+        if (rule.re.test(s)) return rule.comp;
+    }
+    return null;
+};
+
+const getDefaultComposition = (examProfile = "", catSection = "", subject = "") => {
     const section = String(catSection || "").toLowerCase();
     if (CAT_SECTION_COMPOSITION[section]) return CAT_SECTION_COMPOSITION[section];
+    // Subject character (theory vs calculation) takes precedence over the
+    // exam-level default so e.g. NEET Botany is theory-heavy, NEET Physics is not.
+    const bySubject = getSubjectComposition(subject);
+    if (bySubject) return bySubject;
     const key = String(examProfile || "").toLowerCase().trim();
     return DEFAULT_COMPOSITION[key] || DEFAULT_COMPOSITION.competitive;
 };
+
+/**
+ * Public: subject-aware integer theory/direct/multi_concept counts for a batch.
+ * Lets non-archetype generation paths (e.g. full-paper combined generation, which
+ * bypasses solve-first) enforce the same composition the planner uses.
+ */
+export const getKindCompositionCounts = ({
+    examProfile = "",
+    subject = "",
+    catSection = "",
+    count = 10,
+} = {}) =>
+    compositionToCounts(
+        getDefaultComposition(examProfile, catSection, subject),
+        Math.max(1, Number(count) || 1)
+    );
 
 /** Turn a composition (fractions) into integer slot counts that sum to n. */
 const compositionToCounts = (composition, n) => {
@@ -171,7 +235,11 @@ export const buildArchetypePlanningPrompt = ({
     const n = Math.max(1, count);
     const subjectLabel = getSubjectLabelForArchetypes(subjectId || subject);
     const examLabel = getExamLabel(examProfile, catSection);
-    const defComp = getDefaultComposition(examProfile, catSection);
+    const defComp = getDefaultComposition(
+        examProfile,
+        catSection,
+        `${subjectId || ""} ${subject || ""}`
+    );
     const sc = compositionToCounts(defComp, n);
     const referenceBlock = String(examReferenceBlock || "").trim()
         ? `\n**Real-paper reference (researched — use it to set the composition):**\n${String(
@@ -359,7 +427,11 @@ const buildFallbackSteering = ({
     // (slotOffset + i) so the mix stays consistent when filling a partial chunk. The
     // pattern is: multi_concept is the base; interleave direct and theory at their
     // share so they spread evenly rather than clustering.
-    const comp = getDefaultComposition(examProfile);
+    const comp = getDefaultComposition(
+        examProfile,
+        null,
+        `${subjectId || ""} ${Array.isArray(subjects) ? subjects.join(" ") : subjects || ""}`
+    );
     const risesAt = (frac, globalIndex) =>
         Math.floor((globalIndex + 1) * frac) > Math.floor(globalIndex * frac);
     const kindAt = (globalIndex) => {

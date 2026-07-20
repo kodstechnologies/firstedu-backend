@@ -21,11 +21,19 @@ export const NON_STEM_HARD_MIN_SOLVE_STEPS = 2;
  * reasoning-depth checks) rather than whether solve-first runs at all. */
 export const isStemProfile = (examProfile = "", subject = "") => {
     const profile = String(examProfile || "").toLowerCase();
+    const hay = `${profile} ${String(subject || "").toLowerCase()}`;
+    // Biology (NEET Botany / Zoology, life sciences) is NOT computational STEM:
+    // its hard tier is conceptual depth / multi-statement NCERT analysis, not
+    // numeric concept-fusion. Route it to the conceptual (non-numeric) path so
+    // it is not held to the physics-style concept-cluster + numeric mandate.
+    if (/\b(botany|zoology|biology|biological|life\s*science)\b/.test(hay)) {
+        return false;
+    }
     if (profile === "jee_main" || profile === "jee_advanced" || profile === "neet") {
         return true;
     }
     return /\bchem|physics|math|mathematics|engineering|jee|iit|pcm|nta\b/i.test(
-        `${examProfile} ${subject}`.toLowerCase()
+        hay
     );
 };
 

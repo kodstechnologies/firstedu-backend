@@ -210,6 +210,11 @@ import {
   deleteAiQuestionBank,
   updateAiQuestion,
 } from "../controllers/aiQuestionBank.controller.js";
+import {
+  getAiBankDraft,
+  saveAiBankDraft,
+  deleteAiBankDraft,
+} from "../controllers/aiBankDraft.controller.js";
 
 import {
   getAllSupport,
@@ -470,6 +475,12 @@ router.get(
 );
 router.delete("/ai-question-banks/:id", verifyJWT, deleteAiQuestionBank);
 router.put("/ai-questions/:id", verifyJWT, updateAiQuestion);
+
+// AI Powered Test create-flow draft (one per user; autosaved so work survives
+// refresh / tab close and can be resumed). Stored in its own collection.
+router.get("/ai-bank-draft", verifyJWT, getAiBankDraft);
+router.put("/ai-bank-draft", verifyJWT, saveAiBankDraft);
+router.delete("/ai-bank-draft", verifyJWT, deleteAiBankDraft);
 
 // Question Bank Management Routes (individual questions - create, list all, get, update, delete)
 router.post("/questions", verifyJWT, uploadAnyImages, createQuestion);

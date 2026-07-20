@@ -20,6 +20,11 @@ export const isPaperReferenceGenerationMode = (mode) =>
     String(mode || GENERATION_MODES.DEFAULT).toLowerCase() ===
     GENERATION_MODES.PAPER_REFERENCE;
 
+/**
+ * Fallback-only reference range. The passage length is DECIDED BY THE AI from the
+ * exam's authentic format (see the generation prompt), not hardcoded here — these
+ * values are only a last-resort hint for the older composer/prompt-first paths.
+ */
 export const passageWordRangeFor = (examProfile, catSection) => {
     if (examProfile === "clat") return "380–500";
     if (examProfile === "cat" && catSection === "cat_varc") return "400–650";
