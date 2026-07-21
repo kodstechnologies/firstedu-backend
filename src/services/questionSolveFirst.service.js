@@ -588,7 +588,7 @@ const findOptionIndexForNumericValue = (opts, value) => {
 };
 
 /** After independent verify adjusts the answer, align solveSteps so explanation matches marked option. */
-const syncSolveStepsToMarkedAnswer = (solveSteps, markedOptionText) => {
+export const syncSolveStepsToMarkedAnswer = (solveSteps, markedOptionText) => {
     const marked = String(markedOptionText || "").trim();
     if (!marked || !Array.isArray(solveSteps) || !solveSteps.length) {
         return solveSteps;
@@ -605,7 +605,7 @@ const syncSolveStepsToMarkedAnswer = (solveSteps, markedOptionText) => {
 };
 
 /** Explanation: numbered solve steps + closing with the marked option. */
-const lockExplanationToMarkedOption = (solveSteps, markedOptionText) => {
+export const lockExplanationToMarkedOption = (solveSteps, markedOptionText) => {
     const marked = String(markedOptionText || "").trim();
     const steps = (solveSteps || []).map(String).map(stripMetaCommentary).filter(Boolean);
     const body =

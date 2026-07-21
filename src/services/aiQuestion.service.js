@@ -118,6 +118,7 @@ import {
 import {
     reconcileQuestionBankWithIndependentVerify,
 } from "./questionNumericVerify.service.js";
+import { runAnswerCorrectnessPass } from "./answerCorrection.service.js";
 import {
     repairSkeletonAuditRejections,
     repairDifficultyRejectedQuestions,
@@ -1679,9 +1680,9 @@ const buildQuestionBankRepairPrompt = ({
                 .slice(0, 4)
                 .join("; ");
             return `
-### Replacement ${idx + 1} (questionType: ${payload.questionType})
+### Item ${idx + 1} (questionType: ${payload.questionType})
 **Automated defects:** ${issueLines || "answer-key / explanation mismatch"}
-**Failed draft — do NOT copy; write a new question on the same concept:**
+**Draft to repair — prefer MODE A (fix the key/explanation in place):**
 ${JSON.stringify(payload, null, 2)}`;
         })
         .join("\n");
@@ -1700,9 +1701,28 @@ ${buildExamSolveThenWriteBlock()}
 ${buildExamAnswerKeyLockBlock()}
 ${buildPreOutputCorrectnessChecklist({ examProfile })}
 
-**TASK:** Return ONLY a valid JSON array with exactly **${flawedEntries.length}** replacement object(s), in the same order as below.
-Each replacement must use the same questionType as the failed draft, test the same syllabus concept, and pass every factual correctness gate (solve → option match → correctAnswer → explanation lock → distinct options).
-Write new stems — do not lightly edit broken drafts. The factual auditor will reject wrong keys, explanation mismatches, missing computed values in options, and duplicate options.
+**TASK — FIX FIRST, REWRITE ONLY IF YOU MUST.** Return ONLY a valid JSON array with exactly **${flawedEntries.length}** object(s), in the same order as below, each using the same questionType as its draft.
+
+**For each item, FIRST re-solve the question yourself from its stem.** Then pick ONE mode:
+
+**MODE A — FIX IN PLACE (strongly preferred).**
+If the stem is sound and your computed answer IS one of the existing options:
+- Keep \`questionText\` and \`options\` **EXACTLY as given — character for character, same order**.
+- Return \`correctAnswer\` pointing at the option that matches your solve.
+- Return a rewritten \`explanation\` that derives **exactly that option**.
+Most defects here are key/explanation faults on an otherwise good question — a wrong
+answer key, an explanation that contradicts the key, or an explanation that self-corrects.
+Those do **not** justify throwing the question away. Fix them.
+
+**MODE B — REWRITE (only when MODE A is impossible).**
+Only if the item cannot be made correct without changing the stem or options — i.e. your
+computed answer is **not among the options**, the options are duplicated/indistinguishable,
+or the stem is ambiguous or missing data. Then write a NEW question on the same syllabus
+concept, with a new stem and four distinct options.
+
+Either way the returned object must pass every factual gate (solve → option match →
+correctAnswer → explanation lock → distinct options). The factual auditor will reject wrong
+keys, explanation mismatches, missing computed values in options, and duplicate options.
 
 **Common defects you MUST fix (do not repeat these patterns):**
 - Explanation derives **4.926 atm** but options list **926 atm** — include the full decimal value with unit in exactly one option.
@@ -1716,7 +1736,7 @@ Write new stems — do not lightly edit broken drafts. The factual auditor will 
 
 ${itemBlocks}
 
-**Output rules:** JSON array only — no markdown. options[] = answer text only (no A)/B. prefixes). explanation max 3 sentences, must match correctAnswer.`;
+**Output rules:** JSON array only — no markdown. options[] = answer text only (no A)/B. prefixes). explanation max 3 sentences, must match correctAnswer. **In MODE A, \`options\` must be byte-identical to the draft's options and \`questionText\` unchanged** — only \`correctAnswer\` and \`explanation\` may differ.`;
 };
 
 /** Regenerate individual flawed questions (one LLM call per entry). */
@@ -2090,6 +2110,11 @@ export const finalizeQuestionBankSuggestions = async ({
         issueCount: reconcileAudit.confirmedIssues?.length ?? 0,
     });
 
+    // NOTE: answer-key / explanation correctness is fixed by the repair call below
+    // (buildQuestionBankRepairPrompt MODE A) — no separate verification call is made
+    // here, so generation costs no extra LLM calls. The deterministic audit above
+    // decides what reaches that repair call. A deeper independent re-solve is available
+    // on demand via applyAnswerCorrectionToQuestionBank().
     const repairFn =
         GEMINI_QB_CORRECTNESS_REPAIR_PASSES > 0
             ? (current, flawedEntries, pass) =>
@@ -3571,6 +3596,64 @@ const summarizeKindComposition = (includedTopics = []) => {
         ...counts,
         label: `${counts.theory} theory · ${counts.direct} direct · ${counts.multi_concept} multi-concept`,
     };
+};
+
+/**
+ * Verify answers independently and correct wrong answer keys / mismatched explanations
+ * in place on an EXISTING question bank. Generation already runs this inside finalize;
+ * this wrapper is the explicit "fix" step for after an evaluation, where the audit has
+ * reported correctness issues and the alternative would be regenerating good questions.
+ *
+ * Read-only on the stem and options — it only re-keys and rewrites explanations. Items it
+ * cannot fix are returned in `unfixableRefs` for the caller to regenerate.
+ */
+export const applyAnswerCorrectionToQuestionBank = async (params = {}) => {
+    const {
+        questions = [],
+        topic = "",
+        bankName = "",
+        sectionName = "",
+        subject = "",
+        categoryPaths = [],
+        generationProvider = "gemini",
+    } = params;
+
+    if (!Array.isArray(questions) || !questions.length) {
+        return {
+            questions: [],
+            checkedCount: 0,
+            disagreementCount: 0,
+            fixedCount: 0,
+            unfixableRefs: [],
+            report: [],
+        };
+    }
+
+    const provider = assertGenerationProviderConfigured(generationProvider);
+    const examCtx = resolveExamContextForGeneration({
+        topic,
+        bankName,
+        sectionName,
+        categoryPaths,
+        subject,
+        competitiveExamPlan: params.competitiveExamPlan || null,
+    });
+
+    return runAnswerCorrectnessPass(
+        questions,
+        {
+            topic,
+            bankName,
+            examProfile: examCtx.examProfile,
+        },
+        {
+            callLlm: (prompt) =>
+                callQuestionBankGenerationLLM(prompt, {
+                    generationProvider: provider,
+                    temperature: 0.1,
+                }),
+        }
+    );
 };
 
 /**
@@ -5834,4 +5917,5 @@ export default {
     shouldDeferQuestionBankValidation,
     prepareFastPathQuestions,
     finalizeQuestionBankSuggestions,
+    applyAnswerCorrectionToQuestionBank,
 };

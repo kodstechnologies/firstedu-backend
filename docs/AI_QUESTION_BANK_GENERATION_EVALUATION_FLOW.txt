@@ -4,6 +4,14 @@ Full pipeline map (functions, files, LLM calls, scores)
 Updated: 2026-07-16
 ================================================================================
 
+NOTE ON THE 2026-07-16 (b) REVISION: ANSWER + EXPLANATION CORRECTNESS is now FIXED
+rather than causing the question to be discarded. The existing correctness REPAIR
+call was changed to fix-first (MODE A: correct the key + explanation in place,
+keeping stem/options byte-identical; MODE B: rewrite only if unsalvageable), so this
+costs NO extra LLM calls. A deeper INDEPENDENT re-solve (which does cost extra calls)
+exists in answerCorrection.service.js but is on-demand only, not automatic. See the
+new PART O. Touchpoints: PART A (call list), PART F5 (finalize order), PART M.
+
 NOTE ON THE 2026-07-16 REVISION: added the per-slot QUESTION-KIND COMPOSITION
 feature — the planner now tags every concept slot with one of three kinds
 (theory / direct / multi_concept) and sets the mix per real-paper norms for the
@@ -43,7 +51,7 @@ WHAT THE PIPELINE ALREADY DOES (AI STEERING — 3 LLM CALLS PER CHUNK)
       → buildArchetypePlanningPrompt()
       → callQuestionBankGenerationLLM()
       → parseArchetypePlanResponse()
-    Plans N unique hard slots + per-slot blueprints for the batch.
+    Plans N unique slots + per-slot blueprints + question-kind mix (PART N).
 
   Call 2 — Skeleton generation (Gemini/OpenAI):
     buildSolveFirstSkeletonPrompt()
@@ -54,6 +62,12 @@ WHAT THE PIPELINE ALREADY DOES (AI STEERING — 3 LLM CALLS PER CHUNK)
     buildTopicRelevancePrompt() + buildCorrectnessAuditPrompt()
       + buildJeeAuthenticityAuditPrompt()
     mergeValidationResults() → difficultyMatchScore
+
+  PLUS, only when the deterministic audit flags something: the correctness REPAIR
+  call (repairFlawedEntriesBatch, one per flawed question, capped). That call now
+  FIXES the answer key / explanation in place rather than rewriting the question —
+  see PART O. It is an existing call, so answer/explanation correctness costs **no
+  extra LLM calls**.
 
 TO ASK AN AI TO FIX LOW DIFFICULTY — USE evaluation_regen (BUILT-IN)
 --------------------------------------------------------------------
@@ -74,8 +88,10 @@ After validate returns difficultyMatchScore < 80:
   5. Post-skeleton **LLM difficulty self-audit** rejects weak skeletons before MCQ build.
   6. **Targeted regen** replaces only failed question numbers (not full bank upscale).
 
-ALTERNATIVE: ADD A 4TH AI CALL (IMPLEMENTED)
----------------------------------------------
+DIFFICULTY SELF-AUDIT — AN ADDITIONAL LLM CALL (IMPLEMENTED)
+------------------------------------------------------------
+  (Numbered "4th call" historically; with the PART O answer-correction calls the
+   per-chunk total is higher — see the call list above.)
   Post-skeleton, pre-finalize:
     applySkeletonDifficultySelfAuditGate() → LLM scores each skeleton 0–100
     applyDifficultySelfAuditGate() on finalize for built MCQs
@@ -488,7 +504,12 @@ FILE: firstedu-backend/src/services/aiQuestion.service.js
     reconcileQuestionBankWithIndependentVerify()    [questionNumericVerify.service.js]
     sanitizeQuestionStemEmbeddedOptions()           [questionSolveFirst.service.js]
     runDeterministicCorrectnessAudit()              [correctnessPreAudit.service.js]
-    repairFlawedQuestionBankQuestions()             [aiQuestion.service.js internal LLM repair]
+    repairFlawedEntriesBatch()                      [aiQuestion.service.js internal LLM repair]
+      NOW FIX-FIRST (PART O): re-solves the flagged question and CORRECTS the answer
+      key + explanation in place (MODE A), keeping stem/options byte-identical.
+      Rewrites the question (MODE B) only when the true answer is not among the
+      options / options are duplicated / the stem is broken. NO extra LLM call —
+      this is the repair call that already existed.
     stripFlawedQuestionBankEntries()                [correctnessPreAudit.service.js]
     IF stripped: generateQuestionBankBatch() top-up (forceOneShot: true)
     assignDifficultyTiersToQuestions()              [difficultyMix.service.js]
@@ -849,6 +870,8 @@ aiQuestion.service.js
   planQuestionBankTopics             (topic-plan step; returns includedTopics
                                       with questionKind + kindRatio; fetches
                                       fetchExamReferenceBrief for grounding — PART N)
+  applyAnswerCorrectionToQuestionBank (explicit post-evaluation answer/explanation
+                                      fix on an existing bank — PART O)
   summarizeKindComposition           (internal — theory/direct/multi counts, PART N)
   generateQuestionBankBatch          (internal)
   generateSolveFirstSingles          (internal — builds kindBySlot, PART N)
@@ -958,8 +981,16 @@ hardQuestionMandate.service.js
   buildHardQuestionMandateBlock
 
 questionNumericVerify.service.js
-  independentlyVerifyQuestion
+  independentlyVerifyQuestion              (11 hardcoded solvers only — see PART O)
   reconcileQuestionBankWithIndependentVerify
+
+answerCorrection.service.js               (NEW — PART O)
+  isAnswerCorrectionEnabled                (AI_QB_ANSWER_CORRECTION, default on)
+  buildIndependentSolvePrompt              (stem+options ONLY — never the key)
+  parseIndependentSolveResponse
+  buildAnswerExplanationFixPrompt          (re-key + rewrite explanation in place)
+  parseAnswerFixResponse
+  runAnswerCorrectnessPass                 (orchestrator)
 
 aiApiCallLogger.js
   runWithPipelineTrace
@@ -1064,6 +1095,94 @@ ENV / BACK-COMPAT
   AI_QB_ARCHETYPE_STEERING=0 → static-catalog fallback still applies the
     composition via DEFAULT_COMPOSITION. Any slot/plan without questionKind
     behaves as multi_concept (i.e. exactly the pre-feature peak-hard path).
+
+
+================================================================================
+PART O — ANSWER + EXPLANATION CORRECTNESS: VERIFY AND FIX IN PLACE
+================================================================================
+
+WHY: a good question with a wrong answer key or a mismatched explanation used to be
+DISCARDED AND REWRITTEN rather than corrected. The correctness repair call
+(repairFlawedEntriesBatch) was instructed "Write new stems — do not lightly edit
+broken drafts", and the only in-place correction available was
+reconcileQuestionWithIndependentVerify(), limited to 11 hardcoded solvers (ΔG,
+first-order kinetics, buffer pH, molality, mixing molarity, EM power, de Broglie ×2,
+entropy vap, hybridization, radial nodes). Mechanics, optics, rotational, modern
+physics and all of maths had no in-place fix at all.
+
+--------------------------------------------------------------------------------
+1. THE FIX — INSIDE THE EXISTING REPAIR CALL (no extra LLM calls)
+--------------------------------------------------------------------------------
+FILE: aiQuestion.service.js → buildQuestionBankRepairPrompt()
+
+The repair call already exists and already receives each flagged question together
+with its detected defects. Its instructions are now FIX-FIRST, two modes:
+
+  MODE A — FIX IN PLACE (strongly preferred)
+    The model re-solves the question from its stem, then keeps `questionText` and
+    `options` **byte-identical** and returns only a corrected `correctAnswer` plus a
+    rewritten `explanation` that derives exactly that option. This covers the common
+    defects — wrong key, explanation contradicting the key, explanation that
+    self-corrects — none of which justify discarding the question.
+
+  MODE B — REWRITE (only when MODE A is impossible)
+    Used only when the item cannot be made correct without changing the stem or
+    options: the true answer is not among the options, options are duplicated /
+    indistinguishable, or the stem is ambiguous or missing data. Then a NEW question
+    on the same syllabus concept is written, as before.
+
+The response contract is unchanged (a full question object per item), so
+applyRepairedQuestions() / parseQuestionBankAIItem() are untouched — only the prompt
+changed. Because this is the repair call that already ran, **answer/explanation
+correctness costs ZERO extra LLM calls.**
+
+WHAT REACHES IT: repair only runs on questions the DETERMINISTIC audit flagged
+(correctnessPreAudit — explanation↔key mismatch, value not in options, self-
+correction, meta commentary, …). Those checks are free (no LLM).
+
+KNOWN LIMIT: a question solved WRONG but explained *consistently* with that wrong
+answer is internally coherent, so the deterministic audit does not flag it and it
+never reaches the repair call. Catching that class requires an INDEPENDENT re-solve
+— see section 2, which is deliberately NOT automatic.
+
+--------------------------------------------------------------------------------
+2. DEEP INDEPENDENT RE-SOLVE — ON DEMAND ONLY (costs extra calls)
+--------------------------------------------------------------------------------
+FILE: firstedu-backend/src/services/answerCorrection.service.js
+
+  runAnswerCorrectnessPass(questions, ctx, { callLlm })
+    1. INDEPENDENT RE-SOLVE. The prompt shows ONLY the stem + options — never the
+       marked key or the existing explanation (otherwise the model just agrees with
+       what it is shown and the check is worthless). This is why it cannot be folded
+       into the generation or repair call: those already know the intended answer.
+       → buildIndependentSolvePrompt / parseIndependentSolveResponse
+       Results carry confidence high|medium|low; only high/medium disagreements are
+       acted on — a low-confidence miss means the checker failed to solve, and
+       re-keying on that would corrupt a good question.
+    2. FIX SET = independent disagreements ∪ deterministic-audit flags.
+    3. FIX IN PLACE via buildAnswerExplanationFixPrompt (stem/options never changed).
+       Applied through lockExplanationToMarkedOption / syncSolveStepsToMarkedAnswer
+       (now exported from questionSolveFirst.service.js) so formatting matches
+       generation. NOTE: the explanation is built from the RAW steps —
+       lockExplanationToMarkedOption appends the "Therefore, the correct answer is …"
+       closing itself, so feeding it already-synced steps would duplicate it.
+    4. RE-AUDIT: only questions we attempted to fix are re-judged, and only against
+       the audit's `factualIssues`. `styleIssues` (e.g. "option trivially embedded in
+       stem") are ignored here — fixing those means editing options, which is the
+       strip/repair path's job.
+    IDEMPOTENT: each question is stamped `_answerChecked`, so re-running the pass
+    (finalizeQuestionBankSuggestions is invoked at 4 sites) never re-solves it.
+    → { questions, checkedCount, disagreementCount, fixedCount, unfixableRefs, report }
+
+  WHERE: NOT automatic in generation. Exposed as
+    aiQuestion.service.js → applyAnswerCorrectionToQuestionBank({ questions, topic, … })
+    and as CLI menu option 2 "Verify & fix answers/explanations" in
+    scripts/testing-flow.mjs (prints a per-question diff: Q3: key B → C, explanation
+    rewritten). validateQuestionTopicRelevance stays READ-ONLY — it is the scoring
+    endpoint the frontend depends on; fixing is a separate follow-up call.
+
+  COST when invoked: +1 solve call per 10 questions, +1 fix call per 10 disputed.
+  ENV: AI_QB_ANSWER_CORRECTION=0 disables; AI_QB_ANSWER_CORRECTION_BATCH sets batch size.
 
 
 ================================================================================

@@ -312,6 +312,7 @@ const run = async () => {
             `Bank ready (${questions.length} questions). What next?`,
             [
                 "Evaluate quality (validate)",
+                "Verify & fix answers/explanations",
                 "Regenerate failed questions (needs evaluate first)",
                 "Log confirmed questions to file",
                 "Show questions again",
@@ -342,6 +343,40 @@ const run = async () => {
                 log(`✗ Evaluation failed: ${err?.message || err}`);
             }
         } else if (choice === 2) {
+            log("\n… Independently re-solving every question and fixing wrong keys / explanations …");
+            try {
+                const fix = await svc.applyAnswerCorrectionToQuestionBank({
+                    ...baseParams,
+                    questions,
+                    competitiveExamPlan: null,
+                });
+                rule("═");
+                log("ANSWER / EXPLANATION CORRECTION");
+                rule("═");
+                log(
+                    `checked=${fix.checkedCount}  disagreements=${fix.disagreementCount}  fixed=${fix.fixedCount}  unfixable=${fix.unfixableRefs.length}`
+                );
+                (fix.report || []).forEach((r) => {
+                    const qn = (r.ref?.topIndex ?? 0) + 1;
+                    if (r.status === "fixed") {
+                        log(`  ✔ Q${qn}: key ${r.from} → ${r.to}, explanation rewritten`);
+                    } else {
+                        log(`  ✗ Q${qn}: unfixable — ${r.reason}`);
+                    }
+                    (r.reasons || []).forEach((why) => log(`        · ${why}`));
+                });
+                if (fix.fixedCount) {
+                    questions = fix.questions;
+                    lastEvaluation = null; // bank changed — re-evaluate for fresh scores
+                    log("\nBank updated. Re-evaluate (option 1) for fresh scores.");
+                    printQuestions(questions);
+                } else {
+                    log("No answer/explanation corrections were needed.");
+                }
+            } catch (err) {
+                log(`✗ Answer correction failed: ${err?.message || err}`);
+            }
+        } else if (choice === 3) {
             if (!lastEvaluation) {
                 log("Evaluate first (option 1) before regenerating.");
                 continue;
@@ -396,7 +431,7 @@ const run = async () => {
             } catch (err) {
                 log(`✗ Regeneration failed: ${err?.message || err}`);
             }
-        } else if (choice === 3) {
+        } else if (choice === 4) {
             log("\n… Logging confirmed questions …");
             try {
                 const res = await logConfirmedQuestionsToFile({
@@ -410,9 +445,9 @@ const run = async () => {
             } catch (err) {
                 log(`✗ Logging failed: ${err?.message || err}`);
             }
-        } else if (choice === 4) {
-            printQuestions(questions);
         } else if (choice === 5) {
+            printQuestions(questions);
+        } else if (choice === 6) {
             break;
         }
     }
