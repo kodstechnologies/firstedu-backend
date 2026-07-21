@@ -511,15 +511,39 @@ export const buildHardQuestionMandateBlock = ({
  * Explicit codegen checklist — mirrors deterministic skeleton validators.
  * Placed in solve-first prompts so the model ships compliant skeletons on first pass.
  */
+const SKELETON_EXAM_LABELS = {
+    jee_advanced: "JEE Advanced",
+    jee_main: "JEE Main shift-paper",
+    neet: "NEET",
+    cat: "CAT",
+    board: "board exam",
+    competitive: "competitive exam",
+};
+
 export const buildSkeletonGenerationComplianceBlock = ({
     examProfile = "jee_main",
     examCalibrated = false,
+    subject = "",
 } = {}) => {
     const floors = getHardMandateFloors({ examCalibrated });
+    // Was hardcoded to "JEE Main shift-paper" for EVERY profile except jee_advanced, so a
+    // CAT / UPSC / board skeleton was repaired against a JEE brief.
     const examLabel =
-        examProfile === "jee_advanced" ? "JEE Advanced" : "JEE Main shift-paper";
+        SKELETON_EXAM_LABELS[String(examProfile || "").toLowerCase()] ||
+        "competitive exam";
 
-    const conceptVocabHint = `
+    // The vocabulary list below is physics-specific. Injecting it into a non-STEM bank
+    // (CAT DILR, UPSC, CLAT) instructed the model to build stems out of "incline, pulley,
+    // emf, capacitor" — which is how JEE physics questions ended up inside a CAT
+    // Data-Interpretation bank during repair. Only emit it for STEM profiles.
+    const wantsPhysicsVocab = isStemProfile(examProfile, subject);
+
+    const conceptVocabHint = !wantsPhysicsVocab
+        ? `
+**Two-concept stem requirement:** the stem must combine **≥2 ideas from THIS bank's own
+syllabus** (the topic/subject named above). Do NOT import vocabulary or scenarios from a
+different subject to satisfy this — an off-syllabus stem is a failure, not a fix.`
+        : `
 **Two-concept stem vocabulary (use words from ≥2 areas in the stem):**
 - Mechanics/dynamics: incline, pulley, friction, collision, momentum
 - Energy/work: kinetic, potential, conservation, work done, power

@@ -1146,6 +1146,173 @@ never reaches the repair call. Catching that class requires an INDEPENDENT re-so
 — see section 2, which is deliberately NOT automatic.
 
 --------------------------------------------------------------------------------
+1b. WHY WRONG KEYS USED TO REACH PRODUCTION (2026-07-21 — fixed)
+--------------------------------------------------------------------------------
+A live CAT DILR run shipped 22 questions with correctnessScore 100, repairedPasses 0,
+and at least two genuinely wrong answer keys. Four independent defects, all fixed in
+questionSolveFirst.service.js / hardQuestionMandate.service.js:
+
+  (a) THE CONSISTENCY CHECK VALIDATED A CONCLUSION THE CODE ITSELF WROTE.
+      buildMcqFromSkeleton ran syncSolveStepsToMarkedAnswer() — which appends
+      "Therefore, the correct answer is <marked option>" — and only THEN called
+      assertBuiltMcqConsistency(). So the highest-priority conclusion token in
+      _solveSteps was always the manufactured one, always equal to the key.
+      A derivation ending "…the total is 44 W" with a key of "8 W" passed.
+      FIX: assertSolveStepsConsistency() now runs on the RAW solveSteps, before any
+      alignment. Also, the explanation is now built from the raw steps, which removes
+      the duplicated "Therefore … Therefore …" closing seen on every shipped question.
+
+  (b) THE ANSWER-MATCH TOLERANCE COULD SPAN TWO OPTIONS.
+      Tolerance was max(0.05, |v|*2%). That flat 0.05 floor is wider than the spacing
+      between small-magnitude options — for 0.2500 / 0.2875 / 0.3000 / 0.3125 every
+      option is within 0.05 of every other, so a derivation of 0.2875 "matched" a key
+      of 0.3000. FIX: answerMatchTolerance() = min(2% relative, half the smallest gap
+      between distinct options); used by assertSolveStepsConsistency and
+      computedMatchesAnyOption.
+
+  (c) THE KEY ITSELF WAS SELECTED WITH THAT SAME LOOSE TOLERANCE.
+      correctIndex was found via findIndex() over the SHUFFLED options using the 0.05
+      floor, so it keyed whichever near-value came first — often a distractor
+      (observed: display "0.3000" keyed onto option "0.3125"). FIX: exact normalised
+      match wins outright; the numeric fallback uses the gap-bounded tolerance.
+
+  (d) DEGENERATE SOLVE STEPS PADDED THE DERIVATION.
+      A shipped question had a solveStep that was literally ".". FIX: steps with no
+      alphanumeric content are dropped, so the step-count floor rejects the skeleton
+      and routes it to repair.
+
+REPAIR CONTEXT LOSS (same run): the four repaired items were JEE **physics**
+(EMF, thermal power, quantum oscillators) inside a CAT DILR bank, and were the only
+items missing _questionKind. Causes, both fixed:
+  · buildSkeletonRepairPrompt() had NO topic/bankName/subject at all — only a
+    conceptSlot id — and examProfile defaulted to "jee_main". It now carries
+    topic/subject/questionKind plus an explicit STAY-IN-SCOPE rule, and repairSkeleton()
+    preserves questionKind across the repair.
+  · buildSkeletonGenerationComplianceBlock() hardcoded the label "JEE Main shift-paper"
+    for every non-Advanced profile AND injected a physics-only concept vocabulary
+    ("incline, pulley, friction … emf, capacitor") telling the model to build stems from
+    those words. It now resolves a real per-exam label and only emits that vocabulary
+    for STEM profiles (isStemProfile); non-STEM banks get a "stay within THIS bank's
+    syllabus" instruction instead.
+
+--------------------------------------------------------------------------------
+1b-2. TEXT ANSWERS + INTEGER DISTRACTORS (2026-07-21 — fixed)
+--------------------------------------------------------------------------------
+  (e) TEXT ANSWERS HAD NO KEY VERIFICATION AT ALL.
+      assertSolveStepsConsistency() began with
+        `if (!Number.isFinite(markedNumeric)) return;`
+      so every non-numeric answer was returned unverified — i.e. most of a DILR /
+      VARC / theory bank ("B, A, C, D", "Team 3", "Scatter plot"). Reproduced: a
+      derivation ending "…team 14 defeated Team 3" shipped with the key "Team 1"
+      and an explanation reading "…defeated Team 3 … Therefore, the correct answer
+      is Team 1."
+      Compounding it, parseNumber("Team 1") returns 1, so such answers took the
+      NUMERIC branch, found no numeric conclusion, and returned silently.
+      FIX: assertTextAnswerConsistency() — extracts the concluding clause of the last
+      solve step and throws when it names a DIFFERENT option and not the marked one.
+      Reached both when the marked option is non-numeric AND when the numeric branch
+      finds no candidate. Matching is WORD-BOUNDARY based (mentionsToken): plain
+      substring matching would treat "Team 1" as present in "Team 14". Options shorter
+      than 3 chars are skipped as non-distinctive. Deliberately conservative — verified
+      no false positives on "B, A, C, D", "Team 3", "Scatter plot".
+
+  (f) FRACTIONAL DISTRACTORS ON WHOLE-NUMBER ANSWERS.
+      buildNumericDistractors() synthesized/accepted decimals regardless of the answer
+      type, shipping "minimum number of rooms" with options 1.76 / 1.52 / 2 / 2.72, a
+      path count offering 1.76, and a student count offering 26.88 — obviously wrong to
+      any candidate and a giveaway. FIX: when the answer is a whole number, supplied and
+      synthesized distractors are coerced to integers; proportional offsets are tried
+      first (keeps magnitude plausible), then ±k walking if rounding collides. Genuine
+      decimal answers are unaffected (0.2875 keeps 0.2500 / 0.3000 / 0.3125).
+
+  (g) STYLE DEFECTS WERE NEITHER REPAIRED NOR STRIPPED — THEY JUST SHIPPED.
+      isStrippableCorrectnessIssue() excludes non-critical STYLE issues (correctly — you
+      should not delete a question over cosmetics), but nothing else handled them either,
+      so they never entered findFlawedQuestionBankEntries() and never reached repairFn.
+      Live result: styleScore 90, strippedCount 0, with "Option D trivially embedded in
+      the stem" and "Options A and D are near-duplicates" both surviving into the bank.
+      FIX: sanitizeDistractorQuality() repairs both DETERMINISTICALLY at build time — no
+      LLM call. It replaces only DISTRACTORS (never the key) and only for genuinely
+      numeric answers; text distractors are left alone (still flagged) rather than filled
+      with fabricated nonsense.
+      The old sanitizeStemEmbeddedOptions() missed case 1 because it tested the stem with
+      a RAW case-sensitive `includes` while the auditor tests it normalised — flagged and
+      fixed disagreed. Matching is now normalised on both sides.
+
+  TWO TRAPS FOUND WHILE BUILDING (g) — both are live hazards for future work here:
+    · parseNumber() is permissive: parseNumber("Team 3") === 3. Guarding numeric logic
+      with Number.isFinite() alone therefore treats TEXT answers as numeric — the first
+      cut of this fix replaced the distractor "Team 1" with a bare "5" among team names.
+      Numeric paths must test that the option IS a number (optionally + unit), not that it
+      merely contains one.
+    · formatValueForOption() silently DROPS any unit outside its whitelist
+      (min · M · mol/kg · kJ/mol · nm · J/mol·K · W). Round-tripping a distractor through
+      it turned "20160 kW" into "20160". Distractor synthesis now renders the number and
+      unit explicitly, and integer coercion rewrites only the numeric substring in place,
+      leaving already-integer values untouched. (The whitelist itself is a pre-existing
+      bug — anything in kW/kg/m/s/N/J loses its unit through that helper.)
+
+  (h) NON-SOLVE-FIRST PATHS HAD NONE OF THE ABOVE.
+      Every check in (a)–(d) lives in buildMcqFromSkeleton, which only the SOLVE-FIRST
+      path calls. shouldUseSolveFirstGeneration() returns false for passageCount > 0,
+      multipleCount > 0, trueFalseCount > 0, full-paper/multi-subject plans and
+      prompt_first — so passage sets, multi-correct, true/false and full-paper banks had
+      no explanation-vs-key gate at all.
+      FIX: detectExplanationContradictsKey() in correctnessPreAudit.service.js, added to
+      DETECTORS so it runs via runDeterministicCorrectnessAudit() on EVERY path (and
+      flattenQuestionBankForCorrectnessAudit already expands passage sub-questions).
+      It works off the explanation text, so it needs no _solveSteps:
+        · stripAppendedClosing() removes the code-generated "Therefore, the correct
+          answer is <marked>" sentence(s) first — that text is written FROM the key, so
+          leaving it in makes every explanation appear to agree with the key. This is the
+          same masking described in (a), now handled at audit level too.
+        · Reads the WHOLE derivation (the old detectors only scanned the last 280 chars,
+          which were dominated by that appended closing).
+        · Recognises "= N", "is N", "equals N", "yields N", "gives N", "therefore N".
+        · Uses a gap-bounded tolerance (same reasoning as (b)).
+        · Text answers: compares the concluding clause against option names by
+          whole-token match ("Team 1" must not match inside "Team 14").
+      Severity factual/critical → strippable → reaches the repair path (MODE A).
+      Verified: catches one-shot numeric, one-shot text, passage sub-question, and
+      appended-closing-masked mismatches; zero false positives on six real correct
+      questions from the live CAT run (percentage, fraction-text, ordering, chart-name,
+      unit-decimal, sentence-length options).
+
+--------------------------------------------------------------------------------
+1c. SELF-CONTRADICTORY EXPLANATIONS — CAUGHT AT EVALUATE (no extra calls)
+--------------------------------------------------------------------------------
+The checks in §1/§1b are deterministic and only catch a derivation that disagrees with
+the KEY. A second class shipped in the same CAT run: explanations that contradict
+THEMSELVES or ignore a constraint stated in the stem, while the marked option is still
+correct. Examples from that run:
+  · "16 beats 1, 15 beats 2, 14 beats 3" immediately followed by "1 beats 16, 2 beats
+    15, 3 beats 14" — the same relation asserted both ways.
+  · Stem says "exactly 10 students between A and B"; the explanation computes 17,
+    remarks "this implies an overlap", and proceeds to answer anyway.
+  · A solveStep that is literally "." (also now stripped in code — §1b(d)).
+
+These need semantic judgement; a regex for them would reject good questions. They are
+therefore handled by the LLM correctness audit that ALREADY runs at evaluate time —
+buildCorrectnessAuditPrompt() in topicRelevanceValidation.service.js — so there is **no
+extra LLM call**. That prompt now has:
+  · VERIFICATION PROTOCOL step 5 — derivation self-consistency, with the concrete
+    signatures above (relation reversal, silently replaced value, conceded-then-ignored
+    inconsistency, empty step).
+  · VERIFICATION PROTOCOL step 6 — stem-constraint compliance: every condition stated in
+    the stem must actually be used and satisfied.
+  · An explicit rule that a contradiction is a **factual** defect (severity "major")
+    EVEN WHEN THE MARKED OPTION IS CORRECT — the explanation is what students read.
+  · A narrowed false-positive exemption: "informal wording" now covers phrasing only and
+    can no longer be used to wave through broken logic.
+  · The CAT profile note reconciled — its leniency is scoped to distractor craft and
+    intermediate values, and explicitly does NOT relax steps 5–6 (previously it said
+    "only flag factual errors when explanation and marked answer clearly disagree",
+    which would have suppressed this entire class on CAT banks).
+
+Flagged items flow into confirmedIssues → the existing repair path, where MODE A (§1)
+rewrites the explanation while keeping the stem, options and (correct) key intact.
+
+--------------------------------------------------------------------------------
 2. DEEP INDEPENDENT RE-SOLVE — ON DEMAND ONLY (costs extra calls)
 --------------------------------------------------------------------------------
 FILE: firstedu-backend/src/services/answerCorrection.service.js

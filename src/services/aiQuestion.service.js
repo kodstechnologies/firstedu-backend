@@ -2785,7 +2785,7 @@ const generateSolveFirstSingles = async ({
                     examCalibrated: difficultyResolution?.examCalibrated || false,
                     publishPartials: streamPartials,
                 },
-                { callLlm: callRepairLlm, examProfile, subject, kindBySlot }
+                { callLlm: callRepairLlm, examProfile, subject, kindBySlot, topic, bankName }
             );
             batchQuestions = batchQuestions.concat(keptBatch);
         }
@@ -2817,7 +2817,7 @@ const generateSolveFirstSingles = async ({
                                 difficultyResolution?.examCalibrated || false,
                             publishPartials: streamPartials,
                         },
-                        { callLlm: callRepairLlm, examProfile, subject, kindBySlot }
+                        { callLlm: callRepairLlm, examProfile, subject, kindBySlot, topic, bankName }
                     );
                     batchQuestions = batchQuestions.concat(repairedBatch);
                 }
