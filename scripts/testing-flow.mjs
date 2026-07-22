@@ -32,13 +32,13 @@ dotenv.config({ path: path.join(BACKEND_ROOT, ".env") });
 // CONFIG — edit these
 // ============================================================================
 const CONFIG = {
-    topic: "Competitive > Engineering > JEE Main > Physics",
+    topic: "Competitive > Engineering > JEE Main > Chemistry",
     bankName: "", // blank → same as topic
     difficulty: "hard", // easy | medium | hard
     questionCount: 10, // how many standalone single questions to produce
-    categoryPaths: [], // e.g. ["Competitive>Engineering>JEE Main>Physics"]
-    sectionName: "",
-    subject: "", // blank → inferred from topic/category
+    categoryPaths: [], // e.g. ["Competitive>Engineering>JEE Main>Chemistry"]
+    sectionName: "chemistry",
+    subject: "Chemistry", // blank → inferred from topic/category
     generationProvider: "gemini", // gemini | openai
     evaluationProvider: "openai", // openai | gemini
     maxGenerationRounds: 6, // safety cap while topping up to questionCount

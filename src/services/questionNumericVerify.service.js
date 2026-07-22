@@ -23,8 +23,12 @@ export const parseNumber = (text) => {
     const superscriptMap = { '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4', '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9', '⁻': '-', '−': '-' };
     let s = String(text || "").replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹⁻−]/g, m => superscriptMap[m]);
 
-    // Handle scientific notation: × 10^N or x 10^N → e+N; × 10-N or x 10-N → e-N
-    s = s.replace(/[×x]\s*10\s*(-?)\s*(\d+)/gi, (_, sign, exp) => {
+    // Handle scientific notation: × 10^N, × 10N, x 10^-N, x 10-N → e+N / e-N.
+    // The optional \^? is required for CARET notation ("× 10^8") — the single most
+    // common form LLMs actually emit — which this regex previously did not match at
+    // all (it only matched an optional "-" directly after "10", nothing else), so
+    // "1.6737 × 10^8" silently parsed as 1.6737, dropping the exponent entirely.
+    s = s.replace(/[×x]\s*10\s*\^?\s*(-?)\s*(\d+)/gi, (_, sign, exp) => {
         // Use the minus sign if present, otherwise positive exponent
         const op = sign === '-' ? '-' : '+';
         return `e${op}${exp}`;

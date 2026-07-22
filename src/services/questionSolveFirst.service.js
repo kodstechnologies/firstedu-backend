@@ -725,7 +725,10 @@ const sanitizePhOptions = (options, correctIndex) => {
  */
 const parseNumericWithSuperscript = (str) => {
     const s = String(str || "").trim();
-    const sciMatch = s.match(/^(-?\d+(?:\.\d+)?)\s*[×x\*]\s*10([⁰¹²³⁴⁵⁶⁷⁸⁹⁻\-\d]+)/i);
+    // \s*\^?\s* after "10" is required for CARET notation ("10^52") — the most common
+    // form LLMs emit — which this regex previously did not match (only an immediately-
+    // adjacent superscript/digit exponent), silently truncating "4.17 × 10^52" to 4.17.
+    const sciMatch = s.match(/^(-?\d+(?:\.\d+)?)\s*[×x\*]\s*10\s*\^?\s*([⁰¹²³⁴⁵⁶⁷⁸⁹⁻\-\d]+)/i);
     if (sciMatch) {
         const base = parseFloat(sciMatch[1]);
         const expStr = sciMatch[2];
@@ -758,7 +761,10 @@ const parseNumericWithSuperscript = (str) => {
  * Returns { highPri: [{value, display}], lastEq: {value, display} | null }.
  */
 const extractSolveStepResults = (solveSteps) => {
-    const NUM_TOKEN_SRC = '(-?\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?(?:\\s*[×x\\*]\\s*10[⁰¹²³⁴⁵⁶⁷⁸⁹⁻\\-\\d]+)?)';
+    // \\s*\\^?\\s* after "10" is required for CARET notation ("× 10^52") — without it
+    // this token silently stops at the mantissa for the most common form LLMs emit,
+    // truncating "4.17 × 10^52" to "4.17" before any parsing even runs.
+    const NUM_TOKEN_SRC = '(-?\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?(?:\\s*[×x\\*]\\s*10\\s*\\^?\\s*[⁰¹²³⁴⁵⁶⁷⁸⁹⁻\\-\\d]+)?)';
 
     // High-priority: conclusion keywords anywhere across all steps
     const allText = solveSteps.map(s => String(s || "")).join(" ");
@@ -920,7 +926,10 @@ const assertSolveStepsConsistency = ({ _solveSteps, options, correctIndex }) => 
 
     // --- Failure C: explicit "therefore/thus/hence NUMBER" != marked ---
     const allText = _solveSteps.map(s => String(s || "")).join(" ");
-    const NUM_TOKEN_SRC = '(-?\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?(?:\\s*[×x\\*]\\s*10[⁰¹²³⁴⁵⁶⁷⁸⁹⁻\\-\\d]+)?)';
+    // \\s*\\^?\\s* after "10" is required for CARET notation ("× 10^52") — without it
+    // this token silently stops at the mantissa for the most common form LLMs emit,
+    // truncating "4.17 × 10^52" to "4.17" before any parsing even runs.
+    const NUM_TOKEN_SRC = '(-?\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?(?:\\s*[×x\\*]\\s*10\\s*\\^?\\s*[⁰¹²³⁴⁵⁶⁷⁸⁹⁻\\-\\d]+)?)';
     const conclusionRe = new RegExp(
         `\\b(?:therefore|thus|hence)\\s*(?:the\\s+(?:correct\\s+)?(?:answer|result|value)\\s+is\\s+)?${NUM_TOKEN_SRC}`,
         'gi'
@@ -1329,6 +1338,479 @@ export const sanitizeQuestionStemEmbeddedOptions = (q) => {
     return { ...q, options };
 };
 
+/**
+ * VALIDATION 1: Solve step chain validation
+ * Ensures steps are logically connected and derive valid intermediate values
+ */
+const validateSolveStepChain = (solveSteps = []) => {
+    if (!Array.isArray(solveSteps) || solveSteps.length === 0) {
+        throw new Error("No solve steps provided");
+    }
+
+    // Check for degenerate steps (empty, only punctuation, too short)
+    const validSteps = solveSteps.filter(s => {
+        const text = String(s || "").trim();
+        return /[A-Za-z0-9]{3,}/.test(text); // At least 3 alphanumeric chars
+    });
+
+    if (validSteps.length < 2) {
+        throw new Error(
+            `Insufficient solve steps: need at least 2 meaningful steps (found ${validSteps.length})`
+        );
+    }
+
+    // Check for common reasoning gaps (steps that jump without intermediate)
+    const stepText = validSteps.join(" ");
+    const hasMultiplication = /[\*×]/.test(stepText);
+    const hasDivision = /[\/÷]/.test(stepText);
+    const hasAddSub = /[+-]/.test(stepText);
+
+    if (hasMultiplication && hasAddSub) {
+        // Check that steps don't contradict (e.g., "times 2" then "plus 2" making no sense)
+        const conflicts = [
+            /times\s+[+-]\d+/i, // "times plus" back-to-back
+            /divide\s+[×x]\d+/i, // "divide times" back-to-back
+        ];
+        const hasConflict = conflicts.some(re => re.test(stepText));
+        if (hasConflict) {
+            throw new Error("Solve steps contain contradictory operations (e.g., 'times' then 'plus' without intermediate result)");
+        }
+    }
+
+    return validSteps;
+};
+
+/**
+ * VALIDATION 2: Stem quality validation
+ * Checks for ambiguity, completeness, and formatting issues
+ */
+const validateStemQuality = (stem) => {
+    const text = String(stem || "").trim();
+
+    if (!text || text.length < 20) {
+        throw new Error(
+            `Stem too short or empty (${text.length} chars) — likely incomplete`
+        );
+    }
+
+    // Check for required numeric data (most physics/chemistry problems need values)
+    const hasValues = /\d+(?:\.\d+)?/.test(text);
+    if (!hasValues) {
+        throw new Error(
+            "Stem lacks numeric values — likely an incomplete problem statement"
+        );
+    }
+
+    // Check for extreme/unrealistic values
+    const largeNumbers = text.match(/\d{10,}/g) || [];
+    if (largeNumbers.length > 2) {
+        // Some problems might have very large numbers, but suspicious if many
+        console.warn(`Stem has unusually large numbers: ${largeNumbers.join(", ")}`);
+    }
+
+    // Check for question mark (is it actually asking something?)
+    if (!text.includes("?")) {
+        throw new Error(
+            "Stem lacks a question mark — likely not a question"
+        );
+    }
+
+    // Check for common typos/errors (double spaces, strange symbols)
+    if (/\s{2,}/.test(text)) {
+        throw new Error("Stem has excessive whitespace (likely formatting error)");
+    }
+
+    return text;
+};
+
+/**
+ * VALIDATION 3: Distractor spacing and quality
+ * Ensures distractors are distinct, plausible, and spread appropriately
+ */
+const validateDistractorQuality = (answerValue, answerUnit, distractors = []) => {
+    const answerNum = Number.isFinite(answerValue) ? answerValue : null;
+
+    if (!distractors || distractors.length === 0) {
+        throw new Error("No distractors provided");
+    }
+
+    if (distractors.length < 3) {
+        throw new Error(
+            `Need 3+ distractors (found ${distractors.length})`
+        );
+    }
+
+    const distractorNums = distractors.map(d => parseNumber(d)).filter(n => Number.isFinite(n));
+
+    // If answer is numeric, check spacing
+    if (answerNum !== null && distractorNums.length >= 2) {
+        const allNums = [answerNum, ...distractorNums];
+        const sorted = [...allNums].sort((a, b) => a - b);
+
+        // Check if answer is sandwiched between two distractors (ambiguous)
+        const answerIdx = sorted.indexOf(answerNum);
+        if (answerIdx > 0 && answerIdx < sorted.length - 1) {
+            const before = sorted[answerIdx - 1];
+            const after = sorted[answerIdx + 1];
+            const gapBefore = Math.abs(answerNum - before);
+            const gapAfter = Math.abs(after - answerNum);
+
+            // If gaps are very small, hard to distinguish
+            if (gapBefore < Math.abs(answerNum) * 0.01 || gapAfter < Math.abs(answerNum) * 0.01) {
+                throw new Error(
+                    `Answer (${answerNum}) is too close to adjacent distractors (${before}, ${after}) — ambiguous`
+                );
+            }
+        }
+
+        // Check if answer is suspiciously far from all distractors (obvious correct answer)
+        const minGapToDistractor = Math.min(...distractorNums.map(d => Math.abs(d - answerNum)));
+        const maxGapToDistractor = Math.max(...distractorNums.map(d => Math.abs(d - answerNum)));
+        if (minGapToDistractor > maxGapToDistractor * 0.5 && minGapToDistractor > Math.abs(answerNum) * 0.1) {
+            // Answer is very far from all distractors — students can guess by magnitude
+            console.warn(`Answer (${answerNum}) is far from all distractors — might be too obvious`);
+        }
+    }
+
+    // Check for duplicate distractors
+    const uniqueNums = new Set(distractorNums);
+    if (uniqueNums.size < distractorNums.length) {
+        throw new Error(
+            "Duplicate numeric values in distractors — two options are identical"
+        );
+    }
+
+    // Check for implausible values (negative when answer is positive, or vice versa)
+    if (answerNum !== null) {
+        const answerSign = Math.sign(answerNum);
+        const wrongSignDistr = distractorNums.filter(d => {
+            const distrSign = Math.sign(d);
+            // Allow 0 to have either sign, but not if answer is clearly positive/negative
+            if (d === 0 || answerNum === 0) return false;
+            return distrSign !== answerSign;
+        });
+
+        // It's OK to have some wrong-sign distractors, but not all or most
+        if (wrongSignDistr.length === distractorNums.length) {
+            throw new Error(
+                `All distractors have opposite sign from answer (${answerNum}) — sign giveaway`
+            );
+        }
+    }
+
+    return distractors;
+};
+
+/** Superscript digit/minus → ASCII, shared by the log/antilog exponent scanners below. */
+const SUPERSCRIPT_MAP = { '⁰':'0','¹':'1','²':'2','³':'3','⁴':'4','⁵':'5','⁶':'6','⁷':'7','⁸':'8','⁹':'9','⁻':'-','−':'-' };
+
+/** Finds every "10^N" / "10¹⁸" occurrence in `text`, in reading order. */
+const findExponentsIn = (text) => {
+    const s = String(text || "");
+    const results = [];
+    const supRe = /10\s*([⁻−]?[⁰¹²³⁴⁵⁶⁷⁸⁹]+)/g;
+    let m;
+    while ((m = supRe.exec(s))) {
+        const converted = m[1].replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹⁻−]/g, ch => SUPERSCRIPT_MAP[ch]);
+        results.push({ index: m.index, exp: parseFloat(converted) });
+    }
+    const caretRe = /10\s*\^\s*(-?\d+(?:\.\d+)?)/g;
+    while ((m = caretRe.exec(s))) results.push({ index: m.index, exp: parseFloat(m[1]) });
+    results.sort((a, b) => a.index - b.index);
+    return results;
+};
+
+/**
+ * Finds the LAST "log10(X) = A/B ≈ C" or "ln(X) = C" clause in the text and returns
+ * its resolved value as a log10 exponent (natural-log values are converted via /ln(10)).
+ * Only the LAST clause matters — LLMs often write an intermediate fragment first
+ * ("log(K) = A/B, which simplifies to log(K) = ... = C") and only the final restatement
+ * is the value that should carry into the antilog step.
+ */
+const findLastLogClause = (text) => {
+    const s = String(text || "");
+    const clauseRe = /\b(log(?:10)?|ln)\s*\(?[A-Za-z0-9_]*\)?\s*[≈=]\s*([\d\s\/\*.\-≈=()]+)/gi;
+    let last = null, m;
+    while ((m = clauseRe.exec(s))) {
+        const kind = m[1].toLowerCase().startsWith("ln") ? "ln" : "log10";
+        const nums = [...m[2].matchAll(/(-?\d+(?:\.\d+)?)/g)].map(x => parseFloat(x[1]));
+        if (!nums.length) continue;
+        const val = nums[nums.length - 1];
+        const exp = kind === "ln" ? val / Math.LN10 : val;
+        last = { endIndex: m.index + m[0].length, exp, kind };
+    }
+    return last;
+};
+
+/**
+ * Catches antilog exponent slips: a derivation computes log10(K) ≈ 37.18 but the
+ * stated final answer is 10¹⁸ instead of 10³⁷ (a ~19-order-of-magnitude error LLMs
+ * are prone to when converting a log value back to a power of ten). None of the
+ * other consistency checks catch this — they verify the marked option matches the
+ * text's OWN stated conclusion, and here the text's conclusion is self-consistently
+ * wrong (states 10¹⁸ and then also uses 10¹⁸ as "the answer").
+ *
+ * Deliberately scoped to the window immediately AFTER the log clause (not the whole
+ * derivation) — an unscoped search cross-referenced unrelated "10^N" values that were
+ * just given data elsewhere in the same explanation (e.g. a Ka value quoted earlier),
+ * producing false positives. Only the last log/ln clause is checked, for the same
+ * reason: an earlier, not-yet-simplified fragment is not the value that carries into
+ * the antilog. This is a heuristic, not a symbolic solver — it only fires when a
+ * log/antilog CHAIN is written out; it has no opinion on derivations that don't do a
+ * base-10 exponent conversion at all.
+ */
+const validateLogAntilogConsistency = (solveSteps = [], finalAnswerDisplay = "") => {
+    const text = [...(solveSteps || []).map(String), String(finalAnswerDisplay || "")].join(" ");
+    const clause = findLastLogClause(text);
+    if (!clause) return; // no log/ln arithmetic — nothing to check
+
+    const WINDOW_CHARS = 200;
+    const TOLERANCE = 1.5; // orders of magnitude; absorbs normal antilog rounding
+    const window = text.slice(clause.endIndex, clause.endIndex + WINDOW_CHARS);
+    const exponents = findExponentsIn(window);
+    if (!exponents.length) return; // no antilog conclusion nearby — nothing to cross-check
+
+    const stated = exponents[exponents.length - 1].exp;
+    const diff = Math.abs(stated - clause.exp);
+    if (diff > TOLERANCE) {
+        throw new Error(
+            `Log/antilog mismatch: derivation computes ${clause.kind === "ln" ? "ln" : "log10"}-based exponent ≈${clause.exp.toFixed(2)} but the stated answer uses 10^${stated} — likely an antilog conversion error (off by ~${diff.toFixed(1)} orders of magnitude)`
+        );
+    }
+};
+
+/**
+ * Finds the LAST "exp(X) = Y" or "e^X = Y" occurrence and returns its exponent X
+ * plus the byte offset right after the match — mirrors findLastLogClause's "last
+ * occurrence only" rationale (an earlier, unrelated exp() elsewhere in the same
+ * derivation should not be cross-checked against a later, unrelated claimed value).
+ */
+const findLastExpClaim = (text) => {
+    const s = String(text || "");
+    const re = /\bexp\s*\(\s*(-?\d+(?:\.\d+)?)\s*\)|\be\s*\^\s*(-?\d+(?:\.\d+)?)/gi;
+    let m, last = null;
+    while ((m = re.exec(s))) last = m;
+    if (!last) return null;
+    const exponent = parseFloat(last[1] ?? last[2]);
+    if (!Number.isFinite(exponent)) return null;
+    return { endIndex: last.index + last[0].length, exponent };
+};
+
+/**
+ * Catches exp()/e^ arithmetic slips: a derivation writes "exp(12.028) ≈ 1.67×10⁸"
+ * when exp(12.028) is actually ≈1.67×10⁵ (a live example — off by exactly 3 orders
+ * of magnitude, the same failure family as validateLogAntilogConsistency but via a
+ * direct exponential rather than a log-then-antilog chain, so the log/ln-anchored
+ * check above never sees it).
+ *
+ * Unlike the log/antilog check, this one converts directly: expected log10(exp(X))
+ * = X / ln(10), compared against log10 of whatever numeric value follows exp(X) in
+ * the text (scanned in a bounded window, same false-positive rationale as above —
+ * grep-matching "10^N" across the WHOLE derivation cross-referenced unrelated given
+ * data during testing).
+ */
+const validateExpConsistency = (solveSteps = [], finalAnswerDisplay = "") => {
+    const text = [...(solveSteps || []).map(String), String(finalAnswerDisplay || "")].join(" ");
+    const claim = findLastExpClaim(text);
+    if (!claim) return; // no exp()/e^ arithmetic — nothing to check
+
+    const WINDOW_CHARS = 120;
+    const TOLERANCE = 1.0; // orders of magnitude
+    const window = text
+        .slice(claim.endIndex, claim.endIndex + WINDOW_CHARS)
+        .replace(/(\d),(\d)/g, "$1$2"); // "167,430" -> "167430" so it isn't truncated at the comma
+
+    const valueToken = window.match(
+        /\d+(?:\.\d+)?(?:\s*[×x]\s*10\s*\^?\s*[⁻−\-]?[⁰¹²³⁴⁵⁶⁷⁸⁹\d]+)?/
+    );
+    if (!valueToken) return; // no claimed value nearby — nothing to cross-check
+
+    const claimedValue = parseNumber(valueToken[0]);
+    if (!Number.isFinite(claimedValue) || claimedValue <= 0) return;
+
+    const expectedLog10 = claim.exponent / Math.LN10;
+    const actualLog10 = Math.log10(claimedValue);
+    const diff = Math.abs(expectedLog10 - actualLog10);
+    if (diff > TOLERANCE) {
+        throw new Error(
+            `exp() arithmetic mismatch: exp(${claim.exponent}) should be ≈10^${expectedLog10.toFixed(2)} but the derivation states ${valueToken[0].trim()} (≈10^${actualLog10.toFixed(2)}) — off by ~${diff.toFixed(1)} orders of magnitude`
+        );
+    }
+};
+
+/**
+ * VALIDATION 5: Better answer matching
+ * Finds the best matching option for computed answer with proper tolerance
+ */
+const findBestMatchingOption = (computedValue, options = [], tolerance = null) => {
+    if (!Number.isFinite(computedValue) || !options.length) {
+        return null;
+    }
+
+    const optionNums = options.map(o => ({ val: parseNumber(o), orig: o }));
+    const validOptions = optionNums.filter(o => Number.isFinite(o.val));
+
+    if (!validOptions.length) return null;
+
+    // Exact match first (within machine epsilon for floating point)
+    const exactMatch = validOptions.find(o => Math.abs(o.val - computedValue) < 1e-10);
+    if (exactMatch) {
+        return { index: options.indexOf(exactMatch.orig), option: exactMatch.orig, distance: 0 };
+    }
+
+    // Calculate smart tolerance based on option spacing
+    let smartTol = tolerance ?? answerMatchTolerance(computedValue, validOptions.map(o => o.val));
+
+    // Find closest option within tolerance
+    const candidates = validOptions
+        .map((o, idx) => ({
+            index: options.indexOf(o.orig),
+            option: o.orig,
+            distance: Math.abs(o.val - computedValue),
+        }))
+        .filter(c => c.distance <= smartTol)
+        .sort((a, b) => a.distance - b.distance);
+
+    if (candidates.length === 0) {
+        // No match within tolerance — return closest with warning
+        const closest = validOptions
+            .map((o, idx) => ({
+                index: options.indexOf(o.orig),
+                option: o.orig,
+                distance: Math.abs(o.val - computedValue),
+            }))
+            .sort((a, b) => a.distance - b.distance)[0];
+        return { ...closest, outOfTolerance: true };
+    }
+
+    // If two options are equidistant, that's ambiguous
+    if (candidates.length >= 2 && Math.abs(candidates[0].distance - candidates[1].distance) < 1e-10) {
+        throw new Error(
+            `Computed value (${computedValue}) is equidistant from options "${candidates[0].option}" and "${candidates[1].option}" — ambiguous`
+        );
+    }
+
+    return candidates[0];
+};
+
+/**
+ * Runs all 6 pre-MCQ validation layers against a skeleton. Throws on the first
+ * failure with a descriptive message. MUST be called on every skeleton before
+ * buildAndPush() — including skeletons coming back from the repair LLM, which
+ * are just as likely (empirically MORE likely) to still be broken.
+ */
+const runSkeletonValidationGates = (sk) => {
+    // VALIDATION 1: Stem quality
+    validateStemQuality(sk.stem);
+
+    // VALIDATION 2: Solve step chain
+    // (No separate "explanation completeness" gate here: neither the initial skeleton
+    // prompt nor the repair prompt ever asks for an `explanation` field — only stem/
+    // finalAnswer/solveSteps/distractorValues. buildMcqFromSkeleton() synthesizes the
+    // real explanation from solveSteps via lockExplanationToMarkedOption(). Checking
+    // sk.explanation pre-build was checking a field that is always empty by design,
+    // which rejected 100% of skeletons — confirmed live: a real chemistry generation
+    // run produced 0/5 questions in a chunk, every one killed by "Explanation is
+    // empty". Solve-step adequacy (checked above) is the correct pre-build proxy.
+    validateSolveStepChain(sk.solveSteps);
+
+    // VALIDATION 4: Distractor quality
+    const fa = sk.finalAnswer || {};
+    const display = String(fa.display ?? fa.value ?? "").trim();
+    const unit = String(fa.unit || "").trim();
+    const computed = parseNumber(display);
+    if (Number.isFinite(computed)) {
+        validateDistractorQuality(computed, unit, sk.distractorValues || []);
+    }
+
+    // VALIDATION 5: Answer-option coherence (unit consistency across all options)
+    validateSkeletonAnswerCoherence(sk);
+
+    // VALIDATION 6: Computed answer must match an option (no silent divergence)
+    if (Number.isFinite(computed) && (sk.distractorValues || []).length > 0) {
+        const allOptions = [display, ...(sk.distractorValues || [])];
+        const match = findBestMatchingOption(computed, allOptions);
+        if (!match || match.outOfTolerance) {
+            throw new Error(
+                `Computed answer (${display}) does not match any option within tolerance`
+            );
+        }
+    }
+
+    // VALIDATION 7: Log/antilog exponent consistency (e.g. log10(K)≈37.18 but the
+    // stated answer uses 10¹⁸ instead of 10³⁷). See validateLogAntilogConsistency
+    // for why this is scoped to a text window and the LAST log clause only.
+    validateLogAntilogConsistency(sk.solveSteps, display);
+
+    // VALIDATION 8: exp()/e^ arithmetic consistency — same failure family as #7 but
+    // via a direct exponential (e.g. Arrhenius A_cat/A_uncat derivations) rather than
+    // a log-then-antilog chain, so #7 never sees it.
+    validateExpConsistency(sk.solveSteps, display);
+};
+
+/**
+ * Pre-MCQ validation: rejects skeletons where the computed answer and option values
+ * are fundamentally incoherent (unit mismatches, computed value absent, etc).
+ * Fails fast before wasting time building MCQ with bad data.
+ */
+const validateSkeletonAnswerCoherence = (skeleton) => {
+    const fa = skeleton.finalAnswer || {};
+    const display = String(fa.display ?? fa.value ?? "").trim();
+    const unit = String(fa.unit || "").trim();
+    const distractorValues = skeleton.distractorValues || [];
+
+    if (!display) {
+        throw new Error("Missing finalAnswer.display or finalAnswer.value");
+    }
+
+    // Parse the computed answer
+    const computed = parseNumber(display);
+    if (!Number.isFinite(computed)) {
+        // Non-numeric answer — check that all distractors are also non-numeric
+        const anyNumeric = distractorValues.some(d => Number.isFinite(parseNumber(d)));
+        if (anyNumeric) {
+            throw new Error(
+                `Answer is non-numeric ("${display}") but has numeric distractors — inconsistent types`
+            );
+        }
+        return; // Text answers pass here; unit checking doesn't apply
+    }
+
+    // Numeric answer: all options must have matching unit structure
+    const extractUnit = (text) => {
+        const s = String(text || "").trim();
+        const m = s.match(/\s+([a-zA-Z°\/·\-·^₀-₉]+.*?)$/);
+        return m ? m[1].trim() : "";
+    };
+
+    const computedUnit = extractUnit(display);
+    const unitMismatch = distractorValues.some(d => {
+        const dUnit = extractUnit(d);
+        // Both have units: units must match
+        if (computedUnit && dUnit && computedUnit !== dUnit) return true;
+        // One has unit, other doesn't
+        if ((computedUnit && !dUnit) || (!computedUnit && dUnit)) return true;
+        return false;
+    });
+
+    if (unitMismatch) {
+        throw new Error(
+            `Inconsistent units across options: answer "${display}" but distractors include different unit structures`
+        );
+    }
+
+    // Verify that at least one distractor has a different numeric value
+    const distractorNumerics = distractorValues.map(d => parseNumber(d));
+    const anyDifferent = distractorNumerics.some(n =>
+        Number.isFinite(n) && Math.abs(n - computed) > 1e-10
+    );
+    if (!anyDifferent && distractorValues.length > 0) {
+        throw new Error(
+            `All distractors are numerically identical to the answer — impossible to distinguish correct option`
+        );
+    }
+};
+
 export const skeletonsToQuestions = async (
     skeletons,
     tierSlots = [],
@@ -1372,6 +1854,32 @@ export const skeletonsToQuestions = async (
             registerBatchStem(built.questionText, batchSeenStems);
         }
         return built;
+    };
+
+    // Track failure reasons for analytics
+    const failureCategories = {
+        stemQuality: 0,
+        solveSteps: 0,
+        explanation: 0,
+        distractors: 0,
+        answerCoherence: 0,
+        answerMatching: 0,
+        mathConsistency: 0,
+        hardMandate: 0,
+        buildError: 0,
+        other: 0,
+    };
+
+    const categorizeError = (message) => {
+        if (/log\/antilog|antilog|exp\(\).*mismatch|orders of magnitude/i.test(message)) return "mathConsistency";
+        if (/stem/i.test(message)) return "stemQuality";
+        if (/solve step/i.test(message)) return "solveSteps";
+        if (/explanation/i.test(message)) return "explanation";
+        if (/distractor/i.test(message)) return "distractors";
+        if (/unit|option|answer.*value/i.test(message)) return "answerCoherence";
+        if (/computed.*answer|matching|ambiguous/i.test(message)) return "answerMatching";
+        if (/hard question|mandate|concept/i.test(message)) return "hardMandate";
+        return "other";
     };
 
     for (let i = 0; i < skeletons.length; i++) {
@@ -1440,15 +1948,36 @@ export const skeletonsToQuestions = async (
             });
             continue;
         }
+
+        // Comprehensive pre-MCQ validation
         try {
-            buildAndPush(sk, i, assignedTier, assignedSlot);
+            runSkeletonValidationGates(sk);
         } catch (err) {
+            const category = categorizeError(err.message);
+            failureCategories[category]++;
             repairQueue.push({
                 sk,
                 i,
                 assignedTier,
                 assignedSlot,
                 buildError: err.message,
+                category,
+            });
+            continue;
+        }
+
+        try {
+            buildAndPush(sk, i, assignedTier, assignedSlot);
+        } catch (err) {
+            const category = categorizeError(err.message);
+            failureCategories[category]++;
+            repairQueue.push({
+                sk,
+                i,
+                assignedTier,
+                assignedSlot,
+                buildError: err.message,
+                category,
             });
         }
     }
@@ -1505,6 +2034,12 @@ export const skeletonsToQuestions = async (
                 continue;
             }
             try {
+                // Repaired skeletons are just as likely — empirically MORE likely — to
+                // still be broken (repair LLM fixed the flagged issue but introduced or
+                // left a different one, e.g. unit mismatch, duplicate distractor). Run
+                // the same 6 gates the first pass ran, or a "fixed" skeleton with a
+                // fabricated unit mismatch ships straight through untouched.
+                runSkeletonValidationGates(fixed);
                 const built = buildAndPush(
                     fixed,
                     item.i,
@@ -1517,9 +2052,12 @@ export const skeletonsToQuestions = async (
                     conceptSlot: item.assignedSlot,
                 });
             } catch (err) {
+                const category = categorizeError(err.message);
+                failureCategories[category]++;
                 pipelineTrace("SKELETON_REPAIR_BUILD_FAILED", {
                     index: item.i + 1,
                     error: err.message,
+                    category,
                 });
             }
         }
@@ -1533,6 +2071,20 @@ export const skeletonsToQuestions = async (
                     .join("; "),
             });
         }
+    }
+
+    // Log failure category summary for analytics
+    const totalFailures = Object.values(failureCategories).reduce((a, b) => a + b, 0);
+    if (totalFailures > 0) {
+        const categoryBreakdown = Object.entries(failureCategories)
+            .filter(([_, count]) => count > 0)
+            .map(([cat, count]) => `${cat}(${count})`)
+            .join(", ");
+        pipelineTrace("SKELETON_FAILURE_BREAKDOWN", {
+            totalFailures,
+            categories: categoryBreakdown,
+            passRate: `${Math.round((questions.length / skeletons.length) * 100)}%`,
+        });
     }
 
     return questions;
