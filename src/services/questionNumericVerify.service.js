@@ -19,13 +19,23 @@ const H = 6.626e-34;
 const E_MASS = 9.1e-31;
 
 export const parseNumber = (text) => {
-    const s = String(text || "")
-        .replace(/×|x/gi, "e")
-        .replace(/10\s*[⁻−-]?\s*(\d+)/g, (_, e) => `e-${e}`)
+    // Convert superscript digits and minus to ASCII
+    const superscriptMap = { '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4', '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9', '⁻': '-', '−': '-' };
+    let s = String(text || "").replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹⁻−]/g, m => superscriptMap[m]);
+
+    // Handle scientific notation: × 10^N or x 10^N → e+N; × 10-N or x 10-N → e-N
+    s = s.replace(/[×x]\s*10\s*(-?)\s*(\d+)/gi, (_, sign, exp) => {
+        // Use the minus sign if present, otherwise positive exponent
+        const op = sign === '-' ? '-' : '+';
+        return `e${op}${exp}`;
+    });
+
+    s = s
         .replace(/,/g, "")
         .trim();
-    const m = s.match(/-?\d+(?:\.\d+)?(?:e[+-]?\d+)?/i);
-    return m ? Number(m[0]) : NaN;
+    // Match numeric values with optional whitespace around the 'e' in exponent notation
+    const m = s.match(/-?\d+(?:\.\d+)?(?:\s*e[+-]?\d+)?/i);
+    return m ? Number(m[0].replace(/\s/g, '')) : NaN;
 };
 
 /**
