@@ -257,7 +257,14 @@ import {
   validateQuestionTopicRelevance,
   planQuestionBankTopics,
   logConfirmedQuestions,
+  applyAnswerCorrection,
 } from '../controllers/aiQuestion.controller.js';
+
+import {
+  getCleanupStatusController,
+  runCleanupNowController,
+  forceCleanupController,
+} from '../controllers/adminCleanup.controller.js';
 
 import {
   createPressAnnouncement,
@@ -807,6 +814,12 @@ router.post(
   logConfirmedQuestions
 );
 
+router.post(
+  '/ai/apply-answer-correction',
+  verifyJWT,
+  applyAnswerCorrection
+);
+
 // Save generated questions to Question Bank
 router.post(
   '/ai/save-generated-questions',
@@ -984,6 +997,28 @@ router.get(
   verifyJWT,
   verifyAdmin,
   downloadAdminCallRecording
+);
+
+// ==================== CLEANUP & MAINTENANCE ====================
+router.get(
+  '/cleanup/status',
+  verifyJWT,
+  verifyAdmin,
+  getCleanupStatusController
+);
+
+router.post(
+  '/cleanup/run',
+  verifyJWT,
+  verifyAdmin,
+  runCleanupNowController
+);
+
+router.post(
+  '/cleanup/force',
+  verifyJWT,
+  verifyAdmin,
+  forceCleanupController
 );
 
 export default router;

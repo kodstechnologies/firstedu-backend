@@ -28,6 +28,28 @@ export const parseNumber = (text) => {
     return m ? Number(m[0]) : NaN;
 };
 
+/**
+ * Distinguish true numeric options (numbers with optional units)
+ * from text containing digits (e.g., "Team 3", "1st place").
+ *
+ * Returns true for: "123", "123.45", "123 J", "1.5 kW", "0.005 mol/L"
+ * Returns false for: "Team 1", "1st place", "pH 3", "Year 2023"
+ */
+export const isNumericAnswer = (option) => {
+    const text = String(option || "").trim();
+    if (!text) return false;
+
+    // Match: number with optional unit, but not text containing a digit
+    // Pattern: -?\d+(\.\d+)? optionally followed by space + unit
+    const numericPattern = /^-?(\d+(?:\.\d+)?|\d+\/\d+)(?:\s+[a-zA-Z°\/·\-]+)?$/;
+    return numericPattern.test(text);
+};
+
+/**
+ * Inverse of isNumericAnswer — text options that are not numeric.
+ */
+export const isTextAnswer = (option) => !isNumericAnswer(option);
+
 /** Extract first N numeric literals from stem (with optional unit suffix). */
 const extractNumbers = (stem, limit = 12) => {
     const matches = [
@@ -506,24 +528,55 @@ function buildVerifyOptionsFromSkeleton(skeleton) {
     return [display, ...distractors].slice(0, 4);
 }
 
+/** Comprehensive unit whitelist (for reference only; units are no longer filtered). */
+const UNIT_WHITELIST = new Set([
+    // SI base units
+    "s", "m", "kg", "A", "K", "mol", "cd",
+    // SI derived units
+    "N", "J", "W", "Pa", "Hz", "C", "V", "Ω", "F", "H",
+    // Concentration & molarity
+    "M", "mol/L", "mol/kg", "ppm", "ppb", "g/L", "mg/L",
+    // Energy
+    "J", "kJ", "eV", "cal", "kcal", "kJ/mol", "kcal/mol",
+    // Power (including prefixed variants)
+    "W", "kW", "MW", "mW",
+    // Other common units
+    "min", "nm", "Å", "°C", "°F", "atm", "bar", "L", "mL",
+    // Specific chemistry units
+    "J/mol·K", "kJ/mol·K", "cm³", "cm³/mol", "g/mol",
+    // Time
+    "s", "ms", "μs", "ns", "min", "h",
+    // Distance
+    "m", "cm", "mm", "μm", "nm", "Å", "pm",
+    // Composed units (velocity, acceleration, etc.)
+    "m/s", "cm/s", "km/h", "kg/m³", "g/cm³", "K/s", "J/K",
+]);
+
 export const formatValueForOption = (value, unit = "") => {
     if (value == null) return "";
     if (typeof value === "string") return value;
+
     const u = String(unit || "").trim();
-    if (u === "min") return `${Math.round(value)} min`;
-    if (u === "M") return `${value.toFixed(2)} M`;
-    if (u === "mol/kg") return `${value.toFixed(2)} mol/kg`;
-    if (u === "kJ/mol") return `${value.toFixed(1)} kJ/mol`;
-    if (u === "nm") return `${value.toFixed(2)} nm`;
-    if (u === "J/mol·K") return `${value.toFixed(1)} J/mol·K`;
-    if (u === "W") return `${Math.round(value * 1000) / 1000} W`;
-    if (Number.isFinite(value)) {
-        if (Math.abs(value) >= 100 || Number.isInteger(value)) {
-            return String(Math.round(value * 100) / 100);
-        }
-        return value.toFixed(2);
+
+    // Preserve any unit passed in — don't filter by whitelist.
+    // Whitelist exists for documentation; actual unit preservation happens here.
+    const formatted = formatNumericValue(value);
+
+    if (!u) return formatted;
+    return `${formatted} ${u}`;
+};
+
+/** Format numeric value with appropriate precision. */
+const formatNumericValue = (value) => {
+    if (!Number.isFinite(value)) return String(value);
+
+    // Special handling for specific numeric values by convention
+    // These could be expanded based on domain-specific formatting rules
+    if (Math.abs(value) >= 100 || Number.isInteger(value)) {
+        return String(Math.round(value * 100) / 100);
     }
-    return String(value);
+
+    return value.toFixed(2);
 };
 
 const stripExplanationMetaTail = (explanation = "") => {

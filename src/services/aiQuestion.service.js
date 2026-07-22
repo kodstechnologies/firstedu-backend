@@ -236,9 +236,10 @@ export {
 // all — without it, the SDK falls back to undici's ~5min default headers
 // timeout, so a stuck call silently hangs for minutes before our own
 // retry/backoff logic (callGeminiWithRetries) ever gets a chance to run.
+// Increased from 90s to 120s to account for network jitter and Gemini latency variations.
 const GEMINI_REQUEST_TIMEOUT_MS = Math.max(
     10_000,
-    Number(process.env.GEMINI_REQUEST_TIMEOUT_MS ?? 90_000)
+    Number(process.env.GEMINI_REQUEST_TIMEOUT_MS ?? 120_000)
 );
 const genAI = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY,
@@ -598,7 +599,22 @@ const callGeminiWithRetries = async (generateOnce) => {
     let lastError;
     for (let attempt = 1; attempt <= GEMINI_QB_MAX_ATTEMPTS; attempt++) {
         try {
-            return await generateOnce();
+            const startTime = Date.now();
+            const result = await generateOnce();
+            const elapsed = Date.now() - startTime;
+
+            // Alert if slow (approaching timeout threshold)
+            if (elapsed > 70_000) {
+                console.warn(
+                    `[gemini] slow response: ${elapsed}ms (timeout: ${GEMINI_REQUEST_TIMEOUT_MS}ms) — consider increasing GEMINI_REQUEST_TIMEOUT_MS`
+                );
+            }
+
+            if (process.env.DEBUG_QB_TIMING) {
+                console.log(`[gemini] call completed in ${elapsed}ms (attempt ${attempt})`);
+            }
+
+            return result;
         } catch (error) {
             lastError = error;
             if (

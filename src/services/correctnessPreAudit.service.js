@@ -887,6 +887,90 @@ const detectExplanationContradictsKey = (q) => {
     };
 };
 
+/**
+ * Text-answer consistency check — explanation mentions wrong option.
+ * Uses word-boundary matching to distinguish "Team 1" from "Team 14".
+ * For non-STEM paths (DILR, VARC, CAT QA text answers).
+ */
+const detectTextAnswerConsistency = (q) => {
+    const explanation = String(q.explanation || "");
+    const opts = (q.options || []).map((o) => String(o || "").trim()).filter(Boolean);
+    const markedIdx = getMarkedOptionIndex(q);
+
+    if (markedIdx == null || !opts[markedIdx]) return null;
+
+    // Only run on non-numeric answers — numeric path uses its own checks
+    const markedOption = opts[markedIdx];
+    if (/^\d+(?:\.\d+)?(?:\s+[a-zA-Z°\/·\-]+)?$/.test(markedOption)) return null;
+
+    // Extract last 400 chars for conclusion patterns
+    const tail = explanation.slice(Math.max(0, explanation.length - 400));
+
+    // Patterns that indicate a final conclusion
+    const conclusionPatterns = [
+        /therefore,?\s+(?:the\s+)?(?:answer\s+(?:is|:|=)\s+)?(.+?)(?:\.|$)/i,
+        /hence,?\s+(.+?)(?:\.|$)/i,
+        /thus,?\s+(.+?)(?:\.|$)/i,
+        /the\s+(?:correct\s+)?answer\s+(?:is|:|=)\s+(.+?)(?:\.|$)/i,
+        /correct\s+(?:answer|option|choice)\s+(?:is|:|=)\s+(.+?)(?:\.|$)/i,
+    ];
+
+    const mentioned = new Set();
+    for (const pattern of conclusionPatterns) {
+        const m = tail.match(pattern);
+        if (m && m[1]) {
+            mentioned.add(m[1].trim());
+        }
+    }
+
+    if (!mentioned.size) return null; // No conclusion found
+
+    // Check if any mentioned value matches an option (other than marked)
+    for (const text of mentioned) {
+        // Skip very short mentions (noise)
+        if (text.length < 2) continue;
+
+        const mentionedMatches = opts.some((opt, idx) =>
+            idx !== markedIdx && mentionsToken(opt, text)
+        );
+
+        if (mentionedMatches) {
+            const altIdx = opts.findIndex((opt, idx) =>
+                idx !== markedIdx && mentionsToken(opt, text)
+            );
+            return {
+                questionNumber: q.sampleNumber,
+                issue: `Explanation concludes "${text}" but marked answer is ${String.fromCharCode(65 + markedIdx)} ("${markedOption}"); "${text}" matches option ${String.fromCharCode(65 + altIdx)}.`,
+                severity: "critical",
+                confidence: "confirmed",
+                category: ISSUE_CATEGORY.FACTUAL,
+            };
+        }
+    }
+
+    return null;
+};
+
+/**
+ * Word-boundary token matching.
+ * "Team 1" matches in "Team 1 won" but NOT in "Team 14".
+ * Used for text-answer consistency checks in non-STEM exams.
+ */
+const mentionsToken = (fullText, token) => {
+    const full = norm(fullText);
+    const normalized = norm(token);
+
+    if (!full || !normalized) return false;
+    if (normalized.length < 2) return false; // Too short
+
+    if (full === normalized) return true;
+
+    // Word-boundary regex: token must be its own word, not substring
+    const escapedToken = normalized.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const wordBoundary = new RegExp(`\\b${escapedToken}\\b`);
+    return wordBoundary.test(full);
+};
+
 const DETECTORS = [
     detectExplanationContradictsKey,
     detectInvalidPhScaleOptions,
@@ -907,6 +991,7 @@ const DETECTORS = [
     detectExplanationSelfCorrection,
     detectExplanationCorrectionContradiction,
     detectExplanationNumericMismatch,
+    detectTextAnswerConsistency, // NEW: for non-STEM text answers (DILR, VARC, CAT)
 ];
 
 /**

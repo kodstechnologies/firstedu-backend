@@ -826,19 +826,71 @@ export const logConfirmedQuestions = asyncHandler(async (req, res) => {
     );
 });
 
+/**
+ * Apply deep answer correction to an existing question bank.
+ * Performs independent re-solve and fixes high-confidence disagreements.
+ * @route POST /api/admin/ai/apply-answer-correction
+ */
+export const applyAnswerCorrection = asyncHandler(async (req, res) => {
+    const { topic, bankName, questions, evaluationProvider } = req.body;
+
+    if (!Array.isArray(questions) || questions.length === 0) {
+        throw new ApiError(400, 'Validation Error', ['questions array is required and must not be empty']);
+    }
+
+    if (questions.length > 500) {
+        throw new ApiError(400, 'Validation Error', ['Maximum 500 questions per request']);
+    }
+
+    try {
+        const result = await runWithPipelineTrace(
+            req,
+            topic || bankName || 'unknown',
+            { intent: 'answer_correction', questionCount: questions.length },
+            async () => {
+                return await aiQuestionService.applyAnswerCorrectionToQuestionBank({
+                    topic: topic || bankName || '',
+                    bankName: bankName || topic || '',
+                    questions,
+                    evaluationProvider: evaluationProvider || 'openai',
+                });
+            }
+        );
+
+        return res.status(200).json(
+            ApiResponse.success(
+                {
+                    questions: result.questions,
+                    checkedCount: result.checkedCount,
+                    disagreementCount: result.disagreementCount,
+                    fixedCount: result.fixedCount,
+                    skippedCount: result.skippedCount || 0,
+                    report: result.report,
+                },
+                `Answer correction complete: ${result.fixedCount} fixed, ${result.checkedCount} checked`
+            )
+        );
+    } catch (error) {
+        console.error('[answer-correction]', error.message);
+        throw error;
+    }
+});
+
 export default {
     generateQuestions,
     generateQuestionBankSuggestions,
+    getQuestionBankGenerationJobStatus,
     getQuestionBankBackgroundValidation,
     getPipelineEventsStatus,
     generateImageQuestion,
     generateImageQuestionOpenAI,
     generateQuestionImage,
-  listGeminiImageModels,
-  listGeminiTextModels,
-  generateQuestionImageOpenAI,
+    listGeminiImageModels,
+    listGeminiTextModels,
+    generateQuestionImageOpenAI,
     saveGeneratedQuestions,
     validateQuestionTopicRelevance,
     planQuestionBankTopics,
     logConfirmedQuestions,
+    applyAnswerCorrection,
 };
