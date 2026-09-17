@@ -38,6 +38,8 @@ import '../models/SscCglTier1CompetitiveQuestion.js';
 import '../models/SscCglTier2CompetitiveQuestion.js';
 import '../models/UpscCompetitiveQuestion.js';
 import '../models/CatCompetitiveQuestion.js';
+import '../models/AiPaperGenerationJob.js';
+import '../models/AiPaperGenerationQuestion.js';
 
 dotenv.config();
 

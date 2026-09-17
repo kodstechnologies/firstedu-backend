@@ -268,6 +268,17 @@ import {
   listJeeExamSyllabus,
   getJeeExamSyllabusByExam,
 } from '../controllers/jeeExamSyllabus.controller.js';
+import {
+  getExamBlueprint,
+  getExamTopics,
+  planExamTopics,
+  generateExamQuestions,
+  dualLockExamQuestions,
+  expandExamQuestions,
+  startExamQuestionJob,
+  getExamQuestionJob,
+  resumeExamQuestionJob,
+} from '../controllers/aiPoweredTest.controller.js';
 
 import {
   getCleanupStatusController,
@@ -737,6 +748,21 @@ router.get('/competitive/jee-main/papers', verifyJWT, listJeeMainPapersAdmin);
 router.get('/competitive/jee-main/papers/:id', verifyJWT, getJeeMainPaperAdmin);
 router.get('/competitive/jee-syllabus', verifyJWT, listJeeExamSyllabus);
 router.get('/competitive/jee-syllabus/:examType', verifyJWT, getJeeExamSyllabusByExam);
+
+/* ==================== AI POWERED TEST (exam blueprint + seeded topics) ==================== */
+router.get('/ai-powered-test/exam-blueprint', verifyJWT, getExamBlueprint);
+router.get('/ai-powered-test/exam-topics', verifyJWT, getExamTopics);
+router.post('/ai-powered-test/topic-plan', verifyJWT, planExamTopics);
+router.post('/ai-powered-test/questions/generate', verifyJWT, generateExamQuestions);
+router.post('/ai-powered-test/questions/dual-lock', verifyJWT, dualLockExamQuestions);
+router.post('/ai-powered-test/questions/expand', verifyJWT, expandExamQuestions);
+router.post('/ai-powered-test/questions', verifyJWT, startExamQuestionJob);
+router.get('/ai-powered-test/questions/jobs/:jobId', verifyJWT, getExamQuestionJob);
+router.post(
+  '/ai-powered-test/questions/jobs/:jobId/resume',
+  verifyJWT,
+  resumeExamQuestionJob
+);
 
 /* ==================== AI QUESTION GENERATION ==================== */
 /* RAG + AI generation APIs are commented out. JEE Main papers are served
