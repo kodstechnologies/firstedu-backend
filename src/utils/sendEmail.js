@@ -96,9 +96,9 @@ export const sendOTPEmail = async (email, otp, name) => {
       throw new ApiError(500, `SMTP configuration incomplete. Missing: ${missingVars.join(', ')}`);
     }
 
-    if (!process.env.SMTP_NOREPLY_PASSWORD) {
-      throw new ApiError(500, 'SMTP_NOREPLY_PASSWORD is not configured');
-    }
+    // if (!process.env.SMTP_NOREPLY_PASSWORD) {
+    //   throw new ApiError(500, 'SMTP_NOREPLY_PASSWORD is not configured');
+    // }
 
     const info = await sendEmailWithTemplate({
       to: email,
