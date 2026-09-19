@@ -101,6 +101,7 @@ export function getAgoraRecordingConfig() {
 }
 
 /** Human-readable list of missing config (for logs, no secrets). */
+
 export function getAgoraRecordingDisableReasons() {
   const rtc = getAgoraRtcConfig();
   const reasons = [];
