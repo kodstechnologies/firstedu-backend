@@ -1,0 +1,189 @@
+import ExamSyllabusPack from "../models/ExamSyllabusPack.js";
+
+/**
+ * Multi-exam syllabus + scoring pack accessors (Mongo).
+ * Generation file packs (ncert / quotas) stay file-backed; this layer owns
+ * syllabus chapters + relevance scoring for any examType.
+ */
+
+const normalizeExamType = (value = "") =>
+  String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+
+const normalizeSubject = (value = "") => {
+  const key = String(value || "").trim();
+  if (/^math/i.test(key)) return "Mathematics";
+  if (/^phys/i.test(key)) return "Physics";
+  if (/^chem/i.test(key)) return "Chemistry";
+  if (/^bot/i.test(key)) return "Botany";
+  if (/^zoo/i.test(key)) return "Zoology";
+  if (/^bio/i.test(key)) return "Biology";
+  if (/^varc$/i.test(key) || /verbal ability.*reading comprehension/i.test(key))
+    return "VARC";
+  if (
+    /^dilr$/i.test(key) ||
+    /data interpretation and logical reasoning/i.test(key)
+  ) {
+    return "DILR";
+  }
+  if (
+    /^qa$/i.test(key) ||
+    /^quantitative ability$/i.test(key) ||
+    /^quantitative aptitude\s*\(\s*qa\s*\)$/i.test(key)
+  ) {
+    return "QA";
+  }
+  return key;
+};
+
+/** Map Mongo pack topic → generation-service shape used by Advanced maths/physics. */
+export const mapPackTopicToGenerationShape = (topic = {}) => {
+  const relevance =
+    topic.scoring?.relevance ||
+    topic.scoring?.advancedRelevance ||
+    null;
+  const scoring = topic.scoring
+    ? {
+        advanced_relevance: relevance,
+        relevance,
+        jee_main_freq_band: topic.scoring.freqBand || null,
+        neet_freq_band: topic.scoring.freqBand || null,
+        cat_freq_band: topic.scoring.freqBand || null,
+        avg_q_per_session_jee_main: topic.scoring.avgQPerSession || null,
+        avg_q_per_session_neet: topic.scoring.avgQPerSession || null,
+        avg_q_per_slot: topic.scoring.avgQPerSession || null,
+        difficulty_split: topic.scoring.difficultySplit
+          ? {
+              easy: topic.scoring.difficultySplit.easy,
+              medium: topic.scoring.difficultySplit.medium,
+              hard: topic.scoring.difficultySplit.hard,
+            }
+          : undefined,
+        notes: topic.scoring.notes || "",
+      }
+    : null;
+
+  return {
+    topicId: topic.topicId || null,
+    chapter: topic.title || "",
+    classLevel: topic.classLevel || "",
+    branch: topic.branch || null,
+    subtopics: Array.isArray(topic.subtopics) ? topic.subtopics : [],
+    unit: topic.unit || topic.topicId || null,
+    content: topic.content || "",
+    order: topic.order ?? 0,
+    scoring,
+    highLock: String(relevance || "").toLowerCase() === "high",
+    relevance: relevance ? String(relevance).toLowerCase() : null,
+  };
+};
+
+export const findExamSyllabusPack = async ({
+  examType,
+  subject,
+  year = 2026,
+  paper = null,
+} = {}) => {
+  const exam = normalizeExamType(examType);
+  const subj = normalizeSubject(subject);
+  if (!exam || !subj) return null;
+
+  const aliases = [subj, String(subject || '').trim()].filter(Boolean);
+  if (/reasoning/i.test(subj) || /logical/i.test(subj)) {
+    aliases.push(
+      "Reasoning",
+      "Reasoning Ability",
+      "Logical Reasoning",
+      "Legal Reasoning",
+      "Reasoning and General Intelligence",
+      "General Intelligence & Reasoning",
+      "General Intelligence and Reasoning",
+      "DILR"
+    );
+  }
+  if (/quant/i.test(subj) || /math/i.test(subj) || subj === "QA") {
+    aliases.push(
+      "QA",
+      "Qa",
+      "Quantitative Aptitude",
+      "Quantitative Ability",
+      "Quantitative Aptitude (QA)",
+      "Mathematical Abilities",
+      "Mathematics",
+      "Quantitative Techniques"
+    );
+  }
+  if (/english/i.test(subj) || /verbal/i.test(subj) || subj === "VARC") {
+    aliases.push(
+      "VARC",
+      "Varc",
+      "English Comprehension",
+      "English Language",
+      "English Language and Comprehension",
+      "English",
+      "Verbal Ability and Reading Comprehension"
+    );
+  }
+  if (/awareness|knowledge|gk|ga/i.test(subj)) {
+    aliases.push(
+      "General Awareness",
+      "General Knowledge",
+      "GA",
+      "Current Affairs",
+      "Computer Knowledge"
+    );
+  }
+
+  const query = {
+    examType: exam,
+    subject: { $in: [...new Set(aliases)] },
+    year: Number(year) || 2026,
+    isActive: true,
+  };
+  if (paper != null && String(paper).trim() !== "") {
+    query.paper = String(paper).trim();
+  }
+
+  let doc = await ExamSyllabusPack.findOne(query)
+    .sort({ topicCount: -1, updatedAt: -1 })
+    .lean();
+  if (!doc && query.paper != null) {
+    const { paper: _p, ...withoutPaper } = query;
+    doc = await ExamSyllabusPack.findOne(withoutPaper)
+      .sort({ topicCount: -1, updatedAt: -1 })
+      .lean();
+  }
+  return doc;
+};
+
+export const getExamSyllabusPackTopics = async (opts = {}) => {
+  const pack = await findExamSyllabusPack(opts);
+  if (!pack?.topics?.length) return [];
+  return pack.topics.map(mapPackTopicToGenerationShape);
+};
+
+export const getHighRelevancePackTopics = async (opts = {}) => {
+  const topics = await getExamSyllabusPackTopics(opts);
+  return topics.filter((t) => String(t.relevance || "").toLowerCase() === "high");
+};
+
+export const getMediumPlusPackTopics = async (opts = {}) => {
+  const topics = await getExamSyllabusPackTopics(opts);
+  return topics.filter((t) => {
+    const r = String(t.relevance || "").toLowerCase();
+    return r === "high" || r === "medium";
+  });
+};
+
+export const listExamSyllabusPacks = async ({ examType = null } = {}) => {
+  const query = { isActive: true };
+  if (examType) query.examType = normalizeExamType(examType);
+  return ExamSyllabusPack.find(query)
+    .select(
+      "examType examLabel subject year paper topicCount highRelevanceCount scoringSource updatedAt"
+    )
+    .sort({ examType: 1, subject: 1 })
+    .lean();
+};

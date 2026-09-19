@@ -330,7 +330,7 @@ export const detectExplanationNamedConclusionMismatch = (q) => {
 };
 
 const EXPLANATION_META_COMMENTARY =
-    /\b(?:re-?evaluat|re-?calculat|recomput|adjustment|editing option|my mistake|error in distractor|let(?:'s| us)\s+(?:adjust|use|recalculate|assume|pick|choose)|however,?\s+considering|calculated\s+as|is incorrect,\s*checking|none match|correction:|wait)\b/i;
+    /\b(?:re-?evaluat(?:ing|e|ion)?|re-?calculat(?:ing|e|ion)?|recomput(?:ing|e)?|correcting|correction|upon reconsideration|actually|instead|however|wait|my mistake|i made a mistake|let us correct|let'?s correct|adjustment|editing option|error in distractor|let(?:'s| us)\s+(?:adjust|use|recalculate|assume|pick|choose|correct)|however,?\s+considering|calculated\s+as|is incorrect,\s*checking|none match)\b/i;
 
 /** Draft/meta commentary in explanation — not publishable on first pass. */
 const detectExplanationMetaCommentary = (q) => {
@@ -797,6 +797,116 @@ const detectDuplicateOptions = (q) => {
     return null;
 };
 
+/** Structural: option count must be 4 for MCQ (2 for true/false). */
+const detectOptionCountInvalid = (q) => {
+    const type = String(q.questionType || "single").toLowerCase();
+    if (type === "connected") return null;
+    const opts = (q.options || [])
+        .map((o) =>
+            typeof o === "object" && o !== null ? String(o.text ?? "") : String(o ?? "")
+        )
+        .map((t) => t.trim())
+        .filter(Boolean);
+    if (type === "true_false") {
+        if (opts.length !== 2) {
+            return {
+                questionNumber: q.sampleNumber,
+                issue: `True/False question must have exactly 2 options (found ${opts.length}).`,
+                severity: "critical",
+                confidence: "confirmed",
+                category: ISSUE_CATEGORY.FACTUAL,
+            };
+        }
+        return null;
+    }
+    if (opts.length !== 4) {
+        return {
+            questionNumber: q.sampleNumber,
+            issue: `MCQ must have exactly 4 non-empty options (found ${opts.length}).`,
+            severity: "critical",
+            confidence: "confirmed",
+            category: ISSUE_CATEGORY.FACTUAL,
+        };
+    }
+    return null;
+};
+
+/** Structural: explanation required and non-whitespace. */
+const detectEmptyExplanation = (q) => {
+    const type = String(q.questionType || "single").toLowerCase();
+    if (type === "connected") return null;
+    if (String(q.explanation || "").trim()) return null;
+    return {
+        questionNumber: q.sampleNumber,
+        issue: "Explanation is empty or missing.",
+        severity: "critical",
+        confidence: "confirmed",
+        category: ISSUE_CATEGORY.FACTUAL,
+    };
+};
+
+/** Structural: required stem + answer fields. */
+const detectMissingRequiredFields = (q) => {
+    const type = String(q.questionType || "single").toLowerCase();
+    if (type === "connected") return null;
+    if (!String(q.questionText || "").trim()) {
+        return {
+            questionNumber: q.sampleNumber,
+            issue: "questionText is empty or missing.",
+            severity: "critical",
+            confidence: "confirmed",
+            category: ISSUE_CATEGORY.FACTUAL,
+        };
+    }
+    const hasIndex = Number.isFinite(Number(q.correctIndex));
+    const hasAnswer =
+        q.correctAnswer != null &&
+        String(Array.isArray(q.correctAnswer) ? q.correctAnswer.join("") : q.correctAnswer)
+            .trim().length > 0;
+    if (!hasIndex && !hasAnswer) {
+        return {
+            questionNumber: q.sampleNumber,
+            issue: "correctAnswer / correctIndex is missing.",
+            severity: "critical",
+            confidence: "confirmed",
+            category: ISSUE_CATEGORY.FACTUAL,
+        };
+    }
+    return null;
+};
+
+/** Multiple-correct must mark exactly 2 options (also covered by detectAllOptionsMarkedCorrect for >2). */
+const detectMultipleCorrectCardinality = (q) => {
+    if (String(q.questionType || "").toLowerCase() !== "multiple") return null;
+    const correctIdx = Array.isArray(q.multipleCorrectIndexes)
+        ? q.multipleCorrectIndexes.map(Number).filter(Number.isFinite)
+        : [];
+    if (Array.isArray(q.correctAnswer)) {
+        const letters = q.correctAnswer
+            .map((x) => String(x).trim().toUpperCase())
+            .filter((x) => /^[A-D]$/.test(x));
+        if (letters.length && letters.length !== 2) {
+            return {
+                questionNumber: q.sampleNumber,
+                issue: `Multiple-correct correctAnswer has ${letters.length} letters — must be exactly 2.`,
+                severity: "major",
+                confidence: "confirmed",
+                category: ISSUE_CATEGORY.FACTUAL,
+            };
+        }
+    }
+    if (correctIdx.length && correctIdx.length !== 2) {
+        return {
+            questionNumber: q.sampleNumber,
+            issue: `Multiple-correct has ${correctIdx.length} marked indexes — must be exactly 2.`,
+            severity: "major",
+            confidence: "confirmed",
+            category: ISSUE_CATEGORY.FACTUAL,
+        };
+    }
+    return null;
+};
+
 /** "Multiple correct" MCQs are capped at exactly 2 correct answers — 3 or 4 correct is not a valid question for this format. */
 const detectAllOptionsMarkedCorrect = (q) => {
     if (String(q.questionType || "").toLowerCase() !== "multiple") return null;
@@ -983,7 +1093,7 @@ const detectExplanationNumericMismatch = (q) => {
     return null;
 };
 
-const BATCH_DUPLICATE_STEM_RATIO = 0.85;
+const BATCH_DUPLICATE_STEM_RATIO = 0.95;
 
 /** Near-duplicate stems within the same batch (e.g. Q5 = Q14, Q8 = Q15). */
 export const detectBatchDuplicateStemIssues = (sampled = []) => {
@@ -1317,6 +1427,10 @@ const mentionsToken = (fullText, token) => {
 };
 
 const DETECTORS = [
+    detectMissingRequiredFields,
+    detectOptionCountInvalid,
+    detectEmptyExplanation,
+    detectMultipleCorrectCardinality,
     detectExplanationContradictsKey,
     detectExplanationArithmeticInconsistency,
     detectMarkedOptionUnitMismatch,

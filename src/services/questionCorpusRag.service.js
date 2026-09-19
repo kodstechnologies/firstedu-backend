@@ -22,8 +22,8 @@ import { resolveGeminiEmbeddingModel } from "./geminiEmbeddingModels.js";
 import { detectExamProfile } from "./examDifficultyCalibration.js";
 
 const MAX_CANDIDATES = Math.min(
-    500,
-    Math.max(10, Number(process.env.AI_QB_QUESTION_RAG_MAX_CANDIDATES || 200))
+    800,
+    Math.max(10, Number(process.env.AI_QB_QUESTION_RAG_MAX_CANDIDATES || 400))
 );
 const DEFAULT_K = Math.min(
     20,
@@ -32,10 +32,23 @@ const DEFAULT_K = Math.min(
 const MAX_MATCHING_BANKS = 50;
 const SNIPPET_CHARS = 160;
 
+/** Sticky subject RAG: only use explained past/reference questions. */
+const requireNonEmptyExplanation = () =>
+    process.env.AI_QB_RAG_REQUIRE_EXPLANATION !== "0" &&
+    process.env.AI_QB_RAG_REQUIRE_EXPLANATION !== "false";
+
+/** When section/subject is known, do not fall open to other subjects. */
+const sectionFilterFailClosed = () =>
+    process.env.AI_QB_RAG_SECTION_FAIL_OPEN !== "1" &&
+    process.env.AI_QB_RAG_SECTION_FAIL_OPEN !== "true";
+
+const hasNonEmptyExplanation = (q) =>
+    Boolean(String(q?.explanation || "").trim());
+
 /** Cosine threshold above which a generated question is treated as a near-copy. */
 export const RAG_COPY_THRESHOLD = Math.min(
     0.99,
-    Math.max(0.8, Number(process.env.AI_QB_QUESTION_RAG_COPY_THRESHOLD || 0.92))
+    Math.max(0.8, Number(process.env.AI_QB_QUESTION_RAG_COPY_THRESHOLD || 0.93))
 );
 
 /** Named exams only — not generic "competitive"/"board", which would over-match. */
@@ -177,6 +190,10 @@ export const filterCandidatesBySection = (
     });
 
     if (!filtered.length) {
+        // Sticky subject: Physics gen must not silently use Chem/Math exemplars.
+        if (sectionFilterFailClosed()) {
+            return { filtered: [], sectionFiltered: true, fellBack: false };
+        }
         return { filtered: candidates, sectionFiltered: false, fellBack: true };
     }
     return { filtered, sectionFiltered: true, fellBack: false };
@@ -204,24 +221,70 @@ const markedOptionLetter = (q) => {
     return idx >= 0 ? String.fromCharCode(65 + idx) : null;
 };
 
-const formatExemplarBlock = (candidates) =>
-    candidates
+const formatExemplarBlock = (candidates) => {
+    const metadataOnly =
+        process.env.AI_QB_RAG_METADATA_ONLY === "1" ||
+        process.env.AI_QB_RAG_METADATA_ONLY === "true";
+
+    return candidates
         .map((q, i) => {
             const opts = (q.options || [])
-                .map((o, j) => `${String.fromCharCode(65 + j)}. ${String(o?.text || "").trim()}`)
-                .join("\n");
+                .map((o, j) =>
+                    String(o?.text || "").trim()
+                        ? `${String.fromCharCode(65 + j)}. ${String(o?.text || "").trim()}`
+                        : null
+                )
+                .filter(Boolean);
             const letter = markedOptionLetter(q);
+            const difficulty =
+                q.difficulty || q.difficultyTier || q.overallDifficulty || "";
+            const concept =
+                q.conceptSlot || q._conceptSlot || q.topic || q.subject || "";
+            const solvingLength = String(q.explanation || "")
+                .split(/(?:Step\s*\d+)/i)
+                .filter(Boolean).length;
+
+            if (metadataOnly) {
+                return [
+                    `Exemplar ${i + 1} (style metadata — do NOT copy content):`,
+                    concept ? `Concept: ${concept}` : "",
+                    difficulty ? `Difficulty example: ${difficulty}` : "",
+                    q.bloomLevel || q.bloom ? `Bloom level: ${q.bloomLevel || q.bloom}` : "",
+                    `Distractor pattern: ${opts.length} options; near-miss / adjacent-concept traps preferred`,
+                    solvingLength > 1
+                        ? `Expected solving length: ~${solvingLength} steps`
+                        : "Expected solving length: short",
+                    q.timeEstimate
+                        ? `Time estimate example: ${q.timeEstimate}`
+                        : "",
+                    `Common mistakes to target in distractors: sign error, unit slip, adjacent formula, incomplete condition`,
+                    `Formula constraint: keep exam-legal relations for this concept only`,
+                    q._id ? `Prior question id: ${q._id}` : "",
+                    `Stem texture: ${stemSnippet(q.questionText)}`,
+                    String(q.explanation || "").trim()
+                        ? `Explanation texture: ${stemSnippet(q.explanation)}`
+                        : "",
+                ]
+                    .filter(Boolean)
+                    .join("\n");
+            }
+
             return [
                 `Exemplar ${i + 1}:`,
                 `Question: ${q.questionText}`,
-                opts,
+                opts.join("\n"),
                 letter ? `Correct: ${letter}` : "",
+                difficulty ? `Difficulty: ${difficulty}` : "",
+                concept ? `Concept: ${concept}` : "",
+                String(q.explanation || "").trim()
+                    ? `Explanation texture: ${stemSnippet(q.explanation)}`
+                    : "",
             ]
                 .filter(Boolean)
                 .join("\n");
         })
         .join("\n\n");
-
+};
 const stemSnippet = (text) => {
     const s = String(text || "").replace(/\s+/g, " ").trim();
     if (!s) return "";
@@ -360,6 +423,7 @@ export const retrieveSimilarConfirmedQuestions = async ({
     subject = "",
     sectionName = "",
     conceptHints = [],
+    difficulty = "",
     k = DEFAULT_K,
 } = {}) => {
     if (!topic?.trim() && !bankName?.trim()) return emptyRetrieval("empty_query");
@@ -392,13 +456,36 @@ export const retrieveSimilarConfirmedQuestions = async ({
         const bankIds = matchedBanks.map((b) => b._id);
         const banksById = new Map(matchedBanks.map((b) => [String(b._id), b]));
 
-        let candidates = await AiQuestion.find({
+        const explainedOnly = requireNonEmptyExplanation();
+        const findFilter = {
             aiQuestionBank: { $in: bankIds },
             isActive: true,
             questionType: "single",
-        })
+            ...(explainedOnly
+                ? {
+                      explanation: {
+                          $exists: true,
+                          $type: "string",
+                          $ne: "",
+                      },
+                  }
+                : {}),
+        };
+
+        let candidates = await AiQuestion.find(findFilter)
             .limit(MAX_CANDIDATES)
             .lean();
+
+        if (explainedOnly) {
+            const beforeExpl = candidates.length;
+            candidates = candidates.filter(hasNonEmptyExplanation);
+            if (beforeExpl !== candidates.length) {
+                pipelineTrace("QUESTION_RAG_EMPTY_EXPLANATION_STRIPPED", {
+                    before: beforeExpl,
+                    after: candidates.length,
+                });
+            }
+        }
 
         if (!candidates.length) {
             pipelineTrace("QUESTION_RAG_RETRIEVAL_EMPTY", {
@@ -406,9 +493,13 @@ export const retrieveSimilarConfirmedQuestions = async ({
                 bankName,
                 subject,
                 sectionName,
-                reason: "no_matching_questions",
+                reason: explainedOnly
+                    ? "no_explained_questions"
+                    : "no_matching_questions",
             });
-            return emptyRetrieval("no_matching_questions");
+            return emptyRetrieval(
+                explainedOnly ? "no_explained_questions" : "no_matching_questions"
+            );
         }
 
         const {
@@ -426,7 +517,32 @@ export const retrieveSimilarConfirmedQuestions = async ({
                 before: candidates.length,
             });
         }
+        if (!filtered.length && (sectionName || subject)) {
+            pipelineTrace("QUESTION_RAG_RETRIEVAL_EMPTY", {
+                topic,
+                bankName,
+                subject,
+                sectionName,
+                reason: "section_filter_empty",
+                beforeSection: candidates.length,
+            });
+            return emptyRetrieval("section_filter_empty");
+        }
         candidates = filtered;
+
+        // Phase C2: prefer candidates matching requested difficulty tier when set.
+        const wantTier = String(difficulty || "").toLowerCase().trim();
+        if (wantTier === "easy" || wantTier === "medium" || wantTier === "hard") {
+            const tierMatched = candidates.filter((c) => {
+                const d = String(
+                    c.difficulty || c.difficultyTier || ""
+                ).toLowerCase();
+                return d === wantTier;
+            });
+            if (tierMatched.length >= Math.min(4, k)) {
+                candidates = tierMatched;
+            }
+        }
 
         const model = resolveGeminiEmbeddingModel();
         const embeddingsById = await ensureEmbeddings(candidates, model);
@@ -434,7 +550,9 @@ export const retrieveSimilarConfirmedQuestions = async ({
             topic,
             subject,
             sectionName,
-            conceptHints,
+            conceptHints: difficulty
+                ? [...(conceptHints || []), `${difficulty}-tier`]
+                : conceptHints,
         });
         const queryVector = await getEmbedding(queryText, { taskType: "RETRIEVAL_QUERY" });
 

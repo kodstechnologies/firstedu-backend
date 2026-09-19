@@ -3,6 +3,24 @@
  * for each generation batch. Falls back to the static catalog when disabled or on failure.
  */
 
+import {
+    buildScoringConceptPlanningBlock,
+    allocateScoringConceptSlots,
+    isJeeMainScoringConceptsAvailable,
+} from "./jeeMainScoringConcept.service.js";
+import {
+    buildOfficialSyllabusPlanningBlock,
+} from "./jeeMainOfficialSyllabus.service.js";
+import { buildNcertHardArchetypePlanBlock } from "./ncertChapterReference.service.js";
+import {
+    buildJeeAdvancedPlannerInjection,
+    isJeeAdvancedMathsDataAvailable,
+} from "./jeeAdvancedMaths.service.js";
+import {
+    buildJeeAdvancedPhysicsPlannerInjection,
+    isJeeAdvancedPhysicsDataAvailable,
+} from "./jeeAdvancedPhysics.service.js";
+
 /**
  * Known-deleted / out-of-scope topics per subject+exam, seeded into the planning
  * prompt so the model doesn't rely solely on its own (possibly stale) syllabus
@@ -98,26 +116,53 @@ const getSubjectComposition = (subject = "") => {
 };
 
 /**
- * Optional overrides that force a fixed theory/direct/multi_concept mix for an
- * exam profile. Intentionally empty: JEE Main previously forced 100%
- * multi_concept ("all hard = all multi"), which made topic plans ignore direct
- * and theory. Hard difficulty now means each *kind* is hard within its type —
- * use DEFAULT_COMPOSITION / SUBJECT_COMPOSITION_RULES instead.
- * Set AI_QB_FORCE_ALL_MULTI=1 to restore the old all-multi_concept behaviour.
+ * Optional overrides that force a fixed theory/direct/multi_concept mix.
+ * AI_QB_FORCE_ALL_MULTI=1 → 100% multi_concept (max difficulty).
+ * AI_QB_HARD_MULTI_HEAVY=1 (default for exam-calibrated via getDefaultComposition
+ * when examCalibrated is passed) → mostly multi, few theory, almost no direct.
  */
-const EXAM_PROFILE_FORCED_COMPOSITION = (() => {
+/** Exam-calibrated hard banks: multi-concept heavy (not 50% direct easy drills). */
+const EXAM_HARD_MULTI_HEAVY = {
+    theory: 0.05,
+    direct: 0.1,
+    multi_concept: 0.85,
+};
+
+const ALL_MULTI = { theory: 0, direct: 0, multi_concept: 1 };
+
+const getDefaultComposition = (
+    examProfile = "",
+    catSection = "",
+    subject = "",
+    { examCalibrated = false, bankDifficulty = "" } = {}
+) => {
+    const key = String(examProfile || "").toLowerCase().trim();
+    // Read env at call time so scripts can set AI_QB_FORCE_ALL_MULTI before generation.
     if (
         process.env.AI_QB_FORCE_ALL_MULTI === "1" ||
         process.env.AI_QB_FORCE_ALL_MULTI === "true"
     ) {
-        return { jee_main: { theory: 0, direct: 0, multi_concept: 1 } };
+        if (key === "jee_main" || key === "jee_advanced" || key === "neet" || !key) {
+            return ALL_MULTI;
+        }
     }
-    return {};
-})();
 
-const getDefaultComposition = (examProfile = "", catSection = "", subject = "") => {
-    const key = String(examProfile || "").toLowerCase().trim();
-    if (EXAM_PROFILE_FORCED_COMPOSITION[key]) return EXAM_PROFILE_FORCED_COMPOSITION[key];
+    const hardTier =
+        examCalibrated ||
+        String(bankDifficulty || "").toLowerCase().includes("hard");
+    const multiHeavy =
+        process.env.AI_QB_HARD_MULTI_HEAVY === "1" ||
+        process.env.AI_QB_HARD_MULTI_HEAVY === "true" ||
+        // Default ON for JEE/NEET hard/exam-calibrated — was shipping ~50% direct Easy.
+        (hardTier &&
+            (key === "jee_main" || key === "jee_advanced" || key === "neet") &&
+            process.env.AI_QB_HARD_MULTI_HEAVY !== "0" &&
+            process.env.AI_QB_HARD_MULTI_HEAVY !== "false");
+
+    if (multiHeavy && (key === "jee_main" || key === "jee_advanced" || key === "neet")) {
+        return EXAM_HARD_MULTI_HEAVY;
+    }
+
     const section = String(catSection || "").toLowerCase();
     if (CAT_SECTION_COMPOSITION[section]) return CAT_SECTION_COMPOSITION[section];
     // Subject character (theory vs calculation) takes precedence over the
@@ -137,9 +182,14 @@ export const getKindCompositionCounts = ({
     subject = "",
     catSection = "",
     count = 10,
+    examCalibrated = false,
+    bankDifficulty = "",
 } = {}) =>
     compositionToCounts(
-        getDefaultComposition(examProfile, catSection, subject),
+        getDefaultComposition(examProfile, catSection, subject, {
+            examCalibrated,
+            bankDifficulty,
+        }),
         Math.max(1, Number(count) || 1)
     );
 
@@ -257,7 +307,8 @@ export const buildArchetypePlanningPrompt = ({
     const defComp = getDefaultComposition(
         examProfile,
         catSection,
-        `${subjectId || ""} ${subject || ""}`
+        `${subjectId || ""} ${subject || ""}`,
+        { examCalibrated, bankDifficulty }
     );
     const sc = compositionToCounts(defComp, n);
     const referenceBlock = String(examReferenceBlock || "").trim()
@@ -333,6 +384,91 @@ ${referenceBlock}`;
               .slice(0, 1500)}\nApply it exactly: add any topics the reviewer asked for, drop any they rejected (also add rejected ones to \`excludedTopics\`), and keep the rest of the plan fresh — do not simply repeat the previous slots.\n`
         : "";
 
+    const isAdvMaths =
+        String(examProfile || "").toLowerCase() === "jee_advanced" &&
+        isJeeAdvancedMathsDataAvailable() &&
+        /\bmath/i.test(
+            `${subjectId || ""} ${subject || ""} ${topic || ""} ${bankName || ""}`
+        );
+    const isAdvPhysics =
+        String(examProfile || "").toLowerCase() === "jee_advanced" &&
+        isJeeAdvancedPhysicsDataAvailable() &&
+        /\bphysics\b/i.test(
+            `${subjectId || ""} ${subject || ""} ${topic || ""} ${bankName || ""}`
+        );
+    const isAdvSubjectPack = isAdvMaths || isAdvPhysics;
+
+    // JEE Advanced Maths/Physics: prefer dedicated Advanced pack (syllabus +
+    // hard archetypes + scoring). Fall back to Main packs only if Advanced data missing.
+    const advancedPlannerBlock = isAdvMaths
+        ? buildJeeAdvancedPlannerInjection({
+              subject: subjectId || subject,
+              subjectId: subjectId || subject,
+              examProfile,
+              bankDifficulty,
+              count: n,
+              highOnly:
+                  String(bankDifficulty || "").toLowerCase().includes("hard") ||
+                  examCalibrated,
+          })
+        : isAdvPhysics
+          ? buildJeeAdvancedPhysicsPlannerInjection({
+                subject: subjectId || subject,
+                subjectId: subjectId || subject,
+                examProfile,
+                bankDifficulty,
+                count: n,
+                highOnly:
+                    String(bankDifficulty || "")
+                        .toLowerCase()
+                        .includes("hard") || examCalibrated,
+            })
+          : "";
+
+    const scoringConceptBlock = isAdvSubjectPack
+        ? ""
+        : buildScoringConceptPlanningBlock({
+              subject: subjectId || subject,
+              examProfile,
+              bankDifficulty,
+              examCalibrated,
+              count: n,
+          });
+
+    const officialSyllabusBlock = isAdvSubjectPack
+        ? ""
+        : buildOfficialSyllabusPlanningBlock({
+              subject: subjectId || subject,
+              examProfile,
+          });
+
+    // File-backed hard archetypes — Advanced Maths/Physics packs already inject them.
+    const ncertHardArchetypeBlock =
+        !isAdvSubjectPack &&
+        (String(bankDifficulty || "").toLowerCase().includes("hard") ||
+            examCalibrated)
+            ? buildNcertHardArchetypePlanBlock({
+                  subject: subjectId || subject || topic || bankName,
+              })
+            : "";
+
+    const advSyllabusStep0Header = isAdvPhysics
+        ? `**Step 0 — official JEE Advanced Physics syllabus lock (file-backed):**
+Use the JEE Advanced Physics topic list (P01–P19) and hard-topic scoring below as the only in-scope source. Put anything outside that list in \`excludedTopics\`. Prefer HIGH advanced_relevance topics for hard banks.`
+        : `**Step 0 — official JEE Advanced Mathematics syllabus lock (file-backed):**
+Use the JEE Advanced topic list (M01–M19) and hard-topic scoring below as the only in-scope source. Put anything outside that list in \`excludedTopics\`. Prefer HIGH advanced_relevance topics for hard banks.`;
+
+    const syllabusStep0 = advancedPlannerBlock
+        ? `${advSyllabusStep0Header}
+${advancedPlannerBlock}`
+        : officialSyllabusBlock
+          ? `**Step 0 — official syllabus lock (file-backed, not model memory):**
+Use the OFFICIAL JEE (Main) 2026 unit list below as the only in-scope source. Put anything outside that list in \`excludedTopics\`. Do not rely on memorized/deleted chapters.
+${officialSyllabusBlock}`
+          : `**Step 0 — determine syllabus scope first:**
+Before planning any slot, work out what is actually in-scope for the **current ${examLabel} syllabus** on this topic (rationalized NCERT / current exam pattern). List any topic you are deliberately leaving out — recently deleted chapters, or topics that read as this subject but are outside this exam's syllabus (e.g. college-level material) — in \`excludedTopics\`. Then plan every slot ONLY from what remains in scope. If you are unsure whether a topic was deleted, treat it as excluded rather than risk an out-of-syllabus question.
+${syllabusExclusionBlock}`;
+
     return `You are a senior ${examLabel} ${subjectLabel} paper setter. Plan **${n} distinct question archetypes** for the next generation batch, composed like a real ${examLabel} paper (mix of theory / direct / multi-concept — see composition below).
 
 **Topic / syllabus context:** ${topic || bankName}
@@ -343,17 +479,23 @@ ${buildVeteranExamineeCaliberBlock({ examProfile })}
 
 Your output steers a downstream question writer. Plan **exam-native items** (mixed by kind per the composition below) spread across the **full syllabus** for this topic — not one chapter only.
 
-**Step 0 — determine syllabus scope first:**
-Before planning any slot, work out what is actually in-scope for the **current ${examLabel} syllabus** on this topic (rationalized NCERT / current exam pattern). List any topic you are deliberately leaving out — recently deleted chapters, or topics that read as this subject but are outside this exam's syllabus (e.g. college-level material) — in \`excludedTopics\`. Then plan every slot ONLY from what remains in scope. If you are unsure whether a topic was deleted, treat it as excluded rather than risk an out-of-syllabus question.
-${syllabusExclusionBlock}${planningFeedbackBlock}
+${syllabusStep0}
+${officialSyllabusBlock || advancedPlannerBlock ? syllabusExclusionBlock : ""}
+${planningFeedbackBlock}
 ${excludeArchetypeBlock}${excludeStemBlock}${regenBlock}
+${scoringConceptBlock}
+${ncertHardArchetypeBlock}
 ${kindMixBlock}
 
 **Planning rules:**
 1. **${n} unique slots** — different micro-topic, setup, and solving chain; no near-duplicate templates.
 2. **Match the composition above + full coverage:** assign each slot's \`questionKind\` so the batch mix reflects a real ${examLabel} paper (see composition block). Spread \`multi_concept\`, \`direct\`, and \`theory\` across **different syllabus units** so all major topic areas get a slot when batch size allows.
-3. **Syllabus breadth** — spread across major ${subjectLabel} areas appropriate to the topic and exam (do not cluster on one unit), and only within the in-scope topics from Step 0.
-4. **Depth per kind:** \`multi_concept\` = ≥2 linked concepts (state fusion in \`conceptFusion\`), ≥3 solve steps, no single-formula plug-in. \`direct\` = ONE clean formula/concept, ~1–2 steps (single-formula is correct — do NOT force fusion). \`theory\` = conceptual depth + close distractors, no computation.
+3. **Syllabus breadth** — spread across major ${subjectLabel} areas appropriate to the topic and exam (do not cluster on one unit), and only within the official/in-scope units from Step 0. When a scoring-concept list is provided above, prefer those high-weightage chapters **only if they also appear in the official syllabus**.
+${
+    String(bankDifficulty || "").toLowerCase() === "hard" || examCalibrated
+        ? `3b. **Hard-topic lock:** Because difficulty is **hard**, every included topic / \`conceptSlot\` MUST come from the hard-leaning scoring list (Hard>0 or predominantly-hard). Do **not** include predominantly-easy / easy-only chapters in \`includedTopics\`. Put easy-only chapters in \`excludedTopics\` if they appear in your reasoning.\n`
+        : ""
+}4. **Depth per kind:** \`multi_concept\` = ≥2 linked concepts (state fusion in \`conceptFusion\`), ≥3 solve steps, no single-formula plug-in. \`direct\` = ONE clean formula/concept, ~1–2 steps (single-formula is correct — do NOT force fusion). \`theory\` = conceptual depth + close distractors, no computation.
 5. **conceptFusion** = the fused ideas for a \`multi_concept\` slot (e.g. "rotation + friction"); optional for \`direct\`/\`theory\`.
 6. **conceptSlot** = short snake_case id you invent (e.g. \`rolling_threshold_mu\`, \`ohms_law_direct\`).
 7. **pattern** = what problem shape to write (1–2 sentences), matching the slot's kind.
@@ -496,17 +638,35 @@ const buildFallbackSteering = ({
     excludeArchetypes,
     examCalibrated = false,
 }) => {
-    const conceptSlots = allocateRankedConceptSlots(count, {
-        examProfile,
-        subjectId,
-        slotOffset,
-        subjects,
-        preferPeak,
-        bankDifficulty,
-        excludeArchetypes,
-        maxPerArchetype:
-            isVeteranDifficultyEnabled() && examCalibrated ? 1 : 2,
-    });
+    const profile = String(examProfile || "").toLowerCase();
+    const useScoringFallback =
+        (profile === "jee_main" || profile === "jee_advanced") &&
+        isJeeMainScoringConceptsAvailable() &&
+        (preferPeak ||
+            examCalibrated ||
+            String(bankDifficulty || "").toLowerCase() === "hard");
+    const scoringSlots = useScoringFallback
+        ? allocateScoringConceptSlots(count, {
+              subject: subjectId,
+              slotOffset,
+              preferHard: true,
+              hardTopicsOnly: true,
+          })
+        : [];
+    const conceptSlots =
+        scoringSlots.length === Math.max(1, count)
+            ? scoringSlots
+            : allocateRankedConceptSlots(count, {
+                  examProfile,
+                  subjectId,
+                  slotOffset,
+                  subjects,
+                  preferPeak,
+                  bankDifficulty,
+                  excludeArchetypes,
+                  maxPerArchetype:
+                      isVeteranDifficultyEnabled() && examCalibrated ? 1 : 2,
+              });
     // Deterministically assign a kind to each slot so the batch matches the profile's
     // default composition (theory / direct / multi_concept). Uses the global index
     // (slotOffset + i) so the mix stays consistent when filling a partial chunk. The

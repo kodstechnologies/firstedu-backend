@@ -12,7 +12,29 @@
     "test:multiple": "node --experimental-vm-modules node_modules/jest/bin/jest.js tests/multiple-correct-validation.test.js --testTimeout=900000",
     "test:all-blockers": "node --experimental-vm-modules node_modules/jest/bin/jest.js tests/*.test.js --testTimeout=900000",
     "dev": "nodemon src/server.js",
-    "start": "nodemon src/server.js"
+    "start": "nodemon src/server.js",
+    "worker:paper": "node scripts/paper-job-worker.mjs",
+    "seed:jee-main": "node scripts/seed-jee-main-competitive-papers.mjs",
+    "seed:jee-syllabus": "node scripts/seed-jee-exam-syllabus.mjs",
+    "seed:exam-syllabus-pack": "node scripts/seed-exam-syllabus-pack.mjs",
+    "seed:exam-paper-pattern": "node scripts/seed-exam-paper-pattern.mjs",
+    "verify:exam-packs": "node scripts/verify-exam-packs-patterns.mjs",
+    "seed:jee-advanced": "node scripts/seed-jee-advanced-competitive-papers.mjs",
+    "seed:neet": "node scripts/seed-neet-competitive-papers.mjs",
+    "seed:clat": "node scripts/seed-clat-competitive-papers.mjs",
+    "seed:ibps": "node scripts/seed-ibps-competitive-papers.mjs",
+    "seed:gmat": "node scripts/seed-gmat-competitive-papers.mjs",
+    "seed:ssc-cgl-tier1": "node scripts/seed-ssc-cgl-tier1-competitive-papers.mjs",
+    "seed:ssc-cgl-tier2": "node scripts/seed-ssc-cgl-tier2-competitive-papers.mjs",
+    "seed:upsc": "node scripts/seed-upsc-competitive-papers.mjs",
+    "seed:cat": "node scripts/seed-cat-competitive-papers.mjs",
+    "seed:mba-exam-categories": "node scripts/seed-mba-exam-categories.mjs",
+    "seed:banking-exam-categories": "node scripts/seed-banking-exam-categories.mjs",
+    "seed:ssc-cgl-tier1-exam-categories": "node scripts/seed-ssc-cgl-tier1-exam-categories.mjs",
+    "seed:ssc-cgl-tier2-exam-categories": "node scripts/seed-ssc-cgl-tier2-exam-categories.mjs",
+    "seed:upsc-exam-categories": "node scripts/seed-upsc-exam-categories.mjs",
+    "prune:unseeded-exam-categories": "node scripts/prune-unseeded-exam-categories.mjs",
+    "seed:exam-desk-users": "node scripts/seed-exam-desk-users.mjs"
   },
   "keywords": [],
   "author": "",
@@ -48,6 +70,20 @@
   },
   "devDependencies": {
     "jest": "^30.4.2",
-    "nodemon": "^3.1.10"
-  }
+    "nodemon": "^3.1.10",
+    "pdf-parse": "^2.4.5",
+    "pdfjs-dist": "^6.2.108"
+  },
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kodstechnologies/firstedu-backend.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kodstechnologies/firstedu-backend/issues"
+  },
+  "homepage": "https://github.com/kodstechnologies/firstedu-backend#readme"
 }

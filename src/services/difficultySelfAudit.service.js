@@ -11,6 +11,11 @@ import {
     buildDifficultyAuditRubricsBlock,
     normalizeQuestionTier,
 } from "./difficultyMix.service.js";
+import {
+    buildWeightedDifficultyRubricBlock,
+    computeWeightedDifficultyScore,
+    isWeightedDifficultyScoreEnabled,
+} from "./weightedDifficultyScore.service.js";
 
 // Veteran gate aligned to the audit rubric's own "clearly meets tier" line (80,
 // see buildDifficultySelfAuditPrompt). A higher bar (was 85) rejected questions
@@ -31,6 +36,10 @@ export const SKELETON_DIFFICULTY_SELF_AUDIT_MIN_SCORE = Number(
 const SKELETON_SELF_AUDIT_RELAXED_FLOOR = Number(
     process.env.AI_QB_SKELETON_SELF_AUDIT_RELAXED_FLOOR || 72
 );
+/** Last attempt only — admit near-misses so Physics/STEM batches don't wipe to 0. */
+const SKELETON_SELF_AUDIT_LAST_ATTEMPT_FLOOR = Number(
+    process.env.AI_QB_SKELETON_SELF_AUDIT_LAST_ATTEMPT_FLOOR || 55
+);
 
 const SKELETON_SELF_AUDIT_RELAX_THRESHOLD = Number(
     process.env.AI_QB_SKELETON_SELF_AUDIT_RELAX_THRESHOLD || 0.5
@@ -43,19 +52,29 @@ export const isDifficultySelfAuditEnabled = () => {
 };
 
 /**
- * Exam-native JEE/NEET: trust generation prompts + code mandates — skip LLM difficulty scoring.
- * Set AI_QB_DIFFICULTY_SELF_AUDIT=1 to force audit; =0 to disable globally.
- *
- * Difficulty LLM audits were the main latency source on JEE full-paper Physics
- * (extra call per attempt + reject loops that burned 6 attempts/chunk). Correctness
- * gates (solve-steps vs marked answer) remain on; force AI_QB_DIFFICULTY_SELF_AUDIT=1
- * if you need the old strict difficulty filter.
+ * Difficulty LLM judge: default ON even for exam-native (independent verification).
+ * Set AI_QB_DIFFICULTY_SELF_AUDIT=0 to disable globally.
+ * Set AI_QB_DIFFICULTY_JUDGE=0 to restore legacy skip-on-exam-native behaviour.
+ * Set AI_QB_DIFFICULTY_SELF_AUDIT=1 to force audit (same as judge default now).
  */
 export const shouldSkipLlmDifficultySelfAudit = (difficultyResolution) => {
     const flag = process.env.AI_QB_DIFFICULTY_SELF_AUDIT;
-    if (flag === "1" || flag === "true") return false;
+    // Explicit off only.
     if (flag === "0" || flag === "false") return true;
-    return isExamNativeVeteranGeneration(difficultyResolution);
+    // Exam-calibrated / JEE hard MUST run the independent difficulty judge —
+    // skipping it was the main reason Easy drills shipped as "Hard".
+    if (
+        difficultyResolution?.examCalibrated ||
+        isExamNativeVeteranGeneration(difficultyResolution)
+    ) {
+        return false;
+    }
+    if (flag === "1" || flag === "true") return false;
+    const judgeFlag = process.env.AI_QB_DIFFICULTY_JUDGE;
+    if (judgeFlag === "0" || judgeFlag === "false") {
+        return true;
+    }
+    return false;
 };
 
 const truncate = (text, max = 320) => {
@@ -83,14 +102,34 @@ const formatQuestionForAudit = (q, index) => {
     if (q._conceptSlot || q.conceptSlot) {
         lines.push(`Archetype: ${q._conceptSlot || q.conceptSlot}`);
     }
+    if (isWeightedDifficultyScoreEnabled()) {
+        const w =
+            q._weightedDifficulty ||
+            computeWeightedDifficultyScore(q, {
+                assignedTier: q.difficultyTier || q.difficulty,
+            });
+        q._weightedDifficulty = w;
+        lines.push(
+            `Deterministic weighted difficulty: **${w.total}/100** (floor ${w.floor} for ${w.tier}; est. ~${w.estimatedTimeMinutes} min)`
+        );
+        lines.push(
+            `  Factors: concept=${w.factors.conceptDifficulty}, #concepts=${w.factors.numberOfConcepts}, depth=${w.factors.reasoningDepth}, calc=${w.factors.calculationComplexity}, insight=${w.factors.trickinessInsight}, options=${w.factors.optionQuality}, time=${w.factors.estimatedTime}`
+        );
+    }
     const kind = String(q._questionKind || q.questionKind || "").toLowerCase();
+    const assignedHard =
+        String(q.difficultyTier || q.difficulty || "").toLowerCase() === "hard";
     if (kind === "theory") {
         lines.push(
-            "Question kind: **THEORY** (conceptual — score on concept depth and close distractors, NOT computation, numeric givens, or solve-step count)"
+            assignedHard
+                ? "Question kind: **THEORY HARD** — score on multi-statement traps, close distractors, and non-trivial reasoning. Single-fact recall must score ≤55."
+                : "Question kind: **THEORY** (conceptual — score on concept depth and close distractors, NOT computation, numeric givens, or solve-step count)"
         );
     } else if (kind === "direct") {
         lines.push(
-            "Question kind: **DIRECT** (single-formula numerical by design — a clean 1–2 step solve is correct; do NOT penalize for lacking multi-step depth or concept fusion)"
+            assignedHard
+                ? "Question kind: **DIRECT but assigned HARD** — still require non-obvious application (≥3 conceptual steps or a hidden trick). Textbook 1-step plug-ins / standard identity limits / chain-rule-at-a-point MUST score ≤50."
+                : "Question kind: **DIRECT** (single-formula numerical by design — a clean 1–2 step solve is correct; do NOT penalize for lacking multi-step depth or concept fusion)"
         );
     }
     return lines.join("\n");
@@ -120,20 +159,27 @@ export const buildDifficultySelfAuditPrompt = ({
             tiersInBatch.every((t) => t === "hard"),
     });
 
+    const weightedRubric = isWeightedDifficultyScoreEnabled()
+        ? buildWeightedDifficultyRubricBlock()
+        : "";
+
     return `You are a ${examLabel} difficulty auditor. Score each question against its **assigned difficultyTier** using the **same tier criteria used during generation**.
 
 **Topic:** ${topic || bankName}
 **Bank difficulty profile:** ${difficulty} (overall paper weighting — each question is scored against its own assigned tier)
 
 ${rubricsBlock}
+${weightedRubric}
 
 **How to score each question:**
 1. Read the **Assigned difficultyTier** line for that question
 2. Apply the matching **tier scoring** rubric above (not a generic "hard" feel)
-3. **80+** = clearly meets that tier's Target + REQUIRED bars
-4. **65–79** = borderline for that tier
-5. **Below 65** = too easy for the assigned tier (see "too easy" note for that tier)
-6. **Below 50** = BANNED pattern for that tier
+3. Use the provided **Solve steps** / explanation as the true step-count signal (not stem length alone)
+4. When a **Deterministic weighted difficulty** line is present, treat low factor scores (concept, #concepts, depth, calc, insight, options, time) as evidence the item is below tier — do not inflate scores for long but single-formula stems
+5. **80+** = clearly meets that tier's Target + REQUIRED bars
+6. **65–79** = borderline for that tier
+7. **Below 65** = too easy for the assigned tier (see "too easy" note for that tier)
+8. **Below 50** = BANNED pattern for that tier
 
 Penalize: meta draft text ("adjusting", "re-evaluating"), formula-only stems when tier requires fusion, duplicate template logic.
 
@@ -147,9 +193,20 @@ ${blocks}
 Return ONLY valid JSON:
 {
   "scores": [
-    { "questionNumber": 1, "difficultyScore": 72, "reason": "one-line reason referencing assigned tier criteria" }
+    {
+      "questionNumber": 1,
+      "difficulty": "Hard",
+      "difficultyScore": 0.91,
+      "reason": "one-line reason referencing assigned tier criteria + what makes it this hard"
+    }
   ]
-}`;
+}
+
+Rules for difficultyScore:
+- Use a **0.0–1.0** scale (preferred). Legacy 0–100 integers are also accepted.
+- Also return categorical \`difficulty\`: "Easy" | "Medium" | "Hard" matching your score band
+  (Easy <0.45, Medium 0.45–0.74, Hard ≥0.75) calibrated to the **assigned tier**.
+- \`reason\` must mention concept fusion / reasoning depth when relevant.`;
 };
 
 export const parseDifficultySelfAuditResponse = (rawText, expectedCount = 1) => {
@@ -158,12 +215,24 @@ export const parseDifficultySelfAuditResponse = (rawText, expectedCount = 1) => 
     const byNumber = new Map();
     for (const row of rows) {
         const n = Number(row.questionNumber);
-        const score = Number(row.difficultyScore);
+        let score = Number(row.difficultyScore);
         if (!Number.isFinite(n) || n < 1) continue;
         if (!Number.isFinite(score)) continue;
+        // Accept 0–1 or 0–100; normalize to 0–100 for existing minScore gates.
+        if (score >= 0 && score <= 1) score = Math.round(score * 100);
+        const label = String(row.difficulty || row.tier || "")
+            .trim()
+            .toLowerCase();
         byNumber.set(n, {
             questionNumber: n,
             difficultyScore: Math.max(0, Math.min(100, Math.round(score))),
+            difficultyLabel: /hard|medium|easy/.test(label)
+                ? label.charAt(0).toUpperCase() + label.slice(1)
+                : score >= 75
+                  ? "Hard"
+                  : score >= 45
+                    ? "Medium"
+                    : "Easy",
             reason: String(row.reason || "").trim(),
         });
     }
@@ -172,7 +241,8 @@ export const parseDifficultySelfAuditResponse = (rawText, expectedCount = 1) => 
         scores.push(
             byNumber.get(i) || {
                 questionNumber: i,
-                difficultyScore: 100,
+                difficultyScore: 0,
+                difficultyLabel: "Easy",
                 reason: "not scored",
             }
         );
@@ -228,11 +298,24 @@ export const applyDifficultySelfAuditGate = async (
                     questionNumber: num,
                     question: q,
                     difficultyScore: row?.difficultyScore,
+                    difficultyLabel: row?.difficultyLabel,
                     reason: row?.reason,
                     stem: truncate(q.questionText, 120),
                 });
             } else {
-                keptSingles.push(q);
+                keptSingles.push({
+                    ...q,
+                    _verification: {
+                        ...(q._verification || {}),
+                        difficultyScore: row?.difficultyScore ?? null,
+                        difficultyLabel: row?.difficultyLabel || null,
+                        difficultyReason: row?.reason || null,
+                    },
+                    timeEstimate:
+                        q.timeEstimate ||
+                        q._verification?.timeEstimate ||
+                        undefined,
+                });
             }
         });
 
@@ -313,7 +396,13 @@ export const applySkeletonDifficultySelfAuditGate = async (
             // so admit near-bar skeletons rather than return nothing. On any
             // earlier attempt, leave the bar intact and let the caller's retry
             // loop regenerate the deficit at full quality instead.
-            effectiveMin = Math.min(minScore, SKELETON_SELF_AUDIT_RELAXED_FLOOR);
+            // Use a lower floor than mid-run relax (72) — flash-lite Physics often
+            // scores 55–75 and previously wiped the whole batch at the 72 bar.
+            effectiveMin = Math.min(
+                minScore,
+                SKELETON_SELF_AUDIT_LAST_ATTEMPT_FLOOR,
+                SKELETON_SELF_AUDIT_RELAXED_FLOOR
+            );
             pipelineTrace("SKELETON_SELF_AUDIT_RELAXED", {
                 inputCount: asAuditItems.length,
                 wouldReject,
@@ -321,6 +410,7 @@ export const applySkeletonDifficultySelfAuditGate = async (
                 minScore,
                 effectiveMin,
                 scoredCount,
+                lastAttempt: true,
             });
         } else {
             pipelineTrace("SKELETON_SELF_AUDIT_RELAX_SKIPPED", {
@@ -364,6 +454,30 @@ export const applySkeletonDifficultySelfAuditGate = async (
             inputCount: list.length,
             kept: kept.length,
             rejected: rejected.length,
+        });
+    }
+
+    // Absolute last resort: if every skeleton is below the (already relaxed) floor on
+    // the final attempt, keep the highest-scoring ones so generation is not empty.
+    if (ctx.isLastAttempt && kept.length === 0 && rejected.length > 0) {
+        const ranked = [...rejected].sort(
+            (a, b) => (b.difficultyScore || 0) - (a.difficultyScore || 0)
+        );
+        const salvageCount = Math.max(1, Math.ceil(list.length / 2));
+        const salvage = ranked.slice(0, salvageCount);
+        for (const row of salvage) {
+            kept.push(row.skeleton);
+            keptIndices.push(row.skeletonIndex);
+        }
+        const salvagedIndexes = new Set(salvage.map((r) => r.skeletonIndex));
+        const stillRejected = rejected.filter(
+            (r) => !salvagedIndexes.has(r.skeletonIndex)
+        );
+        rejected.length = 0;
+        rejected.push(...stillRejected);
+        pipelineTrace("SKELETON_SELF_AUDIT_LAST_ATTEMPT_SALVAGE", {
+            salvaged: salvage.length,
+            scores: salvage.map((r) => r.difficultyScore),
         });
     }
 
