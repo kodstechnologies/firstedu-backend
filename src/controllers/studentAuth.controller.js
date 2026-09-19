@@ -359,7 +359,7 @@ export const requestForgotPasswordOTP = asyncHandler(async (req, res) => {
     user.email,
     otp,
     user.name,
-    process.env.SMTP_NOREPLY_EMAIL || "noreply@testladr.com"
+    "noreply@testladr.com"
   );
 
   return res.status(200).json(

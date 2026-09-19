@@ -74,7 +74,7 @@ transporter.verify((error, success) => {
   }
 });
 
-export const sendOTPEmail = async (email, otp, name, fromAddress) => {
+export const sendOTPEmail = async (email, otp, name, fromAddress = "noreply@testladr.com") => {
   try {
     if (!email) {
       throw new ApiError(400, 'Email address is required');
@@ -100,7 +100,7 @@ export const sendOTPEmail = async (email, otp, name, fromAddress) => {
           <p style="color: #999; font-size: 12px;">If you did not request this, please ignore this email.</p>
         </div>
       `,
-      from: fromAddress || process.env.SMTP_EMAIL,
+      from: fromAddress || "noreply@testladr.com",
     });
     console.log(`✅ Email sent successfully to ${email}. Message ID: ${info.messageId}`);
     return info;
