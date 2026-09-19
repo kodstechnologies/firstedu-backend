@@ -3,7 +3,7 @@ import nodemailer from 'nodemailer';
 import dotenv from "dotenv";
 import { ApiError } from './ApiError.js';
 import emailTemplateService from '../services/emailTemplate.service.js';
-import { getDefaultTemplateByCategorySlug } from "./emailTemplateCategories.js";
+import { getDefaultTemplateByCategorySlug, getFromAddressForCategory } from "./emailTemplateCategories.js";
 
 dotenv.config();
 
@@ -74,7 +74,7 @@ transporter.verify((error, success) => {
   }
 });
 
-export const sendOTPEmail = async (email, otp, name, fromAddress = "noreply@testladr.com") => {
+export const sendOTPEmail = async (email, otp, name) => {
   try {
     if (!email) {
       throw new ApiError(400, 'Email address is required');
@@ -100,7 +100,6 @@ export const sendOTPEmail = async (email, otp, name, fromAddress = "noreply@test
           <p style="color: #999; font-size: 12px;">If you did not request this, please ignore this email.</p>
         </div>
       `,
-      from: fromAddress || "noreply@testladr.com",
     });
     console.log(`✅ Email sent successfully to ${email}. Message ID: ${info.messageId}`);
     return info;
@@ -125,13 +124,18 @@ export const sendEmailWithTemplate = async ({
   variables = {},
   defaultSubject,
   defaultHtml,
-  from = `"TestLadr" <${process.env.SMTP_CONNECT_EMAIL || process.env.SMTP_EMAIL}>`,
+  from,
   attachments = [],
 }) => {
   if (!email) throw new ApiError(400, 'Email address is required');
   if (missingVars.length > 0) {
     throw new ApiError(500, `SMTP configuration incomplete. Missing: ${missingVars.join(', ')}`);
   }
+  const categoryFrom = getFromAddressForCategory(category);
+  const resolvedFrom =
+    categoryFrom ||
+    from ||
+    `"TestLadr" <${process.env.SMTP_CONNECT_EMAIL || process.env.SMTP_EMAIL}>`;
   const resolved = await resolveTemplate(category, slug, variables);
   const fallback = resolveFallbackTemplate({
     category,
@@ -145,7 +149,7 @@ export const sendEmailWithTemplate = async ({
   if (!subject || !html) {
     throw new ApiError(500, `No email template content found for ${category}/${slug}`);
   }
-  const mailOptions = { from, to: email, subject, html };
+  const mailOptions = { from: resolvedFrom, to: email, subject, html };
   if (attachments && attachments.length > 0) {
     mailOptions.attachments = attachments;
   }

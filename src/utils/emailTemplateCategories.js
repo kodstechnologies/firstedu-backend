@@ -67,6 +67,7 @@ export const EMAIL_TEMPLATE_CATEGORIES = [
     label: "Login / OTP",
     description: "Authentication and password reset templates.",
     audience: "all_users",
+    fromEmail: "noreply@testladr.com",
     slugs: [
       {
         key: "password_reset",
@@ -578,6 +579,11 @@ export const EMAIL_TEMPLATE_CATEGORIES = [
 
 export const getCategoryByKey = (key) =>
   EMAIL_TEMPLATE_CATEGORIES.find((c) => c.key === key);
+
+export const getFromAddressForCategory = (categoryKey) => {
+  const fromEmail = getCategoryByKey(categoryKey)?.fromEmail;
+  return fromEmail || null;
+};
 
 export const getSlugByKey = (categoryKey, slugKey) => {
   const category = getCategoryByKey(categoryKey);

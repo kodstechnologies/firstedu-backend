@@ -355,12 +355,7 @@ export const requestForgotPasswordOTP = asyncHandler(async (req, res) => {
 
   await studentRepository.save(user);
 
-  await sendOTPEmail(
-    user.email,
-    otp,
-    user.name,
-    "noreply@testladr.com"
-  );
+  await sendOTPEmail(user.email, otp, user.name);
 
   return res.status(200).json(
     ApiResponse.success({}, "OTP has been sent to your email")
