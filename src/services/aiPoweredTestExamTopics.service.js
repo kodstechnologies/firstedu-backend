@@ -233,26 +233,38 @@ export const subjectLookupAliases = (subject, examType = null) => {
   const aliases = new Set([canonical, String(subject || "").trim()]);
   const exam = normalizeExamType(examType);
 
-  if (canonical === "QA") {
+  if (/reasoning/i.test(canonical) || /logical/i.test(canonical)) {
+    aliases.add("Reasoning");
+    aliases.add("Reasoning Ability");
+    aliases.add("Logical Reasoning");
+    aliases.add("General Intelligence and Reasoning");
+    aliases.add("General Intelligence & Reasoning");
+    aliases.add("DILR");
+  }
+  if (/quant/i.test(canonical) || /math/i.test(canonical) || canonical === "QA") {
     aliases.add("QA");
     aliases.add("Qa");
+    aliases.add("Quantitative Aptitude");
     aliases.add("Quantitative Ability");
     aliases.add("Quantitative Aptitude (QA)");
-    if (exam === "cat") aliases.add("Quantitative Aptitude");
+    aliases.add("Mathematical Abilities");
+    aliases.add("Mathematics");
+    aliases.add("Quant");
   }
-  if (canonical === "VARC") {
+  if (/english/i.test(canonical) || /verbal/i.test(canonical) || canonical === "VARC") {
     aliases.add("VARC");
     aliases.add("Varc");
+    aliases.add("English Comprehension");
+    aliases.add("English Language");
+    aliases.add("English");
     aliases.add("Verbal Ability and Reading Comprehension");
   }
-  if (canonical === "DILR") {
-    aliases.add("DILR");
-    aliases.add("Dilr");
-    aliases.add("Data Interpretation and Logical Reasoning");
-  }
-  if (canonical === "Quantitative Aptitude" && exam === "cat") {
-    aliases.add("QA");
-    aliases.add("Quantitative Aptitude (QA)");
+  if (/awareness|knowledge|gk|ga/i.test(canonical)) {
+    aliases.add("General Awareness");
+    aliases.add("General Knowledge");
+    aliases.add("GA");
+    aliases.add("Current Affairs");
+    aliases.add("Computer Knowledge");
   }
 
   return [...aliases].filter(Boolean);

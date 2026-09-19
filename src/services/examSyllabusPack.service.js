@@ -90,20 +90,50 @@ export const findExamSyllabusPack = async ({
   const subj = normalizeSubject(subject);
   if (!exam || !subj) return null;
 
-  const aliases = [subj];
-  if (subj === "QA") {
+  const aliases = [subj, String(subject || '').trim()].filter(Boolean);
+  if (/reasoning/i.test(subj) || /logical/i.test(subj)) {
     aliases.push(
-      "Qa",
-      "Quantitative Ability",
-      "Quantitative Aptitude (QA)",
-      "Quantitative Aptitude"
+      "Reasoning",
+      "Reasoning Ability",
+      "Logical Reasoning",
+      "Legal Reasoning",
+      "Reasoning and General Intelligence",
+      "General Intelligence & Reasoning",
+      "General Intelligence and Reasoning",
+      "DILR"
     );
   }
-  if (subj === "VARC") {
-    aliases.push("Varc", "Verbal Ability and Reading Comprehension");
+  if (/quant/i.test(subj) || /math/i.test(subj) || subj === "QA") {
+    aliases.push(
+      "QA",
+      "Qa",
+      "Quantitative Aptitude",
+      "Quantitative Ability",
+      "Quantitative Aptitude (QA)",
+      "Mathematical Abilities",
+      "Mathematics",
+      "Quantitative Techniques"
+    );
   }
-  if (subj === "DILR") {
-    aliases.push("Dilr", "Data Interpretation and Logical Reasoning");
+  if (/english/i.test(subj) || /verbal/i.test(subj) || subj === "VARC") {
+    aliases.push(
+      "VARC",
+      "Varc",
+      "English Comprehension",
+      "English Language",
+      "English Language and Comprehension",
+      "English",
+      "Verbal Ability and Reading Comprehension"
+    );
+  }
+  if (/awareness|knowledge|gk|ga/i.test(subj)) {
+    aliases.push(
+      "General Awareness",
+      "General Knowledge",
+      "GA",
+      "Current Affairs",
+      "Computer Knowledge"
+    );
   }
 
   const query = {
