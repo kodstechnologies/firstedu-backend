@@ -14,6 +14,7 @@ import { isCorsOriginAllowed } from "./utils/corsOrigin.js";
 dotenv.config();
 const app = express();
 
+
 // CORS
 app.use(
   cors({
