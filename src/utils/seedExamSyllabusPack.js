@@ -676,8 +676,8 @@ const seedSscCglTier2SectionPacks = async () => {
   return out;
 };
 
-/** Trailing space matches on-disk seed folder name. */
-const UPSC_SEED_DIR = "UPSC CSE Prelims ";
+/** Clean seed folder path without trailing space (Windows-compatible). */
+const UPSC_SEED_DIR = "files/upsc_cse_prelims";
 
 const UPSC_CATEGORY_ORDER = [
   "History",

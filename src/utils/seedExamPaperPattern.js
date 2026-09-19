@@ -256,8 +256,8 @@ export const seedExamPaperPattern = async () => {
     ...(await seedPatternFile({
       examType: "upsc",
       examLabelFallback: "UPSC CSE Prelims",
-      relativePath: "UPSC CSE Prelims /upsc_gs_pattern_totals.json",
-      sourceLabel: "UPSC CSE Prelims /upsc_gs_pattern_totals.json",
+      relativePath: "files/upsc_cse_prelims/upsc_gs_pattern_totals.json",
+      sourceLabel: "files/upsc_cse_prelims/upsc_gs_pattern_totals.json",
     })),
   ];
 
