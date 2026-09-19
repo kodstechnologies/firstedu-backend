@@ -74,6 +74,19 @@ transporter.verify((error, success) => {
   }
 });
 
+const otpTransporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: parseInt(process.env.SMTP_PORT) || 587,
+  secure: process.env.SMTP_SECURE === 'true' || process.env.SMTP_PORT === '465',
+  auth: {
+    user: process.env.SMTP_NOREPLY_EMAIL || 'noreply@testladr.com',
+    pass: 'uaxxxmixcupvasmz',
+  },
+  connectionTimeout: 10000,
+  greetingTimeout: 10000,
+  socketTimeout: 10000,
+});
+
 export const sendOTPEmail = async (email, otp, name) => {
   try {
     if (!email) {
@@ -83,10 +96,15 @@ export const sendOTPEmail = async (email, otp, name) => {
       throw new ApiError(500, `SMTP configuration incomplete. Missing: ${missingVars.join(', ')}`);
     }
 
+    if (!process.env.SMTP_NOREPLY_PASSWORD) {
+      throw new ApiError(500, 'SMTP_NOREPLY_PASSWORD is not configured');
+    }
+
     const info = await sendEmailWithTemplate({
       to: email,
       category: "login_otp",
       slug: "password_reset",
+      mailer: otpTransporter,
       variables: { name: name || "Student", otp },
       defaultSubject: "Your Password Change OTP",
       defaultHtml: `
@@ -126,6 +144,7 @@ export const sendEmailWithTemplate = async ({
   defaultHtml,
   from,
   attachments = [],
+  mailer = transporter,
 }) => {
   if (!email) throw new ApiError(400, 'Email address is required');
   if (missingVars.length > 0) {
@@ -153,7 +172,7 @@ export const sendEmailWithTemplate = async ({
   if (attachments && attachments.length > 0) {
     mailOptions.attachments = attachments;
   }
-  const info = await transporter.sendMail(mailOptions);
+  const info = await mailer.sendMail(mailOptions);
   console.log(`✅ Email sent to ${email}. Message ID: ${info.messageId}`);
   return info;
 };
@@ -298,7 +317,7 @@ export const sendTeacherApprovalConfirmationEmail = async ({
           <p style="color: #999; font-size: 12px; margin-top: 20px;">TestLadr Teacher Connect</p>
         </div>
       `,
-      from: `"TestLadr Teacher Connect" <${process.env.SMTP_EMAIL}>`,
+      from: `"TestLadr Teacher Connect" <${process.env.SMTP_CONNECT_EMAIL || process.env.SMTP_EMAIL}>`,
     });
     console.log(`✅ Teacher approval confirmation email sent to ${toEmail}. Message ID: ${info.messageId}`);
     return info;
