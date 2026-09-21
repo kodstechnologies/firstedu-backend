@@ -458,6 +458,7 @@ export const sendCourseEnrollmentEmail = async (email, name, courseTitle, amount
       from: `"TestLadr" <${process.env.SMTP_NOREPLY_EMAIL || process.env.SMTP_EMAIL}>`,
       variables: {
         name: name || "Student",
+        course: courseTitle || "Course",
         courseTitle: courseTitle || "Course",
         amount: amount != null ? amount.toString() : "0",
         date: date ? new Date(date).toLocaleDateString() : new Date().toLocaleDateString()
@@ -509,6 +510,7 @@ export const sendEventRegistrationEmail = async (eventType, email, name, eventTi
       from: `"TestLadr" <${process.env.SMTP_NOREPLY_EMAIL || process.env.SMTP_EMAIL}>`,
       variables: {
         name: name || "Student",
+        event: eventTitle || "Event",
         eventTitle: eventTitle || "Event",
         amount: amount != null ? amount.toString() : "0",
         date: date ? new Date(date).toLocaleDateString() : new Date().toLocaleDateString()
