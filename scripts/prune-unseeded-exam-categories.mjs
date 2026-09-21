@@ -59,8 +59,25 @@ const run = async () => {
   const markKeepSubtree = (nodeId, ancestorIsExam) => {
     const children = byParent.get(String(nodeId)) || [];
     for (const child of children) {
-      const selfIsExam = isSeededExamLabel(child.name);
+      const rawSelfIsExam = isSeededExamLabel(child.name);
+      const childNodes = byParent.get(String(child._id)) || [];
+
+      // If an exam node has 0 children but another node with the same exam label HAS children,
+      // treat this empty node as a duplicate to be pruned.
+      const isDuplicateEmpty =
+        rawSelfIsExam &&
+        childNodes.length === 0 &&
+        all.some(
+          d =>
+            String(d._id) !== String(child._id) &&
+            isSeededExamLabel(d.name) &&
+            d.name.trim().toLowerCase() === child.name.trim().toLowerCase() &&
+            (byParent.get(String(d._id)) || []).length > 0
+        );
+
+      const selfIsExam = rawSelfIsExam && !isDuplicateEmpty;
       const underExam = ancestorIsExam || selfIsExam;
+
       if (underExam || selfIsExam) {
         keepIds.add(String(child._id));
         markKeepSubtree(child._id, underExam);

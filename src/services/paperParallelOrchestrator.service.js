@@ -50,32 +50,69 @@ const getSolverTimeoutMs = () =>
     30_000,
     Math.min(300_000, Number(process.env.PAPER_SOLVER_TIMEOUT_MS || 120_000))
   );
-/** Higher default — o3 must return verifiedSolution, not just a key. */
+/** Higher default — o3 must return verifiedSolution, not just a key. Default 10k prevents TPM reservation spikes. */
 const getSolverMaxTokens = () =>
-  Math.max(4000, Number(process.env.PAPER_SOLVER_MAX_TOKENS || 12000));
+  Math.max(2000, Math.min(25000, Number(process.env.PAPER_SOLVER_MAX_TOKENS || 10000)));
 
 const genConcurrency = () =>
-  Math.max(1, Math.min(8, Number(process.env.JEE_ADV_GENERATE_CONCURRENCY || 6)));
+  Math.max(
+    1,
+    Math.min(
+      8,
+      Number(
+        process.env.PAPER_GENERATE_CONCURRENCY ||
+          process.env.JEE_ADV_GENERATE_CONCURRENCY ||
+          6
+      )
+    )
+  );
 const o3Concurrency = () =>
-  Math.max(1, Math.min(8, Number(process.env.JEE_ADV_O3_CONCURRENCY || 6)));
+  Math.max(
+    1,
+    Math.min(
+      8,
+      Number(
+        process.env.PAPER_O3_CONCURRENCY ||
+          process.env.JEE_ADV_O3_CONCURRENCY ||
+          2
+      )
+    )
+  );
 
 const infraTimeoutRetries = () =>
   Math.max(
     0,
-    Math.min(3, Number(process.env.JEE_ADV_VERIFY_TIMEOUT_RETRIES ?? 2))
+    Math.min(
+      5,
+      Number(
+        process.env.PAPER_VERIFY_TIMEOUT_RETRIES ??
+          process.env.JEE_ADV_VERIFY_TIMEOUT_RETRIES ??
+          4
+      )
+    )
   );
 
 const o3SameSeatRetries = () =>
   Math.max(
     0,
-    Math.min(4, Number(process.env.JEE_ADV_O3_SAME_SEAT_RETRIES ?? 2))
+    Math.min(
+      5,
+      Number(
+        process.env.PAPER_O3_SAME_SEAT_RETRIES ??
+          process.env.JEE_ADV_O3_SAME_SEAT_RETRIES ??
+          2
+      )
+    )
   );
 
 const qualityReplaceMax = (needSeats) => {
-  const raw = process.env.JEE_ADV_QUALITY_REPLACE_MAX;
+  const raw =
+    process.env.PAPER_QUALITY_REPLACE_MAX ??
+    process.env.JEE_ADV_QUALITY_REPLACE_MAX;
   if (raw === "0" || raw === "false") return 0;
   if (raw != null && String(raw).trim() !== "") {
-    return Math.max(0, Number(raw) || 0);
+    const parsed = Number(raw);
+    return Math.max(needSeats, Number.isFinite(parsed) ? parsed : 0);
   }
   return Math.max(0, Number(needSeats) || 0);
 };
@@ -83,17 +120,38 @@ const qualityReplaceMax = (needSeats) => {
 const isInfraError = (err) => {
   const code = String(err?.code || "");
   const msg = String(err?.message || err || "");
+  const status = Number(err?.response?.status || err?.status || 0);
   return (
+    status === 429 ||
+    status === 502 ||
+    status === 503 ||
+    status === 504 ||
     code === "ECONNABORTED" ||
     code === "ETIMEDOUT" ||
     code === "ECONNRESET" ||
     code === "ENOTFOUND" ||
     code === "O3_EMPTY" ||
     code === "O3_INFRA" ||
-    /timeout|ECONNABORTED|ETIMEDOUT|network|socket hang up|fetch failed|temporarily unavailable|429|502|503|504|empty response|unparseable/i.test(
+    /timeout|ECONNABORTED|ETIMEDOUT|network|socket hang up|fetch failed|temporarily unavailable|429|rate limit|502|503|504|empty response|unparseable/i.test(
       msg
     )
   );
+};
+
+const getRetryAfterSeconds = (err) => {
+  const header =
+    err?.response?.headers?.["retry-after"] ||
+    err?.response?.headers?.["Retry-After"] ||
+    err?.headers?.["retry-after"] ||
+    err?.headers?.["Retry-After"];
+  if (!header) return null;
+  const sec = Number(header);
+  if (Number.isFinite(sec) && sec > 0) return sec;
+  const date = new Date(header).getTime();
+  if (Number.isFinite(date) && date > Date.now()) {
+    return Math.ceil((date - Date.now()) / 1000);
+  }
+  return null;
 };
 
 const withInfraRetries = async (fn, { label, pipelineLog, maxAttempts } = {}) => {
@@ -104,16 +162,36 @@ const withInfraRetries = async (fn, { label, pipelineLog, maxAttempts } = {}) =>
       return await fn(attempt);
     } catch (err) {
       lastErr = err;
+      const is429 =
+        Number(err?.response?.status || err?.status || 0) === 429 ||
+        /429|rate limit/i.test(String(err?.message || err || ""));
       const canRetry = isInfraError(err) && attempt < attempts;
       if (!canRetry) throw err;
-      const backoffMs = Math.min(8000, 1000 * attempt);
+
+      const retryAfterSec = getRetryAfterSeconds(err);
+      const jitter = Math.floor(Math.random() * 2000);
+      let backoffMs;
+      if (is429) {
+        // Exponential backoff: 2s -> 4s -> 8s -> 16s -> 30s (+ jitter)
+        const exp = Math.min(30000, 2000 * Math.pow(2, attempt - 1) + jitter);
+        backoffMs = retryAfterSec ? Math.max(exp, retryAfterSec * 1000 + jitter) : exp;
+      } else {
+        backoffMs = Math.min(8000, 1000 * attempt + jitter);
+      }
+
       pipelineLog?.("INFRA_RETRY", {
         label,
         attempt,
         nextAttempt: attempt + 1,
         maxAttempts: attempts,
         backoffMs,
+        retryAfter: retryAfterSec || null,
         reason: err?.message || String(err),
+        status: err?.response?.status || null,
+        rateLimitReset:
+          err?.response?.headers?.["x-ratelimit-reset-requests"] ||
+          err?.response?.headers?.["x-ratelimit-reset-tokens"] ||
+          null,
       });
       await sleep(backoffMs);
     }
@@ -626,26 +704,25 @@ const verifySeatWithO3Budget = async (item, ctx, stampTrust) => {
       return { ok: true, item, kind: "pass" };
     }
 
-    const retryable = out.infra || out.uncertain;
-    ctx.pipelineLog?.("O3_SAME_SEAT", {
-      seq: item.seq,
-      attempt,
-      maxAttempts,
-      infra: Boolean(out.infra),
-      uncertain: Boolean(out.uncertain),
-      willRetry: retryable && attempt < maxAttempts,
-      issues: out.result?.issues,
-      solutionChars: String(out.result?.verifiedSolution || "").length,
-    });
-
-    if (retryable && attempt < maxAttempts) {
-      await sleep(Math.min(4000, 800 * attempt));
-      continue;
-    }
-
     if (out.infra) {
       return { ok: false, item, kind: "infra", detail: out.result };
     }
+
+    if (out.uncertain && attempt < maxAttempts) {
+      ctx.pipelineLog?.("O3_SAME_SEAT", {
+        seq: item.seq,
+        attempt,
+        maxAttempts,
+        infra: false,
+        uncertain: true,
+        willRetry: true,
+        issues: out.result?.issues,
+        solutionChars: String(out.result?.verifiedSolution || "").length,
+      });
+      await sleep(Math.min(4000, 1000 * attempt));
+      continue;
+    }
+
     if (out.uncertain) {
       return { ok: false, item, kind: "uncertain", detail: out.result };
     }
@@ -843,16 +920,28 @@ export const runParallelPaperPipeline = async ({
   // Soft fill for schema/dup fails only — capped by quality replace budget later shared pool
   const schemaFillMax = Math.min(
     needSeats,
-    Number(process.env.JEE_ADV_SCHEMA_REPLACE_MAX ?? needSeats) || needSeats
+    Number(
+      process.env.PAPER_SCHEMA_REPLACE_MAX ??
+        process.env.JEE_ADV_SCHEMA_REPLACE_MAX ??
+        needSeats
+    ) || needSeats
   );
   let schemaFills = 0;
   while (
     working.length < needSeats &&
-    schemaFills < schemaFillMax &&
-    unusedCursor < unusedPool.length
+    schemaFills < schemaFillMax
   ) {
     schemaFills += 1;
-    const seat = unusedPool[unusedCursor++];
+    let seat;
+    if (unusedPool.length > 0 && unusedCursor < unusedPool.length) {
+      seat = unusedPool[unusedCursor++];
+    } else if (unusedPool.length > 0) {
+      seat = unusedPool[(unusedCursor++) % unusedPool.length];
+    } else if (seats.length > 0) {
+      seat = seats[schemaFills % seats.length];
+    } else {
+      break;
+    }
     const item = await generateOne(seat, seq++, schemaFills + 1, exclude);
     if (item?.locked && item.stage === "generated_ok") {
       working.push(item);
@@ -904,18 +993,30 @@ export const runParallelPaperPipeline = async ({
   }
 
   let qualityReplacesUsed = 0;
+  let replaceAttempts = 0;
+  const maxReplaceAttempts = Math.max(replaceBudget * 3, needSeats * 3);
   while (
     working.length < needSeats &&
     qualityReplacesUsed < replaceBudget &&
-    unusedCursor < unusedPool.length
+    replaceAttempts < maxReplaceAttempts
   ) {
-    qualityReplacesUsed += 1;
-    const seat = unusedPool[unusedCursor++];
+    replaceAttempts += 1;
+    let seat;
+    if (unusedPool.length > 0 && unusedCursor < unusedPool.length) {
+      seat = unusedPool[unusedCursor++];
+    } else if (unusedPool.length > 0) {
+      seat = unusedPool[(unusedCursor++) % unusedPool.length];
+    } else if (seats.length > 0) {
+      seat = seats[replaceAttempts % seats.length];
+    } else {
+      break;
+    }
     pipelineLog?.("QUALITY_REPLACE", {
       used: qualityReplacesUsed,
       budget: replaceBudget,
       working: working.length,
       needSeats,
+      attempt: replaceAttempts,
     });
     onProgress?.({
       phase: "o3_repair",
@@ -943,6 +1044,10 @@ export const runParallelPaperPipeline = async ({
           res.detail || res.item?.o3
         )
       );
+      // ONLY consume quality replacement budget if it was an actual quality rejection, not an infra error!
+      if (kind !== "infra") {
+        qualityReplacesUsed += 1;
+      }
     }
   }
 

@@ -799,7 +799,7 @@ const buildSeededPapersPayload = async (examType, year = 2026) => {
   return null;
 };
 
-const subjectCountsFromPapers = (examPapers, subjects = []) => {
+const subjectCountsFromPapers = (examPapers, subjects = [], requestedPaper = null) => {
   const fromPapers = examPapers?.subjectCounts || {};
   if (Object.keys(fromPapers).length) {
     const out = {};
@@ -808,6 +808,14 @@ const subjectCountsFromPapers = (examPapers, subjects = []) => {
     }
     if (Object.keys(out).length) return out;
     return { ...fromPapers };
+  }
+  const paperNum = Number(requestedPaper) || 1;
+  const paper =
+    examPapers?.papers?.find((p) => Number(p.paperNumber) === paperNum) ||
+    examPapers?.papers?.[0];
+  const qPerSub = paper?.questionsPerSubject || paper?.total;
+  if (qPerSub && subjects.length) {
+    return Object.fromEntries(subjects.map((s) => [s, Number(qPerSub) || 0]));
   }
   return {};
 };
@@ -890,17 +898,28 @@ export const getAiPoweredTestExamBlueprint = async (query = {}) => {
     topicsPayload.year || 2026
   );
 
-  const wizardSubjects = [
+  let wizardSubjects = [
     ...new Set(
       (
         subjects.map((s) => s.subject).filter(Boolean).length
           ? subjects.map((s) => s.subject)
-          : examPapers?.subjects || []
+          : inferred.subjects?.length
+            ? inferred.subjects
+            : examPapers?.subjects || []
       ).filter(Boolean)
     ),
   ];
 
-  const subjectCounts = subjectCountsFromPapers(examPapers, wizardSubjects);
+  if (inferred.subjects?.length > 0) {
+    const filtered = wizardSubjects.filter((s) => inferred.subjects.includes(s));
+    if (filtered.length) wizardSubjects = filtered;
+  }
+
+  const subjectCounts = subjectCountsFromPapers(
+    examPapers,
+    wizardSubjects,
+    paperNumber
+  );
   // Prefer scored total when section counts sum (NEET printed 200 / scored 180).
   const scoredFromSections = Object.values(subjectCounts).reduce(
     (sum, n) => sum + (Number(n) || 0),

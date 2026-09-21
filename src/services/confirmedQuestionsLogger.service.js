@@ -246,12 +246,54 @@ export const logConfirmedQuestionsToFile = async ({
         await fs.promises.writeFile(filePath, body, 'utf8');
     }
 
+    // Mirror to .json format in the same directory
+    const jsonFilePath = filePath.replace(/\.txt$/, '.json');
+    const jsonPayload = {
+        topic,
+        bankName,
+        sectionName: sectionName || null,
+        sectionIndex: sectionIndex ?? null,
+        timestamp: now.toISOString(),
+        questionCount: list.length,
+        questions: list.map((q, i) => {
+            const opts = optionsOf(q);
+            const correct = formatCorrectAnswer(q);
+            return {
+                questionNumber: i + 1,
+                questionType: q?.questionType || 'single',
+                subject: q?.subject || null,
+                topic: q?.topic || null,
+                marks: q?.marks ?? 4,
+                negativeMarks: q?.negativeMarks ?? 0,
+                passage: q?.passage || q?.paragraph || null,
+                questionText: stemOf(q),
+                options: opts.map((opt, optIdx) => ({
+                    key: letterFromIndex(optIdx),
+                    text: optionTextOf(opt),
+                })),
+                correctAnswer: correct,
+                explanation: String(q?.explanation || '').trim(),
+                ...(Array.isArray(q?.subQuestions) ? { subQuestions: q.subQuestions } : {}),
+            };
+        }),
+    };
+    try {
+        await fs.promises.writeFile(
+            jsonFilePath,
+            JSON.stringify(jsonPayload, null, 2),
+            'utf8'
+        );
+    } catch (jsonErr) {
+        console.error('[confirmed-questions] failed to write json log:', jsonErr?.message);
+    }
+
     console.log(
-        `[confirmed-questions] ${appended ? 'appended' : 'wrote'} ${list.length} question(s) → ${filePath}`
+        `[confirmed-questions] ${appended ? 'appended' : 'wrote'} ${list.length} question(s) → ${filePath} and ${jsonFilePath}`
     );
 
     return {
         filePath,
+        jsonFilePath,
         questionCount: list.length,
         appended,
     };

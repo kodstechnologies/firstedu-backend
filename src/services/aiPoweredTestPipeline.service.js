@@ -116,12 +116,17 @@ const serializeError = (err) => {
 
 const logPromptPayload = (prompt) => {
   const text = String(prompt || "");
-  const max = Number(process.env.JEE_ADV_LOG_PROMPT_CHARS || 200000);
+  const max = Number(
+    process.env.PAPER_LOG_PROMPT_CHARS ||
+      process.env.JEE_ADV_LOG_PROMPT_CHARS ||
+      200000
+  );
   return {
     promptChars: text.length,
     promptPreview: text.slice(0, 800),
     promptTail: text.length > 800 ? text.slice(-400) : undefined,
     prompt:
+      process.env.PAPER_LOG_FULL_PROMPT === "0" ||
       process.env.JEE_ADV_LOG_FULL_PROMPT === "0"
         ? undefined
         : text.length <= max
@@ -161,7 +166,10 @@ const pipelineLog = (event, payload = {}) => {
  * is for short UI calls and aborts this pipeline with AbortError.
  */
 const getGeminiTimeoutMs = (kind = "generate") => {
-  const dedicated = Number(process.env.JEE_ADV_GEMINI_TIMEOUT_MS);
+  const dedicated = Number(
+    process.env.PAPER_GEMINI_TIMEOUT_MS ||
+      process.env.JEE_ADV_GEMINI_TIMEOUT_MS
+  );
   if (Number.isFinite(dedicated) && dedicated > 0) return dedicated;
   const floor = kind === "solver" ? 90_000 : 180_000;
   return Math.max(floor, 60_000);
@@ -243,7 +251,11 @@ const callGeminiJson = async (prompt, { kind = "generate" } = {}) => {
     process.env.GEMINI_HARD_TEXT_MODEL ||
     resolveGeminiTextModelForTier({ difficulty: "hard", examCalibrated: true }) ||
     "gemini-3.5-flash";
-  const maxAttempts = Number(process.env.JEE_ADV_GEMINI_JSON_ATTEMPTS || 4);
+  const maxAttempts = Number(
+    process.env.PAPER_GEMINI_JSON_ATTEMPTS ||
+      process.env.JEE_ADV_GEMINI_JSON_ATTEMPTS ||
+      4
+  );
   const temperature = kind === "expand" ? 0.2 : 0.1;
   const requestPayload = {
     model,
@@ -406,7 +418,11 @@ const getVerifyMaxTokens = () =>
     )
   );
 
-const VERIFY_CONF_FLOOR = Number(process.env.JEE_ADV_VERIFY_CONF || 0.9);
+const VERIFY_CONF_FLOOR = Number(
+  process.env.PAPER_VERIFY_CONF ||
+    process.env.JEE_ADV_VERIFY_CONF ||
+    0.9
+);
 
 /** Single-model verify: GPT-5.6 Luna only. No o4/o3 chain, no Gemini solver fallback. */
 const callVerifyJson = async (prompt) => {
@@ -507,13 +523,21 @@ const normalizeSubject = (raw) => {
   if (key.startsWith("math")) return "Mathematics";
   if (key.startsWith("phys")) return "Physics";
   if (key.startsWith("chem")) return "Chemistry";
-  return String(raw || "Mathematics").trim() || "Mathematics";
+  if (key.startsWith("bot") || key.includes("botan")) return "Botany";
+  if (key.startsWith("zoo") || key.includes("zool")) return "Zoology";
+  if (key.startsWith("bio") || key.includes("biol")) return "Biology";
+  return String(raw || "").trim() || "General";
 };
 
 const writerLabel = (subject) => {
-  if (subject === "Physics") return "Physics";
-  if (subject === "Chemistry") return "Chemistry";
-  return "Mathematics";
+  const s = normalizeSubject(subject);
+  if (s === "Physics") return "Physics";
+  if (s === "Chemistry") return "Chemistry";
+  if (s === "Botany") return "Botany";
+  if (s === "Zoology") return "Zoology";
+  if (s === "Biology") return "Biology";
+  if (s === "Mathematics") return "Mathematics";
+  return s || "Subject";
 };
 
 const topicIdsFromSlots = (slots = []) =>
@@ -553,6 +577,44 @@ const getJeeAdvancedChemistryTopics = () => {
     chemistryTopicCache = [];
   }
   return chemistryTopicCache;
+};
+
+const neetTopicCache = {};
+const getNeetSyllabusTopics = (subject) => {
+  const norm = normalizeSubject(subject);
+  if (neetTopicCache[norm]) return neetTopicCache[norm];
+  const fileMap = {
+    Botany: "neet_syllabus_botany.json",
+    Zoology: "neet_syllabus_zoology.json",
+    Physics: "neet_syllabus_physics.json",
+    Chemistry: "neet_syllabus_chemistry.json",
+  };
+  const fileName = fileMap[norm];
+  if (!fileName) return [];
+  const candidates = [
+    join(PIPELINE_DIR, "..", "..", "NEET EXAM ALL SEED REQUIRED FILES", fileName),
+    join(process.cwd(), "NEET EXAM ALL SEED REQUIRED FILES", fileName),
+  ];
+  for (const p of candidates) {
+    try {
+      const raw = JSON.parse(readFileSync(p, "utf8"));
+      const list = (raw.topics || []).map((t) => ({
+        topicId: t.topic_id || t.topicId,
+        chapter: t.chapter,
+        subtopics: t.subtopics || [],
+        hardArchetypes: t.subtopics || [],
+        allowed: t.subtopics || [],
+        ncert: { concepts: t.subtopics || [], hard_archetypes: t.subtopics || [] },
+      }));
+      if (list.length) {
+        neetTopicCache[norm] = list;
+        return list;
+      }
+    } catch {
+      // try next candidate
+    }
+  }
+  return [];
 };
 
 const lookupNcert = (subject, topicId) => {
@@ -905,12 +967,17 @@ export const planPipelineSlots = (config = {}) => {
   const totalQuestions = typeSum || requestedTotal;
   const selected = config.selectedTopics || {};
   const runTopics = config.runTopics || {};
-  const subjectCounts = {
-    Physics: Math.max(0, Number(config.subjectCounts?.Physics) || 0),
-    Chemistry: Math.max(0, Number(config.subjectCounts?.Chemistry) || 0),
-    Mathematics: Math.max(0, Number(config.subjectCounts?.Mathematics) || 0),
-  };
-  if (!subjectCounts.Physics && !subjectCounts.Chemistry && !subjectCounts.Mathematics) {
+  const subjectCounts = {};
+  for (const s of subjects) {
+    const norm = normalizeSubject(s);
+    const rawCount =
+      config.subjectCounts?.[s] ??
+      config.subjectCounts?.[norm] ??
+      config.subjectCounts?.[s.toLowerCase()];
+    subjectCounts[s] = Math.max(0, Number(rawCount) || 0);
+  }
+  const hasAnySubjectCount = Object.values(subjectCounts).some((c) => c > 0);
+  if (!hasAnySubjectCount) {
     const per = subjects.length
       ? Math.floor(totalQuestions / subjects.length)
       : totalQuestions;
@@ -923,9 +990,18 @@ export const planPipelineSlots = (config = {}) => {
   }
 
   const packFor = (subject) => {
-    if (subject === "Physics") return getJeeAdvancedPhysicsTopics();
-    if (subject === "Mathematics") return getJeeAdvancedMathTopics();
-    if (subject === "Chemistry") return getJeeAdvancedChemistryTopics();
+    const s = normalizeSubject(subject);
+    const examTypeNorm = String(config.examType || "").toLowerCase();
+    if (examTypeNorm === "neet") {
+      const neetList = getNeetSyllabusTopics(s);
+      if (neetList.length) return neetList;
+    }
+    if (s === "Physics") return getJeeAdvancedPhysicsTopics();
+    if (s === "Mathematics") return getJeeAdvancedMathTopics();
+    if (s === "Chemistry") return getJeeAdvancedChemistryTopics();
+    if (s === "Botany" || s === "Zoology" || s === "Biology") {
+      return getNeetSyllabusTopics(s);
+    }
     return [];
   };
 
@@ -1053,17 +1129,27 @@ export const planPipelineSlots = (config = {}) => {
     if (type === "integer") return 5 + Math.min(n, 3);
     return 4 + Math.min(n, 4);
   };
+  const conceptRotationByTopic = new Map();
   const pickPreferredConcept = (topic, type) => {
-    const archetypes = topic?.hardArchetypes || topic?.ncert?.hard_archetypes || [];
+    const archetypes =
+      topic?.hardArchetypes ||
+      topic?.ncert?.hard_archetypes ||
+      topic?.subtopics ||
+      [];
     if (!archetypes.length) return "";
-    // Prefer first archetype; for match prefer longer multi-subproblem families.
+    const key = `${topic.subject || ""}:${topic.topicId || ""}`;
+    const usedCount = conceptRotationByTopic.get(key) || 0;
+    conceptRotationByTopic.set(key, usedCount + 1);
+
+    // For match prefer longer multi-subproblem families.
     if (type === "match") {
       const ranked = [...archetypes].sort(
         (a, b) => String(b).length - String(a).length
       );
-      return String(ranked[0] || "").trim();
+      return String(ranked[usedCount % ranked.length] || "").trim();
     }
-    return String(archetypes[0] || "").trim();
+    // Rotate through distinct concepts/subtopics so multiple seats in the same chapter do NOT get the exact same archetype
+    return String(archetypes[usedCount % archetypes.length] || "").trim();
   };
   const takeBestTopic = (subject, type, index) => {
     const pool = (allocated[subject]?.length
@@ -1490,7 +1576,17 @@ const isVerifyTimeoutError = (err) =>
   /timeout|ECONNABORTED|ETIMEDOUT/i.test(String(err?.message || err || ""));
 
 const getVerifyTimeoutRetries = () =>
-  Math.max(0, Math.min(3, Number(process.env.JEE_ADV_VERIFY_TIMEOUT_RETRIES ?? 2)));
+  Math.max(
+    0,
+    Math.min(
+      5,
+      Number(
+        process.env.PAPER_VERIFY_TIMEOUT_RETRIES ??
+          process.env.JEE_ADV_VERIFY_TIMEOUT_RETRIES ??
+          3
+      )
+    )
+  );
 
 const truthyGate = (v, { defaultIfMissing = false } = {}) => {
   if (v === true) return true;
@@ -2147,10 +2243,25 @@ const fillType = async ({
     if (kept.length >= need) return { kept, items, failures, seq };
   }
 
-  const maxAttempts = Math.max(need * Number(process.env.JEE_ADV_FILL_ROUNDS || 4), need);
+  const maxAttempts = Math.max(
+    need *
+      Number(
+        process.env.PAPER_FILL_ROUNDS ||
+          process.env.JEE_ADV_FILL_ROUNDS ||
+          4
+      ),
+    need
+  );
   const concurrency = Math.max(
     1,
-    Math.min(4, Number(process.env.JEE_ADV_QUESTION_CONCURRENCY || 2))
+    Math.min(
+      6,
+      Number(
+        process.env.PAPER_QUESTION_CONCURRENCY ||
+          process.env.JEE_ADV_QUESTION_CONCURRENCY ||
+          2
+      )
+    )
   );
   let attempt = 0;
   const usedKeys = new Set(

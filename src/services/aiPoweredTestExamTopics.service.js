@@ -298,6 +298,7 @@ export const inferExamAndSubject = ({
   examType,
   exam,
   subject,
+  subjects,
   categoryPath,
   categoryPaths,
   paper,
@@ -321,24 +322,64 @@ export const inferExamAndSubject = ({
     detectedExam && !GENERIC_EXAM_PROFILES.has(detectedExam)
       ? detectedExam
       : null;
+  const currentExam = explicitExam || inferredExam || null;
+
+  // Extract candidate subjects from query and leaf segments of each category path
+  const candidateSubjects = [];
+  for (const raw of [...asQueryList(subjects), ...asQueryList(subject)]) {
+    const can = canonicalizeSubject(raw);
+    if (can && normalizeExamType(can) !== currentExam) {
+      candidateSubjects.push(can);
+    }
+  }
+
+  for (const p of paths) {
+    const parts = String(p || "")
+      .split(/[>›/|]/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (!parts.length) continue;
+    const leaf = parts[parts.length - 1];
+    const can = canonicalizeSubject(leaf);
+    if (can && normalizeExamType(can) !== currentExam) {
+      candidateSubjects.push(can);
+    }
+  }
+
+  const uniqueSubjects = [...new Set(candidateSubjects)];
 
   let explicitSubject = canonicalizeSubject(subject);
   // Drop subject if it merely repeats the exam name.
   if (
     explicitSubject &&
     !CANONICAL_SUBJECT_VALUES.has(explicitSubject) &&
-    normalizeExamType(explicitSubject) === (explicitExam || inferredExam)
+    normalizeExamType(explicitSubject) === currentExam
   ) {
     explicitSubject = null;
   }
 
-  const inferredSubject =
-    canonicalizeSubject(resolvedSubject?.label) ||
-    canonicalizeSubject(resolvedSubject?.id);
+  let finalSubject = null;
+  let finalSubjects = uniqueSubjects;
+
+  if (uniqueSubjects.length === 1) {
+    finalSubject = uniqueSubjects[0];
+  } else if (uniqueSubjects.length > 1) {
+    // Multiple distinct subjects selected
+    finalSubject = null;
+    finalSubjects = uniqueSubjects;
+  } else {
+    // No subjects from paths/query, fallback to single resolved subject if any
+    const inferredSubject =
+      canonicalizeSubject(resolvedSubject?.label) ||
+      canonicalizeSubject(resolvedSubject?.id);
+    finalSubject = explicitSubject || inferredSubject || null;
+    finalSubjects = finalSubject ? [finalSubject] : [];
+  }
 
   return {
-    examType: explicitExam || inferredExam || null,
-    subject: explicitSubject || inferredSubject || null,
+    examType: currentExam,
+    subject: finalSubject,
+    subjects: finalSubjects,
     paperNumber: inferPaperNumber({
       paper,
       paperNumber,
@@ -421,14 +462,28 @@ const docsToSubjectsPayload = (docs = []) => {
  * Prefer ExamSyllabusPack (Main / NEET / CAT / Advanced scoring packs).
  * Fall back to legacy JeeExamSyllabus for older JEE-only seeds.
  */
-const loadSeededSyllabusDocs = async (examType, subject = null) => {
+const loadSeededSyllabusDocs = async (
+  examType,
+  subject = null,
+  requestedSubjects = []
+) => {
   const packFilter = { examType, isActive: true };
-  if (subject) {
-    const aliases = subjectLookupAliases(subject, examType);
+  const subjectsToFilter =
+    Array.isArray(requestedSubjects) && requestedSubjects.length > 0
+      ? requestedSubjects
+      : subject
+        ? [subject]
+        : [];
+
+  if (subjectsToFilter.length > 0) {
+    const allAliases = subjectsToFilter.flatMap((s) =>
+      subjectLookupAliases(s, examType)
+    );
+    const uniqueAliases = [...new Set(allAliases)].filter(Boolean);
     packFilter.subject =
-      aliases.length > 1
-        ? { $in: aliases }
-        : new RegExp(`^${escapeRegex(aliases[0] || subject)}$`, "i");
+      uniqueAliases.length > 1
+        ? { $in: uniqueAliases }
+        : new RegExp(`^${escapeRegex(uniqueAliases[0] || subjectsToFilter[0])}$`, "i");
   }
   let docs = await ExamSyllabusPack.find(packFilter)
     .sort({ subject: 1 })
@@ -450,15 +505,18 @@ const loadSeededSyllabusDocs = async (examType, subject = null) => {
   if (examType !== "jee_main" && examType !== "jee_advanced") return [];
 
   const legacyFilter = { examType, isActive: true };
-  if (subject) {
-    legacyFilter.subject = new RegExp(`^${escapeRegex(subject)}$`, "i");
+  if (subjectsToFilter.length > 0) {
+    legacyFilter.subject =
+      subjectsToFilter.length > 1
+        ? { $in: subjectsToFilter.map((s) => new RegExp(`^${escapeRegex(s)}$`, "i")) }
+        : new RegExp(`^${escapeRegex(subjectsToFilter[0])}$`, "i");
   }
   return JeeExamSyllabus.find(legacyFilter).sort({ subject: 1 }).lean();
 };
 
 export const getAiPoweredTestExamTopics = async (query = {}) => {
   const inferred = inferExamAndSubject(query);
-  const { examType, subject } = inferred;
+  const { examType, subject, subjects: requestedSubjects } = inferred;
 
   const [packDocs, legacyDocs] = await Promise.all([
     ExamSyllabusPack.find({ isActive: true })
@@ -500,14 +558,25 @@ export const getAiPoweredTestExamTopics = async (query = {}) => {
     };
   }
 
-  const docs = await loadSeededSyllabusDocs(examType, subject);
-  const subjects = docsToSubjectsPayload(docs);
+  const docs = await loadSeededSyllabusDocs(examType, subject, requestedSubjects);
+  let subjects = docsToSubjectsPayload(docs);
+  if (requestedSubjects && requestedSubjects.length > 1) {
+    subjects.sort((a, b) => {
+      const idxA = requestedSubjects.indexOf(a.subject);
+      const idxB = requestedSubjects.indexOf(b.subject);
+      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+      if (idxA !== -1) return -1;
+      if (idxB !== -1) return 1;
+      return 0;
+    });
+  }
   const topics = subjects.flatMap((entry) => entry.topics);
 
   return {
     examType,
     examLabel: docs[0]?.examLabel || getExamLabel(examType),
     subject,
+    subjectsRequested: requestedSubjects || [],
     year: docs[0]?.year || null,
     paper: docs[0]?.paper || "",
     hasSeededTopics: topics.length > 0,
