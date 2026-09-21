@@ -1,6 +1,6 @@
 import EverydayChallengeSchedule from "../models/EverydayChallengeSchedule.js";
 import Admin from "../models/Admin.js";
-import { sendEmailWithTemplate } from "../utils/sendEmail.js";
+import { otpTransporter, sendEmailWithTemplate } from "../utils/sendEmail.js";
 
 /**
  * Sends a dynamically generated HTML email to all admins.
@@ -16,6 +16,8 @@ const sendEmailToAllAdmins = async (subject, htmlBody) => {
           slug: "everyday_challenge_alert",
           defaultSubject: subject,
           defaultHtml: htmlBody,
+          from: `"TestLadr" <noreply@testladr.com>`,
+          mailer: otpTransporter,
         });
       }
     }
