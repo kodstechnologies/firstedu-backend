@@ -154,7 +154,7 @@ export const sendEmailWithTemplate = async ({
   const resolvedFrom =
     categoryFrom ||
     from ||
-    `"TestLadr" <${process.env.SMTP_CONNECT_EMAIL || process.env.SMTP_EMAIL}>`;
+    `"TestLadr" <${"noreply@testladr.com"}>`;
   const resolved = await resolveTemplate(category, slug, variables);
   const fallback = resolveFallbackTemplate({
     category,
