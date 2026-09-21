@@ -14,7 +14,7 @@ export const EMAIL_TEMPLATE_CATEGORIES = [
         key: "welcome_email",
         label: "Welcome Email",
         description: "Sent after successful signup.",
-        requiredVariables: ["name"],
+        requiredVariables: ["name", "link"],
         defaultSubject: "Welcome to TestLadr, {{name}}!",
         defaultContent: `
           <div style="font-family: 'Inter', Helvetica, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
@@ -26,7 +26,7 @@ export const EMAIL_TEMPLATE_CATEGORIES = [
               <p style="color: #475569; font-size: 16px; line-height: 1.6; margin-bottom: 24px;">Welcome to the learning platform! We are absolutely thrilled to have you with us.</p>
               <p style="color: #475569; font-size: 16px; line-height: 1.6; margin-bottom: 24px;">You can now start exploring courses, taking tests, and utilizing our learning tools directly from your student dashboard.</p>
               <div style="text-align: center; margin: 32px 0;">
-                <a href="#" style="display:inline-block; padding: 12px 24px; background-color: #2563eb; color: #ffffff; text-decoration: none; font-weight: 600; border-radius: 6px;">Go to Dashboard</a>
+                <a href="{{link}}" style="display:inline-block; padding: 12px 24px; background-color: #2563eb; color: #ffffff; text-decoration: none; font-weight: 600; border-radius: 6px;">Go to Dashboard</a>
               </div>
             </div>
             <div style="background-color: #f1f5f9; padding: 20px; text-align: center; border-top: 1px solid #e2e8f0;">

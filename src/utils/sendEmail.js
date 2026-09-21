@@ -433,11 +433,15 @@ export const sendTeacherRejectionEmail = async ({ toEmail, teacherName, jobTitle
  */
 export const sendWelcomeEmail = async (email, name) => {
   try {
+    const frontendUrl = (process.env.FRONTEND_URL || "https://admin.testladr.com").replace(/\/$/, "");
     const info = await sendEmailWithTemplate({
       to: email,
       category: "registration",
       slug: "welcome_email",
-      variables: { name: name || "Student" },
+      variables: {
+        name: name || "Student",
+        link: `${frontendUrl}/student/login`,
+      },
     });
     return info;
   } catch (error) {
