@@ -37,7 +37,7 @@
       "priority": "medium",
       "cluster": "mechanics",
       "hardSlotCount": 4,
-      "lastUsedPaper": null
+      "lastUsedPaper": 1
     },
     "P05": {
       "weight": 0.88,
@@ -596,6 +596,30 @@
       "lastUsedPaper": 1
     },
     "REASON01": {
+      "lastUsedPaper": 1
+    },
+    "ENG02": {
+      "lastUsedPaper": 1
+    },
+    "QUANT02": {
+      "lastUsedPaper": 1
+    },
+    "REASON02": {
+      "lastUsedPaper": 1
+    },
+    "QUANT03": {
+      "lastUsedPaper": 1
+    },
+    "CA01": {
+      "lastUsedPaper": 1
+    },
+    "ENG03": {
+      "lastUsedPaper": 1
+    },
+    "LEGAL01": {
+      "lastUsedPaper": 1
+    },
+    "LOGIC01": {
       "lastUsedPaper": 1
     }
   }

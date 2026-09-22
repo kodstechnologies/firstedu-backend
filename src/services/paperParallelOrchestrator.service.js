@@ -846,6 +846,7 @@ export const runParallelPaperPipeline = async ({
 
   const failures = [];
   const keptBySeq = new Map();
+  const failedResume = [];
   for (const it of resumeItems || []) {
     if (
       it?.locked &&
@@ -862,6 +863,20 @@ export const runParallelPaperPipeline = async ({
           _trustBadge: it.locked._trustBadge || "O3-VERIFIED",
         },
       });
+      continue;
+    }
+    // Prior failed / dropped seats — keep for same-subject replace + stem exclude
+    if (
+      it &&
+      (it.failureReason ||
+        it.stage === "failed" ||
+        it.stage === "dropped" ||
+        it.stage === "generated_ok" ||
+        it.stage === "generated" ||
+        it.locked ||
+        it.raw)
+    ) {
+      failedResume.push(it);
     }
   }
 
@@ -873,12 +888,57 @@ export const runParallelPaperPipeline = async ({
     seq = Math.max(seq, Number(k) + 1);
   }
 
-  const exclude = [...keptBySeq.values()].map((it) =>
-    String(it.locked?.questionText || "").slice(0, 180)
-  );
+  const stemSnippet = (q) =>
+    String(q?.questionText || q?.text || "").slice(0, 180);
+
+  const exclude = [
+    ...[...keptBySeq.values()].map((it) => stemSnippet(it.locked)),
+    ...failedResume.map((it) => stemSnippet(it.locked || it.raw)),
+  ].filter(Boolean);
 
   const needSeats = Math.max(0, expectedTotal - keptBySeq.size);
-  const seatQueue = seats.slice(0, needSeats);
+
+    // Prefer seats matching previously failed items (same subject/topic/type)
+    // so resume fills the gaps without drifting to unrelated chapters.
+    // First resume (resumeCount becomes 1 when queued): re-verify failed stems once.
+    // Later resumes: generate NEW unique stems only (same subject/topic).
+    const allowReverify = Number(config?._resumeCount || 0) <= 1;
+  const preferredFromFailures = failedResume
+    .map((it) => ({
+      type: it.type || "single",
+      slot: {
+        subject: it.subject,
+        topicId: it.topicId,
+        chapter: it.chapter,
+        conceptSlot: it.conceptSlot || "",
+        hardArchetype: it.conceptSlot || "",
+      },
+      retryItem: allowReverify && (it.locked || it.raw) ? it : null,
+    }))
+    .slice(0, needSeats);
+
+  const usedPreferredKeys = new Set();
+  const seatKey = (s) =>
+    `${s.type}|${normalizeSubject(s.slot?.subject)}|${s.slot?.topicId || ""}`;
+
+  let seatQueue = [];
+  for (const pref of preferredFromFailures) {
+    seatQueue.push(pref);
+    usedPreferredKeys.add(seatKey(pref));
+  }
+  // Fill remaining need from the original plan seats (skip already-covered subjects/topics when possible)
+  for (const s of seats) {
+    if (seatQueue.length >= needSeats) break;
+    const k = seatKey(s);
+    if (usedPreferredKeys.has(k)) continue;
+    seatQueue.push(s);
+    usedPreferredKeys.add(k);
+  }
+  while (seatQueue.length < needSeats && seats.length > 0) {
+    seatQueue.push(seats[seatQueue.length % seats.length]);
+  }
+  seatQueue = seatQueue.slice(0, needSeats);
+
   const unusedPool = types.flatMap((t) =>
     (plan.unusedSlots?.[t] || []).map((slot) => ({ type: t, slot }))
   );
@@ -964,18 +1024,83 @@ export const runParallelPaperPipeline = async ({
   });
 
   let working = [];
+  let preVerified = [];
   let unusedCursor = 0;
+  const o3CtxEarly = {
+    pipelineLog,
+    recordUsage,
+    jobId,
+    examType: config?.examType,
+    examLabel: config?.examLabel,
+    checkpointItem,
+  };
+
   const initial = await mapPool(seatQueue, genConcurrency(), async (seat, i) => {
-    const seqNum = seq + i;
-    return generateOne(seat, seqNum, 1, exclude);
+    const seqNum = Number(seat?.retryItem?.seq) || seq + i;
+
+    // Resume path: re-verify a previously failed stem once before generating a replacement.
+    const retry = seat?.retryItem;
+    if (retry && (retry.locked || retry.raw)) {
+      const retryItem = {
+        ...retry,
+        seq: seqNum,
+        type: seat.type,
+        subject: normalizeSubject(seat.slot?.subject || retry.subject),
+        topicId: seat.slot?.topicId || retry.topicId || "",
+        chapter: seat.slot?.chapter || retry.chapter || "",
+        conceptSlot:
+          seat.slot?.conceptSlot ||
+          retry.conceptSlot ||
+          retry.hardArchetype ||
+          "",
+        stage: "generated_ok",
+        locked: retry.locked || retry.raw,
+        attempt: (Number(retry.attempt) || 1) + 1,
+        failureReason: undefined,
+        failureDetail: undefined,
+      };
+      pipelineLog?.("QUESTION_RESUME_REVERIFY", {
+        seq: seqNum,
+        topicId: retryItem.topicId,
+        subject: retryItem.subject,
+        priorFailure: retry.failureReason || null,
+      });
+      try {
+        const res = await verifySeatWithO3Budget(
+          retryItem,
+          o3CtxEarly,
+          stampTrust
+        );
+        if (res?.ok && res.item?.locked) {
+          return { __preVerified: true, item: res.item };
+        }
+      } catch (err) {
+        pipelineLog?.("QUESTION_RESUME_REVERIFY_FAIL", {
+          seq: seqNum,
+          error: err?.message || String(err),
+        });
+      }
+      // Re-verify failed → generate a NEW unique stem for the same subject/topic.
+      exclude.push(stemSnippet(retry.locked || retry.raw));
+    }
+
+    return generateOne(seat, seqNum, (Number(retry?.attempt) || 0) + 1, exclude);
   });
   seq += seatQueue.length;
 
   for (const item of initial) {
-    if (item?.locked && (item.stage === "generated_ok" || item.stage === "generated")) {
+    if (item?.__preVerified && item.item?.locked) {
+      preVerified.push(item.item);
+      exclude.push(stemSnippet(item.item.locked));
+      continue;
+    }
+    if (
+      item?.locked &&
+      (item.stage === "generated_ok" || item.stage === "generated")
+    ) {
       working.push(item);
-      exclude.push(String(item.locked.questionText || "").slice(0, 180));
-    } else {
+      exclude.push(stemSnippet(item.locked));
+    } else if (item && !item.__preVerified) {
       failures.push(item);
     }
   }
@@ -991,7 +1116,7 @@ export const runParallelPaperPipeline = async ({
   );
   let schemaFills = 0;
   while (
-    working.length < needSeats &&
+    working.length + preVerified.length < needSeats &&
     schemaFills < schemaFillMax
   ) {
     schemaFills += 1;
@@ -1008,7 +1133,7 @@ export const runParallelPaperPipeline = async ({
     const item = await generateOne(seat, seq++, schemaFills + 1, exclude);
     if (item?.locked && item.stage === "generated_ok") {
       working.push(item);
-      exclude.push(String(item.locked.questionText || "").slice(0, 180));
+      exclude.push(stemSnippet(item.locked));
     } else {
       failures.push(item);
     }
@@ -1018,9 +1143,9 @@ export const runParallelPaperPipeline = async ({
     phase: "o3_verify",
     message: `Parallel o3 solve+verify+solution ×${working.length}`,
     questions: dedupePaperQuestionsByStem(
-      working.map((it) => toUiQuestion(it.locked, config))
+      [...preVerified, ...working].map((it) => toUiQuestion(it.locked, config))
     ),
-    items: [...keptBySeq.values(), ...working, ...failures],
+    items: [...keptBySeq.values(), ...preVerified, ...working, ...failures],
     failures,
   });
 
@@ -1039,7 +1164,7 @@ export const runParallelPaperPipeline = async ({
     }
   });
 
-  working = [];
+  working = [...preVerified];
   const pendingSeats = [];
   for (const res of o3Results) {
     if (res?.ok && res.item?.locked) {
@@ -1173,7 +1298,9 @@ export const runParallelPaperPipeline = async ({
           res.detail || res.item?.o3
         )
       );
-      // Requeue slot back into pendingSeats so it will be retried
+      // Never regenerate the same failed stem on the next replace attempt.
+      exclude.push(stemSnippet(res.item?.locked || res.item?.raw || item.locked));
+      // Requeue slot back into pendingSeats so it will be retried with a NEW stem
       pendingSeats.push({
         type: seat.type,
         slot: seat.slot,

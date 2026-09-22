@@ -2418,9 +2418,10 @@ export const runAdvancedPaperPipeline = async (
     plan,
   });
 
+  const resumeCount = Number(resumeJob?.resumeCount) || 0;
   return runParallelPaperPipeline({
     plan,
-    config,
+    config: { ...config, _resumeCount: resumeCount },
     onProgress,
     resumeItems: resumeJob?.items || [],
     deps: {
