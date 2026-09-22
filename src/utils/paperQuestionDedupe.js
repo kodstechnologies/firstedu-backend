@@ -4,15 +4,35 @@
  * from ever leaving the backend as duplicate stems.
  */
 
-const normalizeStem = (q) =>
-  String(q?.questionText || q?.text || q?.title || "")
+const normalizeStem = (q) => {
+  const stem = String(q?.questionText || q?.text || q?.title || "")
     .replace(/\$[^$]*\$/g, " ") // ignore latex noise for near-dup
     .replace(/\\[a-zA-Z]+/g, " ")
     .replace(/\{|\}/g, " ")
     .replace(/\s+/g, " ")
     .trim()
-    .toLowerCase()
-    .slice(0, 280);
+    .toLowerCase();
+
+  let extra = "";
+  if (Array.isArray(q?.options) && q.options.length > 0) {
+    extra = q.options
+      .map((o) =>
+        String(o?.text || o || "")
+          .replace(/\$[^$]*\$/g, " ")
+          .replace(/\s+/g, " ")
+          .trim()
+          .toLowerCase()
+          .slice(0, 40)
+      )
+      .join("|");
+  } else if (Array.isArray(q?.listI) || Array.isArray(q?.listII)) {
+    extra = [...(q.listI || []), ...(q.listII || [])].join("|");
+  }
+
+  const prefix = stem.slice(0, 240);
+  const suffix = extra.slice(0, 100);
+  return suffix ? `${prefix}##${suffix}` : prefix;
+};
 
 const explanationScore = (q) => String(q?.explanation || "").length;
 

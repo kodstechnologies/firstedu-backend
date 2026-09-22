@@ -482,13 +482,13 @@ export const o3VerifyCompact = async (q, type, ctx) => {
   let raw;
   try {
     raw = await withInfraRetries(
-      async () =>
+      async (attempt) =>
         callOpenAiJson({
           kind: "solve",
           model: getSolverModel(),
-          effort: getSolverEffort(),
+          effort: attempt > 1 ? "medium" : getSolverEffort(),
           timeoutMs: getSolverTimeoutMs(),
-          maxTokens: getSolverMaxTokens(),
+          maxTokens: Math.min(24000, getSolverMaxTokens() + (attempt > 1 ? 4000 : 0)),
           prompt: buildO3SolvePrompt(q, type, ctx),
           developerHint:
             "Return ONLY JSON. Independently solve. verifiedSolution is mandatory and must derive independentAnswer.",
@@ -995,8 +995,14 @@ export const runParallelPaperPipeline = async ({
   let qualityReplacesUsed = 0;
   let replaceAttempts = 0;
   const maxReplaceAttempts = Math.max(replaceBudget * 3, needSeats * 3);
+
+  const getUniqueCount = () =>
+    dedupePaperQuestionsByStem(
+      [...keptBySeq.values(), ...working].map((it) => it.locked).filter(Boolean)
+    ).length;
+
   while (
-    working.length < needSeats &&
+    getUniqueCount() < expectedTotal &&
     qualityReplacesUsed < replaceBudget &&
     replaceAttempts < maxReplaceAttempts
   ) {
@@ -1011,16 +1017,17 @@ export const runParallelPaperPipeline = async ({
     } else {
       break;
     }
+    const currentCount = getUniqueCount();
     pipelineLog?.("QUALITY_REPLACE", {
       used: qualityReplacesUsed,
       budget: replaceBudget,
-      working: working.length,
-      needSeats,
+      working: currentCount,
+      needSeats: expectedTotal,
       attempt: replaceAttempts,
     });
     onProgress?.({
       phase: "o3_repair",
-      message: `Quality replace ${qualityReplacesUsed}/${replaceBudget} — ${working.length}/${needSeats}`,
+      message: `Quality replace ${qualityReplacesUsed}/${replaceBudget} — ${currentCount}/${expectedTotal}`,
     });
     let item = await generateOne(seat, seq++, qualityReplacesUsed + 1, exclude);
     if (!(item?.locked && item.stage === "generated_ok")) {
