@@ -121,12 +121,49 @@ export const codeValidateQuestion = (q, typeHint = null) => {
   return { ok: issues.length === 0, issues, type };
 };
 
+export const stripDirectionPreamble = (text) => {
+  let cleaned = asText(text);
+  const stmtMatch = cleaned.match(
+    /((\*\*Statements:\*\*|\*\*Statements\*\*|Statements:)[\s\S]*)/i
+  );
+  if (stmtMatch) {
+    cleaned = stmtMatch[0];
+  } else {
+    cleaned = cleaned
+      .replace(
+        /^(directions?|direction\s*:|in the (following|question)[^:\n]*:?\s*)/i,
+        ""
+      )
+      .replace(
+        /^you have to take the given statements to be true[^:\n]*\n?/gi,
+        ""
+      )
+      .trim();
+  }
+  return cleaned;
+};
+
+export const normalizeStemForDedupe = (stem) => {
+  const cleaned = stripDirectionPreamble(stem);
+  const norm = asText(cleaned || stem)
+    .toLowerCase()
+    .replace(/\$[^$]*\$/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return norm.length > 300 ? norm.slice(-300) : norm;
+};
+
 export const isDuplicateStem = (stem, existingStems = []) => {
-  const norm = asText(stem).toLowerCase().replace(/\s+/g, " ").slice(0, 180);
-  if (!norm) return false;
+  const norm = normalizeStemForDedupe(stem);
+  if (!norm || norm.length < 15) return false;
   return existingStems.some((s) => {
-    const other = asText(s).toLowerCase().replace(/\s+/g, " ").slice(0, 180);
-    return other && (other === norm || other.includes(norm) || norm.includes(other));
+    const other = normalizeStemForDedupe(s);
+    if (!other || other.length < 15) return false;
+    return (
+      other === norm ||
+      (norm.length >= 50 && other.includes(norm)) ||
+      (other.length >= 50 && norm.includes(other))
+    );
   });
 };
 

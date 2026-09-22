@@ -880,13 +880,33 @@ const stampTrust = (q) => {
   };
 };
 
-const excludeBlock = (excludeTexts = []) =>
-  excludeTexts?.length
-    ? `Do NOT repeat these stems:\n${excludeTexts
-        .slice(0, 20)
-        .map((t, i) => `${i + 1}. ${String(t).slice(0, 160)}`)
+const excludeBlock = (excludeTexts = []) => {
+  if (!excludeTexts?.length) return "";
+  const cleaned = excludeTexts
+    .slice(-20)
+    .map((t) => {
+      let text = String(t || "").trim();
+      const stmtMatch = text.match(/(\*\*Statements:\*\*|Statements:[\s\S]*)/i);
+      if (stmtMatch) {
+        text = stmtMatch[0];
+      } else {
+        text = text
+          .replace(
+            /^(directions?|direction\s*:|in the (following|question)[^:\n]*:?\s*)/i,
+            ""
+          )
+          .trim();
+      }
+      return text.slice(0, 160);
+    })
+    .filter(Boolean);
+
+  return cleaned.length
+    ? `Do NOT repeat these stems:\n${cleaned
+        .map((t, i) => `${i + 1}. ${t}`)
         .join("\n")}`
     : "";
+};
 
 const normalizeMultiLetters = (raw) => {
   if (raw == null) return null;

@@ -4,8 +4,30 @@
  * from ever leaving the backend as duplicate stems.
  */
 
+const stripDirectionPreamble = (raw) => {
+  const text = String(raw || "");
+  const stmtMatch = text.match(
+    /((\*\*Statements:\*\*|\*\*Statements\*\*|Statements:)[\s\S]*)/i
+  );
+  if (stmtMatch) {
+    return stmtMatch[0];
+  }
+  return text
+    .replace(
+      /^(directions?|direction\s*:|in the (following|question)[^:\n]*:?\s*)/i,
+      ""
+    )
+    .replace(
+      /^you have to take the given statements to be true[^:\n]*\n?/gi,
+      ""
+    )
+    .trim();
+};
+
 const normalizeStem = (q) => {
-  const stem = String(q?.questionText || q?.text || q?.title || "")
+  const rawText = String(q?.questionText || q?.text || q?.title || "");
+  const cleaned = stripDirectionPreamble(rawText);
+  const stem = cleaned
     .replace(/\$[^$]*\$/g, " ") // ignore latex noise for near-dup
     .replace(/\\[a-zA-Z]+/g, " ")
     .replace(/\{|\}/g, " ")
@@ -29,7 +51,7 @@ const normalizeStem = (q) => {
     extra = [...(q.listI || []), ...(q.listII || [])].join("|");
   }
 
-  const prefix = stem.slice(0, 240);
+  const prefix = stem.length > 300 ? stem.slice(0, 300) : stem;
   const suffix = extra.slice(0, 100);
   return suffix ? `${prefix}##${suffix}` : prefix;
 };

@@ -1207,12 +1207,12 @@ export const runParallelPaperPipeline = async ({
     qualityReplaceBudget: replaceBudget,
   };
 
+  const isFullyComplete = uniqueFinal.length >= expectedTotal;
   onProgress?.({
-    phase: "done",
-    message:
-      uniqueFinal.length >= expectedTotal
-        ? `Paper ready — ${uniqueFinal.length}/${expectedTotal} (Gemini→o3)`
-        : `Partial — ${uniqueFinal.length}/${expectedTotal} o3-verified`,
+    phase: isFullyComplete ? "done" : "partial",
+    message: isFullyComplete
+      ? `Paper ready — ${uniqueFinal.length}/${expectedTotal} (Gemini→o3)`
+      : `Partial — ${uniqueFinal.length}/${expectedTotal} o3-verified. Click Resume to complete.`,
     questions: uniqueFinal.map((q) => toUiQuestion(q, config)),
     items: [...finalItems, ...failures],
     failures,
