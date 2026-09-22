@@ -18,6 +18,7 @@ import { callOpenAIReasoningJson } from "./openaiReasoningChat.service.js";
 import { isDuplicateStem } from "./paperCodeValidation.service.js";
 import { dedupePaperQuestionsByStem } from "../utils/paperQuestionDedupe.js";
 import { resolvePaperExam } from "./paperExamIdentity.service.js";
+import { getGenerationJob } from "./questionBankGenerationJobStore.js";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -1001,7 +1002,14 @@ export const runParallelPaperPipeline = async ({
       [...keptBySeq.values(), ...working].map((it) => it.locked).filter(Boolean)
     ).length;
 
+  const isCancelled = () => {
+    if (!jobId) return false;
+    const j = getGenerationJob(jobId);
+    return String(j?.status || "").toLowerCase() === "cancelled";
+  };
+
   while (
+    !isCancelled() &&
     getUniqueCount() < expectedTotal &&
     qualityReplacesUsed < replaceBudget &&
     replaceAttempts < maxReplaceAttempts

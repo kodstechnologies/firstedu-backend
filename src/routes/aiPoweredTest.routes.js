@@ -19,6 +19,7 @@ import {
   getExamQuestionJob,
   getExamQuestionJobStatus,
   resumeExamQuestionJob,
+  cancelExamQuestionJob,
 } from "../controllers/aiPoweredTest.controller.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 
@@ -97,6 +98,8 @@ const getJobDispatcher = asyncHandler(async (req, res, next) => {
 
 router.get("/questions/jobs/:jobId", getJobDispatcher);
 router.post("/questions/jobs/:jobId/resume", resumeExamQuestionJob);
+router.post("/questions/jobs/:jobId/cancel", cancelExamQuestionJob);
+router.delete("/questions/jobs/:jobId", cancelExamQuestionJob);
 router.get(
   "/questions/:generationId/status",
   getExamQuestionJobStatus

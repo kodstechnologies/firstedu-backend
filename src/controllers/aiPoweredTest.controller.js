@@ -9,11 +9,13 @@ import {
   expandPipelineQuestions,
   startAdvancedPaperJob,
   resumeAdvancedPaperJob,
+  cancelAdvancedPaperJob,
 } from "../services/aiPoweredTestPipeline.service.js";
 import {
   getGenerationJob,
   createGenerationJob,
   updateGenerationJob,
+  deleteGenerationJob,
 } from "../services/questionBankGenerationJobStore.js";
 import {
   loadPersistedJob,
@@ -355,3 +357,23 @@ export const resumeExamQuestionJob = asyncHandler(async (req, res) => {
     )
   );
 });
+
+/**
+ * POST /admin/ai-powered-test/questions/jobs/:jobId/cancel
+ * DELETE /admin/ai-powered-test/questions/jobs/:jobId
+ * Cancel and destroy an active or queued generation job.
+ */
+export const cancelExamQuestionJob = asyncHandler(async (req, res) => {
+  const { jobId } = req.params;
+  const existing = await resolvePaperJob(jobId);
+  const targetId = existing?.jobId || jobId;
+  cancelAdvancedPaperJob(targetId);
+  deleteGenerationJob(targetId);
+  return res.status(200).json(
+    ApiResponse.success(
+      { jobId: targetId, status: "cancelled", message: "Generation job cancelled and destroyed" },
+      "Generation job cancelled and destroyed"
+    )
+  );
+});
+

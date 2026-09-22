@@ -447,12 +447,40 @@ export const requeueOrphanedWorkerJobs = () => {
     return requeued;
 };
 
+export const cancelGenerationJob = (jobId, reason = "Generation cancelled by user") => {
+    const existing = getGenerationJob(jobId);
+    if (!existing) return null;
+    return updateGenerationJob(jobId, {
+        status: "cancelled",
+        phase: "cancelled",
+        message: reason,
+        error: reason,
+        resumable: false,
+    });
+};
+
+export const deleteGenerationJob = (jobId) => {
+    jobs.delete(jobId);
+    try {
+        ensureJobDir();
+        const filePath = path.join(JOB_DIR, `${jobId}.json`);
+        if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+        }
+    } catch {
+        // non-fatal
+    }
+};
+
 export default {
     createGenerationJob,
     updateGenerationJob,
     getGenerationJob,
     listGenerationJobs,
     claimGenerationJob,
+    cancelGenerationJob,
+    deleteGenerationJob,
     failOrphanedGenerationJobs,
     requeueOrphanedWorkerJobs,
 };
+

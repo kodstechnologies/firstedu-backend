@@ -40,6 +40,7 @@ import {
   createGenerationJob,
   updateGenerationJob,
   getGenerationJob,
+  cancelGenerationJob,
 } from "./questionBankGenerationJobStore.js";
 import {
   enqueuePaperJob,
@@ -2488,6 +2489,10 @@ const applyJobProgress = (jobId, evt) => {
 
 const runJobLoop = async (jobId, config, { resume = false } = {}) => {
   if (runningJobs.has(jobId)) return getGenerationJob(jobId);
+  const current = getGenerationJob(jobId);
+  if (String(current?.status || "").toLowerCase() === "cancelled") {
+    return current;
+  }
   runningJobs.add(jobId);
   currentJobId = jobId;
   lastCallContext = null;
@@ -2507,6 +2512,9 @@ const runJobLoop = async (jobId, config, { resume = false } = {}) => {
       resumeJob,
       onProgress: (evt) => applyJobProgress(jobId, evt),
     });
+    if (String(getGenerationJob(jobId)?.status || "").toLowerCase() === "cancelled") {
+      return getGenerationJob(jobId);
+    }
     const tokens = readTokenSummary(jobId);
     pipelineLog("JOB_DONE", { counts: result.counts, tokens: tokens.byModel });
     const questions = dedupePaperQuestionsByStem(result.questions || []);
@@ -2745,6 +2753,18 @@ export const resumeAdvancedPaperJob = (jobId) => {
   return getGenerationJob(jobId);
 };
 
+export const cancelAdvancedPaperJob = (jobId) => {
+  runningJobs.delete(jobId);
+  const updated = cancelGenerationJob(jobId, "Generation cancelled by user");
+  persistJobRecord(jobId, {
+    status: "cancelled",
+    phase: "cancelled",
+    message: "Generation cancelled by user",
+    resumable: false,
+  }).catch(() => {});
+  return updated;
+};
+
 export default {
   planPipelineSlots,
   generatePipelineQuestions,
@@ -2753,5 +2773,6 @@ export default {
   runAdvancedPaperPipeline,
   startAdvancedPaperJob,
   resumeAdvancedPaperJob,
+  cancelAdvancedPaperJob,
   executePaperJob,
 };
