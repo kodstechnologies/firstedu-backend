@@ -1185,10 +1185,10 @@ export const runParallelPaperPipeline = async ({
     }
   }
 
-  const finalItems = [...keptBySeq.values(), ...working].slice(0, expectedTotal);
-  const uniqueFinal = dedupePaperQuestionsByStem(
-    finalItems.map((it) => it.locked).filter(Boolean)
-  );
+  const allLocked = [...keptBySeq.values(), ...working]
+    .map((it) => it.locked)
+    .filter(Boolean);
+  const uniqueFinal = dedupePaperQuestionsByStem(allLocked).slice(0, expectedTotal);
 
   const byType = { single: [], multiple: [], integer: [], match: [] };
   for (const q of uniqueFinal) {
