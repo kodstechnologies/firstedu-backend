@@ -36,12 +36,15 @@ export const resolvePaperExam = (configOrType = {}) => {
   };
 };
 
-/** Score floor used by the paper writer for this exam (keep in sync with hardness lock). */
-export const paperScoreFloor = (examType) => {
-  const type = String(examType || "").toLowerCase();
-  if (type === "jee_advanced") return 75;
-  if (type === "jee_main" || type === "neet") return 70;
-  return 68;
+/**
+ * Score floor used by the paper writer (keep in sync with hardness lock).
+ * Env wins for every exam: PAPER_SCORE_FLOOR / JEE_ADV_SCORE_FLOOR (default 75).
+ */
+export const paperScoreFloor = (_examType) => {
+  const fromEnv = Number(
+    process.env.PAPER_SCORE_FLOOR || process.env.JEE_ADV_SCORE_FLOOR || 75
+  );
+  return Number.isFinite(fromEnv) && fromEnv > 0 ? fromEnv : 75;
 };
 
 /**
@@ -63,12 +66,11 @@ export const buildWriterHardnessLock = (examType, examLabel) => {
   const label = examLabel || "Exam";
   const type = String(examType || "").toLowerCase();
   const floor = paperScoreFloor(type);
-  const band =
-    type === "jee_advanced"
-      ? { target: "78–88", floor }
-      : type === "jee_main" || type === "neet"
-        ? { target: "70–82", floor }
-        : { target: "68–80", floor };
+  // Target band sits just above the env floor (default 75 → 75–85).
+  const band = {
+    target: `${floor}–${Math.min(95, floor + 10)}`,
+    floor,
+  };
 
   if (type === "jee_main") {
     return `**JEE MAIN HARDNESS LOCK (NTA screening test — speed & accuracy)**

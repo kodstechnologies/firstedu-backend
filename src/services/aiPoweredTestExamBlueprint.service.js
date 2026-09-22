@@ -224,114 +224,36 @@ const enrichTopicsWithPack = async (topics = [], subject = "", examType = "") =>
   });
 };
 
+/** All paper exams default to hard; score floor comes from PAPER_SCORE_FLOOR (default 75). */
+const paperDifficultyScoreFloor = () => {
+  const fromEnv = Number(
+    process.env.PAPER_SCORE_FLOOR || process.env.JEE_ADV_SCORE_FLOOR || 75
+  );
+  return Number.isFinite(fromEnv) && fromEnv > 0 ? fromEnv : 75;
+};
+
 const buildDifficulty = (examType) => {
-  if (examType === "jee_advanced") {
-    return {
-      default: "hard",
-      examNative: true,
-      options: ["hard"],
-      label: "Hard (JEE Advanced exam-native)",
-      skeletonMin: 70,
-      lastAttemptFloor: 65,
-    };
-  }
-  if (examType === "jee_main") {
-    return {
-      default: "hard",
-      examNative: true,
-      options: ["hard"],
-      label: "Hard (JEE Main exam-native)",
-      skeletonMin: 80,
-      lastAttemptFloor: 72,
-    };
-  }
-  if (examType === "neet") {
-    return {
-      default: "medium",
-      examNative: true,
-      options: ["medium", "hard"],
-      label: "Medium–Hard (NEET exam-native)",
-      skeletonMin: 70,
-      lastAttemptFloor: 65,
-    };
-  }
-  if (examType === "cat") {
-    return {
-      default: "hard",
-      examNative: true,
-      options: ["medium", "hard"],
-      label: "Hard (CAT exam-native)",
-      skeletonMin: 75,
-      lastAttemptFloor: 68,
-    };
-  }
-  if (examType === "gmat") {
-    return {
-      default: "hard",
-      examNative: true,
-      options: ["medium", "hard"],
-      label: "Hard (GMAT Focus exam-native)",
-      skeletonMin: 75,
-      lastAttemptFloor: 68,
-    };
-  }
-  if (examType === "clat") {
-    return {
-      default: "medium",
-      examNative: true,
-      options: ["medium", "hard"],
-      label: "Medium–Hard (CLAT UG exam-native)",
-      skeletonMin: 70,
-      lastAttemptFloor: 65,
-    };
-  }
-  if (examType === "ibps") {
-    return {
-      default: "medium",
-      examNative: true,
-      options: ["medium", "hard"],
-      label: "Medium–Hard (IBPS PO Prelims exam-native)",
-      skeletonMin: 70,
-      lastAttemptFloor: 65,
-    };
-  }
-  if (examType === "ssc_cgl_tier1") {
-    return {
-      default: "medium",
-      examNative: true,
-      options: ["medium", "hard"],
-      label: "Medium–Hard (SSC CGL Tier 1 exam-native)",
-      skeletonMin: 70,
-      lastAttemptFloor: 65,
-    };
-  }
-  if (examType === "ssc_cgl_tier2") {
-    return {
-      default: "hard",
-      examNative: true,
-      options: ["medium", "hard"],
-      label: "Hard (SSC CGL Tier 2 exam-native)",
-      skeletonMin: 75,
-      lastAttemptFloor: 68,
-    };
-  }
-  if (examType === "upsc") {
-    return {
-      default: "medium",
-      examNative: true,
-      options: ["easy", "medium", "hard"],
-      label: "Medium (UPSC CSE Prelims exam-native)",
-      skeletonMin: 70,
-      lastAttemptFloor: 65,
-    };
-  }
+  const floor = paperDifficultyScoreFloor();
+  const labels = {
+    jee_advanced: "Hard (JEE Advanced exam-native)",
+    jee_main: "Hard (JEE Main exam-native)",
+    neet: "Hard (NEET exam-native)",
+    cat: "Hard (CAT exam-native)",
+    gmat: "Hard (GMAT Focus exam-native)",
+    clat: "Hard (CLAT UG exam-native)",
+    ibps: "Hard (IBPS PO Prelims exam-native)",
+    ssc_cgl_tier1: "Hard (SSC CGL Tier 1 exam-native)",
+    ssc_cgl_tier2: "Hard (SSC CGL Tier 2 exam-native)",
+    upsc: "Hard (UPSC CSE Prelims exam-native)",
+  };
+  const known = Boolean(labels[examType]);
   return {
-    default: "medium",
-    examNative: false,
-    options: ["easy", "medium", "hard"],
-    label: "Medium",
-    skeletonMin: null,
-    lastAttemptFloor: null,
+    default: "hard",
+    examNative: known,
+    options: ["hard"],
+    label: labels[examType] || "Hard",
+    skeletonMin: floor,
+    lastAttemptFloor: Math.max(60, floor - 3),
   };
 };
 
