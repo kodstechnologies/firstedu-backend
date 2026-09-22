@@ -824,7 +824,13 @@ const stampTrust = (q) => {
   let needsReview = true;
   let guaranteed = false;
 
-  if (
+  if (/o3/i.test(mode) || q._o3Verify) {
+    grade = "production_o3";
+    badge = q._rekeyedByO3 ? "O3-REKEYED" : "O3-VERIFIED";
+    productionReady = true;
+    needsReview = false;
+    guaranteed = true;
+  } else if (
     (/luna|gpt-5\.6/i.test(mode) || q._verifyPass) &&
     q._proposedKeyMatch
   ) {

@@ -642,9 +642,43 @@ export const o3VerifyCompact = async (q, type, ctx) => {
   };
 };
 
-const applyO3Lock = (item, out, stampTrust) => {
+const isValidKeyForQuestion = (type, key, locked) => {
+  if (key == null) return false;
+  if (type === "integer") {
+    return Number.isFinite(Number(key));
+  }
+  if (type === "multiple") {
+    const letters = String(key)
+      .toUpperCase()
+      .split(/[^A-D]+/)
+      .filter((s) => /^[A-D]$/.test(s));
+    if (!letters.length) return false;
+    const maxIdx = Array.isArray(locked?.options) ? locked.options.length : 4;
+    return letters.every((L) => {
+      const idx = L.charCodeAt(0) - 65;
+      return idx >= 0 && idx < maxIdx;
+    });
+  }
+  // single / match
+  const letter = String(key).toUpperCase().slice(0, 1);
+  if (!/^[A-D]$/.test(letter)) return false;
+  const maxIdx = Array.isArray(locked?.options) ? locked.options.length : 4;
+  const idx = letter.charCodeAt(0) - 65;
+  return idx >= 0 && idx < maxIdx;
+};
+
+const isTier1RekeyEnabled = () => {
+  const v =
+    process.env.PAPER_TIER1_REKEY_ENABLED ??
+    process.env.AI_QB_STAGE_A_ANSWER_LOCK;
+  if (v === "0" || v === "false") return false;
+  return true;
+};
+
+const applyO3Lock = (item, out, stampTrust, { rekeyed = false } = {}) => {
   const type = item.type;
   const key = out.result.independentAnswer;
+  const isRekeyed = Boolean(rekeyed || !out.result.answerMatches);
   const locked = {
     ...item.locked,
     explanation: out.result.verifiedSolution,
@@ -658,10 +692,12 @@ const applyO3Lock = (item, out, stampTrust) => {
     _lockMode: `o3(${getSolverModel()})+solution`,
     _productionReady: true,
     _needsReview: false,
-    _trustBadge: "O3-VERIFIED",
+    _trustBadge: isRekeyed ? "O3-REKEYED" : "O3-VERIFIED",
     _trustGrade: "production_o3",
     _explanationExpanded: true,
     _explanationSource: "o3_verifiedSolution",
+    _solverTruthApplied: isRekeyed,
+    _rekeyedByO3: isRekeyed,
   };
 
   if (type === "integer" && key != null) {
@@ -700,9 +736,35 @@ const verifySeatWithO3Budget = async (item, ctx, stampTrust) => {
     item.o3Attempts = attempt;
 
     if (out.pass) {
-      applyO3Lock(item, out, stampTrust);
+      applyO3Lock(item, out, stampTrust, { rekeyed: false });
       await ctx.checkpointItem?.(item);
       return { ok: true, item, kind: "pass" };
+    }
+
+    // TIER 1: Auto-rekey if question is valid and o3 solved independently with high confidence
+    const canTier1Rekey =
+      isTier1RekeyEnabled() &&
+      out.result?.questionValid === true &&
+      !out.result?.answerMatches &&
+      out.result?.confidence === "high" &&
+      out.result?.calculationCorrect === true &&
+      String(out.result?.verifiedSolution || "").trim().length >= 40 &&
+      isValidKeyForQuestion(item.type, out.result?.independentAnswer, item.locked);
+
+    if (canTier1Rekey) {
+      ctx.pipelineLog?.("TIER1_REKEY", {
+        seq: item.seq,
+        type: item.type,
+        topicId: item.topicId,
+        chapter: item.chapter,
+        generatorKey: out.result.proposedKey,
+        solverKey: out.result.independentAnswer,
+        confidence: out.result.confidence,
+        reason: "o3_high_confidence_rekey",
+      });
+      applyO3Lock(item, out, stampTrust, { rekeyed: true });
+      await ctx.checkpointItem?.(item);
+      return { ok: true, item, kind: "rekeyed" };
     }
 
     if (out.infra) {
@@ -978,6 +1040,7 @@ export const runParallelPaperPipeline = async ({
   });
 
   working = [];
+  const pendingSeats = [];
   for (const res of o3Results) {
     if (res?.ok && res.item?.locked) {
       working.push(res.item);
@@ -991,11 +1054,23 @@ export const runParallelPaperPipeline = async ({
           ? "o3_uncertain_exhausted"
           : "o3_fail";
     failures.push(await failItem(res.item, reason, res.detail || res.item?.o3));
+    if (res?.item) {
+      pendingSeats.push({
+        type: res.item.type,
+        slot: {
+          subject: res.item.subject,
+          topicId: res.item.topicId,
+          chapter: res.item.chapter,
+          conceptSlot: res.item.conceptSlot,
+        },
+        failedCount: 1,
+      });
+    }
   }
 
   let qualityReplacesUsed = 0;
   let replaceAttempts = 0;
-  const maxReplaceAttempts = Math.max(replaceBudget * 3, needSeats * 3);
+  const maxReplaceAttempts = Math.max(replaceBudget * 3, expectedTotal * 3, 100);
 
   const getUniqueCount = () =>
     dedupePaperQuestionsByStem(
@@ -1011,12 +1086,36 @@ export const runParallelPaperPipeline = async ({
   while (
     !isCancelled() &&
     getUniqueCount() < expectedTotal &&
-    qualityReplacesUsed < replaceBudget &&
     replaceAttempts < maxReplaceAttempts
   ) {
     replaceAttempts += 1;
+    let seatEntry = pendingSeats.shift();
     let seat;
-    if (unusedPool.length > 0 && unusedCursor < unusedPool.length) {
+    if (seatEntry) {
+      // If this specific topic slot has failed repeatedly (>= 3 times), swap with an alternate unused slot in same subject if available
+      if (seatEntry.failedCount >= 3) {
+        const altIndex = unusedPool.findIndex(
+          (u) =>
+            u.type === seatEntry.type &&
+            normalizeSubject(u.slot.subject) ===
+              normalizeSubject(seatEntry.slot.subject)
+        );
+        if (altIndex >= 0) {
+          const [alt] = unusedPool.splice(altIndex, 1);
+          seat = alt;
+          pipelineLog?.("TOPIC_FALLBACK_SWAP", {
+            seq,
+            fromTopic: seatEntry.slot.topicId,
+            toTopic: alt.slot.topicId,
+            failedCount: seatEntry.failedCount,
+          });
+        } else {
+          seat = { type: seatEntry.type, slot: seatEntry.slot };
+        }
+      } else {
+        seat = { type: seatEntry.type, slot: seatEntry.slot };
+      }
+    } else if (unusedPool.length > 0 && unusedCursor < unusedPool.length) {
       seat = unusedPool[unusedCursor++];
     } else if (unusedPool.length > 0) {
       seat = unusedPool[(unusedCursor++) % unusedPool.length];
@@ -1025,6 +1124,7 @@ export const runParallelPaperPipeline = async ({
     } else {
       break;
     }
+
     const currentCount = getUniqueCount();
     pipelineLog?.("QUALITY_REPLACE", {
       used: qualityReplacesUsed,
@@ -1032,20 +1132,34 @@ export const runParallelPaperPipeline = async ({
       working: currentCount,
       needSeats: expectedTotal,
       attempt: replaceAttempts,
+      pendingCount: pendingSeats.length,
     });
     onProgress?.({
       phase: "o3_repair",
-      message: `Quality replace ${qualityReplacesUsed}/${replaceBudget} — ${currentCount}/${expectedTotal}`,
+      message: `Quality replace attempt ${replaceAttempts} — ${currentCount}/${expectedTotal}`,
     });
-    let item = await generateOne(seat, seq++, qualityReplacesUsed + 1, exclude);
+
+    let item = await generateOne(
+      seat,
+      seq++,
+      (seatEntry?.failedCount || 0) + 1,
+      exclude
+    );
     if (!(item?.locked && item.stage === "generated_ok")) {
       failures.push(item);
+      pendingSeats.push({
+        type: seat.type,
+        slot: seat.slot,
+        failedCount: (seatEntry?.failedCount || 0) + 1,
+      });
       continue;
     }
+
     const res = await verifySeatWithO3Budget(item, o3Ctx, stampTrust);
     if (res.ok && res.item?.locked) {
       working.push(res.item);
       exclude.push(String(res.item.locked.questionText || "").slice(0, 180));
+      qualityReplacesUsed += 1;
     } else {
       const kind = res?.kind || "quality";
       failures.push(
@@ -1059,7 +1173,12 @@ export const runParallelPaperPipeline = async ({
           res.detail || res.item?.o3
         )
       );
-      // ONLY consume quality replacement budget if it was an actual quality rejection, not an infra error!
+      // Requeue slot back into pendingSeats so it will be retried
+      pendingSeats.push({
+        type: seat.type,
+        slot: seat.slot,
+        failedCount: (seatEntry?.failedCount || 0) + 1,
+      });
       if (kind !== "infra") {
         qualityReplacesUsed += 1;
       }

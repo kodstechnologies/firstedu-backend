@@ -192,6 +192,23 @@ export const createAiQuestionBankWithQuestions = async (data, createdBy) => {
   const bankName = String(data.name || "").trim();
   if (!bankName) throw new ApiError(400, "Bank name is required");
 
+  const questionsInput = dedupePaperQuestionsByStem(data.questions || []);
+  if (questionsInput.length < (data.questions || []).length) {
+    console.warn(
+      `[ai-question-bank] dropped ${
+        (data.questions || []).length - questionsInput.length
+      } duplicate stem(s) before save`
+    );
+  }
+
+  const expectedTotal = Number(data.expectedTotal) || 0;
+  if (expectedTotal > 0 && questionsInput.length < expectedTotal) {
+    throw new ApiError(
+      409,
+      `Paper has ${questionsInput.length}/${expectedTotal} questions. Cannot save until paper generation reaches full target (${expectedTotal}).`
+    );
+  }
+
   // Each save is a new generation — never block on exam/subject display name reuse.
   const generationId = String(data.generationId || randomUUID()).trim();
   if (!generationId) throw new ApiError(400, "generationId is required");
@@ -205,14 +222,6 @@ export const createAiQuestionBankWithQuestions = async (data, createdBy) => {
     );
   }
 
-  const questionsInput = dedupePaperQuestionsByStem(data.questions || []);
-  if (questionsInput.length < (data.questions || []).length) {
-    console.warn(
-      `[ai-question-bank] dropped ${
-        (data.questions || []).length - questionsInput.length
-      } duplicate stem(s) before save`
-    );
-  }
   const overallDifficulty = data.overallDifficulty || "medium";
   const useSectionWise = data.useSectionWise ?? false;
   const sections = useSectionWise ? data.sections || [] : [];

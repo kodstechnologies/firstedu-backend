@@ -162,6 +162,11 @@ export const buildWriterHardnessLock = (examType, examLabel) => {
 - Solve-time target: **under ~1 minute** for a hard single item (Tier-2 may allow slightly longer multi-step Quant).
 - difficultySelfScore target **${band.target}**; never below **${band.floor}**.
 - Structure: exam-faithful banking/SSC style — one primary skill, clean calculation or logic chain.
+- **Syllogism standard convention (strict):**
+  - "Only a few A are B" means BOTH: (1) Some A are B, and (2) Some A are NOT B.
+  - "All A can be B is a possibility" is definitively FALSE when "Only a few A are B" holds.
+  - "All B can be A is a possibility" is TRUE unless prevented by other constraints.
+  - Formulate conclusions with zero ambiguity so independent Venn diagram solvers agree 100%.
 - **Banned:** JEE Advanced multi-concept STEM fusion, Match-the-Following / multi-correct IIT formats unless the official pattern uses them.
 - Stretch hardness by **speed traps and multi-step arithmetic/logic**, not denser LaTeX.
 - Stay inside the assigned section/topic; set conceptSlot to a short slug.

@@ -159,6 +159,7 @@ const createAiQuestionBankWithQuestions = Joi.object({
     })
     .optional(),
   questions: Joi.array().items(aiQuestionItemSchema).min(1).required(),
+  expectedTotal: Joi.number().min(1).optional(),
 });
 
 const updateAiQuestion = aiQuestionItemSchema
