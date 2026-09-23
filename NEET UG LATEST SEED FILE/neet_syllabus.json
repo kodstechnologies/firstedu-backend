@@ -1,0 +1,602 @@
+{
+  "subject": "Physics + Chemistry + Biology (Botany & Zoology)",
+  "exam": "NEET UG 2026",
+  "source_note": "Compiled from the NMC-notified rationalized NEET UG 2026 syllabus (unchanged from the 2024 revision), based on NCERT Class 11 & 12 textbooks. Verify chapter wording against the official NMC/NTA PDF before final production use.",
+  "unit_counts": {
+    "Physics": 20,
+    "Chemistry": 20,
+    "Biology": 10,
+    "total_units": 50
+  },
+  "topics": [
+    {
+      "topic_id": "NP01",
+      "subject": "Physics",
+      "chapter": "Physics and Measurement",
+      "class_level": "11",
+      "subtopics": [
+        "Units of measurement, SI units, fundamental and derived units",
+        "Dimensional analysis and its applications",
+        "Significant figures and errors in measurement"
+      ]
+    },
+    {
+      "topic_id": "NP02",
+      "subject": "Physics",
+      "chapter": "Kinematics",
+      "class_level": "11",
+      "subtopics": [
+        "Motion in a straight line, position-time and velocity-time graphs",
+        "Vectors: addition, resolution, scalar and vector products",
+        "Projectile motion and uniform circular motion",
+        "Relative velocity"
+      ]
+    },
+    {
+      "topic_id": "NP03",
+      "subject": "Physics",
+      "chapter": "Laws of Motion",
+      "class_level": "11",
+      "subtopics": [
+        "Newton's three laws of motion, inertia",
+        "Momentum, impulse, conservation of linear momentum",
+        "Friction (static, kinetic, rolling)",
+        "Dynamics of circular motion, banking of roads"
+      ]
+    },
+    {
+      "topic_id": "NP04",
+      "subject": "Physics",
+      "chapter": "Work, Energy and Power",
+      "class_level": "11",
+      "subtopics": [
+        "Work-energy theorem, work done by variable force",
+        "Kinetic and potential energy, conservative forces",
+        "Power, elastic and inelastic collisions in 1D/2D"
+      ]
+    },
+    {
+      "topic_id": "NP05",
+      "subject": "Physics",
+      "chapter": "Rotational Motion",
+      "class_level": "11",
+      "subtopics": [
+        "Centre of mass of a system of particles",
+        "Torque, angular momentum and its conservation",
+        "Moment of inertia, parallel and perpendicular axis theorems",
+        "Rolling motion without slipping"
+      ]
+    },
+    {
+      "topic_id": "NP06",
+      "subject": "Physics",
+      "chapter": "Gravitation",
+      "class_level": "11",
+      "subtopics": [
+        "Universal law of gravitation, acceleration due to gravity and its variation",
+        "Gravitational potential energy, escape velocity",
+        "Kepler's laws of planetary motion",
+        "Orbital velocity, geostationary satellites"
+      ]
+    },
+    {
+      "topic_id": "NP07",
+      "subject": "Physics",
+      "chapter": "Properties of Solids and Liquids",
+      "class_level": "11",
+      "subtopics": [
+        "Elastic behaviour, stress-strain curve, moduli of elasticity",
+        "Pressure in a fluid, Pascal's law, buoyancy",
+        "Viscosity, Stokes' law, terminal velocity",
+        "Surface tension, surface energy, capillarity, Bernoulli's theorem"
+      ]
+    },
+    {
+      "topic_id": "NP08",
+      "subject": "Physics",
+      "chapter": "Thermodynamics",
+      "class_level": "11-12",
+      "subtopics": [
+        "Zeroth, first and second laws of thermodynamics",
+        "Isothermal and adiabatic processes",
+        "Heat engines and refrigerators, reversible/irreversible processes",
+        "Specific heat capacity, Cp and Cv"
+      ]
+    },
+    {
+      "topic_id": "NP09",
+      "subject": "Physics",
+      "chapter": "Kinetic Theory of Gases",
+      "class_level": "11",
+      "subtopics": [
+        "Kinetic theory postulates, ideal gas equation",
+        "Pressure of a gas, RMS/average/most probable speed",
+        "Degrees of freedom, law of equipartition of energy",
+        "Mean free path"
+      ]
+    },
+    {
+      "topic_id": "NP10",
+      "subject": "Physics",
+      "chapter": "Oscillations and Waves",
+      "class_level": "11",
+      "subtopics": [
+        "Simple harmonic motion, energy in SHM, spring and simple pendulum",
+        "Wave motion, transverse and longitudinal waves, speed of sound",
+        "Principle of superposition, standing waves, beats",
+        "Doppler effect"
+      ]
+    },
+    {
+      "topic_id": "NP11",
+      "subject": "Physics",
+      "chapter": "Electrostatics",
+      "class_level": "12",
+      "subtopics": [
+        "Coulomb's law, superposition principle, electric field and field lines",
+        "Electric dipole, torque on a dipole, Gauss's law and applications",
+        "Electric potential, equipotential surfaces, potential energy",
+        "Capacitors, combinations of capacitors, energy stored in a capacitor"
+      ]
+    },
+    {
+      "topic_id": "NP12",
+      "subject": "Physics",
+      "chapter": "Current Electricity",
+      "class_level": "12",
+      "subtopics": [
+        "Ohm's law, drift velocity, resistivity and conductivity",
+        "Combination of resistors, temperature dependence of resistance",
+        "Kirchhoff's laws, Wheatstone bridge, metre bridge",
+        "Potentiometer, cells, EMF, internal resistance, grouping of cells"
+      ]
+    },
+    {
+      "topic_id": "NP13",
+      "subject": "Physics",
+      "chapter": "Magnetic Effects of Current and Magnetism",
+      "class_level": "12",
+      "subtopics": [
+        "Biot-Savart law, Ampere's circuital law and applications",
+        "Force on a moving charge and current-carrying conductor",
+        "Moving coil galvanometer, ammeter, voltmeter",
+        "Bar magnet, earth's magnetism, magnetic properties of materials"
+      ]
+    },
+    {
+      "topic_id": "NP14",
+      "subject": "Physics",
+      "chapter": "Electromagnetic Induction and Alternating Currents",
+      "class_level": "12",
+      "subtopics": [
+        "Faraday's and Lenz's laws, motional EMF",
+        "Self and mutual inductance",
+        "AC circuits: LCR series circuit, resonance, power factor",
+        "Transformers, AC generator"
+      ]
+    },
+    {
+      "topic_id": "NP15",
+      "subject": "Physics",
+      "chapter": "Electromagnetic Waves",
+      "class_level": "12",
+      "subtopics": [
+        "Displacement current and its need",
+        "Characteristics of electromagnetic waves",
+        "Electromagnetic spectrum and applications of its regions"
+      ]
+    },
+    {
+      "topic_id": "NP16",
+      "subject": "Physics",
+      "chapter": "Optics",
+      "class_level": "12",
+      "subtopics": [
+        "Reflection and refraction, mirror and lens formula, power of a lens",
+        "Refraction through a prism, optical instruments (microscope, telescope)",
+        "Wave optics: Huygens' principle, interference, Young's double slit",
+        "Diffraction, resolving power, polarisation"
+      ]
+    },
+    {
+      "topic_id": "NP17",
+      "subject": "Physics",
+      "chapter": "Dual Nature of Matter and Radiation",
+      "class_level": "12",
+      "subtopics": [
+        "Photoelectric effect, Einstein's photoelectric equation",
+        "Particle nature of light: photons",
+        "de Broglie relation, matter waves"
+      ]
+    },
+    {
+      "topic_id": "NP18",
+      "subject": "Physics",
+      "chapter": "Atoms and Nuclei",
+      "class_level": "12",
+      "subtopics": [
+        "Alpha-particle scattering, Bohr model of the atom, atomic spectra",
+        "Composition and size of nucleus, mass-energy relation, mass defect",
+        "Binding energy per nucleon, nuclear fission and fusion",
+        "Radioactivity: alpha, beta, gamma decay laws"
+      ]
+    },
+    {
+      "topic_id": "NP19",
+      "subject": "Physics",
+      "chapter": "Electronic Devices",
+      "class_level": "12",
+      "subtopics": [
+        "Semiconductors: intrinsic and extrinsic, p-n junction diode",
+        "Diode as a rectifier, special-purpose diodes (brief)",
+        "Transistor and its characteristics, transistor as a switch/amplifier",
+        "Logic gates (OR, AND, NOT, NAND, NOR)"
+      ]
+    },
+    {
+      "topic_id": "NP20",
+      "subject": "Physics",
+      "chapter": "Experimental Skills",
+      "class_level": "11-12",
+      "subtopics": [
+        "Vernier callipers and screw gauge: least count and use",
+        "Verification/determination experiments (g, focal length, resistance, etc.)",
+        "Error analysis and plotting of graphs from experimental data"
+      ]
+    },
+    {
+      "topic_id": "NC01",
+      "subject": "Chemistry",
+      "chapter": "Some Basic Concepts of Chemistry",
+      "class_level": "11",
+      "subtopics": [
+        "Laws of chemical combination, Dalton's atomic theory",
+        "Mole concept, molar mass, percentage composition",
+        "Stoichiometry and stoichiometric calculations"
+      ]
+    },
+    {
+      "topic_id": "NC02",
+      "subject": "Chemistry",
+      "chapter": "Atomic Structure",
+      "class_level": "11",
+      "subtopics": [
+        "Bohr's model and its limitations, dual nature of matter and radiation",
+        "Quantum mechanical model: quantum numbers, shapes of orbitals",
+        "Aufbau principle, Pauli's exclusion principle, Hund's rule, electronic configuration"
+      ]
+    },
+    {
+      "topic_id": "NC03",
+      "subject": "Chemistry",
+      "chapter": "Chemical Bonding and Molecular Structure",
+      "class_level": "11",
+      "subtopics": [
+        "Ionic and covalent bonding, Lewis structures, formal charge",
+        "VSEPR theory and molecular shapes",
+        "Valence bond theory, hybridisation (s, p, d)",
+        "Molecular orbital theory (homonuclear diatomics), hydrogen bonding, dipole moment"
+      ]
+    },
+    {
+      "topic_id": "NC04",
+      "subject": "Chemistry",
+      "chapter": "Chemical Thermodynamics",
+      "class_level": "11",
+      "subtopics": [
+        "First law of thermodynamics, internal energy, enthalpy",
+        "Hess's law, enthalpies of reaction/formation/combustion",
+        "Second law: entropy, Gibbs free energy and spontaneity criteria"
+      ]
+    },
+    {
+      "topic_id": "NC05",
+      "subject": "Chemistry",
+      "chapter": "Solutions",
+      "class_level": "12",
+      "subtopics": [
+        "Concentration terms: molarity, molality, mole fraction",
+        "Raoult's law, ideal and non-ideal solutions",
+        "Colligative properties: relative lowering of vapour pressure, elevation in boiling point, depression in freezing point, osmotic pressure, van't Hoff factor"
+      ]
+    },
+    {
+      "topic_id": "NC06",
+      "subject": "Chemistry",
+      "chapter": "Equilibrium",
+      "class_level": "11",
+      "subtopics": [
+        "Dynamic equilibrium, law of mass action, Kc and Kp, Le Chatelier's principle",
+        "Acids and bases (Arrhenius, Bronsted-Lowry, Lewis), ionisation of weak acids/bases, pH",
+        "Buffer solutions, hydrolysis of salts, solubility product"
+      ]
+    },
+    {
+      "topic_id": "NC07",
+      "subject": "Chemistry",
+      "chapter": "Redox Reactions and Electrochemistry",
+      "class_level": "11-12",
+      "subtopics": [
+        "Oxidation number, balancing redox equations",
+        "Electrochemical cells, standard electrode potential, Nernst equation",
+        "Conductance, molar conductivity, Kohlrausch's law, electrolysis, batteries, fuel cells, corrosion"
+      ]
+    },
+    {
+      "topic_id": "NC08",
+      "subject": "Chemistry",
+      "chapter": "Chemical Kinetics",
+      "class_level": "12",
+      "subtopics": [
+        "Rate of reaction, factors affecting rate, rate law and rate constant",
+        "Order and molecularity, integrated rate equations (zero and first order)",
+        "Arrhenius equation, activation energy, collision theory (elementary)"
+      ]
+    },
+    {
+      "topic_id": "NC09",
+      "subject": "Chemistry",
+      "chapter": "Classification of Elements and Periodicity in Properties",
+      "class_level": "11",
+      "subtopics": [
+        "Modern periodic law and present form of periodic table",
+        "Periodic trends: atomic/ionic radius, ionisation enthalpy, electron gain enthalpy, electronegativity",
+        "Anomalous properties of second period elements"
+      ]
+    },
+    {
+      "topic_id": "NC10",
+      "subject": "Chemistry",
+      "chapter": "p-Block Elements",
+      "class_level": "11-12",
+      "subtopics": [
+        "Group 13-14: boron family, carbon family, important compounds",
+        "Group 15-16: nitrogen family, oxygen family, oxides and oxoacids",
+        "Group 17-18: halogens, noble gases, interhalogen compounds"
+      ]
+    },
+    {
+      "topic_id": "NC11",
+      "subject": "Chemistry",
+      "chapter": "d- and f-Block Elements",
+      "class_level": "12",
+      "subtopics": [
+        "General trends: electronic configuration, variable oxidation states, magnetic properties, colour, catalytic property",
+        "Preparation and properties of KMnO4 and K2Cr2O7",
+        "Lanthanoid and actinoid contraction, uses"
+      ]
+    },
+    {
+      "topic_id": "NC12",
+      "subject": "Chemistry",
+      "chapter": "Coordination Compounds",
+      "class_level": "12",
+      "subtopics": [
+        "Werner's theory, coordination number, IUPAC nomenclature",
+        "Isomerism in coordination compounds (structural and stereo)",
+        "Valence bond theory and crystal field theory, colour and magnetic properties",
+        "Importance in qualitative analysis and biological systems"
+      ]
+    },
+    {
+      "topic_id": "NC13",
+      "subject": "Chemistry",
+      "chapter": "Purification and Characterisation of Organic Compounds",
+      "class_level": "11",
+      "subtopics": [
+        "Methods of purification: crystallisation, sublimation, distillation, chromatography",
+        "Qualitative analysis for N, S, halogens, P",
+        "Quantitative analysis (principles): C, H, N, halogens, S, P"
+      ]
+    },
+    {
+      "topic_id": "NC14",
+      "subject": "Chemistry",
+      "chapter": "Basic Principles of Organic Chemistry",
+      "class_level": "11",
+      "subtopics": [
+        "IUPAC nomenclature, classification of organic compounds",
+        "Structural and stereoisomerism (elementary)",
+        "Electronic effects: inductive, resonance, hyperconjugation",
+        "Types of organic reactions and reactive intermediates (carbocation, carbanion, free radical)"
+      ]
+    },
+    {
+      "topic_id": "NC15",
+      "subject": "Chemistry",
+      "chapter": "Hydrocarbons",
+      "class_level": "11",
+      "subtopics": [
+        "Alkanes: preparation, conformations, reactions",
+        "Alkenes and alkynes: preparation, addition reactions, Markovnikov's rule",
+        "Aromatic hydrocarbons: benzene structure, aromaticity, electrophilic substitution"
+      ]
+    },
+    {
+      "topic_id": "NC16",
+      "subject": "Chemistry",
+      "chapter": "Organic Compounds Containing Halogens",
+      "class_level": "12",
+      "subtopics": [
+        "Nomenclature and nature of C-X bond",
+        "Preparation of haloalkanes and haloarenes",
+        "SN1 and SN2 mechanisms, reactions and uses"
+      ]
+    },
+    {
+      "topic_id": "NC17",
+      "subject": "Chemistry",
+      "chapter": "Organic Compounds Containing Oxygen",
+      "class_level": "12",
+      "subtopics": [
+        "Alcohols and phenols: preparation, properties, distinguishing tests",
+        "Ethers: preparation and properties",
+        "Aldehydes and ketones: preparation, nucleophilic addition reactions",
+        "Carboxylic acids: preparation, acidity and reactions"
+      ]
+    },
+    {
+      "topic_id": "NC18",
+      "subject": "Chemistry",
+      "chapter": "Organic Compounds Containing Nitrogen",
+      "class_level": "12",
+      "subtopics": [
+        "Amines: preparation, basic character, structure-basicity relationship",
+        "Diazonium salts: preparation and synthetic applications"
+      ]
+    },
+    {
+      "topic_id": "NC19",
+      "subject": "Chemistry",
+      "chapter": "Biomolecules",
+      "class_level": "12",
+      "subtopics": [
+        "Carbohydrates: classification, structure of glucose and sucrose",
+        "Proteins: amino acids, peptide bond, structure levels, denaturation",
+        "Enzymes, vitamins, nucleic acids (DNA and RNA structure)"
+      ]
+    },
+    {
+      "topic_id": "NC20",
+      "subject": "Chemistry",
+      "chapter": "Principles Related to Practical Chemistry",
+      "class_level": "11-12",
+      "subtopics": [
+        "Detection of functional groups (unsaturation, phenolic, carboxylic, amino, etc.)",
+        "Chemistry involved in titrimetric exercises (acid-base, redox)",
+        "Salt analysis: detection of cations and anions"
+      ]
+    },
+    {
+      "topic_id": "NB01",
+      "subject": "Biology",
+      "branch": "Both",
+      "chapter": "Diversity in Living World",
+      "class_level": "11",
+      "subtopics": [
+        "The living world: characteristics and taxonomy",
+        "Biological classification (five kingdom system)",
+        "Plant kingdom: algae, bryophytes, pteridophytes, gymnosperms, angiosperms",
+        "Animal kingdom: classification basis and major phyla"
+      ]
+    },
+    {
+      "topic_id": "NB02",
+      "subject": "Biology",
+      "branch": "Both",
+      "chapter": "Structural Organisation in Animals and Plants",
+      "class_level": "11",
+      "subtopics": [
+        "Morphology of flowering plants (root, stem, leaf, inflorescence, flower, fruit, seed)",
+        "Anatomy of flowering plants: tissues and tissue systems",
+        "Animal tissues: epithelial, connective, muscular, neural",
+        "Structural organisation in animals (frog as a representative type)"
+      ]
+    },
+    {
+      "topic_id": "NB03",
+      "subject": "Biology",
+      "branch": "Both",
+      "chapter": "Cell Structure and Function",
+      "class_level": "11",
+      "subtopics": [
+        "Cell theory, prokaryotic and eukaryotic cells",
+        "Cell membrane, cell wall, cell organelles and their functions",
+        "Biomolecules: structure and function",
+        "Cell cycle and cell division (mitosis, meiosis)"
+      ]
+    },
+    {
+      "topic_id": "NB04",
+      "subject": "Biology",
+      "branch": "Botany",
+      "chapter": "Plant Physiology",
+      "class_level": "11",
+      "subtopics": [
+        "Transport in plants: diffusion, osmosis, plant-water relations",
+        "Mineral nutrition: essential elements, deficiency symptoms, nitrogen metabolism",
+        "Photosynthesis: light and dark reactions, C3/C4 pathways, factors affecting rate",
+        "Respiration in plants: glycolysis, Krebs cycle, ETC, fermentation",
+        "Plant growth and development, plant hormones"
+      ]
+    },
+    {
+      "topic_id": "NB05",
+      "subject": "Biology",
+      "branch": "Zoology",
+      "chapter": "Human Physiology",
+      "class_level": "11-12",
+      "subtopics": [
+        "Digestion and absorption",
+        "Breathing and exchange of gases, respiratory volumes",
+        "Body fluids and circulation: blood, lymph, cardiac cycle, ECG",
+        "Excretory products and their elimination, nephron function, osmoregulation",
+        "Locomotion and movement: muscle contraction, skeletal system",
+        "Neural control and coordination: neuron, reflex arc, brain",
+        "Chemical coordination and integration: endocrine glands and hormones"
+      ]
+    },
+    {
+      "topic_id": "NB06",
+      "subject": "Biology",
+      "branch": "Both",
+      "chapter": "Reproduction",
+      "class_level": "12",
+      "subtopics": [
+        "Reproduction in organisms: asexual and sexual modes",
+        "Sexual reproduction in flowering plants: pollination, fertilisation, seed/fruit formation",
+        "Human reproduction: male and female reproductive systems, gametogenesis, menstrual cycle, fertilisation, pregnancy, parturition",
+        "Reproductive health: contraception, STIs, infertility, ART"
+      ]
+    },
+    {
+      "topic_id": "NB07",
+      "subject": "Biology",
+      "branch": "Both",
+      "chapter": "Genetics and Evolution",
+      "class_level": "12",
+      "subtopics": [
+        "Principles of inheritance and variation: Mendelian genetics, chromosomal theory, linkage, sex determination, pedigree analysis, Mendelian disorders",
+        "Molecular basis of inheritance: DNA structure and replication, transcription, genetic code, translation, gene regulation, Human Genome Project",
+        "Evolution: origin of life, evidences, Darwinism, Hardy-Weinberg principle, adaptive radiation, mechanisms of speciation"
+      ]
+    },
+    {
+      "topic_id": "NB08",
+      "subject": "Biology",
+      "branch": "Both",
+      "chapter": "Biology and Human Welfare",
+      "class_level": "12",
+      "subtopics": [
+        "Human health and disease: pathogens, immunity, AIDS, cancer, drug and alcohol abuse",
+        "Strategies for enhancement in food production: plant breeding, animal husbandry, single cell protein",
+        "Microbes in human welfare: household products, industrial production, sewage treatment, biogas, biocontrol agents, biofertilisers"
+      ]
+    },
+    {
+      "topic_id": "NB09",
+      "subject": "Biology",
+      "branch": "Both",
+      "chapter": "Biotechnology and Its Applications",
+      "class_level": "12",
+      "subtopics": [
+        "Principles and processes: recombinant DNA technology, restriction enzymes, cloning vectors, PCR",
+        "Applications in health: genetically engineered insulin, gene therapy",
+        "Applications in agriculture: Bt crops, GM organisms, biosafety issues, transgenic animals"
+      ]
+    },
+    {
+      "topic_id": "NB10",
+      "subject": "Biology",
+      "branch": "Both",
+      "chapter": "Ecology and Environment",
+      "class_level": "12",
+      "subtopics": [
+        "Organisms and populations: population interactions and growth, population attributes",
+        "Ecosystem: structure, function, energy flow, ecological pyramids, nutrient cycling, ecological succession",
+        "Biodiversity and conservation: patterns, importance, loss, conservation strategies (in-situ/ex-situ)",
+        "Environmental issues: pollution, global warming, ozone depletion, deforestation"
+      ]
+    }
+  ]
+}

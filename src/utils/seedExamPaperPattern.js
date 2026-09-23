@@ -108,16 +108,127 @@ const seedPatternFile = async ({
   const pattern = readJson(patternPath);
   const year = Number(pattern.year || 2026);
   const examDay = pattern.exam_day || {};
+
+  // Newer NEET/CAT-style files use top-level `structure` (+ section tables)
+  // instead of structure_per_subject_per_paper. Normalize so the rest of the
+  // seeder is shared.
+  let perPaper = pattern.structure_per_subject_per_paper || null;
+  if (!perPaper && pattern.structure && typeof pattern.structure === "object") {
+    const st = pattern.structure;
+    const qps = st.questions_per_subject || st.questions_per_section || {};
+    const qpsValues = Object.values(qps)
+      .map((n) => Number(n) || 0)
+      .filter((n) => n > 0);
+    const perSubject =
+      Number(
+        qps.Physics ||
+          qps.Chemistry ||
+          qps.Botany ||
+          qps.VARC ||
+          qps.DILR ||
+          qps.QA ||
+          0
+      ) ||
+      (qpsValues.length
+        ? Math.round(qpsValues.reduce((a, b) => a + b, 0) / qpsValues.length)
+        : 0) ||
+      Math.round(Number(st.total_questions || 180) / 4) ||
+      45;
+    const sectionCount = Math.max(
+      1,
+      (Array.isArray(pattern.section_order) && pattern.section_order.length) ||
+        (Array.isArray(pattern.sections) &&
+          pattern.sections.every((s) => typeof s === "string") &&
+          pattern.sections.length) ||
+        qpsValues.length ||
+        1
+    );
+    const mcqSplit = st.approx_mcq_tita_split || {};
+    let singleQs = Number(mcqSplit.mcq)
+      ? Math.round(Number(mcqSplit.mcq) / sectionCount)
+      : perSubject;
+    let integerQs = Number(mcqSplit.tita)
+      ? Math.round(Number(mcqSplit.tita) / sectionCount)
+      : 0;
+    if (integerQs > 0 && singleQs + integerQs !== perSubject) {
+      singleQs = Math.max(0, perSubject - integerQs);
+    }
+    perPaper = {
+      Paper_1: {
+        paper_number: 1,
+        label: `${examLabelFallback || pattern.exam || "Exam"} Paper`,
+        session: examDay.single_paper
+          ? "single"
+          : examDay.slots
+            ? "slot-varies"
+            : "",
+        start_time: st.start_time || "",
+        end_time: st.end_time || "",
+        duration_minutes: Number(
+          st.total_duration_minutes ||
+            pattern.grand_total?.duration_minutes ||
+            180
+        ),
+        total_marks: Number(st.total_marks || 0),
+        questions_per_subject: perSubject,
+        total_questions: Number(st.total_questions || 0),
+        total_questions_scored: Number(st.total_questions || 0),
+        overall_difficulty: st.overall_difficulty || "",
+        section_1_single_correct: {
+          questions: singleQs,
+          options: Number(st.question_format?.options || 4) || 4,
+          type: "single",
+        },
+        section_2_multi_correct: { questions: 0, options: 4, type: "multi" },
+        section_3_numerical: {
+          questions: integerQs,
+          options: 0,
+          type: "integer",
+        },
+        section_4_match_list: { questions: 0, options: 4, type: "match" },
+        section_5_paragraph: { questions: 0, options: 4, type: "paragraph" },
+        formats: Array.isArray(st.question_types)
+          ? st.question_types
+          : integerQs > 0
+            ? ["Single Correct MCQ", "TITA"]
+            : ["Single Correct MCQ"],
+      },
+    };
+  }
+
   const subjects = Array.isArray(pattern.bank_subjects)
     ? pattern.bank_subjects
-    : Array.isArray(pattern.subjects)
-      ? pattern.subjects
-      : ["Physics", "Chemistry", "Mathematics"];
+    : Array.isArray(pattern.biology_split) && Array.isArray(pattern.subjects)
+      ? [
+          ...pattern.subjects.filter(
+            (s) => !/^bio/i.test(String(s)) && !/^biology$/i.test(String(s))
+          ),
+          ...pattern.biology_split,
+        ]
+      : Array.isArray(pattern.subjects)
+        ? pattern.subjects
+        : Array.isArray(pattern.sections) &&
+            pattern.sections.every((s) => typeof s === "string")
+          ? pattern.sections
+          : Array.isArray(pattern.section_order)
+            ? pattern.section_order
+            : ["Physics", "Chemistry", "Mathematics"];
   const results = [];
 
-  for (const [paperKey, block] of Object.entries(
-    pattern.structure_per_subject_per_paper || {}
-  )) {
+  const structureQps =
+    pattern.structure?.questions_per_subject ||
+    pattern.structure?.questions_per_section ||
+    null;
+  const structureQpsTable = structureQps
+    ? Object.fromEntries(
+        Object.entries(structureQps).map(([key, val]) => [
+          key,
+          { questions: Number(val) || 0 },
+        ])
+      )
+    : null;
+
+  for (const [paperKey, block] of Object.entries(perPaper || {})) {
     const paperNumber = Number(
       block.paper_number || (paperKey === "Paper_2" ? 2 : 1)
     );
@@ -157,7 +268,12 @@ const seedPatternFile = async ({
       source: sourceLabel || relativePath,
       dataProvenance: pattern.data_provenance || "",
       quickComparison:
-        pattern.quick_comparison || pattern.all_subjects_table || undefined,
+        structureQpsTable ||
+        pattern.section_table ||
+        pattern.combined_subject_table ||
+        pattern.all_subjects_table ||
+        pattern.quick_comparison ||
+        undefined,
       isActive: true,
     });
 
@@ -170,6 +286,7 @@ const seedPatternFile = async ({
       marks: doc.totalMarks,
       session: `${doc.startTime}-${doc.endTime}`,
       types: doc.typeCounts,
+      subjects: doc.subjects,
     });
   }
 
@@ -207,15 +324,14 @@ export const seedExamPaperPattern = async () => {
     ...(await seedPatternFile({
       examType: "neet",
       examLabelFallback: "NEET UG",
-      relativePath:
-        "NEET EXAM ALL SEED REQUIRED FILES/neet_pattern_totals.json",
-      sourceLabel: "NEET EXAM ALL SEED REQUIRED FILES/neet_pattern_totals.json",
+      relativePath: "NEET UG LATEST SEED FILE/neet_pattern_totals.json",
+      sourceLabel: "NEET UG LATEST SEED FILE/neet_pattern_totals.json",
     })),
     ...(await seedPatternFile({
       examType: "cat",
       examLabelFallback: "CAT",
-      relativePath: "CAT exam seed files/cat_pattern_totals.json",
-      sourceLabel: "CAT exam seed files/cat_pattern_totals.json",
+      relativePath: "CAT EXAM LATAETS SEED FILE/cat_pattern_totals.json",
+      sourceLabel: "CAT EXAM LATAETS SEED FILE/cat_pattern_totals.json",
     })),
     ...(await seedPatternFile({
       examType: "gmat",

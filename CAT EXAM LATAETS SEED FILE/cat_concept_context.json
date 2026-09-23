@@ -1,0 +1,570 @@
+{
+  "subject": "VARC + DILR + QA",
+  "exam": "CAT 2026",
+  "schema_note": "Keyed by topic_id (matches cat_syllabus.json). Fields: concepts, formulas, methods, traps, hard_archetypes, banned_easy_templates, out_of_scope. CAT mixes MCQ and TITA items; 'hard_archetypes' reflects CAT's characteristic multi-step/ambiguity-heavy item design rather than JEE-style symbolic proofs.",
+  "topics": {
+    "CV01": {
+      "concepts": [
+        "Author's tone, stance and rhetorical purpose",
+        "Implied meaning and inference beyond the literal sentence",
+        "Structure of an abstract/argumentative passage (thesis, counter-argument, synthesis)"
+      ],
+      "formulas": [],
+      "methods": [
+        "Read for the passage's central argument and author's attitude on a first pass, before hunting for specific-detail answers",
+        "Eliminate options that are true-but-not-stated or that over-extend the passage's actual claim"
+      ],
+      "traps": [
+        "Choosing an option that is factually plausible but not actually supported by the passage text",
+        "Confusing the author's reported view of someone else's position with the author's own view"
+      ],
+      "hard_archetypes": [
+        "Inference question where every option paraphrases part of the passage but only one captures the full logical implication",
+        "Tone/attitude question requiring synthesis of cues spread across the whole passage"
+      ],
+      "banned_easy_templates": [
+        "Direct 'which of the following is stated in the passage' with the answer in one obvious sentence"
+      ],
+      "out_of_scope": [
+        "Passages requiring outside domain expertise beyond what the passage itself supplies"
+      ]
+    },
+    "CV02": {
+      "concepts": [
+        "Fact-retrieval vs application-based RC questions",
+        "Passage summary and title selection",
+        "Vocabulary-in-context for domain-specific (business/science) terms"
+      ],
+      "formulas": [],
+      "methods": [
+        "Separate 'what does the passage say' questions from 'what can be inferred/applied' questions before choosing a strategy",
+        "For title/summary questions, check that the chosen option covers the full scope of the passage, not just one paragraph"
+      ],
+      "traps": [
+        "Selecting a summary option that is accurate for only part of the passage (too narrow)",
+        "Selecting a summary option that goes beyond what the passage actually covers (too broad)"
+      ],
+      "hard_archetypes": [
+        "Application question requiring the reader to extend the passage's argument to a new, unstated scenario",
+        "Passage with a shift in argument midway, where a naive reader would answer based on only the first half"
+      ],
+      "banned_easy_templates": [
+        "Direct fact-lookup question answerable from a single unambiguous sentence"
+      ],
+      "out_of_scope": [
+        "Highly technical scientific/economic content beyond general-reader business-journalism level"
+      ]
+    },
+    "CV03": {
+      "concepts": [
+        "Mandatory pair identification (sentences that must be adjacent)",
+        "Logical and chronological sequencing",
+        "Pronoun/referent and transition-word linkage between sentences"
+      ],
+      "formulas": [],
+      "methods": [
+        "Find the most obvious mandatory pair (linked by pronoun or clear cause-effect) before attempting the full sequence",
+        "Identify the opening sentence by elimination (sentences with 'this'/'it'/'however' rarely open a paragraph)"
+      ],
+      "traps": [
+        "Assuming the sentence that sounds most general must be the opener without checking for an unresolved pronoun",
+        "Locking in a sequence too early instead of verifying it reads coherently start to finish"
+      ],
+      "hard_archetypes": [
+        "5-6 sentence jumble with two plausible mandatory pairs, only one of which fits the full sequence",
+        "Jumble where the topic sentence is deliberately not the most 'obvious' opener"
+      ],
+      "banned_easy_templates": [
+        "3-sentence jumble with only one possible non-trivial order"
+      ],
+      "out_of_scope": [
+        "Jumbles requiring outside factual knowledge to sequence (should be resolvable from internal logic alone)"
+      ]
+    },
+    "CV04": {
+      "concepts": [
+        "Distinguishing a true summary from a restatement, an example, or an over/under-generalisation",
+        "Identifying the paragraph's central idea vs supporting details"
+      ],
+      "formulas": [],
+      "methods": [
+        "Identify the paragraph's core claim first, then check which option best compresses that claim without adding or dropping scope",
+        "Eliminate options that merely repeat a supporting detail as if it were the main point"
+      ],
+      "traps": [
+        "Picking an option that captures one supporting example rather than the paragraph's actual main idea",
+        "Picking an option that adds an inference not actually present in the paragraph"
+      ],
+      "hard_archetypes": [
+        "Paragraph with two closely related ideas, where the correct summary must balance both without favouring either"
+      ],
+      "banned_easy_templates": [
+        "Very short paragraph with an obvious one-line restatement"
+      ],
+      "out_of_scope": [
+        "Summary questions requiring outside knowledge of the topic beyond the paragraph given"
+      ]
+    },
+    "CV05": {
+      "concepts": [
+        "Thematic coherence of a paragraph (odd-one-out)",
+        "Logical continuation/conclusion for an incomplete paragraph"
+      ],
+      "formulas": [],
+      "methods": [
+        "For odd-sentence-out, check each sentence against the paragraph's single unifying theme, not just topical similarity",
+        "For para completion, identify the paragraph's trajectory (argument direction) before picking the concluding sentence"
+      ],
+      "traps": [
+        "Eliminating a sentence for being topically different when it is actually the concluding/linking sentence",
+        "Picking a technically true but tonally mismatched conclusion sentence"
+      ],
+      "hard_archetypes": [
+        "Paragraph where the 'odd' sentence is topically related but breaks the logical flow/argument direction"
+      ],
+      "banned_easy_templates": [
+        "Paragraph with one sentence in an obviously unrelated subject area"
+      ],
+      "out_of_scope": [
+        "Grammar-error-based odd-one-out (CAT's version is theme/logic-based, not grammar-based)"
+      ]
+    },
+    "CD01": {
+      "concepts": [
+        "Reading a single table/bar/line/pie chart accurately",
+        "Percentage share, ratio and period-over-period growth-rate calculations"
+      ],
+      "formulas": [
+        "% growth = (new-old)/old x 100",
+        "Share % = category value/total x 100"
+      ],
+      "methods": [
+        "Scan the chart's axes/legend fully before reading any question, to avoid mis-reading units",
+        "Pre-compute totals/row-column sums once, and reuse them across the set's multiple questions"
+      ],
+      "traps": [
+        "Misreading a dual-axis chart (two different scales on left/right y-axis)",
+        "Confusing percentage-point change with percentage change"
+      ],
+      "hard_archetypes": [
+        "Question requiring a ratio-of-ratios or a weighted-average computed across multiple rows of the table"
+      ],
+      "banned_easy_templates": [
+        "Direct single-cell lookup with no calculation"
+      ],
+      "out_of_scope": [
+        "Sets requiring statistical techniques (regression, standard deviation) beyond arithmetic manipulation"
+      ]
+    },
+    "CD02": {
+      "concepts": [
+        "Combining information from two or more linked sources (table+chart, or two tables) into one working dataset",
+        "Caselet-to-table conversion from a text-based data description"
+      ],
+      "formulas": [],
+      "methods": [
+        "Before answering any question, build a single consolidated table/grid from all the given sources",
+        "In text caselets, extract every numeric constraint into a table first, only then attempt to fill gaps"
+      ],
+      "traps": [
+        "Answering from only one of the two linked sources when the question actually needs both combined",
+        "Missing an implicit constraint stated in the caselet's prose rather than its explicit data"
+      ],
+      "hard_archetypes": [
+        "Caselet with several missing values that must be deduced from consistency constraints across sources before any question can be answered"
+      ],
+      "banned_easy_templates": [
+        "Single-source caselet with no cross-referencing needed (belongs under CD01 instead)"
+      ],
+      "out_of_scope": [
+        "Sets requiring domain expertise (finance/statistics formulas) beyond what's stated in the caselet"
+      ]
+    },
+    "CD03": {
+      "concepts": [
+        "Linear and circular seating arrangement logic",
+        "Scheduling/sequencing with day, slot or order constraints"
+      ],
+      "formulas": [],
+      "methods": [
+        "Draw the arrangement skeleton (row/circle/timeline) before placing any entity",
+        "Place the most constrained entity (fewest valid positions) first, then propagate remaining constraints"
+      ],
+      "traps": [
+        "Forgetting to distinguish 'facing the centre' vs 'facing outward' in a circular arrangement's left/right sense",
+        "Missing an indirect constraint implied by combining two separate given clues"
+      ],
+      "hard_archetypes": [
+        "Arrangement with multiple valid partial solutions that only converge to one final arrangement after combining all clues together"
+      ],
+      "banned_easy_templates": [
+        "Arrangement solvable by placing clues in the order given with no backtracking needed"
+      ],
+      "out_of_scope": [
+        "3D or multi-dimensional arrangement puzzles beyond linear/circular/matrix layouts"
+      ]
+    },
+    "CD04": {
+      "concepts": [
+        "Round-robin/knockout tournament structure and points-table logic",
+        "Route/network diagrams with distance or connectivity constraints"
+      ],
+      "formulas": [
+        "Round-robin total matches = nC2 for n teams"
+      ],
+      "methods": [
+        "Build the full fixture list or points table systematically before answering a specific-match question",
+        "For network/route sets, sketch the graph and track edge weights (distances/costs) as you read the clues"
+      ],
+      "traps": [
+        "Assuming a knockout structure when the clues actually describe round-robin (or vice versa)",
+        "Missing an indirect route/path implied by combining two direct connections"
+      ],
+      "hard_archetypes": [
+        "Points-table reconstruction where several matches' results must be deduced from partial standings data"
+      ],
+      "banned_easy_templates": [
+        "Direct 'read the given points table' question with no deduction needed"
+      ],
+      "out_of_scope": [
+        "Graph-theory formal algorithms (shortest-path proofs) beyond manual route-tracing"
+      ]
+    },
+    "CD05": {
+      "concepts": [
+        "Matrix/grid puzzles assigning multiple attributes to multiple entities",
+        "Distribution puzzles allocating a fixed quantity among entities under constraints"
+      ],
+      "formulas": [],
+      "methods": [
+        "Set up a full entity-vs-attribute grid and mark 'yes/no/maybe' as each clue is processed",
+        "For distribution puzzles, use the total-sum constraint to check partial allocations as you go"
+      ],
+      "traps": [
+        "Forgetting that some grid puzzles allow more than one entity to share an attribute value unless explicitly restricted",
+        "Missing a hidden numeric constraint (e.g. 'total must be even') buried in the puzzle's prose"
+      ],
+      "hard_archetypes": [
+        "Grid puzzle with 4+ attributes and clues that require several rounds of elimination before any cell is confirmed"
+      ],
+      "banned_easy_templates": [
+        "Grid puzzle solvable in a single pass with directly-stated cell values"
+      ],
+      "out_of_scope": [
+        "Puzzles requiring formal constraint-satisfaction algorithms rather than manual elimination"
+      ]
+    },
+    "CD06": {
+      "concepts": [
+        "Sets that combine a data table with an explicit list of logical conditions to satisfy simultaneously",
+        "Venn-diagram/set-theory based reasoning caselets"
+      ],
+      "formulas": [
+        "|A\u222aB\u222aC| = |A|+|B|+|C|-|A\u2229B|-|B\u2229C|-|A\u2229C|+|A\u2229B\u2229C|"
+      ],
+      "methods": [
+        "List every condition explicitly before attempting to fill in any data value, then check each candidate solution against all conditions together",
+        "For Venn-based sets, fill the diagram from the innermost (most-overlapping) region outward"
+      ],
+      "traps": [
+        "Satisfying most but not all conditions and mistakenly treating a partial solution as final",
+        "Double-counting an overlap region when combining set totals"
+      ],
+      "hard_archetypes": [
+        "Set with conditions that are individually simple but jointly restrictive enough to admit only one valid data table"
+      ],
+      "banned_easy_templates": [
+        "Single straightforward two-set Venn diagram with no combined-condition reasoning"
+      ],
+      "out_of_scope": [
+        "Sets requiring formal set-theory proofs beyond a numeric/diagrammatic solution"
+      ]
+    },
+    "CQ01": {
+      "concepts": [
+        "Divisibility rules and remainder theorems",
+        "Factors, multiples, LCM-HCF applications",
+        "Number properties (odd/even, prime, perfect square) in word problems"
+      ],
+      "formulas": [
+        "LCM(a,b) x HCF(a,b) = a x b",
+        "Remainder of a product/sum = product/sum of remainders (mod n)"
+      ],
+      "methods": [
+        "Reduce a large-number divisibility question to its last-few-digits or digit-sum property before brute-forcing",
+        "Use modular arithmetic to find remainders instead of direct division for large exponents"
+      ],
+      "traps": [
+        "Forgetting a negative-remainder convention mismatch when a problem expects the smallest non-negative remainder",
+        "Applying a divisibility rule for one base (10) to a different base question"
+      ],
+      "hard_archetypes": [
+        "Remainder-of-a-large-power numerical requiring Euler's theorem or cyclicity-of-last-digit reasoning"
+      ],
+      "banned_easy_templates": [
+        "Direct 'find the LCM of two small numbers' with no word-problem context"
+      ],
+      "out_of_scope": [
+        "Formal number-theory proofs (Euler's totient derivation) beyond applied problem-solving"
+      ]
+    },
+    "CQ02": {
+      "concepts": [
+        "Percentage change and successive percentage changes",
+        "Profit, loss, discount and marked-price relationships",
+        "Simple and compound interest, including varying compounding frequency"
+      ],
+      "formulas": [
+        "Successive % change = a+b+ab/100",
+        "CI = P(1+r/100)^n - P",
+        "SP = CP(1 \u00b1 %change)"
+      ],
+      "methods": [
+        "Convert all percentage changes into multiplying factors and chain them, rather than adding percentages directly",
+        "Separate marked-price/discount problems from cost-price/profit problems before setting up the equation"
+      ],
+      "traps": [
+        "Adding two successive percentage changes directly instead of using the successive-change formula",
+        "Confusing profit % on cost price with profit % on selling price"
+      ],
+      "hard_archetypes": [
+        "Multi-step problem chaining discount, tax and profit-margin together, requiring careful factor-based tracking"
+      ],
+      "banned_easy_templates": [
+        "Direct 'X% of Y' calculation with no chained scenario"
+      ],
+      "out_of_scope": [
+        "Actuarial/finance-grade compound-interest formulas (continuous compounding) beyond discrete-period CAT-style problems"
+      ]
+    },
+    "CQ03": {
+      "concepts": [
+        "Ratio and proportion, including partnership-share problems",
+        "Averages and weighted averages",
+        "Mixtures, alligation and replacement problems"
+      ],
+      "formulas": [
+        "Alligation: (quantity of cheaper)/(quantity of dearer) = (dearer price - mean price)/(mean price - cheaper price)",
+        "Weighted average = \u03a3(wi xi)/\u03a3wi"
+      ],
+      "methods": [
+        "Use the alligation rule directly instead of setting up simultaneous equations for a two-component mixture",
+        "For partnership problems, convert investment x time into an equivalent-capital ratio before splitting profit"
+      ],
+      "traps": [
+        "Applying simple average instead of weighted/time-weighted average in a partnership or mixed-group problem",
+        "Forgetting to account for the time period in a partnership investment ratio"
+      ],
+      "hard_archetypes": [
+        "Successive-replacement mixture problem (repeatedly removing and replacing a fraction of a mixture)"
+      ],
+      "banned_easy_templates": [
+        "Direct simple-average-of-a-few-numbers question with no weighting"
+      ],
+      "out_of_scope": [
+        "Statistical concepts (variance, standard deviation) beyond basic averages"
+      ]
+    },
+    "CQ04": {
+      "concepts": [
+        "Relative speed (same/opposite direction), trains crossing objects",
+        "Boats and streams (upstream/downstream speed)",
+        "Time and work, including pipes-and-cisterns and combined work-rate problems"
+      ],
+      "formulas": [
+        "Relative speed (opposite) = v1+v2; (same direction) = v1-v2",
+        "Upstream speed = b-s, Downstream speed = b+s",
+        "Combined work rate = 1/t1 + 1/t2 (rates add)"
+      ],
+      "methods": [
+        "Convert all time-work statements into a common 'work done per unit time' rate before combining",
+        "For trains/boats, always identify direction (same vs opposite/upstream vs downstream) before writing the relative-speed equation"
+      ],
+      "traps": [
+        "Adding times directly instead of adding rates in a combined-work problem",
+        "Forgetting to account for train length when computing crossing time for two moving trains"
+      ],
+      "hard_archetypes": [
+        "Multi-entity work problem with some workers leaving/joining midway, requiring a piecewise rate calculation"
+      ],
+      "banned_easy_templates": [
+        "Direct distance=speed\u00d7time single-object question with no relative-motion element"
+      ],
+      "out_of_scope": [
+        "Calculus-based rate-of-change problems (this is arithmetic rate reasoning, not differential rates)"
+      ]
+    },
+    "CQ05": {
+      "concepts": [
+        "Forming and solving linear/quadratic equations from word problems",
+        "Nature of roots (discriminant), sum/product of roots",
+        "Linear and quadratic inequalities"
+      ],
+      "formulas": [
+        "Sum of roots = -b/a, product = c/a",
+        "Discriminant D = b^2-4ac determines real/imaginary and equal/distinct roots"
+      ],
+      "methods": [
+        "Translate the word problem into algebraic equations methodically, defining variables explicitly before solving",
+        "Use sum/product-of-roots shortcuts instead of fully solving the quadratic when only a combination of roots is asked"
+      ],
+      "traps": [
+        "Forgetting to check which root is valid in context (e.g. negative age/length is invalid)",
+        "Sign errors when forming an equation directly from a word problem's 'more than'/'less than' phrasing"
+      ],
+      "hard_archetypes": [
+        "Word problem generating a quadratic where only one of two mathematically valid roots satisfies the real-world constraint"
+      ],
+      "banned_easy_templates": [
+        "Direct 'solve this quadratic equation' with no word-problem translation step"
+      ],
+      "out_of_scope": [
+        "Cubic/higher-degree equation general solving techniques beyond quadratic-level CAT scope"
+      ]
+    },
+    "CQ06": {
+      "concepts": [
+        "Logarithm properties and change-of-base",
+        "Surds, indices and exponential equations",
+        "Function domain/range, composition and basic graph transformations"
+      ],
+      "formulas": [
+        "log_a(mn) = log_a m + log_a n",
+        "a^m x a^n = a^(m+n)",
+        "log_a b = log_c b/log_c a (change of base)"
+      ],
+      "methods": [
+        "Convert a mixed-base logarithmic expression to a common base before simplifying",
+        "Reduce a surd/index equation to a common base on both sides to compare exponents directly"
+      ],
+      "traps": [
+        "Applying log(m+n) = log m + log n (an invalid identity) instead of the correct product rule",
+        "Forgetting the domain restriction (argument > 0) when solving a logarithmic equation"
+      ],
+      "hard_archetypes": [
+        "Exponential equation requiring substitution (treating a^x as a new variable) to reduce to a quadratic"
+      ],
+      "banned_easy_templates": [
+        "Direct 'evaluate log_2 8' with no equation-solving step"
+      ],
+      "out_of_scope": [
+        "Complex-number-valued logarithms, formal real-analysis treatment of functions"
+      ]
+    },
+    "CQ07": {
+      "concepts": [
+        "Arithmetic, geometric and harmonic progressions",
+        "Sum of a series, including telescoping and mixed AP-GP series"
+      ],
+      "formulas": [
+        "S_n(AP) = n/2[2a+(n-1)d]",
+        "S_n(GP) = a(r^n-1)/(r-1)",
+        "S_inf(GP) = a/(1-r), |r|<1"
+      ],
+      "methods": [
+        "Identify the progression type from the pattern of consecutive-term ratios/differences before choosing a formula",
+        "Use telescoping (writing each term as a difference) for series that don't fit standard AP/GP forms"
+      ],
+      "traps": [
+        "Applying the AP sum formula to a GP series or vice versa",
+        "Forgetting the |r|<1 condition before using the infinite-GP-sum formula"
+      ],
+      "hard_archetypes": [
+        "Series requiring the arithmetico-geometric shift-and-subtract technique to sum"
+      ],
+      "banned_easy_templates": [
+        "Direct 'find the nth term of a stated AP' with no summation needed"
+      ],
+      "out_of_scope": [
+        "Formal convergence-proof techniques for infinite series beyond the standard |r|<1 rule"
+      ]
+    },
+    "CQ08": {
+      "concepts": [
+        "Triangle properties: similarity, congruence, centres (centroid, incentre, circumcentre, orthocentre)",
+        "Circle theorems: tangent-chord angle, angle in a semicircle, power of a point",
+        "Quadrilateral and regular-polygon properties"
+      ],
+      "formulas": [
+        "Area of triangle = \u00bd base x height = \u221a(s(s-a)(s-b)(s-c)) (Heron's)",
+        "Tangent-chord angle = angle in alternate segment",
+        "Interior angle of regular n-gon = (n-2)x180/n"
+      ],
+      "methods": [
+        "Identify which triangle centre or circle theorem the given configuration matches before setting up equations",
+        "Use similarity ratios directly instead of full coordinate computation when only a ratio/length is asked"
+      ],
+      "traps": [
+        "Confusing centroid (2:1 median ratio) with incentre/circumcentre properties",
+        "Misapplying a tangent-chord angle theorem to a secant instead of a tangent"
+      ],
+      "hard_archetypes": [
+        "Multi-step configuration combining a triangle's centre property with a circle's tangent/chord property"
+      ],
+      "banned_easy_templates": [
+        "Direct 'find the third angle of a triangle given two angles' with no theorem application"
+      ],
+      "out_of_scope": [
+        "Formal Euclidean-proof writing; trigonometric identities beyond what's needed for a numeric geometry answer"
+      ]
+    },
+    "CQ09": {
+      "concepts": [
+        "2D/3D mensuration: area, perimeter, volume, surface area of standard solids",
+        "Coordinate geometry: distance, section formula, equation and slope of a line, basic locus"
+      ],
+      "formulas": [
+        "Volume(cylinder)=\u03c0r^2h, Volume(cone)=\u2153\u03c0r^2h, Volume(sphere)=4/3\u03c0r^3",
+        "Distance = \u221a((x2-x1)^2+(y2-y1)^2)",
+        "Section formula: ((mx2+nx1)/(m+n), (my2+ny1)/(m+n))"
+      ],
+      "methods": [
+        "Decompose a composite solid/figure into standard shapes before applying formulas",
+        "Use the slope/section formula directly for coordinate problems instead of a full graphical approach"
+      ],
+      "traps": [
+        "Using the wrong formula for a frustum (truncated cone) by treating it as a full cone",
+        "Sign errors in coordinate distance/section-formula substitution"
+      ],
+      "hard_archetypes": [
+        "Composite-solid volume/surface-area problem requiring subtraction of an inscribed shape from an outer one"
+      ],
+      "banned_easy_templates": [
+        "Direct 'find the area of a rectangle given length and breadth' with no composite step"
+      ],
+      "out_of_scope": [
+        "3D coordinate geometry (vectors in space) beyond standard 2D-plane CAT-level questions"
+      ]
+    },
+    "CQ10": {
+      "concepts": [
+        "Permutations and combinations with constraints (repetition, grouping, circular arrangement)",
+        "Basic and conditional probability",
+        "Set theory word problems (union/intersection via Venn diagrams)"
+      ],
+      "formulas": [
+        "nPr = n!/(n-r)!, nCr = n!/(r!(n-r)!)",
+        "P(A|B) = P(A\u2229B)/P(B)",
+        "|A\u222aB| = |A|+|B|-|A\u2229B|"
+      ],
+      "methods": [
+        "Case-split by constraint (e.g. 'together'/'never together') before applying nCr/nPr",
+        "Draw a Venn diagram for any set-theory word problem with 2+ overlapping groups before writing equations"
+      ],
+      "traps": [
+        "Double-counting arrangements when items within a group are identical",
+        "Forgetting to subtract the intersection term when combining two overlapping sets"
+      ],
+      "hard_archetypes": [
+        "Multi-constraint arrangement/selection problem requiring several cases to be summed correctly",
+        "Conditional-probability problem requiring Bayes'-style reasoning from a word scenario"
+      ],
+      "banned_easy_templates": [
+        "Direct nCr evaluation with given numbers and no constraint or word-problem context"
+      ],
+      "out_of_scope": [
+        "Formal combinatorial-proof techniques (generating functions) beyond applied CAT-level counting"
+      ]
+    }
+  }
+}

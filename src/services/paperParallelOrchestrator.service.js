@@ -717,11 +717,219 @@ const applyO3Lock = (item, out, stampTrust, { rekeyed = false } = {}) => {
   }
 
   item.stage = "ready_to_confirm";
-  item.locked = stampTrust(locked);
+  // Shuffle single-correct options so the key letter is not stuck on A (~70% bias).
+  // Remap explanation option-letters to the post-shuffle positions (otherwise
+  // "Hence option B" stays while the key moves to C/D).
+  item.locked = stampTrust(shuffleSingleCorrectOptions(locked));
+  if (item.locked.explanation) {
+    item.locked.explanation = sanitizeExplanationText(item.locked.explanation);
+    item.locked.explanation = alignExplanationToMarkedAnswer(
+      item.locked.explanation,
+      item.locked.correctAnswer
+    );
+  }
   item.answerKey =
     item.locked.correctAnswer ?? item.locked.answerDisplay ?? key ?? null;
   item.o3 = out.result;
   return item;
+};
+
+/**
+ * After option shuffle, remap A–D references in the explanation so they still
+ * point at the same option *text*. Uses placeholders to avoid A→C, C→B collisions.
+ * letterMap: { A: "C", B: "A", ... } (old → new). Missing/identity keys skipped.
+ */
+const remapExplanationOptionLetters = (text, letterMap) => {
+  if (!text || !letterMap || typeof letterMap !== "object") return text;
+  const entries = Object.entries(letterMap).filter(
+    ([from, to]) =>
+      /^[A-D]$/.test(from) && /^[A-D]$/.test(to) && from !== to
+  );
+  if (!entries.length) return text;
+
+  const token = (L) => `\uE000${L}\uE001`;
+  const subst = (L) => {
+    const up = String(L || "").toUpperCase();
+    return letterMap[up] && letterMap[up] !== up ? token(letterMap[up]) : L;
+  };
+
+  let out = String(text);
+
+  // Explicit option / statement / choice references
+  out = out.replace(
+    /\b(options?|statements?|choices?)\s*[\-\s]*\(?([A-D])\)?/gi,
+    (full, word, L) => `${word} ${subst(L)}`
+  );
+
+  // "correct answer is B", "right option is B", "Hence option B is correct"
+  out = out.replace(
+    /\b((?:hence|therefore|thus|so),?\s+)?(?:this\s+corresponds\s+to\s+)?(?:the\s+)?(?:right\s+)?(?:correct\s+)?(?:option|answer)\s+(?:is\s+)?\(?([A-D])\)?/gi,
+    (full, _lead, L) => full.replace(/\(?[A-D]\)?/i, () => subst(L))
+  );
+
+  // "corresponds to option B" / "corresponding to choice C"
+  out = out.replace(
+    /\bcorrespond(?:s|ing)\s+to\s+(?:option|choice)\s*\(?([A-D])\)?/gi,
+    (full, L) => full.replace(/\(?[A-D]\)?/i, () => subst(L))
+  );
+
+  // Line-start option enumeration: "A." / "B)" / "C:"
+  out = out.replace(
+    /(^|\n)([ \t]*)([A-D])([).:]\s+)/gm,
+    (_full, br, sp, L, punct) => `${br}${sp}${subst(L)}${punct}`
+  );
+
+  // FINAL_ANSWER: X / Locked answer: X
+  out = out.replace(
+    /\b(FINAL_ANSWER|Locked answer):\s*([A-D])\b/gi,
+    (_full, label, L) => `${label}: ${subst(L)}`
+  );
+
+  // LaTeX bold option: \mathbf{B}
+  out = out.replace(
+    /\\mathbf\{([A-D])\}/g,
+    (_full, L) => `\\mathbf{${subst(L)}}`
+  );
+
+  return out.replace(/\uE000([A-D])\uE001/g, "$1");
+};
+
+/**
+ * Belt-and-suspenders: if the closing "option X is correct" still disagrees
+ * with the marked key (all exams), rewrite those closing phrases.
+ * Does not touch mid-explanation "option B is false" style critiques.
+ */
+const alignExplanationToMarkedAnswer = (text, marked) => {
+  const ans = String(marked || "")
+    .trim()
+    .toUpperCase()
+    .slice(0, 1);
+  if (!text || !/^[A-D]$/.test(ans)) return text;
+
+  const closing = [
+    /\b(?:Hence|Therefore|Thus),?\s+option[\s\-]*\(?[A-D]\)?\b/gi,
+    /\boption[\s\-]*\(?[A-D]\)?\s+is\s+(?:therefore\s+)?correct\b/gi,
+    /\b(?:correct|right)\s+(?:option|answer)\s+is\s*\(?[A-D]\)?\b/gi,
+    /\bcorresponds\s+to\s+option\s*\(?[A-D]\)?\b/gi,
+    /\bcorresponding\s+to\s+(?:choice|option)\s*\(?[A-D]\)?\b/gi,
+    /\bFINAL_ANSWER:\s*[A-D]\b/gi,
+    /\bLocked answer:\s*[A-D]\b/gi,
+  ];
+
+  let out = String(text);
+  let lastClosingLetter = null;
+  for (const re of closing) {
+    let m;
+    const r = new RegExp(re.source, re.flags);
+    while ((m = r.exec(out)) !== null) {
+      const letter = (m[0].match(/[A-D]/i) || [])[0];
+      if (letter) lastClosingLetter = letter.toUpperCase();
+    }
+  }
+  if (!lastClosingLetter || lastClosingLetter === ans) return out;
+
+  // Rewrite only closing-style phrases that still name the wrong letter.
+  out = out.replace(
+    /\b((?:Hence|Therefore|Thus),?\s+option[\s\-]*)\(?[A-D]\)?\b/gi,
+    `$1${ans}`
+  );
+  out = out.replace(
+    /\boption[\s\-]*\(?[A-D]\)?(\s+is\s+(?:therefore\s+)?correct)\b/gi,
+    `option ${ans}$1`
+  );
+  out = out.replace(
+    /\b((?:correct|right)\s+(?:option|answer)\s+is\s*)\(?[A-D]\)?\b/gi,
+    `$1${ans}`
+  );
+  out = out.replace(
+    /\b(corresponds\s+to\s+option\s*)\(?[A-D]\)?\b/gi,
+    `$1${ans}`
+  );
+  out = out.replace(
+    /\b(corresponding\s+to\s+(?:choice|option)\s*)\(?[A-D]\)?\b/gi,
+    `$1${ans}`
+  );
+  out = out.replace(/\bFINAL_ANSWER:\s*[A-D]\b/gi, `FINAL_ANSWER: ${ans}`);
+  out = out.replace(/\bLocked answer:\s*[A-D]\b/gi, `Locked answer: ${ans}`);
+  out = out.replace(/\\mathbf\{[A-D]\}/g, `\\mathbf{${ans}}`);
+  return out;
+};
+
+/** Fisher–Yates shuffle of MCQ options; updates correctIndex / letter + explanation. */
+const shuffleSingleCorrectOptions = (locked = {}) => {
+  const type = String(locked._advancedType || locked.questionType || "single").toLowerCase();
+  if (type !== "single" && type !== "match") return locked;
+  const opts = Array.isArray(locked.options) ? locked.options : [];
+  if (opts.length < 2) return locked;
+
+  const plain = opts.map((o) =>
+    String(typeof o === "string" ? o : o?.text || "")
+      .replace(/^[A-D][).:\s]+/i, "")
+      .trim()
+  );
+  let correctIdx = Number.isInteger(locked.correctIndex) ? locked.correctIndex : -1;
+  if (correctIdx < 0 || correctIdx >= plain.length) {
+    const letter = String(locked.correctAnswer || "").toUpperCase().slice(0, 1);
+    if (/^[A-D]$/.test(letter)) correctIdx = letter.charCodeAt(0) - 65;
+  }
+  if (correctIdx < 0 || correctIdx >= plain.length) return locked;
+
+  // Index-stable shuffle so duplicate option texts still get a real permutation.
+  const order = plain.map((_, i) => i);
+  for (let i = order.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+  // Skip no-op shuffles (identity permutation).
+  if (order.every((oldI, newI) => oldI === newI)) {
+    return locked;
+  }
+
+  const shuffled = order.map((oldI) => plain[oldI]);
+  const newIdx = order.indexOf(correctIdx);
+  if (newIdx < 0) return locked;
+  const letter = String.fromCharCode(65 + newIdx);
+
+  const letterMap = {};
+  order.forEach((oldI, newI) => {
+    letterMap[String.fromCharCode(65 + oldI)] = String.fromCharCode(65 + newI);
+  });
+
+  const explanation = remapExplanationOptionLetters(
+    locked.explanation || locked._verifiedSolution || "",
+    letterMap
+  );
+
+  return {
+    ...locked,
+    options: shuffled,
+    correctIndex: newIdx,
+    correctAnswer: letter,
+    correctLetters: [letter],
+    ...(explanation ? { explanation } : {}),
+    ...(explanation && locked._verifiedSolution
+      ? { _verifiedSolution: explanation }
+      : {}),
+    _optionShuffleMap: letterMap,
+  };
+};
+
+const sanitizeExplanationText = (raw) => {
+  let text = String(raw || "");
+  if (!text) return text;
+  return text
+    .replace(/Long\)arrow/gi, "\\rightarrow")
+    .replace(/\)arrow/gi, "\\rightarrow")
+    .replace(/\bLongrightarrow\b/g, "\\longrightarrow")
+    .replace(/\bdll\b/g, "")
+    .replace(/\bdfrac\b/g, "\\dfrac")
+    .replace(/\bfrac\b(?![a-zA-Z])/g, "\\frac")
+    .replace(/\btextbf\b/g, "\\textbf")
+    // Only bare comparison ops (skip already-escaped \\le / \\ge).
+    .replace(/(?<![\\])<=(?=[\s$\d])/g, "\\le ")
+    .replace(/(?<![\\])>=(?=[\s$\d])/g, "\\ge ")
+    .replace(/\[dfrac\{([^}\]]+)\](\d+)\}/gi, "\\dfrac{$1}{$2}")
+    .replace(/\[frac\{([^}\]]+)\](\d+)\}/gi, "\\frac{$1}{$2}");
 };
 
 const verifySeatWithO3Budget = async (item, ctx, stampTrust) => {
@@ -1336,14 +1544,21 @@ export const runParallelPaperPipeline = async ({
   };
 
   const isFullyComplete = uniqueFinal.length >= expectedTotal;
+  // When a seat was replaced successfully, the old o3_fail must not surface in
+  // the UI as "Dropped / failed" — only report unresolved gaps on partial papers.
+  const unresolvedFailures = isFullyComplete ? [] : failures;
+  const resultItems = isFullyComplete
+    ? finalItems
+    : [...finalItems, ...failures];
+
   onProgress?.({
     phase: isFullyComplete ? "done" : "partial",
     message: isFullyComplete
       ? `Paper ready — ${uniqueFinal.length}/${expectedTotal} (Gemini→o3)`
       : `Partial — ${uniqueFinal.length}/${expectedTotal} o3-verified. Click Resume to complete.`,
     questions: uniqueFinal.map((q) => toUiQuestion(q, config)),
-    items: [...finalItems, ...failures],
-    failures,
+    items: resultItems,
+    failures: unresolvedFailures,
     counts,
   });
 
@@ -1351,8 +1566,8 @@ export const runParallelPaperPipeline = async ({
     plan,
     questions: uniqueFinal.map((q) => toUiQuestion(q, config)),
     raw: uniqueFinal,
-    items: [...finalItems, ...failures],
-    failures,
+    items: resultItems,
+    failures: unresolvedFailures,
     paperAudit: null,
     tokenUsage: deps.readTokenSummary?.(jobId)?.byModel || {},
     counts,

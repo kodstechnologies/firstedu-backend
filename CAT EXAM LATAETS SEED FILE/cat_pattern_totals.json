@@ -1,0 +1,111 @@
+{
+  "exam": "CAT",
+  "year": 2026,
+  "cycle": "CAT 2026",
+  "data_provenance": "Verified via web search (Sep 2026): IIM Indore official CAT 2026 press release/notification, cross-checked against multiple test-prep trackers. Pattern has been stable (68Q/120min/3-section sectional-time-lock) since CAT 2020.",
+  "important_caveat": "IIMs can revise exact section counts/timing each year; a couple of sources still cite the pre-2024 20-DILR-question figure, so 22 (this file's figure) should be re-confirmed against the CAT 2026 official mock once released. No official syllabus is ever published for CAT - only the pattern (sections/timing/marking) is official.",
+  "exam_day": {
+    "date": "2026-11-29",
+    "date_label": "29 November 2026",
+    "conducting_body": "IIM Indore",
+    "slots": 3,
+    "mode": "Computer-Based Test (CBT)",
+    "note": "Single day, three slots (morning/afternoon/evening); each candidate sits one slot only."
+  },
+  "sections": [
+    "VARC",
+    "DILR",
+    "QA"
+  ],
+  "section_order_fixed": true,
+  "section_order": [
+    "VARC",
+    "DILR",
+    "QA"
+  ],
+  "structure": {
+    "total_duration_minutes": 120,
+    "duration_per_section_minutes": 40,
+    "sectional_time_lock": true,
+    "can_revisit_previous_section": false,
+    "total_marks": 204,
+    "total_questions": 68,
+    "questions_per_section": {
+      "VARC": 24,
+      "DILR": 22,
+      "QA": 22
+    },
+    "marks_per_section": {
+      "VARC": 72,
+      "DILR": 66,
+      "QA": 66
+    },
+    "question_types": [
+      "MCQ",
+      "TITA (Type In The Answer)"
+    ],
+    "approx_mcq_tita_split": {
+      "mcq": 45,
+      "tita": 23
+    },
+    "calculator": "Basic on-screen calculator provided (QA/DILR)",
+    "overall_difficulty": "DILR typically the most time-pressured/toughest to finish; QA and VARC difficulty varies by slot"
+  },
+  "marking_scheme": {
+    "mcq_correct": 3,
+    "mcq_incorrect": -1,
+    "tita_correct": 3,
+    "tita_incorrect": 0,
+    "unattempted": 0,
+    "max_marks": 204
+  },
+  "section_table": {
+    "VARC": {
+      "questions": 24,
+      "marks": 72,
+      "composition": "~16 RC questions (4 passages x 4) + ~8 non-RC verbal-ability questions"
+    },
+    "DILR": {
+      "questions": 22,
+      "marks": 66,
+      "composition": "~5 sets of 4-5 linked questions each, mixing data-interpretation and logical-reasoning caselets"
+    },
+    "QA": {
+      "questions": 22,
+      "marks": 66,
+      "composition": "Arithmetic and Algebra together ~70% of the section; remainder Geometry/Mensuration and Modern Math"
+    }
+  },
+  "grand_total": {
+    "total_questions": 68,
+    "total_marks": 204,
+    "duration_minutes": 120,
+    "sections": 3
+  },
+  "quick_comparison": [
+    {
+      "feature": "Exam Duration",
+      "value": "120 minutes total, 40 minutes per section (strict, non-transferable)"
+    },
+    {
+      "feature": "Total Marks",
+      "value": "204 Marks"
+    },
+    {
+      "feature": "Number of Questions",
+      "value": "68 Questions (VARC 24, DILR 22, QA 22)"
+    },
+    {
+      "feature": "Core Sections",
+      "value": "VARC, DILR, QA - fixed order, no switching back"
+    },
+    {
+      "feature": "Question Formats",
+      "value": "MCQ (4 options, -1 for wrong) and TITA (typed numeric/text answer, no negative marking)"
+    },
+    {
+      "feature": "Overall Difficulty",
+      "value": "DILR most time-constrained; no officially fixed easy/moderate/hard split, varies by slot"
+    }
+  ]
+}

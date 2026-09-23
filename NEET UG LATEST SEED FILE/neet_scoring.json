@@ -1,0 +1,531 @@
+{
+  "subject": "Physics + Chemistry + Biology",
+  "exam_context": "NEET UG (used to steer topic/difficulty planning)",
+  "data_provenance": "Estimated from PYQ-trend analysis and coaching-institute weightage trackers (not official NTA data); last grounded Sep 2026",
+  "topics": {
+    "NP01": {
+      "subject": "Physics",
+      "avg_questions_per_neet_paper": 1,
+      "difficulty_split": {
+        "easy": 55,
+        "medium": 35,
+        "hard": 10
+      },
+      "neet_relevance": "low"
+    },
+    "NP02": {
+      "subject": "Physics",
+      "avg_questions_per_neet_paper": 3,
+      "difficulty_split": {
+        "easy": 35,
+        "medium": 42,
+        "hard": 23
+      },
+      "neet_relevance": "high",
+      "notes": "Consistently a top-frequency PYQ chapter across shifts; graph-reading and relative-velocity items recur."
+    },
+    "NP03": {
+      "subject": "Physics",
+      "avg_questions_per_neet_paper": 2,
+      "difficulty_split": {
+        "easy": 45,
+        "medium": 40,
+        "hard": 15
+      },
+      "neet_relevance": "medium"
+    },
+    "NP04": {
+      "subject": "Physics",
+      "avg_questions_per_neet_paper": 2,
+      "difficulty_split": {
+        "easy": 45,
+        "medium": 40,
+        "hard": 15
+      },
+      "neet_relevance": "medium"
+    },
+    "NP05": {
+      "subject": "Physics",
+      "avg_questions_per_neet_paper": 2,
+      "difficulty_split": {
+        "easy": 45,
+        "medium": 40,
+        "hard": 15
+      },
+      "neet_relevance": "medium",
+      "notes": "Rotational dynamics/rolling problems are the classic 'moderate-length numerical' NEET Physics item."
+    },
+    "NP06": {
+      "subject": "Physics",
+      "avg_questions_per_neet_paper": 2,
+      "difficulty_split": {
+        "easy": 45,
+        "medium": 40,
+        "hard": 15
+      },
+      "neet_relevance": "medium"
+    },
+    "NP07": {
+      "subject": "Physics",
+      "avg_questions_per_neet_paper": 2,
+      "difficulty_split": {
+        "easy": 45,
+        "medium": 40,
+        "hard": 15
+      },
+      "neet_relevance": "medium"
+    },
+    "NP08": {
+      "subject": "Physics",
+      "avg_questions_per_neet_paper": 2,
+      "difficulty_split": {
+        "easy": 45,
+        "medium": 40,
+        "hard": 15
+      },
+      "neet_relevance": "medium"
+    },
+    "NP09": {
+      "subject": "Physics",
+      "avg_questions_per_neet_paper": 1,
+      "difficulty_split": {
+        "easy": 55,
+        "medium": 35,
+        "hard": 10
+      },
+      "neet_relevance": "low"
+    },
+    "NP10": {
+      "subject": "Physics",
+      "avg_questions_per_neet_paper": 3,
+      "difficulty_split": {
+        "easy": 35,
+        "medium": 42,
+        "hard": 23
+      },
+      "neet_relevance": "high",
+      "notes": "SHM energy graphs and wave-superposition (beats/standing waves) are frequent conceptual+numerical combo."
+    },
+    "NP11": {
+      "subject": "Physics",
+      "avg_questions_per_neet_paper": 4,
+      "difficulty_split": {
+        "easy": 28,
+        "medium": 42,
+        "hard": 30
+      },
+      "neet_relevance": "very high",
+      "notes": "Field/potential due to combinations of charges and capacitor networks are the most repeated Physics sub-theme."
+    },
+    "NP12": {
+      "subject": "Physics",
+      "avg_questions_per_neet_paper": 4,
+      "difficulty_split": {
+        "easy": 28,
+        "medium": 42,
+        "hard": 30
+      },
+      "neet_relevance": "very high",
+      "notes": "Kirchhoff's-law circuit numericals and Wheatstone-bridge variants are a recurring high-yield source."
+    },
+    "NP13": {
+      "subject": "Physics",
+      "avg_questions_per_neet_paper": 3,
+      "difficulty_split": {
+        "easy": 35,
+        "medium": 42,
+        "hard": 23
+      },
+      "neet_relevance": "high"
+    },
+    "NP14": {
+      "subject": "Physics",
+      "avg_questions_per_neet_paper": 3,
+      "difficulty_split": {
+        "easy": 35,
+        "medium": 42,
+        "hard": 23
+      },
+      "neet_relevance": "high"
+    },
+    "NP15": {
+      "subject": "Physics",
+      "avg_questions_per_neet_paper": 1,
+      "difficulty_split": {
+        "easy": 55,
+        "medium": 35,
+        "hard": 10
+      },
+      "neet_relevance": "low",
+      "notes": "Lowest-weightage unit; mostly single recall-based question on EM spectrum ordering/uses."
+    },
+    "NP16": {
+      "subject": "Physics",
+      "avg_questions_per_neet_paper": 4,
+      "difficulty_split": {
+        "easy": 28,
+        "medium": 42,
+        "hard": 30
+      },
+      "neet_relevance": "very high",
+      "notes": "Single highest-weightage Physics unit historically; ray optics instrument numericals plus wave-optics theory both tested."
+    },
+    "NP17": {
+      "subject": "Physics",
+      "avg_questions_per_neet_paper": 2,
+      "difficulty_split": {
+        "easy": 45,
+        "medium": 40,
+        "hard": 15
+      },
+      "neet_relevance": "medium"
+    },
+    "NP18": {
+      "subject": "Physics",
+      "avg_questions_per_neet_paper": 2,
+      "difficulty_split": {
+        "easy": 45,
+        "medium": 40,
+        "hard": 15
+      },
+      "neet_relevance": "medium"
+    },
+    "NP19": {
+      "subject": "Physics",
+      "avg_questions_per_neet_paper": 1,
+      "difficulty_split": {
+        "easy": 55,
+        "medium": 35,
+        "hard": 10
+      },
+      "neet_relevance": "low"
+    },
+    "NP20": {
+      "subject": "Physics",
+      "avg_questions_per_neet_paper": 1,
+      "difficulty_split": {
+        "easy": 55,
+        "medium": 35,
+        "hard": 10
+      },
+      "neet_relevance": "low"
+    },
+    "NC01": {
+      "subject": "Chemistry",
+      "avg_questions_per_neet_paper": 1,
+      "difficulty_split": {
+        "easy": 55,
+        "medium": 35,
+        "hard": 10
+      },
+      "neet_relevance": "low"
+    },
+    "NC02": {
+      "subject": "Chemistry",
+      "avg_questions_per_neet_paper": 2,
+      "difficulty_split": {
+        "easy": 45,
+        "medium": 40,
+        "hard": 15
+      },
+      "neet_relevance": "medium"
+    },
+    "NC03": {
+      "subject": "Chemistry",
+      "avg_questions_per_neet_paper": 3,
+      "difficulty_split": {
+        "easy": 35,
+        "medium": 42,
+        "hard": 23
+      },
+      "neet_relevance": "high",
+      "notes": "Hybridisation, shapes and bond-related comparisons are a perennial high-frequency conceptual source."
+    },
+    "NC04": {
+      "subject": "Chemistry",
+      "avg_questions_per_neet_paper": 1,
+      "difficulty_split": {
+        "easy": 55,
+        "medium": 35,
+        "hard": 10
+      },
+      "neet_relevance": "low"
+    },
+    "NC05": {
+      "subject": "Chemistry",
+      "avg_questions_per_neet_paper": 1,
+      "difficulty_split": {
+        "easy": 55,
+        "medium": 35,
+        "hard": 10
+      },
+      "neet_relevance": "low"
+    },
+    "NC06": {
+      "subject": "Chemistry",
+      "avg_questions_per_neet_paper": 3,
+      "difficulty_split": {
+        "easy": 35,
+        "medium": 42,
+        "hard": 23
+      },
+      "neet_relevance": "high",
+      "notes": "Ionic equilibrium (pH, buffers, Ksp) numericals plus Le Chatelier conceptual items both common."
+    },
+    "NC07": {
+      "subject": "Chemistry",
+      "avg_questions_per_neet_paper": 3,
+      "difficulty_split": {
+        "easy": 35,
+        "medium": 42,
+        "hard": 23
+      },
+      "neet_relevance": "high"
+    },
+    "NC08": {
+      "subject": "Chemistry",
+      "avg_questions_per_neet_paper": 2,
+      "difficulty_split": {
+        "easy": 45,
+        "medium": 40,
+        "hard": 15
+      },
+      "neet_relevance": "medium"
+    },
+    "NC09": {
+      "subject": "Chemistry",
+      "avg_questions_per_neet_paper": 1,
+      "difficulty_split": {
+        "easy": 55,
+        "medium": 35,
+        "hard": 10
+      },
+      "neet_relevance": "low"
+    },
+    "NC10": {
+      "subject": "Chemistry",
+      "avg_questions_per_neet_paper": 5,
+      "difficulty_split": {
+        "easy": 28,
+        "medium": 42,
+        "hard": 30
+      },
+      "neet_relevance": "very high",
+      "notes": "Largest Chemistry unit by question count; spans four groups (13-18), high scope for factual+reaction-based items."
+    },
+    "NC11": {
+      "subject": "Chemistry",
+      "avg_questions_per_neet_paper": 3,
+      "difficulty_split": {
+        "easy": 35,
+        "medium": 42,
+        "hard": 23
+      },
+      "neet_relevance": "high"
+    },
+    "NC12": {
+      "subject": "Chemistry",
+      "avg_questions_per_neet_paper": 3,
+      "difficulty_split": {
+        "easy": 35,
+        "medium": 42,
+        "hard": 23
+      },
+      "neet_relevance": "high"
+    },
+    "NC13": {
+      "subject": "Chemistry",
+      "avg_questions_per_neet_paper": 1,
+      "difficulty_split": {
+        "easy": 55,
+        "medium": 35,
+        "hard": 10
+      },
+      "neet_relevance": "low",
+      "notes": "Lowest-weightage unit; usually one recall-based question on a purification technique."
+    },
+    "NC14": {
+      "subject": "Chemistry",
+      "avg_questions_per_neet_paper": 3,
+      "difficulty_split": {
+        "easy": 35,
+        "medium": 42,
+        "hard": 23
+      },
+      "neet_relevance": "high"
+    },
+    "NC15": {
+      "subject": "Chemistry",
+      "avg_questions_per_neet_paper": 2,
+      "difficulty_split": {
+        "easy": 45,
+        "medium": 40,
+        "hard": 15
+      },
+      "neet_relevance": "medium"
+    },
+    "NC16": {
+      "subject": "Chemistry",
+      "avg_questions_per_neet_paper": 2,
+      "difficulty_split": {
+        "easy": 45,
+        "medium": 40,
+        "hard": 15
+      },
+      "neet_relevance": "medium"
+    },
+    "NC17": {
+      "subject": "Chemistry",
+      "avg_questions_per_neet_paper": 4,
+      "difficulty_split": {
+        "easy": 28,
+        "medium": 42,
+        "hard": 30
+      },
+      "neet_relevance": "very high",
+      "notes": "Alcohols/phenols/carbonyl/carboxylic-acid reactions are the single most tested organic sub-block."
+    },
+    "NC18": {
+      "subject": "Chemistry",
+      "avg_questions_per_neet_paper": 2,
+      "difficulty_split": {
+        "easy": 45,
+        "medium": 40,
+        "hard": 15
+      },
+      "neet_relevance": "medium"
+    },
+    "NC19": {
+      "subject": "Chemistry",
+      "avg_questions_per_neet_paper": 2,
+      "difficulty_split": {
+        "easy": 45,
+        "medium": 40,
+        "hard": 15
+      },
+      "neet_relevance": "medium"
+    },
+    "NC20": {
+      "subject": "Chemistry",
+      "avg_questions_per_neet_paper": 1,
+      "difficulty_split": {
+        "easy": 55,
+        "medium": 35,
+        "hard": 10
+      },
+      "neet_relevance": "low"
+    },
+    "NB01": {
+      "subject": "Biology",
+      "avg_questions_per_neet_paper": 8,
+      "difficulty_split": {
+        "easy": 57,
+        "medium": 31,
+        "hard": 12
+      },
+      "neet_relevance": "medium"
+    },
+    "NB02": {
+      "subject": "Biology",
+      "avg_questions_per_neet_paper": 6,
+      "difficulty_split": {
+        "easy": 57,
+        "medium": 31,
+        "hard": 12
+      },
+      "neet_relevance": "medium"
+    },
+    "NB03": {
+      "subject": "Biology",
+      "avg_questions_per_neet_paper": 9,
+      "difficulty_split": {
+        "easy": 47,
+        "medium": 34,
+        "hard": 19
+      },
+      "neet_relevance": "high",
+      "notes": "Cell organelle structure-function matching is one of the most reliably tested Botany/Zoology-shared themes."
+    },
+    "NB04": {
+      "subject": "Biology",
+      "avg_questions_per_neet_paper": 8,
+      "difficulty_split": {
+        "easy": 57,
+        "medium": 31,
+        "hard": 12
+      },
+      "neet_relevance": "medium"
+    },
+    "NB05": {
+      "subject": "Biology",
+      "avg_questions_per_neet_paper": 16,
+      "difficulty_split": {
+        "easy": 40,
+        "medium": 35,
+        "hard": 25
+      },
+      "neet_relevance": "very high",
+      "notes": "Single highest-weightage NEET unit; spans 7 NCERT chapters, dominates the Zoology 45."
+    },
+    "NB06": {
+      "subject": "Biology",
+      "avg_questions_per_neet_paper": 11,
+      "difficulty_split": {
+        "easy": 47,
+        "medium": 34,
+        "hard": 19
+      },
+      "neet_relevance": "high",
+      "notes": "Human reproduction diagrams/process sequencing recur heavily; plant reproduction contributes fewer but steady items."
+    },
+    "NB07": {
+      "subject": "Biology",
+      "avg_questions_per_neet_paper": 14,
+      "difficulty_split": {
+        "easy": 40,
+        "medium": 35,
+        "hard": 25
+      },
+      "neet_relevance": "very high",
+      "notes": "Genetics numericals (monohybrid/dihybrid ratios, pedigree) plus molecular biology recall make this very high-yield."
+    },
+    "NB08": {
+      "subject": "Biology",
+      "avg_questions_per_neet_paper": 6,
+      "difficulty_split": {
+        "easy": 57,
+        "medium": 31,
+        "hard": 12
+      },
+      "neet_relevance": "medium"
+    },
+    "NB09": {
+      "subject": "Biology",
+      "avg_questions_per_neet_paper": 6,
+      "difficulty_split": {
+        "easy": 57,
+        "medium": 31,
+        "hard": 12
+      },
+      "neet_relevance": "medium"
+    },
+    "NB10": {
+      "subject": "Biology",
+      "avg_questions_per_neet_paper": 6,
+      "difficulty_split": {
+        "easy": 57,
+        "medium": 31,
+        "hard": 12
+      },
+      "neet_relevance": "medium"
+    }
+  },
+  "broad_category_weightage_pct": {
+    "note": "Coarser cross-check figures, % share by subject of the full 180-question paper",
+    "Physics": "25%",
+    "Chemistry": "25%",
+    "Botany": "25%",
+    "Zoology": "25%",
+    "Human_Physiology_and_Genetics_within_Biology": "highest single-topic concentration in the whole exam"
+  }
+}

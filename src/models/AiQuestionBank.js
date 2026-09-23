@@ -53,6 +53,8 @@ const aiQuestionBankSchema = new mongoose.Schema(
     },
     /** Applied to every question when useSectionWise is false. */
     negativeMarks: { type: Number, min: 0, default: 1 },
+    /** Official paper duration (minutes) — e.g. NEET 180, not Q-count heuristics. */
+    durationMinutes: { type: Number, min: 1, default: null },
     sections: [sectionSchema],
     aiProvider: {
       type: String,

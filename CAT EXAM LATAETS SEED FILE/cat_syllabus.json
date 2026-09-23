@@ -1,0 +1,234 @@
+{
+  "subject": "VARC + DILR + QA",
+  "exam": "CAT 2026",
+  "source_note": "CAT has NO officially published syllabus (unlike JEE/NEET's NCERT/NMC basis). This topic list is derived from 10+ years of CAT past-paper pattern analysis by test-prep sources, cross-checked against multiple trackers Sep 2026. Treat as a working syllabus, not an official document.",
+  "section_counts": {
+    "VARC": 5,
+    "DILR": 6,
+    "QA": 10,
+    "total_topics": 21
+  },
+  "topics": [
+    {
+      "topic_id": "CV01",
+      "section": "VARC",
+      "topic_name": "Reading Comprehension - Long/Abstract Passages",
+      "class_level": "N/A",
+      "subtopics": [
+        "Philosophy, sociology, literary criticism and abstract-argument passages (typically 1 of the 4 RC passages)",
+        "Tone, author's stance, inference beyond the literal line",
+        "Vocabulary-in-context and implied-meaning questions"
+      ]
+    },
+    {
+      "topic_id": "CV02",
+      "section": "VARC",
+      "topic_name": "Reading Comprehension - Applied/Contemporary Passages",
+      "class_level": "N/A",
+      "subtopics": [
+        "Business, economics, science/technology and current-affairs passages (remaining 3 of 4 RC passages)",
+        "Fact-based and application-based questions tied to passage content",
+        "Passage-summary and title-selection questions"
+      ]
+    },
+    {
+      "topic_id": "CV03",
+      "section": "VARC",
+      "topic_name": "Para Jumbles",
+      "class_level": "N/A",
+      "subtopics": [
+        "Arranging 4-6 jumbled sentences into a coherent paragraph",
+        "Identifying the mandatory opening/closing pair",
+        "Logical/pronoun/transition-word linkage between sentences"
+      ]
+    },
+    {
+      "topic_id": "CV04",
+      "section": "VARC",
+      "topic_name": "Para Summary",
+      "class_level": "N/A",
+      "subtopics": [
+        "Selecting the option that best summarises a given paragraph",
+        "Distinguishing a summary from a mere restatement or an over-narrow/over-broad option"
+      ]
+    },
+    {
+      "topic_id": "CV05",
+      "section": "VARC",
+      "topic_name": "Odd Sentence Out / Para Completion",
+      "class_level": "N/A",
+      "subtopics": [
+        "Identifying the sentence that doesn't fit the paragraph's theme",
+        "Selecting the most logical concluding/missing sentence for a paragraph"
+      ]
+    },
+    {
+      "topic_id": "CD01",
+      "section": "DILR",
+      "topic_name": "Data Interpretation - Tables & Basic Charts",
+      "class_level": "N/A",
+      "subtopics": [
+        "Single table, bar chart, line graph or pie chart with 3-5 linked questions",
+        "Percentage, ratio and growth-rate calculations from tabulated data"
+      ]
+    },
+    {
+      "topic_id": "CD02",
+      "section": "DILR",
+      "topic_name": "Data Interpretation - Combination & Caselet Sets",
+      "class_level": "N/A",
+      "subtopics": [
+        "Multiple linked charts/tables (e.g. table+chart together) in one caselet",
+        "Text-based caselets requiring the candidate to first tabulate data before answering"
+      ]
+    },
+    {
+      "topic_id": "CD03",
+      "section": "DILR",
+      "topic_name": "Logical Reasoning - Arrangements & Sequencing",
+      "class_level": "N/A",
+      "subtopics": [
+        "Linear/circular seating arrangements",
+        "Scheduling and sequencing puzzles (days, slots, order of events)"
+      ]
+    },
+    {
+      "topic_id": "CD04",
+      "section": "DILR",
+      "topic_name": "Logical Reasoning - Games, Tournaments & Networks",
+      "class_level": "N/A",
+      "subtopics": [
+        "Tournament/league fixture and points-table puzzles",
+        "Route/network and distance-relationship based reasoning sets"
+      ]
+    },
+    {
+      "topic_id": "CD05",
+      "section": "DILR",
+      "topic_name": "Logical Reasoning - Grid & Distribution Puzzles",
+      "class_level": "N/A",
+      "subtopics": [
+        "Matrix/grid-based puzzles (assigning people/items to categories with conditions)",
+        "Distribution puzzles (allocating quantities among entities subject to constraints)"
+      ]
+    },
+    {
+      "topic_id": "CD06",
+      "section": "DILR",
+      "topic_name": "Data Arrangement with Conditional Constraints",
+      "class_level": "N/A",
+      "subtopics": [
+        "Sets combining quantitative data with a list of logical conditions to be satisfied simultaneously",
+        "Venn-diagram and set-based reasoning caselets"
+      ]
+    },
+    {
+      "topic_id": "CQ01",
+      "section": "QA",
+      "topic_name": "Number Systems",
+      "class_level": "N/A",
+      "subtopics": [
+        "Divisibility, remainders, factors and multiples",
+        "LCM-HCF applications",
+        "Base systems and digit-based properties"
+      ]
+    },
+    {
+      "topic_id": "CQ02",
+      "section": "QA",
+      "topic_name": "Percentages, Profit & Loss, Simple & Compound Interest",
+      "class_level": "N/A",
+      "subtopics": [
+        "Percentage change and successive percentage changes",
+        "Profit/loss/discount and marked-price problems",
+        "SI/CI including compounding-frequency variants"
+      ]
+    },
+    {
+      "topic_id": "CQ03",
+      "section": "QA",
+      "topic_name": "Ratio, Proportion, Averages, Mixtures & Alligation",
+      "class_level": "N/A",
+      "subtopics": [
+        "Ratio and proportion applications, partnership problems",
+        "Averages and weighted averages",
+        "Mixtures, alligation and replacement problems"
+      ]
+    },
+    {
+      "topic_id": "CQ04",
+      "section": "QA",
+      "topic_name": "Time-Speed-Distance & Time and Work",
+      "class_level": "N/A",
+      "subtopics": [
+        "Relative speed, trains, boats and streams",
+        "Circular motion/races",
+        "Work-rate, pipes and cisterns, combined work problems"
+      ]
+    },
+    {
+      "topic_id": "CQ05",
+      "section": "QA",
+      "topic_name": "Linear & Quadratic Equations, Inequalities",
+      "class_level": "N/A",
+      "subtopics": [
+        "Solving and forming linear/quadratic equations from word problems",
+        "Nature and properties of roots",
+        "Linear and quadratic inequalities"
+      ]
+    },
+    {
+      "topic_id": "CQ06",
+      "section": "QA",
+      "topic_name": "Logarithms, Surds & Indices, Functions and Graphs",
+      "class_level": "N/A",
+      "subtopics": [
+        "Logarithm properties and change of base",
+        "Surds, indices and exponent equations",
+        "Function definition, domain-range, composition and basic graph behaviour"
+      ]
+    },
+    {
+      "topic_id": "CQ07",
+      "section": "QA",
+      "topic_name": "Progressions and Series",
+      "class_level": "N/A",
+      "subtopics": [
+        "Arithmetic, geometric and harmonic progressions",
+        "Sum of series, including mixed/telescoping series"
+      ]
+    },
+    {
+      "topic_id": "CQ08",
+      "section": "QA",
+      "topic_name": "Geometry - Lines, Triangles, Circles, Polygons",
+      "class_level": "N/A",
+      "subtopics": [
+        "Properties of triangles (similarity, congruence, centres)",
+        "Circle theorems (tangents, chords, angles)",
+        "Properties of quadrilaterals and regular polygons"
+      ]
+    },
+    {
+      "topic_id": "CQ09",
+      "section": "QA",
+      "topic_name": "Mensuration and Coordinate Geometry",
+      "class_level": "N/A",
+      "subtopics": [
+        "2D and 3D mensuration: area, volume, surface area of standard solids",
+        "Coordinate geometry: distance, section formula, equation of a line, basic locus"
+      ]
+    },
+    {
+      "topic_id": "CQ10",
+      "section": "QA",
+      "topic_name": "Permutations & Combinations, Probability, Set Theory",
+      "class_level": "N/A",
+      "subtopics": [
+        "Counting principles, arrangements and selections with constraints",
+        "Basic and conditional probability",
+        "Set theory (Venn-diagram based word problems)"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,1490 @@
+{
+  "subject": "Physics + Chemistry + Biology",
+  "exam": "NEET UG 2026",
+  "schema_note": "Keyed by topic_id (matches neet_syllabus.json). Fields: concepts, formulas, methods, traps, hard_archetypes, banned_easy_templates, out_of_scope. NEET is single-correct MCQ only, so 'hard_archetypes' describes trickier single-correct item designs (multi-step reasoning, ranking/comparison, graph/diagram interpretation) rather than multi-part JEE-style problems.",
+  "topics": {
+    "NP01": {
+      "concepts": [
+        "Fundamental vs derived units",
+        "Significant figures and rules of rounding",
+        "Dimensional homogeneity"
+      ],
+      "formulas": [
+        "[X] = M^a L^b T^c form of dimensional formula",
+        "Error propagation: relative error in a product/quotient adds"
+      ],
+      "methods": [
+        "Check dimensional consistency before trusting a derived formula",
+        "Count significant figures using the standard zero-counting rules"
+      ],
+      "traps": [
+        "Treating significant figures rules for addition/subtraction same as for multiplication/division",
+        "Confusing precision (least count) with accuracy"
+      ],
+      "hard_archetypes": [
+        "Combined percentage-error numericals across a multi-quantity formula (e.g. g from a pendulum)"
+      ],
+      "banned_easy_templates": [
+        "Bare 'state the SI unit of X' with no error/dimension reasoning"
+      ],
+      "out_of_scope": [
+        "Formal propagation-of-uncertainty statistics beyond NCERT treatment"
+      ]
+    },
+    "NP02": {
+      "concepts": [
+        "Vector resolution and addition",
+        "Relative velocity in 1D/2D",
+        "Projectile motion trajectory shape",
+        "Uniform circular motion centripetal acceleration"
+      ],
+      "formulas": [
+        "R = u^2 sin2\u03b8/g, H = u^2 sin^2\u03b8/2g, T = 2u sin\u03b8/g",
+        "v_rel = v1 - v2 (vector)",
+        "a_c = v^2/r = \u03c9^2 r"
+      ],
+      "methods": [
+        "Split projectile motion into independent horizontal/vertical components",
+        "Draw a relative-velocity vector diagram before computing river-boat/rain-man problems"
+      ],
+      "traps": [
+        "Mixing up angle of projection measured from horizontal vs vertical",
+        "Sign errors when velocity reverses direction in a v-t graph area calculation"
+      ],
+      "hard_archetypes": [
+        "Two-projectile relative-motion problems (collision/closest-approach)",
+        "Graph-based question requiring area-under-curve to get displacement, not just reading value"
+      ],
+      "banned_easy_templates": [
+        "Plug numbers into range formula with no twist"
+      ],
+      "out_of_scope": [
+        "Non-uniform circular motion with full tangential+radial vector treatment beyond NCERT depth"
+      ]
+    },
+    "NP03": {
+      "concepts": [
+        "Newton's laws, free-body diagrams",
+        "Static vs kinetic friction",
+        "Circular motion dynamics (banking, conical pendulum)"
+      ],
+      "formulas": [
+        "f_s(max) = \u03bc_s N",
+        "tan\u03b8 = v^2/rg (banking, no friction)",
+        "p = mv, F = dp/dt"
+      ],
+      "methods": [
+        "Always draw a free-body diagram before applying Newton's second law along an axis",
+        "Resolve forces along/perpendicular to an incline before writing equations"
+      ],
+      "traps": [
+        "Using \u03bc_s where \u03bc_k is needed once motion has started",
+        "Forgetting normal reaction changes on an accelerating lift/wedge"
+      ],
+      "hard_archetypes": [
+        "Connected-block-on-incline-with-pulley numericals needing simultaneous equations",
+        "Banking-of-road problems combined with friction (max/min speed range)"
+      ],
+      "banned_easy_templates": [
+        "Single block, single force, solve for acceleration with no constraint"
+      ],
+      "out_of_scope": [
+        "Non-inertial frame pseudo-force problems beyond a simple lift/wedge case"
+      ]
+    },
+    "NP04": {
+      "concepts": [
+        "Work-energy theorem",
+        "Conservative force and potential energy",
+        "Elastic vs inelastic collisions"
+      ],
+      "formulas": [
+        "W = \u222bF\u00b7dx, KE = \u00bdmv^2",
+        "e = relative velocity of separation/approach",
+        "v1' = ((m1-m2)u1 + 2m2u2)/(m1+m2) for elastic 1D collision"
+      ],
+      "methods": [
+        "Use energy conservation instead of kinematics when the path is complex but only endpoints matter",
+        "Identify collision type from given 'e' before choosing the momentum+energy equation set"
+      ],
+      "traps": [
+        "Applying KE conservation to an inelastic collision",
+        "Forgetting potential energy reference-point consistency across a problem"
+      ],
+      "hard_archetypes": [
+        "Variable-force work computed via area under F-x graph or integration",
+        "Multi-body collision + energy-loss numericals"
+      ],
+      "banned_easy_templates": [
+        "Direct KE = \u00bdmv^2 substitution with no further reasoning"
+      ],
+      "out_of_scope": [
+        "Centre-of-mass frame collision analysis beyond lab-frame NCERT treatment"
+      ]
+    },
+    "NP05": {
+      "concepts": [
+        "Centre of mass of discrete/continuous bodies",
+        "Torque and angular momentum conservation",
+        "Moment of inertia, parallel/perpendicular axis theorems",
+        "Rolling without slipping condition v=\u03c9R"
+      ],
+      "formulas": [
+        "I = \u03a3mr^2 (standard MoI list: ring, disc, sphere, rod)",
+        "\u03c4 = I\u03b1, L = I\u03c9",
+        "KE_rolling = \u00bdmv^2 + \u00bdI\u03c9^2"
+      ],
+      "methods": [
+        "Use the parallel-axis theorem to shift a known MoI to a new axis before combining bodies",
+        "Apply angular momentum conservation when external torque is zero (e.g. person on rotating platform)"
+      ],
+      "traps": [
+        "Using linear KE alone for a rolling body, ignoring rotational KE term",
+        "Wrong axis when applying perpendicular-axis theorem (only valid for planar laminas)"
+      ],
+      "hard_archetypes": [
+        "Rolling-down-an-incline numericals comparing different bodies' acceleration via I/(mR^2) factor",
+        "Composite-body centre-of-mass problems (disc with a cut-out section)"
+      ],
+      "banned_easy_templates": [
+        "Direct MoI lookup for a standard body with no combination step"
+      ],
+      "out_of_scope": [
+        "Full rigid-body Euler-angle dynamics beyond NCERT scope"
+      ]
+    },
+    "NP06": {
+      "concepts": [
+        "Newton's law of gravitation",
+        "Variation of g with height/depth/latitude",
+        "Escape velocity, orbital velocity",
+        "Kepler's three laws"
+      ],
+      "formulas": [
+        "g' = g(1-2h/R) for h<<R; g' = g(1-d/R)",
+        "v_esc = \u221a(2GM/R)",
+        "v_orbital = \u221a(GM/r), T^2 \u221d r^3"
+      ],
+      "methods": [
+        "Use energy conservation (KE+PE) for escape-velocity and satellite-energy problems",
+        "Apply Kepler's third law ratio form to avoid recomputing constants"
+      ],
+      "traps": [
+        "Applying the h<<R approximation for g-variation to a large-altitude satellite problem",
+        "Sign errors in gravitational PE (always negative, reference at infinity)"
+      ],
+      "hard_archetypes": [
+        "Total energy / binding energy of a satellite in a given orbit",
+        "Geostationary-satellite height derivation combined with Kepler's law"
+      ],
+      "banned_easy_templates": [
+        "Direct substitution into F = GMm/r^2 with no follow-up"
+      ],
+      "out_of_scope": [
+        "General relativistic corrections, three-body problem"
+      ]
+    },
+    "NP07": {
+      "concepts": [
+        "Stress-strain and moduli of elasticity",
+        "Pascal's law and hydrostatic pressure",
+        "Viscosity and Stokes' law, terminal velocity",
+        "Surface tension, excess pressure, capillary rise, Bernoulli's theorem"
+      ],
+      "formulas": [
+        "Y = stress/strain",
+        "v_terminal = 2r^2(\u03c1-\u03c3)g/9\u03b7",
+        "P + \u00bd\u03c1v^2 + \u03c1gh = constant (Bernoulli)",
+        "h = 2Tcos\u03b8/\u03c1gr (capillary rise)"
+      ],
+      "methods": [
+        "Identify whether a fluid problem needs Bernoulli (flow) or hydrostatics (static) before setting up equations",
+        "Balance weight, buoyancy and viscous drag to derive terminal velocity from first principles"
+      ],
+      "traps": [
+        "Using Bernoulli's equation across a pipe of varying height without including the \u03c1gh term",
+        "Confusing surface tension force direction (tangential to surface) with pressure"
+      ],
+      "hard_archetypes": [
+        "Venturimeter/efflux-speed numericals combining continuity and Bernoulli equations",
+        "Capillary-rise problems requiring contact-angle reasoning"
+      ],
+      "banned_easy_templates": [
+        "Direct Y=stress/strain substitution with given numbers"
+      ],
+      "out_of_scope": [
+        "Turbulent-flow Reynolds-number based problem solving beyond qualitative statement"
+      ]
+    },
+    "NP08": {
+      "concepts": [
+        "Zeroth, first and second laws",
+        "Isothermal vs adiabatic processes",
+        "Heat engine efficiency, Carnot engine",
+        "Reversible/irreversible processes"
+      ],
+      "formulas": [
+        "\u0394Q = \u0394U + \u0394W",
+        "\u03b7 = 1 - T2/T1 (Carnot)",
+        "PV^\u03b3 = constant (adiabatic)",
+        "W = nRT ln(V2/V1) (isothermal)"
+      ],
+      "methods": [
+        "Identify the process type from the given condition (constant P/V/T or Q=0) before choosing the work-done formula",
+        "Use a P-V diagram to visualise and compute work as area under the curve"
+      ],
+      "traps": [
+        "Applying the isothermal work formula to an adiabatic process or vice versa",
+        "Sign convention confusion for work done by vs on the gas"
+      ],
+      "hard_archetypes": [
+        "Cyclic-process numericals requiring net work as enclosed P-V area plus efficiency",
+        "Carnot-engine-and-refrigerator combined coefficient-of-performance problems"
+      ],
+      "banned_easy_templates": [
+        "State the first law with no numerical application"
+      ],
+      "out_of_scope": [
+        "Entropy-based statistical mechanics beyond the qualitative second-law statement"
+      ]
+    },
+    "NP09": {
+      "concepts": [
+        "Kinetic theory postulates",
+        "Ideal gas equation",
+        "RMS/average/most probable speed",
+        "Degrees of freedom and equipartition of energy"
+      ],
+      "formulas": [
+        "PV = nRT",
+        "v_rms = \u221a(3RT/M)",
+        "Cv = f/2 R, Cp = Cv + R"
+      ],
+      "methods": [
+        "Use degrees of freedom to get Cv/Cp for mono-, di- and polyatomic gases before an energy calculation",
+        "Compare v_rms, v_avg, v_mp using their fixed numeric ratios"
+      ],
+      "traps": [
+        "Using molar mass in g/mol instead of kg/mol inside v_rms",
+        "Assuming diatomic gas always has f=5 (ignoring vibrational mode at high T)"
+      ],
+      "hard_archetypes": [
+        "Mixture-of-gases problems requiring a combined effective degrees-of-freedom or Cv",
+        "Pressure-derivation-from-kinetic-theory numerical with molecule count and speed given"
+      ],
+      "banned_easy_templates": [
+        "Direct PV=nRT substitution with no further reasoning"
+      ],
+      "out_of_scope": [
+        "Maxwell-Boltzmann distribution integral derivations beyond the stated speed formulas"
+      ]
+    },
+    "NP10": {
+      "concepts": [
+        "SHM displacement/velocity/acceleration relations",
+        "Energy in SHM",
+        "Wave speed on a string, in a gas",
+        "Superposition, standing waves, beats, Doppler effect"
+      ],
+      "formulas": [
+        "x = A sin(\u03c9t+\u03c6), v_max = A\u03c9, a_max = A\u03c9^2",
+        "T = 2\u03c0\u221a(m/k) (spring), T = 2\u03c0\u221a(L/g) (pendulum)",
+        "f_beat = |f1-f2|",
+        "f' = f(v\u00b1v0)/(v\u2213vs) (Doppler)"
+      ],
+      "methods": [
+        "Use energy conservation (KE+PE=constant) instead of full time-dependence when only amplitude/speed relations are needed",
+        "Apply the correct sign convention in the Doppler formula based on relative motion direction"
+      ],
+      "traps": [
+        "Sign errors in the Doppler formula when source/observer move toward vs away",
+        "Confusing angular frequency \u03c9 with frequency f in SHM formulas"
+      ],
+      "hard_archetypes": [
+        "Combined SHM-of-a-spring-block-system-on-an-incline or with two springs numericals",
+        "Standing-wave harmonic/overtone identification combined with a boundary-condition (open/closed pipe) problem"
+      ],
+      "banned_easy_templates": [
+        "Direct T=2\u03c0\u221a(L/g) substitution with no follow-up"
+      ],
+      "out_of_scope": [
+        "Damped and forced oscillations beyond qualitative resonance statement"
+      ]
+    },
+    "NP11": {
+      "concepts": [
+        "Coulomb's law and superposition",
+        "Electric field and potential due to point charge/dipole",
+        "Gauss's law and its applications",
+        "Capacitors: series/parallel, energy stored, dielectrics"
+      ],
+      "formulas": [
+        "E = kq/r^2, V = kq/r",
+        "Dipole: E_axial=2kp/r^3, E_equatorial=kp/r^3, \u03c4=pEsin\u03b8",
+        "C = \u03b50A/d (parallel plate), U = \u00bdCV^2",
+        "Gauss's law: \u222eE\u00b7dA = q_enc/\u03b50"
+      ],
+      "methods": [
+        "Use Gauss's law for symmetric charge distributions instead of direct integration",
+        "Reduce a capacitor network step by step, identifying series/parallel groups before combining"
+      ],
+      "traps": [
+        "Forgetting factor of 2 difference between axial and equatorial dipole field",
+        "Adding capacitances directly for a series combination (should add reciprocals)"
+      ],
+      "hard_archetypes": [
+        "Multi-capacitor bridge/network numericals requiring symmetry or Wheatstone-like reduction",
+        "Charge/field distribution problems on a system of point charges in equilibrium"
+      ],
+      "banned_easy_templates": [
+        "Direct Coulomb's law substitution for two given point charges with no further step"
+      ],
+      "out_of_scope": [
+        "Continuous charge-distribution potential derivations beyond standard NCERT results (ring, disc)"
+      ]
+    },
+    "NP12": {
+      "concepts": [
+        "Ohm's law, resistivity and its temperature dependence",
+        "Kirchhoff's current and voltage laws",
+        "Wheatstone bridge balance condition",
+        "Potentiometer principle, EMF vs terminal voltage"
+      ],
+      "formulas": [
+        "V=IR, R=\u03c1l/A",
+        "Wheatstone balance: P/Q = R/S",
+        "Potentiometer: EMF \u221d balancing length"
+      ],
+      "methods": [
+        "Apply Kirchhoff's laws systematically (assign loop currents, write independent equations) for multi-loop circuits",
+        "Use the balance condition to solve a Wheatstone-bridge network without computing bridge-current explicitly"
+      ],
+      "traps": [
+        "Confusing EMF with terminal voltage when internal resistance is present",
+        "Sign errors in Kirchhoff's voltage law when traversing a loop against assumed current direction"
+      ],
+      "hard_archetypes": [
+        "Multi-loop circuit numericals requiring simultaneous Kirchhoff equations",
+        "Potentiometer comparison-of-EMFs or internal-resistance-measurement numericals"
+      ],
+      "banned_easy_templates": [
+        "Direct V=IR substitution for a single resistor with no network"
+      ],
+      "out_of_scope": [
+        "Full mesh-analysis/matrix circuit-solving techniques beyond NCERT's Kirchhoff-law approach"
+      ]
+    },
+    "NP13": {
+      "concepts": [
+        "Biot-Savart law and Ampere's circuital law",
+        "Force on a moving charge/current-carrying wire in a magnetic field",
+        "Moving-coil galvanometer conversion to ammeter/voltmeter",
+        "Bar magnet as an equivalent solenoid, earth's magnetism"
+      ],
+      "formulas": [
+        "F = qv\u00d7B, F = IL\u00d7B",
+        "B(centre of circular loop) = \u03bc0I/2R, B(long straight wire) = \u03bc0I/2\u03c0r",
+        "Shunt for ammeter: S = IgG/(I-Ig)"
+      ],
+      "methods": [
+        "Use the right-hand rule consistently for field direction and force direction in every sub-step",
+        "Convert a galvanometer to ammeter/voltmeter using the shunt/series-resistance formula"
+      ],
+      "traps": [
+        "Sign/direction errors in F=qv\u00d7B when velocity and field aren't perpendicular",
+        "Mixing up the shunt-resistance formula for ammeter conversion with the series-resistance formula for voltmeter conversion"
+      ],
+      "hard_archetypes": [
+        "Force-between-two-parallel-current-carrying-wires combined with net-field-at-a-point numericals",
+        "Charged-particle-in-combined-E-and-B-field (velocity selector) problems"
+      ],
+      "banned_easy_templates": [
+        "Direct F=BIL substitution with perpendicular field and no further reasoning"
+      ],
+      "out_of_scope": [
+        "Magnetic materials' hysteresis-loop quantitative analysis beyond qualitative classification"
+      ]
+    },
+    "NP14": {
+      "concepts": [
+        "Faraday's and Lenz's laws, motional EMF",
+        "Self and mutual inductance",
+        "LCR series circuit: impedance, resonance, power factor",
+        "Transformers and AC generators"
+      ],
+      "formulas": [
+        "EMF = -d\u03a6/dt",
+        "XL=\u03c9L, XC=1/\u03c9C, Z=\u221a(R^2+(XL-XC)^2)",
+        "\u03c9_resonance = 1/\u221a(LC)",
+        "P_avg = V_rms I_rms cos\u03c6"
+      ],
+      "methods": [
+        "Apply Lenz's law for direction before computing induced EMF magnitude",
+        "Use the impedance triangle to find phase angle and power factor together"
+      ],
+      "traps": [
+        "Forgetting the negative sign / Lenz's-law direction in induced-EMF problems",
+        "Confusing peak and RMS values when substituting into power formulas"
+      ],
+      "hard_archetypes": [
+        "Rod-sliding-on-rails motional-EMF-with-external-circuit numericals",
+        "LCR resonance numericals requiring both impedance and phase-angle reasoning"
+      ],
+      "banned_easy_templates": [
+        "Direct EMF=-d\u03a6/dt substitution with a simple linear flux change and no circuit context"
+      ],
+      "out_of_scope": [
+        "Three-phase AC systems, transient RL/RC circuit analysis beyond steady-state NCERT treatment"
+      ]
+    },
+    "NP15": {
+      "concepts": [
+        "Displacement current and Maxwell's modification of Ampere's law",
+        "Properties of electromagnetic waves (transverse, mutually perpendicular E and B)",
+        "Electromagnetic spectrum regions and their uses"
+      ],
+      "formulas": [
+        "c = 1/\u221a(\u03bc0\u03b50)",
+        "Energy density relations E0=cB0"
+      ],
+      "methods": [
+        "Recall the EM spectrum order (radio\u2192micro\u2192IR\u2192visible\u2192UV\u2192X-ray\u2192gamma) with typical uses for each band"
+      ],
+      "traps": [
+        "Confusing displacement current with actual charge-carrying conduction current",
+        "Mixing up which spectrum region is used for a given application (e.g. RADAR vs communication)"
+      ],
+      "hard_archetypes": [
+        "Assertion-reason style item testing displacement-current conceptual understanding"
+      ],
+      "banned_easy_templates": [
+        "Simple 'name the region with highest frequency' recall with no application context"
+      ],
+      "out_of_scope": [
+        "Full Maxwell's equations in differential form"
+      ]
+    },
+    "NP16": {
+      "concepts": [
+        "Mirror and lens formula, magnification, power of a lens",
+        "Refraction through a prism, dispersion",
+        "Optical instruments: compound microscope, astronomical telescope",
+        "Interference (YDSE), diffraction, polarisation"
+      ],
+      "formulas": [
+        "1/v - 1/u = 1/f (mirror/lens sign convention)",
+        "\u03bc = sin((A+\u03b4m)/2)/sin(A/2) (prism)",
+        "\u03b2 = \u03bbD/d (fringe width, YDSE)",
+        "P = 1/f (in metres)"
+      ],
+      "methods": [
+        "Apply the Cartesian sign convention consistently through every step of a mirror/lens problem",
+        "Use lens-maker's/combination formula for multi-lens systems before computing final image"
+      ],
+      "traps": [
+        "Sign convention slips (real vs virtual, converging vs diverging) mid-problem",
+        "Confusing fringe-width formula variables when a medium other than air/vacuum is used (\u03bb changes)"
+      ],
+      "hard_archetypes": [
+        "Combination-of-lenses-and-mirrors image-formation numericals with multiple sign-convention steps",
+        "YDSE-with-one-slit-covered-by-a-thin-film numericals needing path-difference reasoning"
+      ],
+      "banned_easy_templates": [
+        "Direct 1/v-1/u=1/f substitution for a single lens with given u,f and no further step"
+      ],
+      "out_of_scope": [
+        "Fresnel diffraction quantitative treatment beyond Young's double slit and simple diffraction minima"
+      ]
+    },
+    "NP17": {
+      "concepts": [
+        "Photoelectric effect and Einstein's equation",
+        "Threshold frequency and work function",
+        "de Broglie wavelength of matter"
+      ],
+      "formulas": [
+        "KE_max = h\u03bd - \u03c60",
+        "eV0 = h\u03bd - \u03c60 (stopping potential)",
+        "\u03bb = h/p = h/\u221a(2mKE)"
+      ],
+      "methods": [
+        "Use the stopping-potential form of Einstein's equation directly when V0 is given/asked",
+        "Relate de Broglie wavelength to kinetic energy or accelerating voltage via momentum"
+      ],
+      "traps": [
+        "Assuming photoelectric current depends on frequency (it depends on intensity, not KE_max)",
+        "Forgetting de Broglie wavelength applies to any moving particle, not just electrons"
+      ],
+      "hard_archetypes": [
+        "Stopping-potential-vs-frequency graph numericals extracting h and \u03c60 from slope/intercept",
+        "de Broglie wavelength comparison across particles accelerated through the same potential"
+      ],
+      "banned_easy_templates": [
+        "Direct KE_max=h\u03bd-\u03c60 substitution with all values given and no graph/derivation"
+      ],
+      "out_of_scope": [
+        "Compton-effect quantitative derivation beyond qualitative statement"
+      ]
+    },
+    "NP18": {
+      "concepts": [
+        "Bohr model and atomic spectra (Balmer, Lyman series)",
+        "Nuclear size, mass defect and binding energy",
+        "Radioactive decay law and half-life",
+        "Nuclear fission and fusion energy release"
+      ],
+      "formulas": [
+        "E_n = -13.6Z^2/n^2 eV",
+        "1/\u03bb = RZ^2(1/n1^2 - 1/n2^2)",
+        "N = N0 e^(-\u03bbt), t\u00bd = ln2/\u03bb",
+        "\u0394E = \u0394mc^2"
+      ],
+      "methods": [
+        "Use the Rydberg formula to identify which spectral series a transition belongs to before computing wavelength",
+        "Compute binding energy per nucleon to compare nuclear stability across isotopes"
+      ],
+      "traps": [
+        "Mixing up half-life formula with mean-life formula",
+        "Forgetting Z^2 dependence when applying the Bohr energy formula to hydrogen-like ions (He+, Li2+)"
+      ],
+      "hard_archetypes": [
+        "Radioactive-decay-series numericals with successive half-lives / activity ratios",
+        "Binding-energy-per-nucleon comparison used to justify fission or fusion energy release"
+      ],
+      "banned_easy_templates": [
+        "Direct E_n formula substitution for hydrogen ground state with no follow-up"
+      ],
+      "out_of_scope": [
+        "Nuclear shell-model quantitative treatment, quark-level particle physics"
+      ]
+    },
+    "NP19": {
+      "concepts": [
+        "Intrinsic vs extrinsic semiconductors, p-n junction formation",
+        "Diode as a half-wave/full-wave rectifier",
+        "Transistor characteristics and its use as an amplifier/switch",
+        "Logic gates and truth tables"
+      ],
+      "formulas": [
+        "Current gain \u03b2=IC/IB (transistor, CE mode)",
+        "Ripple/rectification qualitative relations"
+      ],
+      "methods": [
+        "Use the depletion-region/barrier-potential picture to reason about forward vs reverse bias behaviour",
+        "Build truth tables systematically for combination logic-gate questions"
+      ],
+      "traps": [
+        "Confusing p-type/n-type majority-carrier identity",
+        "Mixing up NAND/NOR truth-table outputs under time pressure"
+      ],
+      "hard_archetypes": [
+        "Transistor-as-amplifier numericals involving gain and biasing conditions",
+        "Combination logic-gate circuit requiring a multi-step truth table"
+      ],
+      "banned_easy_templates": [
+        "Direct 'is silicon a semiconductor?' style pure recall with no circuit reasoning"
+      ],
+      "out_of_scope": [
+        "Integrated-circuit fabrication, op-amp circuits beyond NCERT scope"
+      ]
+    },
+    "NP20": {
+      "concepts": [
+        "Least count of vernier callipers and screw gauge",
+        "Standard verification experiments (g by simple pendulum, focal length of lens/mirror, resistance by metre bridge)",
+        "Systematic vs random error in a graph-based experiment"
+      ],
+      "formulas": [
+        "Least count (vernier) = 1 MSD - 1 VSD",
+        "Least count (screw gauge) = pitch/number of divisions on circular scale"
+      ],
+      "methods": [
+        "Identify zero error type (positive/negative) and apply the correction sign correctly",
+        "Use the slope of a linear graph (rather than a single reading) to extract a physical constant"
+      ],
+      "traps": [
+        "Applying zero-error correction with the wrong sign",
+        "Reading a screw-gauge/vernier scale off by one main-scale division"
+      ],
+      "hard_archetypes": [
+        "Given a raw main-scale + circular-scale reading with a stated zero error, compute the corrected measurement"
+      ],
+      "banned_easy_templates": [
+        "Pure 'what is the formula for least count' recall with no reading to interpret"
+      ],
+      "out_of_scope": [
+        "Statistical treatment of experimental uncertainty beyond NCERT's practical-manual level"
+      ]
+    },
+    "NC01": {
+      "concepts": [
+        "Laws of chemical combination",
+        "Mole concept and Avogadro number",
+        "Limiting reagent, percentage yield/composition"
+      ],
+      "formulas": [
+        "moles = mass/molar mass = volume(STP)/22.4L",
+        "Molarity = moles/volume(L)"
+      ],
+      "methods": [
+        "Identify the limiting reagent before computing product mass in a stoichiometry problem",
+        "Balance the equation first, then set up mole ratios"
+      ],
+      "traps": [
+        "Using given mass of the excess reagent instead of the limiting reagent",
+        "Forgetting to convert to moles before applying a stoichiometric ratio"
+      ],
+      "hard_archetypes": [
+        "Multi-step stoichiometry with limiting reagent and percentage-yield combined"
+      ],
+      "banned_easy_templates": [
+        "Direct moles=mass/molar mass with no reaction context"
+      ],
+      "out_of_scope": [
+        "Advanced volumetric/gravimetric analysis techniques beyond NCERT numericals"
+      ]
+    },
+    "NC02": {
+      "concepts": [
+        "Bohr model postulates and its limitations",
+        "Quantum numbers and orbital shapes",
+        "Aufbau principle, Pauli exclusion, Hund's rule"
+      ],
+      "formulas": [
+        "E_n = -13.6Z^2/n^2 eV",
+        "\u03bb = h/mv (de Broglie)",
+        "\u0394x\u00b7\u0394p \u2265 h/4\u03c0 (Heisenberg)"
+      ],
+      "methods": [
+        "Write electronic configuration using n+l rule before identifying exceptions (Cr, Cu)",
+        "Use quantum-number rules (n, l, ml, ms) to check validity of a given electron state"
+      ],
+      "traps": [
+        "Forgetting exceptions to Aufbau (Cr: 3d5 4s1, Cu: 3d10 4s1)",
+        "Confusing azimuthal quantum number l with magnetic quantum number ml"
+      ],
+      "hard_archetypes": [
+        "Electronic-configuration-of-an-ion (not neutral atom) requiring removal from the correct subshell first"
+      ],
+      "banned_easy_templates": [
+        "Direct 'write electronic configuration of a common element' with no ion/exception twist"
+      ],
+      "out_of_scope": [
+        "Full quantum-mechanical wave-equation solutions"
+      ]
+    },
+    "NC03": {
+      "concepts": [
+        "Lewis structures and formal charge",
+        "VSEPR geometry prediction",
+        "Hybridisation (s,p,d)",
+        "Molecular orbital theory for homonuclear diatomics",
+        "Hydrogen bonding and dipole moment"
+      ],
+      "formulas": [
+        "Bond order (MOT) = \u00bd(Nb-Na)",
+        "Formal charge = valence e- - non-bonding e- - \u00bd bonding e-"
+      ],
+      "methods": [
+        "Determine hybridisation from steric number (bond pairs + lone pairs) before predicting shape",
+        "Use MOT bond-order comparison to rank bond strength/length/magnetic behaviour across a diatomic series"
+      ],
+      "traps": [
+        "Ignoring lone-pair repulsion effect on bond angle in VSEPR (lone pair > bond pair repulsion)",
+        "Applying MOT bond order incorrectly for species with unequal electron counts"
+      ],
+      "hard_archetypes": [
+        "Bond-angle/shape comparison across a series of related molecules with different lone-pair counts",
+        "Paramagnetic/diamagnetic prediction via MOT for O2, N2, and their ions"
+      ],
+      "banned_easy_templates": [
+        "Direct 'state hybridisation of carbon in methane' with no comparative reasoning"
+      ],
+      "out_of_scope": [
+        "Heteronuclear diatomic MOT, group theory-based symmetry analysis"
+      ]
+    },
+    "NC04": {
+      "concepts": [
+        "Internal energy, enthalpy and state functions",
+        "Hess's law",
+        "Entropy and spontaneity via Gibbs free energy"
+      ],
+      "formulas": [
+        "\u0394H = \u0394U + \u0394(PV) = \u0394U + \u0394n_g RT",
+        "\u0394G = \u0394H - T\u0394S",
+        "\u0394H_reaction = \u03a3\u0394H_f(products) - \u03a3\u0394H_f(reactants)"
+      ],
+      "methods": [
+        "Use Hess's law to add/reverse given thermochemical equations to reach the target reaction",
+        "Check the sign of \u0394G (not \u0394H alone) to judge spontaneity"
+      ],
+      "traps": [
+        "Assuming exothermic (\u0394H<0) always means spontaneous, ignoring the T\u0394S term",
+        "Sign errors when reversing a thermochemical equation in a Hess's-law cycle"
+      ],
+      "hard_archetypes": [
+        "Multi-equation Hess's-law cycle requiring algebraic combination with correct sign/coefficient scaling"
+      ],
+      "banned_easy_templates": [
+        "Direct \u0394H=\u0394U+\u0394n_gRT substitution with all values given and no cycle"
+      ],
+      "out_of_scope": [
+        "Statistical-thermodynamic derivation of entropy"
+      ]
+    },
+    "NC05": {
+      "concepts": [
+        "Concentration terms: molarity, molality, mole fraction",
+        "Raoult's law and vapour-pressure lowering",
+        "Colligative properties and van't Hoff factor"
+      ],
+      "formulas": [
+        "\u0394Tb = i Kb m, \u0394Tf = i Kf m",
+        "\u03c0 = iCRT",
+        "i = 1 + (n-1)\u03b1 (dissociation) or 1 - (1-1/n)\u03b1 (association)"
+      ],
+      "methods": [
+        "Determine van't Hoff factor from the degree of dissociation/association before applying a colligative-property formula",
+        "Convert between concentration terms carefully using density when required"
+      ],
+      "traps": [
+        "Forgetting the van't Hoff factor for ionic/associating solutes",
+        "Using molarity where molality is required in freezing-point/boiling-point formulas"
+      ],
+      "hard_archetypes": [
+        "Degree-of-dissociation-or-association numericals back-calculated from an observed colligative property"
+      ],
+      "banned_easy_templates": [
+        "Direct \u0394Tb=Kb\u00d7m substitution for a non-electrolyte with no van't Hoff twist"
+      ],
+      "out_of_scope": [
+        "Non-ideal-solution activity-coefficient calculations"
+      ]
+    },
+    "NC06": {
+      "concepts": [
+        "Law of mass action, Kc and Kp relationship",
+        "Le Chatelier's principle",
+        "Bronsted-Lowry acid-base theory, pH, pOH",
+        "Buffer solutions, salt hydrolysis, solubility product"
+      ],
+      "formulas": [
+        "Kp = Kc(RT)^\u0394n",
+        "pH = -log[H+]",
+        "Henderson-Hasselbalch: pH = pKa + log([salt]/[acid])",
+        "Ksp comparisons with ionic product for precipitation"
+      ],
+      "methods": [
+        "Set up an ICE table before solving any equilibrium-concentration problem",
+        "Use Henderson-Hasselbalch directly for buffer-pH questions instead of full equilibrium algebra"
+      ],
+      "traps": [
+        "Forgetting Kp=Kc only when \u0394n=0; otherwise the (RT)^\u0394n factor is required",
+        "Comparing ionic product to Ksp incorrectly to judge precipitation direction"
+      ],
+      "hard_archetypes": [
+        "Simultaneous-equilibrium or common-ion-effect numericals requiring an ICE table with an approximation check",
+        "Buffer-capacity/pH-change-on-dilution numericals"
+      ],
+      "banned_easy_templates": [
+        "Direct pH=-log[H+] for a strong acid at a given concentration with no equilibrium reasoning"
+      ],
+      "out_of_scope": [
+        "Activity-coefficient-corrected equilibrium constants"
+      ]
+    },
+    "NC07": {
+      "concepts": [
+        "Oxidation number rules and balancing redox equations",
+        "Electrochemical cells and standard electrode potential",
+        "Nernst equation",
+        "Conductance, molar conductivity, Kohlrausch's law"
+      ],
+      "formulas": [
+        "E_cell = E\u00b0_cell - (0.0591/n)logQ",
+        "\u039bm = \u03ba\u00d71000/M",
+        "F = 96500 C/mol, W = (I t)\u00d7(M/nF)"
+      ],
+      "methods": [
+        "Balance redox equations via the ion-electron (half-reaction) method in acidic/basic medium",
+        "Use Kohlrausch's law of independent migration for a weak electrolyte's \u039bm\u00b0 from strong-electrolyte data"
+      ],
+      "traps": [
+        "Sign errors identifying anode (oxidation) vs cathode (reduction) in a galvanic vs electrolytic cell",
+        "Forgetting to balance H+/OH- and H2O when balancing in basic medium"
+      ],
+      "hard_archetypes": [
+        "Nernst-equation numericals requiring cell EMF at non-standard concentration/pressure",
+        "Electrolysis numericals combining Faraday's laws with a given current-time-mass relationship"
+      ],
+      "banned_easy_templates": [
+        "Direct E\u00b0_cell = E\u00b0_cathode - E\u00b0_anode with values given and no further step"
+      ],
+      "out_of_scope": [
+        "Concentration-cell thermodynamics beyond the standard Nernst-equation application"
+      ]
+    },
+    "NC08": {
+      "concepts": [
+        "Rate law, order and molecularity",
+        "Integrated rate equations (zero and first order)",
+        "Arrhenius equation and activation energy"
+      ],
+      "formulas": [
+        "Rate = k[A]^m[B]^n",
+        "t\u00bd(1st order) = 0.693/k, k = (2.303/t)log([A]0/[A])",
+        "k = A e^(-Ea/RT)"
+      ],
+      "methods": [
+        "Determine order experimentally from a rate-vs-concentration data table before writing the rate law",
+        "Use the two-temperature Arrhenius form to find Ea from a pair of rate constants"
+      ],
+      "traps": [
+        "Confusing order (experimental) with molecularity (theoretical, from the mechanism's slowest step)",
+        "Applying the first-order half-life formula to a zero-order reaction"
+      ],
+      "hard_archetypes": [
+        "Rate-data-table numericals requiring determination of order via successive-half-life or initial-rate method",
+        "Arrhenius two-point numerical extracting Ea from given rate constants at two temperatures"
+      ],
+      "banned_easy_templates": [
+        "Direct t\u00bd=0.693/k substitution with k given and no order-determination step"
+      ],
+      "out_of_scope": [
+        "Complex multi-step mechanism steady-state approximation derivations"
+      ]
+    },
+    "NC09": {
+      "concepts": [
+        "Modern periodic law and periodic table structure",
+        "Periodic trends: atomic/ionic radius, ionisation enthalpy, electron gain enthalpy, electronegativity",
+        "Anomalous behaviour of second-period elements"
+      ],
+      "formulas": [
+        "General trend direction rules (radius decreases across a period, increases down a group; IE opposite)"
+      ],
+      "methods": [
+        "Use effective nuclear charge (shielding) reasoning to explain exceptions to the general periodic trend",
+        "Compare isoelectronic species by nuclear charge to rank ionic radius"
+      ],
+      "traps": [
+        "Applying the general IE-increases-across-a-period rule without checking for the Be\u2192B or N\u2192O type dip",
+        "Confusing electron gain enthalpy sign convention (more negative = more favourable)"
+      ],
+      "hard_archetypes": [
+        "Ranking a set of isoelectronic ions/atoms by radius or ionisation enthalpy using exceptions"
+      ],
+      "banned_easy_templates": [
+        "Direct 'which is bigger, Na or Cl' with no exception or isoelectronic twist"
+      ],
+      "out_of_scope": [
+        "Quantitative effective-nuclear-charge (Slater's rules) calculations"
+      ]
+    },
+    "NC10": {
+      "concepts": [
+        "Group 13-14 trends and important compounds (borax, diborane, silicates)",
+        "Group 15-16 trends, oxides and oxoacids of N/P, allotropes of S/P",
+        "Group 17-18 halogens, oxoacids, interhalogen compounds, noble-gas compounds"
+      ],
+      "formulas": [
+        "Oxidation-state range trends down a p-block group (inert-pair effect)"
+      ],
+      "methods": [
+        "Use the inert-pair effect to predict the more stable oxidation state down a p-block group",
+        "Compare oxoacid strength using the number of oxygen atoms / central-atom electronegativity"
+      ],
+      "traps": [
+        "Forgetting the inert-pair effect makes lower oxidation states more stable for heavier p-block elements",
+        "Mixing up oxidising-power trend of halogens (decreases down the group) with acidic-strength trend of their hydracids (increases down the group)"
+      ],
+      "hard_archetypes": [
+        "Oxoacid-strength or oxidising-power ranking across a full group requiring multiple trend rules together",
+        "Reaction-sequence identification for a p-block compound's characteristic preparation/property"
+      ],
+      "banned_easy_templates": [
+        "Direct 'name group 17 elements' recall with no property comparison"
+      ],
+      "out_of_scope": [
+        "Detailed industrial process engineering beyond the named preparation reactions"
+      ]
+    },
+    "NC11": {
+      "concepts": [
+        "General trends: variable oxidation states, magnetic properties, colour, catalytic behaviour",
+        "Preparation/properties of KMnO4 and K2Cr2O7",
+        "Lanthanoid and actinoid contraction"
+      ],
+      "formulas": [
+        "Magnetic moment \u03bc = \u221a(n(n+2)) BM"
+      ],
+      "methods": [
+        "Count unpaired electrons from the ion's configuration before applying the spin-only magnetic-moment formula",
+        "Use lanthanoid contraction to explain similar radii/properties of second and third transition-series elements"
+      ],
+      "traps": [
+        "Using the neutral-atom configuration instead of the ion's configuration when counting unpaired electrons",
+        "Forgetting that Zn2+/Sc3+-type d0/d10 ions are colourless despite being d-block"
+      ],
+      "hard_archetypes": [
+        "Magnetic-moment-from-oxidation-state numericals requiring configuration derivation first",
+        "Colour/magnetic-property prediction requiring d-electron-count reasoning for a given complex ion"
+      ],
+      "banned_easy_templates": [
+        "Direct 'name the d-block series' recall with no property/configuration reasoning"
+      ],
+      "out_of_scope": [
+        "Ligand-field splitting energy quantitative spectrochemical calculations"
+      ]
+    },
+    "NC12": {
+      "concepts": [
+        "Werner's coordination theory, coordination number",
+        "IUPAC nomenclature of coordination compounds",
+        "Structural and stereoisomerism (geometrical, optical)",
+        "Valence bond theory and crystal field theory, colour/magnetism"
+      ],
+      "formulas": [
+        "CFSE (weak/strong field octahedral splitting pattern, qualitative)"
+      ],
+      "methods": [
+        "Determine hybridisation/geometry from coordination number and ligand field strength (VBT) before predicting magnetic behaviour",
+        "Use CFT's eg/t2g splitting and pairing energy comparison to decide high-spin vs low-spin"
+      ],
+      "traps": [
+        "Assuming all coordination-4 complexes are tetrahedral (square planar is common for d8 metals like Pt2+, Ni2+)",
+        "Confusing geometrical isomerism (cis/trans) with optical isomerism criteria"
+      ],
+      "hard_archetypes": [
+        "High-spin vs low-spin prediction for a given octahedral complex using CFT and the spectrochemical series",
+        "IUPAC-naming or isomer-counting numerical for a complex with mixed ligands"
+      ],
+      "banned_easy_templates": [
+        "Direct 'define coordination number' recall with no complex to analyse"
+      ],
+      "out_of_scope": [
+        "Molecular orbital theory treatment of coordination complexes"
+      ]
+    },
+    "NC13": {
+      "concepts": [
+        "Purification methods: crystallisation, sublimation, distillation, chromatography",
+        "Qualitative detection of N, S, halogens, P (Lassaigne's test)",
+        "Principle of quantitative elemental estimation"
+      ],
+      "formulas": [
+        "% element = (mass of element/mass of compound)\u00d7100 from a given estimation data"
+      ],
+      "methods": [
+        "Match the purification method to the property being exploited (volatility, solubility, adsorption)",
+        "Use Lassaigne's-test colour/precipitate outcomes to identify the presence of N/S/halogen"
+      ],
+      "traps": [
+        "Confusing simple distillation conditions with those needed for steam or vacuum distillation",
+        "Misreading Lassaigne's test Prussian-blue vs blood-red colour cues for N vs N+S together"
+      ],
+      "hard_archetypes": [
+        "Percentage-composition numerical from given quantitative-estimation data (Duma's/Kjeldahl's method outcome)"
+      ],
+      "banned_easy_templates": [
+        "Direct 'name a purification method' recall with no property-based reasoning"
+      ],
+      "out_of_scope": [
+        "Instrumental spectroscopic structure elucidation (NMR/IR/mass spec) beyond NCERT mention"
+      ]
+    },
+    "NC14": {
+      "concepts": [
+        "IUPAC nomenclature rules",
+        "Structural and stereoisomerism basics",
+        "Electronic effects: inductive, resonance, hyperconjugation",
+        "Reactive intermediates: carbocation, carbanion, free radical stability"
+      ],
+      "formulas": [
+        "Stability order: 3\u00b0>2\u00b0>1\u00b0 carbocation/free radical (hyperconjugation + inductive)"
+      ],
+      "methods": [
+        "Draw resonance structures systematically to compare relative stability of intermediates/molecules",
+        "Rank inductive-effect strength (\u2013I/+I groups) before predicting acidity/basicity of a series"
+      ],
+      "traps": [
+        "Ignoring resonance stabilisation while ranking carbocation stability by inductive effect alone",
+        "Drawing an invalid resonance structure (breaking octet or moving \u03c3-bonds)"
+      ],
+      "hard_archetypes": [
+        "Acidity/basicity ranking of a series of substituted compounds using combined inductive+resonance reasoning",
+        "Carbocation-rearrangement (hydride/methyl shift) mechanism-based product-prediction question"
+      ],
+      "banned_easy_templates": [
+        "Direct IUPAC-naming of a simple unbranched molecule with no isomer/effect reasoning"
+      ],
+      "out_of_scope": [
+        "Full physical-organic Hammett-equation quantitative treatment"
+      ]
+    },
+    "NC15": {
+      "concepts": [
+        "Alkane preparation and conformations",
+        "Alkene/alkyne addition reactions, Markovnikov and peroxide (anti-Markovnikov) rule",
+        "Aromaticity and electrophilic aromatic substitution on benzene"
+      ],
+      "formulas": [
+        "Huckel's rule: aromatic if planar, cyclic, conjugated with (4n+2) \u03c0 electrons"
+      ],
+      "methods": [
+        "Apply Markovnikov's rule for ionic addition and the peroxide effect for radical addition to unsymmetrical alkenes",
+        "Check Huckel's rule criteria fully (planarity+conjugation+electron count) before calling a ring aromatic"
+      ],
+      "traps": [
+        "Applying Markovnikov's rule to HBr addition in presence of peroxide (anti-Markovnikov applies only to HBr, not HCl/HI)",
+        "Assuming any cyclic conjugated ring is automatically aromatic without checking the 4n+2 count"
+      ],
+      "hard_archetypes": [
+        "Multi-step reaction-sequence product-identification question across alkane\u2192alkene\u2192alkyne interconversions",
+        "Electrophilic-substitution-on-substituted-benzene orientation (activating/deactivating, ortho-para vs meta director) question"
+      ],
+      "banned_easy_templates": [
+        "Direct 'name the product of alkene + HBr' with no peroxide/Markovnikov twist"
+      ],
+      "out_of_scope": [
+        "Detailed pericyclic-reaction mechanisms (Diels-Alder specifics beyond a passing NCERT mention)"
+      ]
+    },
+    "NC16": {
+      "concepts": [
+        "Nomenclature and nature of the C-X bond",
+        "Preparation of haloalkanes/haloarenes",
+        "SN1 vs SN2 mechanism and stereochemistry (inversion vs racemisation)"
+      ],
+      "formulas": [
+        "Rate(SN2) \u221d [substrate][nucleophile]; Rate(SN1) \u221d [substrate] only"
+      ],
+      "methods": [
+        "Judge SN1 vs SN2 preference from substrate class (1\u00b0/2\u00b0/3\u00b0), nucleophile strength and solvent polarity together",
+        "Predict stereochemical outcome (inversion for SN2, racemisation for SN1) from the mechanism identified"
+      ],
+      "traps": [
+        "Assuming all substitution reactions proceed with inversion (true only for SN2)",
+        "Forgetting that haloarenes resist nucleophilic substitution under normal conditions due to resonance with the ring"
+      ],
+      "hard_archetypes": [
+        "SN1-vs-SN2 mechanism-prediction question requiring combined substrate/nucleophile/solvent reasoning"
+      ],
+      "banned_easy_templates": [
+        "Direct 'name the halogen derivative product' with no mechanism identification needed"
+      ],
+      "out_of_scope": [
+        "Full Walden-inversion stereochemical proof beyond the qualitative outcome"
+      ]
+    },
+    "NC17": {
+      "concepts": [
+        "Alcohols/phenols: preparation, acidity comparison, distinguishing tests (Lucas, ceric ammonium nitrate)",
+        "Ethers: preparation (Williamson synthesis)",
+        "Aldehydes/ketones: nucleophilic addition, distinguishing tests (Tollens', Fehling's, iodoform)",
+        "Carboxylic acids: acidity trend, preparation and key reactions (HVZ, esterification)"
+      ],
+      "formulas": [
+        "Acidity order: carboxylic acid > phenol > alcohol > water (relative pKa reasoning)"
+      ],
+      "methods": [
+        "Use substituent electronic effects (EWG/EDG) to rank acidity of a series of substituted phenols/acids",
+        "Match a distinguishing test's positive/negative outcome to identify the functional group present"
+      ],
+      "traps": [
+        "Forgetting EWG groups increase phenol/acid acidity while EDG groups decrease it",
+        "Confusing Tollens'-positive (aldehyde) with iodoform-positive (CH3CO- or CH3CH(OH)- containing) test scope"
+      ],
+      "hard_archetypes": [
+        "Acidity-ranking numerical for a series of substituted phenols/carboxylic acids using combined inductive+resonance effects",
+        "Reaction-sequence identifying an unknown carbonyl/alcohol compound from a set of characteristic test results"
+      ],
+      "banned_easy_templates": [
+        "Direct 'name the product of a simple esterification' with no acidity/test reasoning"
+      ],
+      "out_of_scope": [
+        "Detailed NMR/IR-spectrum-based structure elucidation beyond NCERT's qualitative test level"
+      ]
+    },
+    "NC18": {
+      "concepts": [
+        "Amine preparation and classification (1\u00b0/2\u00b0/3\u00b0)",
+        "Basicity of amines and structure-basicity relationship",
+        "Diazonium salt preparation and synthetic applications (Sandmeyer, coupling reactions)"
+      ],
+      "formulas": [
+        "Basicity order in aqueous phase: 2\u00b0 > 1\u00b0 > 3\u00b0 > NH3 (aliphatic amines, steric+solvation reasoning)"
+      ],
+      "methods": [
+        "Combine inductive, steric and solvation effects together to correctly rank amine basicity (not inductive effect alone)",
+        "Use diazonium-salt reactions as a route to convert -NH2 into a wide range of other functional groups"
+      ],
+      "traps": [
+        "Ranking amine basicity by inductive effect alone, ignoring steric hindrance and solvation of the conjugate acid",
+        "Confusing aniline's reduced basicity (resonance of lone pair with ring) with aliphatic amine behaviour"
+      ],
+      "hard_archetypes": [
+        "Basicity-ranking numerical across a mixed set of aliphatic and aromatic amines",
+        "Diazonium-salt reaction-sequence question to synthesize a target aromatic compound"
+      ],
+      "banned_easy_templates": [
+        "Direct 'name the amine class' recall with no basicity/reaction reasoning"
+      ],
+      "out_of_scope": [
+        "Detailed diazo-coupling reaction kinetics beyond the named synthetic transformations"
+      ]
+    },
+    "NC19": {
+      "concepts": [
+        "Carbohydrate classification and structure of glucose/sucrose",
+        "Protein structure levels (primary to quaternary), denaturation",
+        "Enzymes as biocatalysts, vitamins classification",
+        "Nucleic acid structure (DNA vs RNA)"
+      ],
+      "formulas": [
+        "Peptide bond formation: -COOH + H2N- \u2192 -CO-NH- + H2O (condensation)"
+      ],
+      "methods": [
+        "Distinguish reducing vs non-reducing sugars using the free anomeric -OH/aldehyde criterion",
+        "Match a vitamin to its solubility class (fat- vs water-soluble) and deficiency disease"
+      ],
+      "traps": [
+        "Calling sucrose a reducing sugar (it is non-reducing, unlike glucose/maltose)",
+        "Confusing DNA and RNA structural differences (sugar, base, strandedness) under time pressure"
+      ],
+      "hard_archetypes": [
+        "Match-the-vitamin-to-deficiency-disease question spanning multiple vitamins at once",
+        "Protein-structure-level identification question (distinguishing secondary helix/sheet from tertiary folding)"
+      ],
+      "banned_easy_templates": [
+        "Direct 'what is the monomer of a protein' recall with no structural-level reasoning"
+      ],
+      "out_of_scope": [
+        "Detailed enzyme-kinetics (Michaelis-Menten) mathematics beyond qualitative catalysis discussion"
+      ]
+    },
+    "NC20": {
+      "concepts": [
+        "Detection of common functional groups (unsaturation, phenolic, carboxylic, carbonyl, amino)",
+        "Chemistry behind acid-base and redox titrations",
+        "Salt-analysis scheme for cation/anion detection"
+      ],
+      "formulas": [
+        "Titration relation: M1V1 (acid) = M2V2 (base) for a simple neutralisation"
+      ],
+      "methods": [
+        "Follow the systematic salt-analysis group-wise precipitation scheme rather than testing ions randomly",
+        "Choose the correct indicator (phenolphthalein vs methyl orange) based on the acid-base strength combination"
+      ],
+      "traps": [
+        "Using phenolphthalein for a strong-acid/weak-base titration (wrong equivalence-point pH range)",
+        "Confusing a functional-group confirmatory test's colour change with a different group's test"
+      ],
+      "hard_archetypes": [
+        "Multi-step qualitative salt-analysis question requiring sequential group-reagent reasoning to identify an unknown salt"
+      ],
+      "banned_easy_templates": [
+        "Direct 'name a titration indicator' recall with no acid-base-strength context"
+      ],
+      "out_of_scope": [
+        "Instrumental/potentiometric titration curve analysis beyond NCERT's classical method"
+      ]
+    },
+    "NB01": {
+      "concepts": [
+        "Characteristics that define living organisms",
+        "Five-kingdom classification (Whittaker) and its basis",
+        "Plant kingdom groups: algae, bryophytes, pteridophytes, gymnosperms, angiosperms",
+        "Animal kingdom classification criteria and major phyla"
+      ],
+      "formulas": [
+        "Binomial nomenclature format: Genus species, italicised, genus capitalised"
+      ],
+      "methods": [
+        "Classify an organism using the sequence: level of organisation \u2192 symmetry \u2192 coelom \u2192 segmentation \u2192 notochord",
+        "Match a plant/animal group to its diagnostic feature rather than a memorised example alone"
+      ],
+      "traps": [
+        "Confusing pseudocoelomate (Aschelminthes) with acoelomate (Platyhelminthes) body-cavity type",
+        "Mixing up alternation-of-generations dominance (gametophyte vs sporophyte) across bryophytes/pteridophytes/gymnosperms"
+      ],
+      "hard_archetypes": [
+        "Match-the-phylum-to-its-diagnostic-feature question spanning several animal phyla at once",
+        "Life-cycle/generation-dominance comparison question across two plant groups"
+      ],
+      "banned_easy_templates": [
+        "Direct 'give an example of a mammal' with no classification-criterion reasoning"
+      ],
+      "out_of_scope": [
+        "Detailed cladistics/molecular phylogeny methodology beyond the NCERT classification scheme"
+      ]
+    },
+    "NB02": {
+      "concepts": [
+        "Meristematic and permanent plant tissues",
+        "Anatomy of root/stem/leaf (dicot vs monocot)",
+        "Animal epithelial, connective, muscular and neural tissues",
+        "Frog as a representative organism: external features, systems overview"
+      ],
+      "formulas": [],
+      "methods": [
+        "Use vascular-bundle arrangement (radial vs conjoint; open vs closed) to distinguish plant organ cross-sections",
+        "Distinguish tissue types by cell shape, matrix and intercellular-space pattern"
+      ],
+      "traps": [
+        "Confusing dicot and monocot stem/root anatomy diagrams (bundle arrangement, presence of cambium)",
+        "Mixing up simple vs compound epithelium classification criteria"
+      ],
+      "hard_archetypes": [
+        "Identify-the-tissue/cross-section-from-a-labelled-diagram question requiring dicot-vs-monocot distinction"
+      ],
+      "banned_easy_templates": [
+        "Direct 'name a type of tissue' recall with no diagram/comparison context"
+      ],
+      "out_of_scope": [
+        "Detailed comparative anatomy of organisms beyond the frog/flowering-plant NCERT scope"
+      ]
+    },
+    "NB03": {
+      "concepts": [
+        "Cell theory and prokaryotic vs eukaryotic cell organisation",
+        "Structure and function of cell organelles (mitochondria, chloroplast, ER, Golgi, lysosome, ribosome)",
+        "Major biomolecule classes",
+        "Cell cycle phases and mitosis/meiosis stages"
+      ],
+      "formulas": [
+        "Chromosome number behaviour: 2n (mitosis, somatic) vs n (meiosis, gametes)"
+      ],
+      "methods": [
+        "Match each organelle to its unique structural feature (double membrane, own DNA, etc.) before its function",
+        "Track chromosome number/DNA content (C-value) through each phase of mitosis and meiosis I/II separately"
+      ],
+      "traps": [
+        "Confusing metaphase (chromosomes at equator) with anaphase (chromosomes segregating) in a stage-identification question",
+        "Mixing up crossing-over timing (prophase I of meiosis only, not mitosis)"
+      ],
+      "hard_archetypes": [
+        "Stage-identification-from-a-diagram question distinguishing mitotic vs meiotic phases",
+        "DNA-content-vs-chromosome-number graph interpretation across the cell cycle"
+      ],
+      "banned_easy_templates": [
+        "Direct 'mitochondria is the powerhouse of the cell' recall with no structural/functional detail"
+      ],
+      "out_of_scope": [
+        "Detailed molecular checkpoint-protein regulation of the cell cycle beyond NCERT scope"
+      ]
+    },
+    "NB04": {
+      "concepts": [
+        "Water potential, osmosis, plasmolysis",
+        "Mineral nutrition: essential elements and deficiency symptoms",
+        "Photosynthesis: light reactions, Calvin cycle, C3 vs C4 pathway",
+        "Plant respiration: glycolysis, Krebs cycle, ETC, fermentation",
+        "Plant growth hormones and their effects"
+      ],
+      "formulas": [
+        "Net ATP yield: aerobic respiration ~36-38 ATP/glucose vs 2 ATP (fermentation)",
+        "RQ = volume CO2 released/volume O2 consumed"
+      ],
+      "methods": [
+        "Compare C3 and C4 pathways feature-by-feature (enzyme, first product, anatomy) rather than in isolation",
+        "Match a mineral-deficiency symptom to the specific element based on its physiological role"
+      ],
+      "traps": [
+        "Confusing RuBisCO (C3, mesophyll) with PEP carboxylase (C4, bundle-sheath initial fixation) enzyme roles",
+        "Mixing up which hormone promotes vs inhibits a given process (e.g. auxin apical dominance vs cytokinin release from it)"
+      ],
+      "hard_archetypes": [
+        "C3-vs-C4 anatomical and biochemical comparison question (Kranz anatomy, enzyme, CO2-fixation site)",
+        "ATP/NADH-yield-accounting numerical across glycolysis, Krebs cycle and ETC stages"
+      ],
+      "banned_easy_templates": [
+        "Direct 'photosynthesis occurs in chloroplast' recall with no pathway/enzyme detail"
+      ],
+      "out_of_scope": [
+        "Detailed biochemical enzyme-kinetics of photosynthesis/respiration beyond NCERT pathway diagrams"
+      ]
+    },
+    "NB05": {
+      "concepts": [
+        "Digestion, absorption and associated digestive-gland secretions",
+        "Breathing mechanism, respiratory volumes and capacities, gas transport",
+        "Cardiac cycle, ECG, blood composition, double circulation",
+        "Nephron structure and urine-formation steps, osmoregulation",
+        "Types of muscle and the sliding-filament mechanism, skeletal system",
+        "Neuron structure, synaptic transmission, reflex arc, CNS/PNS organisation",
+        "Endocrine glands, hormone mechanism of action, feedback regulation"
+      ],
+      "formulas": [
+        "Cardiac output = stroke volume \u00d7 heart rate",
+        "Vital capacity = tidal + inspiratory reserve + expiratory reserve volume",
+        "GFR-related clearance reasoning for nephron function"
+      ],
+      "methods": [
+        "Trace a food/gas/urine-forming substance step by step through the correct organ sequence before answering a process question",
+        "Match each respiratory/cardiac volume or capacity to its exact definition rather than relying on rough recall"
+      ],
+      "traps": [
+        "Confusing tidal volume with vital capacity, or systole with diastole timing in the cardiac cycle",
+        "Mixing up which nephron segment reabsorbs which substance (e.g. PCT vs loop of Henle vs DCT)"
+      ],
+      "hard_archetypes": [
+        "Multi-step physiological-pathway question (e.g. full sequence of urine formation with quantities at each nephron segment)",
+        "Hormone-feedback-loop question requiring identification of the gland, hormone and its regulatory target together"
+      ],
+      "banned_easy_templates": [
+        "Direct 'name the largest gland in the human body' recall with no process/pathway context"
+      ],
+      "out_of_scope": [
+        "Detailed clinical pathophysiology of individual diseases beyond the NCERT-listed disorders"
+      ]
+    },
+    "NB06": {
+      "concepts": [
+        "Asexual vs sexual reproduction modes",
+        "Pollination types and double fertilisation in flowering plants",
+        "Male/female reproductive system anatomy, gametogenesis",
+        "Menstrual cycle hormonal regulation",
+        "Fertilisation, implantation, pregnancy and parturition",
+        "Contraceptive methods and reproductive-health technologies"
+      ],
+      "formulas": [
+        "Menstrual cycle phase lengths (approx. day ranges): menstrual (1-5), follicular/proliferative (5-13), ovulation (~day14), luteal/secretory (15-28)"
+      ],
+      "methods": [
+        "Track the hormone (FSH/LH/estrogen/progesterone) driving each menstrual-cycle phase in sequence",
+        "Distinguish self-pollination from cross-pollination mechanisms and their evolutionary significance before answering an application question"
+      ],
+      "traps": [
+        "Confusing double fertilisation's two products (zygote vs endosperm nucleus, 2n vs 3n)",
+        "Mixing up the hormone peak (LH surge) that triggers ovulation with the hormone maintaining the corpus luteum"
+      ],
+      "hard_archetypes": [
+        "Menstrual-cycle-hormone-level graph interpretation question pinpointing an event from a given day",
+        "Double-fertilisation and post-fertilisation seed/fruit-development sequence question"
+      ],
+      "banned_easy_templates": [
+        "Direct 'define fertilisation' recall with no hormonal-sequence or structural detail"
+      ],
+      "out_of_scope": [
+        "Detailed assisted-reproductive-technology (ART) laboratory protocols beyond the NCERT-named techniques"
+      ]
+    },
+    "NB07": {
+      "concepts": [
+        "Mendelian inheritance, monohybrid/dihybrid ratios, deviations (co-dominance, incomplete dominance, multiple alleles)",
+        "Chromosomal theory of inheritance, linkage and recombination, sex determination",
+        "Mendelian genetic disorders and pedigree-analysis interpretation",
+        "DNA replication, transcription, genetic code properties, translation",
+        "Evolutionary evidence, Darwinism, Hardy-Weinberg principle, mechanisms of speciation"
+      ],
+      "formulas": [
+        "Dihybrid ratio 9:3:3:1 (independent assortment)",
+        "Hardy-Weinberg: p^2+2pq+q^2=1, p+q=1"
+      ],
+      "methods": [
+        "Use a Punnett square or a probability-based shortcut consistently for a given cross rather than switching methods mid-problem",
+        "Apply Hardy-Weinberg algebra to find allele/genotype frequencies from a given phenotype frequency"
+      ],
+      "traps": [
+        "Misapplying the standard 9:3:3:1 ratio when the cross actually shows linkage (non-Mendelian ratio) or gene interaction",
+        "Confusing a sex-linked recessive pedigree pattern with an autosomal recessive one"
+      ],
+      "hard_archetypes": [
+        "Multi-generation pedigree-analysis question requiring inheritance-mode identification (autosomal/X-linked, dominant/recessive)",
+        "Hardy-Weinberg numerical computing carrier frequency from a given disease-phenotype frequency"
+      ],
+      "banned_easy_templates": [
+        "Direct 'state Mendel's law of segregation' recall with no cross/numerical to solve"
+      ],
+      "out_of_scope": [
+        "Population-genomics/molecular-phylogenetics quantitative methods beyond the NCERT Hardy-Weinberg scope"
+      ]
+    },
+    "NB08": {
+      "concepts": [
+        "Common human diseases: pathogen, mode of transmission, symptoms",
+        "Immunity types (innate vs acquired), structure of antibody, AIDS and cancer overview",
+        "Plant breeding, animal husbandry, single-cell protein for food enhancement",
+        "Microbes in household products, industrial fermentation, sewage treatment, biogas, biofertilisers and biocontrol agents"
+      ],
+      "formulas": [],
+      "methods": [
+        "Match each disease to its causative-organism category (bacterial/viral/protozoan/fungal/helminthic) before its symptom",
+        "Link a named microbe to its specific industrial/agricultural application rather than a generic 'used in fermentation' answer"
+      ],
+      "traps": [
+        "Confusing the causative organism across similarly-named diseases (e.g. different fevers/diarrheal diseases)",
+        "Mixing up a biocontrol agent (e.g. Trichoderma, Bacillus thuringiensis) with a biofertiliser organism (e.g. Rhizobium, Azotobacter)"
+      ],
+      "hard_archetypes": [
+        "Match-the-microbe-to-its-application table spanning food, agriculture and sewage-treatment uses at once",
+        "Disease-pathogen-symptom matching question across multiple disease categories"
+      ],
+      "banned_easy_templates": [
+        "Direct 'name a communicable disease' recall with no pathogen/transmission detail"
+      ],
+      "out_of_scope": [
+        "Detailed clinical immunology (cytokine signalling pathways) beyond the NCERT overview"
+      ]
+    },
+    "NB09": {
+      "concepts": [
+        "Recombinant DNA technology principles: restriction enzymes, cloning vectors, competent host cells",
+        "PCR and gene-cloning process steps",
+        "Applications in healthcare: recombinant insulin, gene therapy",
+        "Applications in agriculture: Bt crops, RNA interference, biosafety and GM-organism regulation"
+      ],
+      "formulas": [],
+      "methods": [
+        "Sequence the rDNA-technology steps in the correct order (isolation \u2192 cutting \u2192 ligation \u2192 transformation \u2192 selection) before answering a process question",
+        "Link a named Bt-toxin/crop example to the specific pest it targets"
+      ],
+      "traps": [
+        "Confusing a restriction enzyme's recognition-sequence property with a ligase's joining function",
+        "Mixing up the order of gene-cloning steps under time pressure"
+      ],
+      "hard_archetypes": [
+        "Ordered-sequence question requiring the correct stepwise arrangement of an rDNA-technology or PCR process",
+        "Bt-toxin mechanism-of-action question linking gene, protein and pest-specific action"
+      ],
+      "banned_easy_templates": [
+        "Direct 'what does PCR stand for' recall with no process-step reasoning"
+      ],
+      "out_of_scope": [
+        "Detailed CRISPR-Cas9 molecular mechanism beyond a brief NCERT-level mention"
+      ]
+    },
+    "NB10": {
+      "concepts": [
+        "Population interactions (mutualism, competition, predation, parasitism) and population growth models",
+        "Ecosystem structure, energy flow (10% law), ecological pyramids, nutrient cycling",
+        "Biodiversity patterns, importance, loss, in-situ/ex-situ conservation strategies",
+        "Environmental issues: pollution types, global warming, ozone depletion, deforestation"
+      ],
+      "formulas": [
+        "Logistic growth: dN/dt = rN(1-N/K)",
+        "10% energy-transfer law across trophic levels"
+      ],
+      "methods": [
+        "Identify the interaction type from the +/-/0 effect on each species before naming it (mutualism, commensalism, etc.)",
+        "Apply the 10% law stepwise across trophic levels for an energy-flow numerical"
+      ],
+      "traps": [
+        "Confusing an inverted pyramid of biomass (aquatic ecosystem) with the general upright pyramid rule",
+        "Mixing up in-situ (national park, biosphere reserve) with ex-situ (zoo, seed bank, cryopreservation) conservation examples"
+      ],
+      "hard_archetypes": [
+        "Multi-trophic-level energy-flow numerical applying the 10% law across three or more levels",
+        "Population-interaction identification question distinguishing closely related interaction types (parasitism vs predation vs competition)"
+      ],
+      "banned_easy_templates": [
+        "Direct 'define ecosystem' recall with no interaction/energy-flow reasoning"
+      ],
+      "out_of_scope": [
+        "Quantitative climate-modelling or detailed biogeochemical-cycle stoichiometry beyond the NCERT qualitative cycles"
+      ]
+    }
+  }
+}

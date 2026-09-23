@@ -88,7 +88,9 @@ export const mapScoringEntry = (raw = null) => {
     normalizeRelevance(raw.relevance) ||
     normalizeRelevance(raw.relevance_tier) ||
     normalizeRelevance(raw.jee_main_freq_band) ||
+    normalizeRelevance(raw.neet_relevance) ||
     normalizeRelevance(raw.neet_freq_band) ||
+    normalizeRelevance(raw.cat_relevance) ||
     normalizeRelevance(raw.cat_freq_band) ||
     normalizeRelevance(raw.gmat_freq_band) ||
     normalizeRelevance(raw.clat_freq_band) ||
@@ -110,13 +112,17 @@ export const mapScoringEntry = (raw = null) => {
       raw.clat_freq_band ||
       raw.gmat_freq_band ||
       raw.relevance_tier ||
+      raw.cat_relevance ||
       raw.cat_freq_band ||
+      raw.neet_relevance ||
       raw.neet_freq_band ||
       raw.jee_main_freq_band ||
       raw.freq_band ||
       raw.freqBand ||
       null,
     avgQPerSession:
+      raw.avg_questions_per_cat_paper ||
+      raw.avg_questions_per_neet_paper ||
       raw.avg_q_per_paper ||
       raw.avg_q_per_slot ||
       raw.avg_q_per_session_neet ||
@@ -147,7 +153,12 @@ const flattenAdvancedTopics = (topics = [], scoringById = {}) =>
       topicId,
       unit: topicId,
       title: String(
-        topic.chapter || topic.area || topic.topic || topic.title || ""
+        topic.chapter ||
+          topic.topic_name ||
+          topic.area ||
+          topic.topic ||
+          topic.title ||
+          ""
       ).trim(),
       content: Array.isArray(topic.subtopics) ? topic.subtopics.join("; ") : "",
       branch: topic.branch ? String(topic.branch).trim() : null,
@@ -257,9 +268,202 @@ const seedAdvancedSubject = async ({ subject, syllabusRel, scoringRel = null }) 
   });
 
 const MAIN_SEED_DIR = "jee main exam all seed files";
-const NEET_SEED_DIR = "NEET EXAM ALL SEED REQUIRED FILES";
-const CAT_SEED_DIR = "CAT exam seed files";
+const NEET_SEED_DIR = "NEET UG LATEST SEED FILE";
+const CAT_SEED_DIR = "CAT EXAM LATAETS SEED FILE";
 const GMAT_SEED_DIR = "GMAT EXAM  SEED DATA";
+
+/**
+ * Map a Biology unit onto Botany / Zoology paper subjects.
+ * Uses topic_allocation cluster when present; else chapter heuristics.
+ * Shared units are attached to BOTH packs so each 45-Q section has coverage.
+ */
+const resolveNeetBiologyTargets = (topic, clusterById = {}) => {
+  const id = String(topic.topic_id || topic.topicId || "").trim();
+  const cluster = String(clusterById[id]?.cluster || "").toLowerCase();
+  if (cluster.includes("botany") && !cluster.includes("zoology")) {
+    return ["Botany"];
+  }
+  if (cluster.includes("zoology") && !cluster.includes("botany")) {
+    return ["Zoology"];
+  }
+  const chapter = String(topic.chapter || topic.title || "").toLowerCase();
+  // Explicit shared units (plants + animals / cell / genetics / ecology / biotech)
+  if (
+    /structural organisation|diversity in living|cell structure|reproduction|genetics|biotechnology|ecology/.test(
+      chapter
+    )
+  ) {
+    return ["Botany", "Zoology"];
+  }
+  if (/plant physiology|plant growth|photosynthesis|respiration in plants|mineral nutrition|transport in plants/.test(chapter)) {
+    return ["Botany"];
+  }
+  if (
+    /human physiology|animal|locomotion|neural|chemical coordination|digestion|breathing|body fluids|excretory/.test(
+      chapter
+    )
+  ) {
+    return ["Zoology"];
+  }
+  if (/biology and human welfare|human health|immunity|microbes in human/.test(chapter)) {
+    return ["Zoology"];
+  }
+  return ["Botany", "Zoology"];
+};
+
+/** Seed NEET UG from combined latest syllabus + scoring JSON (Physics/Chemistry/Biology). */
+const seedNeetCombinedPacks = async () => {
+  const syllabusRel = `${NEET_SEED_DIR}/neet_syllabus.json`;
+  const scoringRel = `${NEET_SEED_DIR}/neet_scoring.json`;
+  const allocationRel = `${NEET_SEED_DIR}/topic_allocation.json`;
+  const { syllabus: syllabusPath, scoring: scoringPath } = packPaths(
+    syllabusRel,
+    scoringRel
+  );
+  if (!syllabusPath) {
+    console.warn(`ExamSyllabusPack: missing NEET syllabus ${syllabusRel}`);
+    return [];
+  }
+
+  const syllabus = readJson(syllabusPath);
+  const scoring = scoringPath ? readJson(scoringPath) : null;
+  const scoringById =
+    scoring?.topics && typeof scoring.topics === "object" ? scoring.topics : {};
+
+  let clusterById = {};
+  try {
+    const allocPath = packPaths(allocationRel).syllabus;
+    if (allocPath) {
+      const alloc = readJson(allocPath);
+      clusterById = alloc?.topics && typeof alloc.topics === "object" ? alloc.topics : {};
+    }
+  } catch {
+    clusterById = {};
+  }
+
+  const bySubject = {
+    Physics: [],
+    Chemistry: [],
+    Botany: [],
+    Zoology: [],
+  };
+
+  for (const topic of syllabus.topics || []) {
+    const subject = String(topic.subject || "").trim();
+    if (subject === "Physics") {
+      bySubject.Physics.push(topic);
+      continue;
+    }
+    if (subject === "Chemistry") {
+      bySubject.Chemistry.push(topic);
+      continue;
+    }
+    if (subject === "Biology" || subject === "Botany" || subject === "Zoology") {
+      if (subject === "Botany") {
+        bySubject.Botany.push(topic);
+        continue;
+      }
+      if (subject === "Zoology") {
+        bySubject.Zoology.push(topic);
+        continue;
+      }
+      for (const target of resolveNeetBiologyTargets(topic, clusterById)) {
+        bySubject[target].push(topic);
+      }
+    }
+  }
+
+  const out = [];
+  for (const subject of ["Physics", "Chemistry", "Botany", "Zoology"]) {
+    const topics = flattenAdvancedTopics(bySubject[subject], scoringById).filter(
+      (t) => t.title
+    );
+    if (!topics.length) {
+      console.warn(`ExamSyllabusPack: NEET ${subject} has 0 topics — skip`);
+      continue;
+    }
+    const doc = await upsertPack({
+      examType: "neet",
+      examLabel: "NEET UG",
+      paper: "NEET UG Paper",
+      subject,
+      year: 2026,
+      source: syllabus.source_note || syllabusRel,
+      scoringSource: scoringPath ? scoringRel : "",
+      examContext: scoring?.exam_context || "",
+      dataProvenance: scoring?.data_provenance || "",
+      topics,
+      isActive: true,
+    });
+    out.push({
+      examType: doc.examType,
+      subject: doc.subject,
+      topics: doc.topicCount,
+      high: doc.highRelevanceCount,
+      scoringAttached: Boolean(scoringPath),
+    });
+  }
+  return out;
+};
+
+/** Seed CAT from combined latest syllabus + scoring JSON (VARC / DILR / QA). */
+const seedCatCombinedPacks = async () => {
+  const syllabusRel = `${CAT_SEED_DIR}/cat_syllabus.json`;
+  const scoringRel = `${CAT_SEED_DIR}/cat_scoring.json`;
+  const { syllabus: syllabusPath, scoring: scoringPath } = packPaths(
+    syllabusRel,
+    scoringRel
+  );
+  if (!syllabusPath) {
+    console.warn(`ExamSyllabusPack: missing CAT syllabus ${syllabusRel}`);
+    return [];
+  }
+
+  const syllabus = readJson(syllabusPath);
+  const scoring = scoringPath ? readJson(scoringPath) : null;
+  const scoringById =
+    scoring?.topics && typeof scoring.topics === "object" ? scoring.topics : {};
+
+  const bySection = { VARC: [], DILR: [], QA: [] };
+  for (const topic of syllabus.topics || []) {
+    const section = titleCaseSubject(topic.section || topic.subject || "");
+    if (bySection[section]) {
+      bySection[section].push(topic);
+    }
+  }
+
+  const out = [];
+  for (const subject of ["VARC", "DILR", "QA"]) {
+    const topics = flattenAdvancedTopics(bySection[subject], scoringById).filter(
+      (t) => t.title
+    );
+    if (!topics.length) {
+      console.warn(`ExamSyllabusPack: CAT ${subject} has 0 topics — skip`);
+      continue;
+    }
+    const doc = await upsertPack({
+      examType: "cat",
+      examLabel: "CAT",
+      paper: "CAT Slot Paper",
+      subject,
+      year: 2026,
+      source: syllabus.source_note || syllabusRel,
+      scoringSource: scoringPath ? scoringRel : "",
+      examContext: scoring?.exam_context || "",
+      dataProvenance: scoring?.data_provenance || "",
+      topics,
+      isActive: true,
+    });
+    out.push({
+      examType: doc.examType,
+      subject: doc.subject,
+      topics: doc.topicCount,
+      high: doc.highRelevanceCount,
+      scoringAttached: Boolean(scoringPath),
+    });
+  }
+  return out;
+};
 
 const GMAT_SECTION_SUBJECT = {
   Q: "Quant",
@@ -835,66 +1039,11 @@ export const seedExamSyllabusPack = async () => {
     if (seeded) results.push(seeded);
   }
 
-  const neetSubjects = [
-    {
-      subject: "Physics",
-      syllabusRel: `${NEET_SEED_DIR}/neet_syllabus_physics.json`,
-      scoringRel: `${NEET_SEED_DIR}/neet_scoring_physics.json`,
-    },
-    {
-      subject: "Chemistry",
-      syllabusRel: `${NEET_SEED_DIR}/neet_syllabus_chemistry.json`,
-      scoringRel: `${NEET_SEED_DIR}/neet_scoring_chemistry.json`,
-    },
-    {
-      subject: "Botany",
-      syllabusRel: `${NEET_SEED_DIR}/neet_syllabus_botany.json`,
-      scoringRel: `${NEET_SEED_DIR}/neet_scoring_botany.json`,
-    },
-    {
-      subject: "Zoology",
-      syllabusRel: `${NEET_SEED_DIR}/neet_syllabus_zoology.json`,
-      scoringRel: `${NEET_SEED_DIR}/neet_scoring_zoology.json`,
-    },
-  ];
+  const neetPacks = await seedNeetCombinedPacks();
+  results.push(...neetPacks);
 
-  for (const row of neetSubjects) {
-    const seeded = await seedSubjectPack({
-      examType: "neet",
-      examLabel: "NEET UG",
-      paper: "NEET UG Paper",
-      ...row,
-    });
-    if (seeded) results.push(seeded);
-  }
-
-  const catSubjects = [
-    {
-      subject: "VARC",
-      syllabusRel: `${CAT_SEED_DIR}/cat_syllabus_varc.json`,
-      scoringRel: `${CAT_SEED_DIR}/cat_scoring_varc.json`,
-    },
-    {
-      subject: "DILR",
-      syllabusRel: `${CAT_SEED_DIR}/cat_syllabus_dilr.json`,
-      scoringRel: `${CAT_SEED_DIR}/cat_scoring_dilr.json`,
-    },
-    {
-      subject: "QA",
-      syllabusRel: `${CAT_SEED_DIR}/cat_syllabus_qa.json`,
-      scoringRel: `${CAT_SEED_DIR}/cat_scoring_qa.json`,
-    },
-  ];
-
-  for (const row of catSubjects) {
-    const seeded = await seedSubjectPack({
-      examType: "cat",
-      examLabel: "CAT",
-      paper: "CAT Slot Paper",
-      ...row,
-    });
-    if (seeded) results.push(seeded);
-  }
+  const catPacks = await seedCatCombinedPacks();
+  results.push(...catPacks);
 
   const gmatPacks = await seedGmatSectionPacks();
   results.push(...gmatPacks);

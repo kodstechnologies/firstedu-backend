@@ -763,7 +763,7 @@
       "priority": "high",
       "cluster": "physics",
       "hardSlotCount": 6,
-      "lastUsedPaper": 1
+      "lastUsedPaper": null
     },
     "NP12": {
       "weight": 0.87,
@@ -896,7 +896,7 @@
       "priority": "high",
       "cluster": "chemistry",
       "hardSlotCount": 6,
-      "lastUsedPaper": 1
+      "lastUsedPaper": null
     },
     "NC11": {
       "weight": 0.83,
@@ -980,42 +980,42 @@
       "priority": "medium",
       "cluster": "biology",
       "hardSlotCount": 4,
-      "lastUsedPaper": 1
+      "lastUsedPaper": null
     },
     "NB03": {
       "weight": 0.83,
       "priority": "high",
       "cluster": "biology",
       "hardSlotCount": 5,
-      "lastUsedPaper": 1
+      "lastUsedPaper": null
     },
     "NB04": {
       "weight": 0.52,
       "priority": "medium",
       "cluster": "biology-botany",
       "hardSlotCount": 4,
-      "lastUsedPaper": 1
+      "lastUsedPaper": null
     },
     "NB05": {
       "weight": 0.87,
       "priority": "high",
       "cluster": "biology-zoology",
       "hardSlotCount": 6,
-      "lastUsedPaper": 1
+      "lastUsedPaper": null
     },
     "NB06": {
       "weight": 0.83,
       "priority": "high",
       "cluster": "biology",
       "hardSlotCount": 5,
-      "lastUsedPaper": 1
+      "lastUsedPaper": null
     },
     "NB07": {
       "weight": 0.87,
       "priority": "high",
       "cluster": "biology",
       "hardSlotCount": 6,
-      "lastUsedPaper": 1
+      "lastUsedPaper": null
     },
     "NB08": {
       "weight": 0.52,
@@ -1127,21 +1127,21 @@
       "priority": "high",
       "cluster": "cat-quant",
       "hardSlotCount": 4,
-      "lastUsedPaper": 1
+      "lastUsedPaper": null
     },
     "CQ03": {
       "weight": 0.78,
       "priority": "high",
       "cluster": "cat-quant",
       "hardSlotCount": 4,
-      "lastUsedPaper": 1
+      "lastUsedPaper": null
     },
     "CQ04": {
       "weight": 0.78,
       "priority": "high",
       "cluster": "cat-quant",
       "hardSlotCount": 4,
-      "lastUsedPaper": 1
+      "lastUsedPaper": null
     },
     "CQ05": {
       "weight": 0.52,
@@ -1184,33 +1184,6 @@
       "cluster": "cat-quant",
       "hardSlotCount": 2,
       "lastUsedPaper": null
-    },
-    "ENG06": {
-      "lastUsedPaper": 1
-    },
-    "REASON03": {
-      "lastUsedPaper": 1
-    },
-    "ENG07": {
-      "lastUsedPaper": 1
-    },
-    "REASON04": {
-      "lastUsedPaper": 1
-    },
-    "REASON05": {
-      "lastUsedPaper": 1
-    },
-    "REASON06": {
-      "lastUsedPaper": 1
-    },
-    "REASON07": {
-      "lastUsedPaper": 1
-    },
-    "REASON08": {
-      "lastUsedPaper": 1
-    },
-    "REASON09": {
-      "lastUsedPaper": 1
     }
   }
 }

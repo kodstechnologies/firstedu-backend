@@ -1,0 +1,119 @@
+{
+  "exam": "NEET UG",
+  "year": 2026,
+  "cycle": "NEET UG 2026",
+  "data_provenance": "Verified via web search (Sep 2026): NTA/NMC pattern, single paper, all questions compulsory (Section B removed from 2025 onward), pen-and-paper (OMR) mode.",
+  "important_caveat": "NTA can revise exact structure each cycle; a re-exam for a subset of candidates was held 21 Jun 2026 under the same pattern after the main 3 May 2026 sitting. Prefer seeded ExamPaperPattern documents when present; this file is the seed source of truth for 2026.",
+  "exam_day": {
+    "date": "2026-05-03",
+    "date_label": "3 May 2026",
+    "re_exam_date": "2026-06-21",
+    "re_exam_note": "Re-exam held for a subset of affected candidates under the identical pattern; not a second mandatory sitting for all candidates.",
+    "single_paper": true,
+    "note": "Unlike JEE Advanced, NEET UG is one paper, one sitting, no morning/afternoon split."
+  },
+  "subjects": [
+    "Physics",
+    "Chemistry",
+    "Biology"
+  ],
+  "biology_split": [
+    "Botany",
+    "Zoology"
+  ],
+  "mode": "Offline (pen-and-paper, OMR based)",
+  "languages": 13,
+  "structure": {
+    "total_duration_minutes": 180,
+    "start_time": "14:00",
+    "end_time": "17:00",
+    "total_marks": 720,
+    "total_questions": 180,
+    "optional_questions": 0,
+    "section_b_removed": true,
+    "questions_per_subject": {
+      "Physics": 45,
+      "Chemistry": 45,
+      "Botany": 45,
+      "Zoology": 45
+    },
+    "marks_per_subject": {
+      "Physics": 180,
+      "Chemistry": 180,
+      "Botany": 180,
+      "Zoology": 180
+    },
+    "question_format": {
+      "type": "single_correct_mcq",
+      "options": 4,
+      "questions": 180
+    },
+    "overall_difficulty": "Biology easiest/most scoring, Chemistry most time-efficient, Physics typically toughest and most time-consuming"
+  },
+  "marking_scheme": {
+    "correct": 4,
+    "incorrect": -1,
+    "unattempted": 0,
+    "max_marks": 720,
+    "min_possible_marks": -180
+  },
+  "combined_subject_table": {
+    "Physics": {
+      "questions": 45,
+      "marks": 180
+    },
+    "Chemistry": {
+      "questions": 45,
+      "marks": 180
+    },
+    "Biology": {
+      "questions": 90,
+      "marks": 360,
+      "botany_questions": 45,
+      "zoology_questions": 45
+    },
+    "total": {
+      "questions": 180,
+      "marks": 720
+    }
+  },
+  "grand_total": {
+    "total_questions": 180,
+    "total_marks": 720,
+    "duration_minutes": 180,
+    "papers": 1
+  },
+  "option_count_rule": {
+    "single_correct": 4
+  },
+  "quick_comparison": [
+    {
+      "feature": "Exam Time",
+      "value": "2:00 PM to 5:00 PM (3 Hours), single sitting"
+    },
+    {
+      "feature": "Total Marks",
+      "value": "720 Marks"
+    },
+    {
+      "feature": "Number of Questions",
+      "value": "180 Questions (45 each: Physics, Chemistry, Botany, Zoology)"
+    },
+    {
+      "feature": "Core Subjects",
+      "value": "Physics, Chemistry, Biology (Botany + Zoology)"
+    },
+    {
+      "feature": "Question Format",
+      "value": "Single-Correct MCQ only, 4 options, no optional/internal choice"
+    },
+    {
+      "feature": "Marking",
+      "value": "+4 correct, -1 incorrect, 0 unattempted"
+    },
+    {
+      "feature": "Overall Difficulty",
+      "value": "Biology most scoring, Physics typically toughest"
+    }
+  ]
+}

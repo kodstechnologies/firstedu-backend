@@ -151,6 +151,7 @@ const createAiQuestionBankWithQuestions = Joi.object({
   aiProvider: Joi.string().trim().default("gemini"),
   useSectionWise: Joi.boolean().default(false),
   negativeMarks: Joi.number().min(0).optional().default(1),
+  durationMinutes: Joi.number().min(1).optional(),
   sections: Joi.array()
     .items(sectionSchema)
     .when("useSectionWise", {

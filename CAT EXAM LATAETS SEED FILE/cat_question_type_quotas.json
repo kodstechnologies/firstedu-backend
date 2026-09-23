@@ -1,0 +1,428 @@
+{
+  "subject": "VARC + DILR + QA",
+  "exam": "CAT 2026",
+  "purpose": "Per-topic target quotas for building a question BANK/dataset, not a simulation of a single year's paper. Multiply/scale as needed.",
+  "difficulty_note": "CAT mixes MCQ (4-5 options, -1 wrong) and TITA (typed answer, no negative marking); quotas split each difficulty band roughly 2:1 mcq:tita to match the observed ~45:23 overall ratio. RC-based VARC topics (CV01/CV02) are MCQ-only in practice; treat their 'tita' quota as a bank-generation placeholder rather than a literal target.",
+  "topics": {
+    "CV01": {
+      "section": "VARC",
+      "cat_relevance": "high",
+      "quota_weight": 3,
+      "question_types": {
+        "mcq": {
+          "easy": 5,
+          "medium": 9,
+          "hard": 6,
+          "total": 20
+        },
+        "tita": {
+          "easy": 3,
+          "medium": 4,
+          "hard": 3,
+          "total": 10
+        }
+      },
+      "topic_total_quota": 30
+    },
+    "CV02": {
+      "section": "VARC",
+      "cat_relevance": "very high",
+      "quota_weight": 4,
+      "question_types": {
+        "mcq": {
+          "easy": 5,
+          "medium": 11,
+          "hard": 11,
+          "total": 27
+        },
+        "tita": {
+          "easy": 3,
+          "medium": 5,
+          "hard": 5,
+          "total": 13
+        }
+      },
+      "topic_total_quota": 40
+    },
+    "CV03": {
+      "section": "VARC",
+      "cat_relevance": "medium",
+      "quota_weight": 2,
+      "question_types": {
+        "mcq": {
+          "easy": 4,
+          "medium": 5,
+          "hard": 4,
+          "total": 13
+        },
+        "tita": {
+          "easy": 2,
+          "medium": 3,
+          "hard": 2,
+          "total": 7
+        }
+      },
+      "topic_total_quota": 20
+    },
+    "CV04": {
+      "section": "VARC",
+      "cat_relevance": "medium",
+      "quota_weight": 2,
+      "question_types": {
+        "mcq": {
+          "easy": 4,
+          "medium": 5,
+          "hard": 4,
+          "total": 13
+        },
+        "tita": {
+          "easy": 2,
+          "medium": 3,
+          "hard": 2,
+          "total": 7
+        }
+      },
+      "topic_total_quota": 20
+    },
+    "CV05": {
+      "section": "VARC",
+      "cat_relevance": "low",
+      "quota_weight": 1,
+      "question_types": {
+        "mcq": {
+          "easy": 3,
+          "medium": 3,
+          "hard": 1,
+          "total": 7
+        },
+        "tita": {
+          "easy": 1,
+          "medium": 1,
+          "hard": 1,
+          "total": 3
+        }
+      },
+      "topic_total_quota": 10
+    },
+    "CD01": {
+      "section": "DILR",
+      "cat_relevance": "high",
+      "quota_weight": 3,
+      "question_types": {
+        "mcq": {
+          "easy": 5,
+          "medium": 9,
+          "hard": 6,
+          "total": 20
+        },
+        "tita": {
+          "easy": 3,
+          "medium": 4,
+          "hard": 3,
+          "total": 10
+        }
+      },
+      "topic_total_quota": 30
+    },
+    "CD02": {
+      "section": "DILR",
+      "cat_relevance": "very high",
+      "quota_weight": 4,
+      "question_types": {
+        "mcq": {
+          "easy": 5,
+          "medium": 11,
+          "hard": 11,
+          "total": 27
+        },
+        "tita": {
+          "easy": 3,
+          "medium": 5,
+          "hard": 5,
+          "total": 13
+        }
+      },
+      "topic_total_quota": 40
+    },
+    "CD03": {
+      "section": "DILR",
+      "cat_relevance": "high",
+      "quota_weight": 3,
+      "question_types": {
+        "mcq": {
+          "easy": 5,
+          "medium": 9,
+          "hard": 6,
+          "total": 20
+        },
+        "tita": {
+          "easy": 3,
+          "medium": 4,
+          "hard": 3,
+          "total": 10
+        }
+      },
+      "topic_total_quota": 30
+    },
+    "CD04": {
+      "section": "DILR",
+      "cat_relevance": "high",
+      "quota_weight": 3,
+      "question_types": {
+        "mcq": {
+          "easy": 5,
+          "medium": 9,
+          "hard": 6,
+          "total": 20
+        },
+        "tita": {
+          "easy": 3,
+          "medium": 4,
+          "hard": 3,
+          "total": 10
+        }
+      },
+      "topic_total_quota": 30
+    },
+    "CD05": {
+      "section": "DILR",
+      "cat_relevance": "medium",
+      "quota_weight": 2,
+      "question_types": {
+        "mcq": {
+          "easy": 4,
+          "medium": 5,
+          "hard": 4,
+          "total": 13
+        },
+        "tita": {
+          "easy": 2,
+          "medium": 3,
+          "hard": 2,
+          "total": 7
+        }
+      },
+      "topic_total_quota": 20
+    },
+    "CD06": {
+      "section": "DILR",
+      "cat_relevance": "low",
+      "quota_weight": 1,
+      "question_types": {
+        "mcq": {
+          "easy": 3,
+          "medium": 3,
+          "hard": 1,
+          "total": 7
+        },
+        "tita": {
+          "easy": 1,
+          "medium": 1,
+          "hard": 1,
+          "total": 3
+        }
+      },
+      "topic_total_quota": 10
+    },
+    "CQ01": {
+      "section": "QA",
+      "cat_relevance": "medium",
+      "quota_weight": 2,
+      "question_types": {
+        "mcq": {
+          "easy": 4,
+          "medium": 5,
+          "hard": 4,
+          "total": 13
+        },
+        "tita": {
+          "easy": 2,
+          "medium": 3,
+          "hard": 2,
+          "total": 7
+        }
+      },
+      "topic_total_quota": 20
+    },
+    "CQ02": {
+      "section": "QA",
+      "cat_relevance": "high",
+      "quota_weight": 3,
+      "question_types": {
+        "mcq": {
+          "easy": 5,
+          "medium": 9,
+          "hard": 6,
+          "total": 20
+        },
+        "tita": {
+          "easy": 3,
+          "medium": 4,
+          "hard": 3,
+          "total": 10
+        }
+      },
+      "topic_total_quota": 30
+    },
+    "CQ03": {
+      "section": "QA",
+      "cat_relevance": "high",
+      "quota_weight": 3,
+      "question_types": {
+        "mcq": {
+          "easy": 5,
+          "medium": 9,
+          "hard": 6,
+          "total": 20
+        },
+        "tita": {
+          "easy": 3,
+          "medium": 4,
+          "hard": 3,
+          "total": 10
+        }
+      },
+      "topic_total_quota": 30
+    },
+    "CQ04": {
+      "section": "QA",
+      "cat_relevance": "high",
+      "quota_weight": 3,
+      "question_types": {
+        "mcq": {
+          "easy": 5,
+          "medium": 9,
+          "hard": 6,
+          "total": 20
+        },
+        "tita": {
+          "easy": 3,
+          "medium": 4,
+          "hard": 3,
+          "total": 10
+        }
+      },
+      "topic_total_quota": 30
+    },
+    "CQ05": {
+      "section": "QA",
+      "cat_relevance": "medium",
+      "quota_weight": 2,
+      "question_types": {
+        "mcq": {
+          "easy": 4,
+          "medium": 5,
+          "hard": 4,
+          "total": 13
+        },
+        "tita": {
+          "easy": 2,
+          "medium": 3,
+          "hard": 2,
+          "total": 7
+        }
+      },
+      "topic_total_quota": 20
+    },
+    "CQ06": {
+      "section": "QA",
+      "cat_relevance": "medium",
+      "quota_weight": 2,
+      "question_types": {
+        "mcq": {
+          "easy": 4,
+          "medium": 5,
+          "hard": 4,
+          "total": 13
+        },
+        "tita": {
+          "easy": 2,
+          "medium": 3,
+          "hard": 2,
+          "total": 7
+        }
+      },
+      "topic_total_quota": 20
+    },
+    "CQ07": {
+      "section": "QA",
+      "cat_relevance": "low",
+      "quota_weight": 1,
+      "question_types": {
+        "mcq": {
+          "easy": 3,
+          "medium": 3,
+          "hard": 1,
+          "total": 7
+        },
+        "tita": {
+          "easy": 1,
+          "medium": 1,
+          "hard": 1,
+          "total": 3
+        }
+      },
+      "topic_total_quota": 10
+    },
+    "CQ08": {
+      "section": "QA",
+      "cat_relevance": "high",
+      "quota_weight": 3,
+      "question_types": {
+        "mcq": {
+          "easy": 5,
+          "medium": 9,
+          "hard": 6,
+          "total": 20
+        },
+        "tita": {
+          "easy": 3,
+          "medium": 4,
+          "hard": 3,
+          "total": 10
+        }
+      },
+      "topic_total_quota": 30
+    },
+    "CQ09": {
+      "section": "QA",
+      "cat_relevance": "medium",
+      "quota_weight": 2,
+      "question_types": {
+        "mcq": {
+          "easy": 4,
+          "medium": 5,
+          "hard": 4,
+          "total": 13
+        },
+        "tita": {
+          "easy": 2,
+          "medium": 3,
+          "hard": 2,
+          "total": 7
+        }
+      },
+      "topic_total_quota": 20
+    },
+    "CQ10": {
+      "section": "QA",
+      "cat_relevance": "low",
+      "quota_weight": 1,
+      "question_types": {
+        "mcq": {
+          "easy": 3,
+          "medium": 3,
+          "hard": 1,
+          "total": 7
+        },
+        "tita": {
+          "easy": 1,
+          "medium": 1,
+          "hard": 1,
+          "total": 3
+        }
+      },
+      "topic_total_quota": 10
+    }
+  }
+}

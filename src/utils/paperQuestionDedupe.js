@@ -56,6 +56,75 @@ const normalizeStem = (q) => {
   return suffix ? `${prefix}##${suffix}` : prefix;
 };
 
+/**
+ * Near-duplicate fingerprint helpers: topic + content tokens (numbers stripped).
+ * Catches "same disc MOI template with different numbers / wording".
+ */
+const STOP = new Set([
+  "that",
+  "this",
+  "with",
+  "from",
+  "into",
+  "than",
+  "then",
+  "when",
+  "where",
+  "which",
+  "while",
+  "about",
+  "after",
+  "before",
+  "under",
+  "over",
+  "between",
+  "through",
+  "during",
+  "following",
+  "given",
+  "find",
+  "located",
+  "respectively",
+  "correct",
+  "option",
+  "statement",
+  "regarding",
+  "based",
+  "using",
+  "value",
+  "equal",
+  "original",
+  "uniform",
+  "circular",
+]);
+
+const contentTokens = (q) => {
+  const stem = normalizeStem(q)
+    .replace(/\bcentre\b/g, "center")
+    .replace(/\d+(\.\d+)?/g, " ")
+    .replace(/[^a-z\s]/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length > 3 && !STOP.has(w));
+  return [...new Set(stem)];
+};
+
+const jaccard = (a = [], b = []) => {
+  if (!a.length || !b.length) return 0;
+  const A = new Set(a);
+  const B = new Set(b);
+  let inter = 0;
+  for (const x of A) if (B.has(x)) inter += 1;
+  const union = A.size + B.size - inter;
+  return union ? inter / union : 0;
+};
+
+const isNearDuplicate = (a, b) => {
+  const topicA = String(a?._topicId || a?.topicId || "").toLowerCase();
+  const topicB = String(b?._topicId || b?.topicId || "").toLowerCase();
+  if (topicA && topicB && topicA !== topicB) return false;
+  return jaccard(contentTokens(a), contentTokens(b)) >= 0.72;
+};
+
 const explanationScore = (q) => String(q?.explanation || "").length;
 
 const trustScore = (q) => {
@@ -91,7 +160,19 @@ export const dedupePaperQuestionsByStem = (questions = []) => {
       byStem.set(key, q);
     }
   }
-  return [...byStem.values(), ...noStem];
+  // Second pass: drop near-duplicates (same topic + high token overlap).
+  const kept = [];
+  for (const q of byStem.values()) {
+    let replaced = false;
+    for (let i = 0; i < kept.length; i += 1) {
+      if (!isNearDuplicate(kept[i], q)) continue;
+      if (trustScore(q) > trustScore(kept[i])) kept[i] = q;
+      replaced = true;
+      break;
+    }
+    if (!replaced) kept.push(q);
+  }
+  return [...kept, ...noStem];
 };
 
 /**

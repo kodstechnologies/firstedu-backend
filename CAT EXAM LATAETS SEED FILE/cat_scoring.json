@@ -1,0 +1,233 @@
+{
+  "subject": "VARC + DILR + QA",
+  "exam_context": "CAT (used to steer topic/difficulty planning)",
+  "data_provenance": "Estimated from PYQ-trend analysis and test-prep institute weightage trackers (no official CAT syllabus/weightage exists); last grounded Sep 2026",
+  "topics": {
+    "CV01": {
+      "section": "VARC",
+      "avg_questions_per_cat_paper": 4,
+      "difficulty_split": {
+        "easy": 25,
+        "medium": 42,
+        "hard": 33
+      },
+      "cat_relevance": "high"
+    },
+    "CV02": {
+      "section": "VARC",
+      "avg_questions_per_cat_paper": 12,
+      "difficulty_split": {
+        "easy": 20,
+        "medium": 40,
+        "hard": 40
+      },
+      "cat_relevance": "very high",
+      "notes": "By far the largest single VARC sub-theme; 3 of the 4 RC passages are typically applied/contemporary rather than abstract."
+    },
+    "CV03": {
+      "section": "VARC",
+      "avg_questions_per_cat_paper": 3,
+      "difficulty_split": {
+        "easy": 32,
+        "medium": 42,
+        "hard": 26
+      },
+      "cat_relevance": "medium",
+      "notes": "One of the most consistently tested non-RC item types across recent CAT slots."
+    },
+    "CV04": {
+      "section": "VARC",
+      "avg_questions_per_cat_paper": 3,
+      "difficulty_split": {
+        "easy": 32,
+        "medium": 42,
+        "hard": 26
+      },
+      "cat_relevance": "medium"
+    },
+    "CV05": {
+      "section": "VARC",
+      "avg_questions_per_cat_paper": 2,
+      "difficulty_split": {
+        "easy": 40,
+        "medium": 40,
+        "hard": 20
+      },
+      "cat_relevance": "low"
+    },
+    "CD01": {
+      "section": "DILR",
+      "avg_questions_per_cat_paper": 4,
+      "difficulty_split": {
+        "easy": 25,
+        "medium": 42,
+        "hard": 33
+      },
+      "cat_relevance": "high",
+      "notes": "Simplest DILR set type; usually the first target for time-constrained attempts."
+    },
+    "CD02": {
+      "section": "DILR",
+      "avg_questions_per_cat_paper": 5,
+      "difficulty_split": {
+        "easy": 20,
+        "medium": 40,
+        "hard": 40
+      },
+      "cat_relevance": "very high",
+      "notes": "Multi-source caselets (table+chart together) are the most time-consuming but highest-scoring DILR sets when cracked."
+    },
+    "CD03": {
+      "section": "DILR",
+      "avg_questions_per_cat_paper": 4,
+      "difficulty_split": {
+        "easy": 25,
+        "medium": 42,
+        "hard": 33
+      },
+      "cat_relevance": "high"
+    },
+    "CD04": {
+      "section": "DILR",
+      "avg_questions_per_cat_paper": 4,
+      "difficulty_split": {
+        "easy": 25,
+        "medium": 42,
+        "hard": 33
+      },
+      "cat_relevance": "high"
+    },
+    "CD05": {
+      "section": "DILR",
+      "avg_questions_per_cat_paper": 3,
+      "difficulty_split": {
+        "easy": 32,
+        "medium": 42,
+        "hard": 26
+      },
+      "cat_relevance": "medium"
+    },
+    "CD06": {
+      "section": "DILR",
+      "avg_questions_per_cat_paper": 2,
+      "difficulty_split": {
+        "easy": 40,
+        "medium": 40,
+        "hard": 20
+      },
+      "cat_relevance": "low",
+      "notes": "Least frequent set type but often the most discriminating (low overall attempt rate in recent slots)."
+    },
+    "CQ01": {
+      "section": "QA",
+      "avg_questions_per_cat_paper": 2,
+      "difficulty_split": {
+        "easy": 32,
+        "medium": 42,
+        "hard": 26
+      },
+      "cat_relevance": "medium"
+    },
+    "CQ02": {
+      "section": "QA",
+      "avg_questions_per_cat_paper": 3,
+      "difficulty_split": {
+        "easy": 25,
+        "medium": 42,
+        "hard": 33
+      },
+      "cat_relevance": "high",
+      "notes": "Percentages/Profit-Loss/Interest is the single most reliably tested Arithmetic sub-topic across recent CAT slots."
+    },
+    "CQ03": {
+      "section": "QA",
+      "avg_questions_per_cat_paper": 3,
+      "difficulty_split": {
+        "easy": 25,
+        "medium": 42,
+        "hard": 33
+      },
+      "cat_relevance": "high"
+    },
+    "CQ04": {
+      "section": "QA",
+      "avg_questions_per_cat_paper": 3,
+      "difficulty_split": {
+        "easy": 25,
+        "medium": 42,
+        "hard": 33
+      },
+      "cat_relevance": "high"
+    },
+    "CQ05": {
+      "section": "QA",
+      "avg_questions_per_cat_paper": 2,
+      "difficulty_split": {
+        "easy": 32,
+        "medium": 42,
+        "hard": 26
+      },
+      "cat_relevance": "medium"
+    },
+    "CQ06": {
+      "section": "QA",
+      "avg_questions_per_cat_paper": 2,
+      "difficulty_split": {
+        "easy": 32,
+        "medium": 42,
+        "hard": 26
+      },
+      "cat_relevance": "medium"
+    },
+    "CQ07": {
+      "section": "QA",
+      "avg_questions_per_cat_paper": 1,
+      "difficulty_split": {
+        "easy": 40,
+        "medium": 40,
+        "hard": 20
+      },
+      "cat_relevance": "low",
+      "notes": "Progressions appears reliably but usually as 1 standalone question rather than a multi-question theme."
+    },
+    "CQ08": {
+      "section": "QA",
+      "avg_questions_per_cat_paper": 3,
+      "difficulty_split": {
+        "easy": 25,
+        "medium": 42,
+        "hard": 33
+      },
+      "cat_relevance": "high",
+      "notes": "Geometry questions have crept up in recent slots relative to the historical average."
+    },
+    "CQ09": {
+      "section": "QA",
+      "avg_questions_per_cat_paper": 2,
+      "difficulty_split": {
+        "easy": 32,
+        "medium": 42,
+        "hard": 26
+      },
+      "cat_relevance": "medium"
+    },
+    "CQ10": {
+      "section": "QA",
+      "avg_questions_per_cat_paper": 1,
+      "difficulty_split": {
+        "easy": 40,
+        "medium": 40,
+        "hard": 20
+      },
+      "cat_relevance": "low",
+      "notes": "Modern Math (P&C/Probability/Sets) is typically the lightest-weighted QA theme in recent slots."
+    }
+  },
+  "broad_category_weightage_pct": {
+    "note": "Coarser cross-check figures, % share by section of the full 68-question paper",
+    "VARC": "35% (24/68)",
+    "DILR": "32% (22/68)",
+    "QA": "32% (22/68)",
+    "Arithmetic_and_Algebra_within_QA": "~70-75% of QA questions"
+  }
+}

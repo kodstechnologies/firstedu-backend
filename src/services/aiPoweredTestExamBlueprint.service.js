@@ -312,10 +312,11 @@ const buildTypePlan = (examType, { paperNumber = 1 } = {}) => {
         match: 0,
         paragraph: 0,
         total: 45,
-        paperTotalPrinted: 200,
+        paperTotalPrinted: 180,
         paperTotalQuestions: 180,
         paperTotalScored: 180,
         paperTotalMarks: 720,
+        durationMinutes: 180,
       },
       defaultMix: {
         single: 0,
@@ -360,6 +361,7 @@ const buildTypePlan = (examType, { paperNumber = 1 } = {}) => {
         total: 22,
         paperTotalQuestions: 68,
         paperTotalMarks: 204,
+        durationMinutes: 120,
         sectionDurationMinutes: 40,
       },
       defaultMix: {
@@ -868,6 +870,10 @@ export const getAiPoweredTestExamBlueprint = async (query = {}) => {
       typePlan.paperPattern?.paperTotalMarks ||
       examPapers?.papers?.[0]?.totalMarks ||
       null,
+    durationMinutes:
+      Number(typePlan.paperPattern?.durationMinutes) ||
+      Number(examPapers?.papers?.[0]?.durationMinutes) ||
+      (examType === "neet" ? 180 : examType === "cat" ? 120 : null),
   };
 
   return {

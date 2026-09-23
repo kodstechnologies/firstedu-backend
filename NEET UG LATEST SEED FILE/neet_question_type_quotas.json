@@ -1,0 +1,708 @@
+{
+  "subject": "Physics + Chemistry + Biology",
+  "exam": "NEET UG 2026",
+  "purpose": "Per-topic target quotas for building a question BANK/dataset, not a simulation of a single year's paper. Multiply/scale as needed.",
+  "difficulty_note": "NEET UG is single-correct MCQ only (4 options, no multi/integer/match types); quotas include easy items since NEET (unlike JEE Advanced) tests a large easy/moderate share.",
+  "topics": {
+    "NP01": {
+      "subject": "Physics",
+      "neet_relevance": "low",
+      "quota_weight": 1,
+      "question_types": {
+        "single": {
+          "easy": 6,
+          "medium": 4,
+          "hard": 0,
+          "total": 10
+        }
+      },
+      "topic_total_quota": 10
+    },
+    "NP02": {
+      "subject": "Physics",
+      "neet_relevance": "high",
+      "quota_weight": 3,
+      "question_types": {
+        "single": {
+          "easy": 10,
+          "medium": 13,
+          "hard": 7,
+          "total": 30
+        }
+      },
+      "topic_total_quota": 30
+    },
+    "NP03": {
+      "subject": "Physics",
+      "neet_relevance": "medium",
+      "quota_weight": 2,
+      "question_types": {
+        "single": {
+          "easy": 9,
+          "medium": 8,
+          "hard": 3,
+          "total": 20
+        }
+      },
+      "topic_total_quota": 20
+    },
+    "NP04": {
+      "subject": "Physics",
+      "neet_relevance": "medium",
+      "quota_weight": 2,
+      "question_types": {
+        "single": {
+          "easy": 9,
+          "medium": 8,
+          "hard": 3,
+          "total": 20
+        }
+      },
+      "topic_total_quota": 20
+    },
+    "NP05": {
+      "subject": "Physics",
+      "neet_relevance": "medium",
+      "quota_weight": 2,
+      "question_types": {
+        "single": {
+          "easy": 9,
+          "medium": 8,
+          "hard": 3,
+          "total": 20
+        }
+      },
+      "topic_total_quota": 20
+    },
+    "NP06": {
+      "subject": "Physics",
+      "neet_relevance": "medium",
+      "quota_weight": 2,
+      "question_types": {
+        "single": {
+          "easy": 9,
+          "medium": 8,
+          "hard": 3,
+          "total": 20
+        }
+      },
+      "topic_total_quota": 20
+    },
+    "NP07": {
+      "subject": "Physics",
+      "neet_relevance": "medium",
+      "quota_weight": 2,
+      "question_types": {
+        "single": {
+          "easy": 9,
+          "medium": 8,
+          "hard": 3,
+          "total": 20
+        }
+      },
+      "topic_total_quota": 20
+    },
+    "NP08": {
+      "subject": "Physics",
+      "neet_relevance": "medium",
+      "quota_weight": 2,
+      "question_types": {
+        "single": {
+          "easy": 9,
+          "medium": 8,
+          "hard": 3,
+          "total": 20
+        }
+      },
+      "topic_total_quota": 20
+    },
+    "NP09": {
+      "subject": "Physics",
+      "neet_relevance": "low",
+      "quota_weight": 1,
+      "question_types": {
+        "single": {
+          "easy": 6,
+          "medium": 4,
+          "hard": 0,
+          "total": 10
+        }
+      },
+      "topic_total_quota": 10
+    },
+    "NP10": {
+      "subject": "Physics",
+      "neet_relevance": "high",
+      "quota_weight": 3,
+      "question_types": {
+        "single": {
+          "easy": 10,
+          "medium": 13,
+          "hard": 7,
+          "total": 30
+        }
+      },
+      "topic_total_quota": 30
+    },
+    "NP11": {
+      "subject": "Physics",
+      "neet_relevance": "very high",
+      "quota_weight": 4,
+      "question_types": {
+        "single": {
+          "easy": 11,
+          "medium": 17,
+          "hard": 12,
+          "total": 40
+        }
+      },
+      "topic_total_quota": 40
+    },
+    "NP12": {
+      "subject": "Physics",
+      "neet_relevance": "very high",
+      "quota_weight": 4,
+      "question_types": {
+        "single": {
+          "easy": 11,
+          "medium": 17,
+          "hard": 12,
+          "total": 40
+        }
+      },
+      "topic_total_quota": 40
+    },
+    "NP13": {
+      "subject": "Physics",
+      "neet_relevance": "high",
+      "quota_weight": 3,
+      "question_types": {
+        "single": {
+          "easy": 10,
+          "medium": 13,
+          "hard": 7,
+          "total": 30
+        }
+      },
+      "topic_total_quota": 30
+    },
+    "NP14": {
+      "subject": "Physics",
+      "neet_relevance": "high",
+      "quota_weight": 3,
+      "question_types": {
+        "single": {
+          "easy": 10,
+          "medium": 13,
+          "hard": 7,
+          "total": 30
+        }
+      },
+      "topic_total_quota": 30
+    },
+    "NP15": {
+      "subject": "Physics",
+      "neet_relevance": "low",
+      "quota_weight": 1,
+      "question_types": {
+        "single": {
+          "easy": 6,
+          "medium": 4,
+          "hard": 0,
+          "total": 10
+        }
+      },
+      "topic_total_quota": 10
+    },
+    "NP16": {
+      "subject": "Physics",
+      "neet_relevance": "very high",
+      "quota_weight": 4,
+      "question_types": {
+        "single": {
+          "easy": 11,
+          "medium": 17,
+          "hard": 12,
+          "total": 40
+        }
+      },
+      "topic_total_quota": 40
+    },
+    "NP17": {
+      "subject": "Physics",
+      "neet_relevance": "medium",
+      "quota_weight": 2,
+      "question_types": {
+        "single": {
+          "easy": 9,
+          "medium": 8,
+          "hard": 3,
+          "total": 20
+        }
+      },
+      "topic_total_quota": 20
+    },
+    "NP18": {
+      "subject": "Physics",
+      "neet_relevance": "medium",
+      "quota_weight": 2,
+      "question_types": {
+        "single": {
+          "easy": 9,
+          "medium": 8,
+          "hard": 3,
+          "total": 20
+        }
+      },
+      "topic_total_quota": 20
+    },
+    "NP19": {
+      "subject": "Physics",
+      "neet_relevance": "low",
+      "quota_weight": 1,
+      "question_types": {
+        "single": {
+          "easy": 6,
+          "medium": 4,
+          "hard": 0,
+          "total": 10
+        }
+      },
+      "topic_total_quota": 10
+    },
+    "NP20": {
+      "subject": "Physics",
+      "neet_relevance": "low",
+      "quota_weight": 1,
+      "question_types": {
+        "single": {
+          "easy": 6,
+          "medium": 4,
+          "hard": 0,
+          "total": 10
+        }
+      },
+      "topic_total_quota": 10
+    },
+    "NC01": {
+      "subject": "Chemistry",
+      "neet_relevance": "low",
+      "quota_weight": 1,
+      "question_types": {
+        "single": {
+          "easy": 6,
+          "medium": 4,
+          "hard": 0,
+          "total": 10
+        }
+      },
+      "topic_total_quota": 10
+    },
+    "NC02": {
+      "subject": "Chemistry",
+      "neet_relevance": "medium",
+      "quota_weight": 2,
+      "question_types": {
+        "single": {
+          "easy": 9,
+          "medium": 8,
+          "hard": 3,
+          "total": 20
+        }
+      },
+      "topic_total_quota": 20
+    },
+    "NC03": {
+      "subject": "Chemistry",
+      "neet_relevance": "high",
+      "quota_weight": 3,
+      "question_types": {
+        "single": {
+          "easy": 10,
+          "medium": 13,
+          "hard": 7,
+          "total": 30
+        }
+      },
+      "topic_total_quota": 30
+    },
+    "NC04": {
+      "subject": "Chemistry",
+      "neet_relevance": "low",
+      "quota_weight": 1,
+      "question_types": {
+        "single": {
+          "easy": 6,
+          "medium": 4,
+          "hard": 0,
+          "total": 10
+        }
+      },
+      "topic_total_quota": 10
+    },
+    "NC05": {
+      "subject": "Chemistry",
+      "neet_relevance": "low",
+      "quota_weight": 1,
+      "question_types": {
+        "single": {
+          "easy": 6,
+          "medium": 4,
+          "hard": 0,
+          "total": 10
+        }
+      },
+      "topic_total_quota": 10
+    },
+    "NC06": {
+      "subject": "Chemistry",
+      "neet_relevance": "high",
+      "quota_weight": 3,
+      "question_types": {
+        "single": {
+          "easy": 10,
+          "medium": 13,
+          "hard": 7,
+          "total": 30
+        }
+      },
+      "topic_total_quota": 30
+    },
+    "NC07": {
+      "subject": "Chemistry",
+      "neet_relevance": "high",
+      "quota_weight": 3,
+      "question_types": {
+        "single": {
+          "easy": 10,
+          "medium": 13,
+          "hard": 7,
+          "total": 30
+        }
+      },
+      "topic_total_quota": 30
+    },
+    "NC08": {
+      "subject": "Chemistry",
+      "neet_relevance": "medium",
+      "quota_weight": 2,
+      "question_types": {
+        "single": {
+          "easy": 9,
+          "medium": 8,
+          "hard": 3,
+          "total": 20
+        }
+      },
+      "topic_total_quota": 20
+    },
+    "NC09": {
+      "subject": "Chemistry",
+      "neet_relevance": "low",
+      "quota_weight": 1,
+      "question_types": {
+        "single": {
+          "easy": 6,
+          "medium": 4,
+          "hard": 0,
+          "total": 10
+        }
+      },
+      "topic_total_quota": 10
+    },
+    "NC10": {
+      "subject": "Chemistry",
+      "neet_relevance": "very high",
+      "quota_weight": 4,
+      "question_types": {
+        "single": {
+          "easy": 11,
+          "medium": 17,
+          "hard": 12,
+          "total": 40
+        }
+      },
+      "topic_total_quota": 40
+    },
+    "NC11": {
+      "subject": "Chemistry",
+      "neet_relevance": "high",
+      "quota_weight": 3,
+      "question_types": {
+        "single": {
+          "easy": 10,
+          "medium": 13,
+          "hard": 7,
+          "total": 30
+        }
+      },
+      "topic_total_quota": 30
+    },
+    "NC12": {
+      "subject": "Chemistry",
+      "neet_relevance": "high",
+      "quota_weight": 3,
+      "question_types": {
+        "single": {
+          "easy": 10,
+          "medium": 13,
+          "hard": 7,
+          "total": 30
+        }
+      },
+      "topic_total_quota": 30
+    },
+    "NC13": {
+      "subject": "Chemistry",
+      "neet_relevance": "low",
+      "quota_weight": 1,
+      "question_types": {
+        "single": {
+          "easy": 6,
+          "medium": 4,
+          "hard": 0,
+          "total": 10
+        }
+      },
+      "topic_total_quota": 10
+    },
+    "NC14": {
+      "subject": "Chemistry",
+      "neet_relevance": "high",
+      "quota_weight": 3,
+      "question_types": {
+        "single": {
+          "easy": 10,
+          "medium": 13,
+          "hard": 7,
+          "total": 30
+        }
+      },
+      "topic_total_quota": 30
+    },
+    "NC15": {
+      "subject": "Chemistry",
+      "neet_relevance": "medium",
+      "quota_weight": 2,
+      "question_types": {
+        "single": {
+          "easy": 9,
+          "medium": 8,
+          "hard": 3,
+          "total": 20
+        }
+      },
+      "topic_total_quota": 20
+    },
+    "NC16": {
+      "subject": "Chemistry",
+      "neet_relevance": "medium",
+      "quota_weight": 2,
+      "question_types": {
+        "single": {
+          "easy": 9,
+          "medium": 8,
+          "hard": 3,
+          "total": 20
+        }
+      },
+      "topic_total_quota": 20
+    },
+    "NC17": {
+      "subject": "Chemistry",
+      "neet_relevance": "very high",
+      "quota_weight": 4,
+      "question_types": {
+        "single": {
+          "easy": 11,
+          "medium": 17,
+          "hard": 12,
+          "total": 40
+        }
+      },
+      "topic_total_quota": 40
+    },
+    "NC18": {
+      "subject": "Chemistry",
+      "neet_relevance": "medium",
+      "quota_weight": 2,
+      "question_types": {
+        "single": {
+          "easy": 9,
+          "medium": 8,
+          "hard": 3,
+          "total": 20
+        }
+      },
+      "topic_total_quota": 20
+    },
+    "NC19": {
+      "subject": "Chemistry",
+      "neet_relevance": "medium",
+      "quota_weight": 2,
+      "question_types": {
+        "single": {
+          "easy": 9,
+          "medium": 8,
+          "hard": 3,
+          "total": 20
+        }
+      },
+      "topic_total_quota": 20
+    },
+    "NC20": {
+      "subject": "Chemistry",
+      "neet_relevance": "low",
+      "quota_weight": 1,
+      "question_types": {
+        "single": {
+          "easy": 6,
+          "medium": 4,
+          "hard": 0,
+          "total": 10
+        }
+      },
+      "topic_total_quota": 10
+    },
+    "NB01": {
+      "subject": "Biology",
+      "neet_relevance": "medium",
+      "quota_weight": 2,
+      "question_types": {
+        "single": {
+          "easy": 11,
+          "medium": 6,
+          "hard": 3,
+          "total": 20
+        }
+      },
+      "topic_total_quota": 20
+    },
+    "NB02": {
+      "subject": "Biology",
+      "neet_relevance": "medium",
+      "quota_weight": 2,
+      "question_types": {
+        "single": {
+          "easy": 11,
+          "medium": 6,
+          "hard": 3,
+          "total": 20
+        }
+      },
+      "topic_total_quota": 20
+    },
+    "NB03": {
+      "subject": "Biology",
+      "neet_relevance": "high",
+      "quota_weight": 3,
+      "question_types": {
+        "single": {
+          "easy": 14,
+          "medium": 10,
+          "hard": 6,
+          "total": 30
+        }
+      },
+      "topic_total_quota": 30
+    },
+    "NB04": {
+      "subject": "Biology",
+      "neet_relevance": "medium",
+      "quota_weight": 2,
+      "question_types": {
+        "single": {
+          "easy": 11,
+          "medium": 6,
+          "hard": 3,
+          "total": 20
+        }
+      },
+      "topic_total_quota": 20
+    },
+    "NB05": {
+      "subject": "Biology",
+      "neet_relevance": "very high",
+      "quota_weight": 4,
+      "question_types": {
+        "single": {
+          "easy": 16,
+          "medium": 14,
+          "hard": 10,
+          "total": 40
+        }
+      },
+      "topic_total_quota": 40
+    },
+    "NB06": {
+      "subject": "Biology",
+      "neet_relevance": "high",
+      "quota_weight": 3,
+      "question_types": {
+        "single": {
+          "easy": 14,
+          "medium": 10,
+          "hard": 6,
+          "total": 30
+        }
+      },
+      "topic_total_quota": 30
+    },
+    "NB07": {
+      "subject": "Biology",
+      "neet_relevance": "very high",
+      "quota_weight": 4,
+      "question_types": {
+        "single": {
+          "easy": 16,
+          "medium": 14,
+          "hard": 10,
+          "total": 40
+        }
+      },
+      "topic_total_quota": 40
+    },
+    "NB08": {
+      "subject": "Biology",
+      "neet_relevance": "medium",
+      "quota_weight": 2,
+      "question_types": {
+        "single": {
+          "easy": 11,
+          "medium": 6,
+          "hard": 3,
+          "total": 20
+        }
+      },
+      "topic_total_quota": 20
+    },
+    "NB09": {
+      "subject": "Biology",
+      "neet_relevance": "medium",
+      "quota_weight": 2,
+      "question_types": {
+        "single": {
+          "easy": 11,
+          "medium": 6,
+          "hard": 3,
+          "total": 20
+        }
+      },
+      "topic_total_quota": 20
+    },
+    "NB10": {
+      "subject": "Biology",
+      "neet_relevance": "medium",
+      "quota_weight": 2,
+      "question_types": {
+        "single": {
+          "easy": 11,
+          "medium": 6,
+          "hard": 3,
+          "total": 20
+        }
+      },
+      "topic_total_quota": 20
+    }
+  }
+}

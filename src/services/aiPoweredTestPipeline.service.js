@@ -527,6 +527,12 @@ const normalizeSubject = (raw) => {
   if (key.startsWith("bot") || key.includes("botan")) return "Botany";
   if (key.startsWith("zoo") || key.includes("zool")) return "Zoology";
   if (key.startsWith("bio") || key.includes("biol")) return "Biology";
+  if (key === "varc" || key.includes("verbal") || key.includes("reading comprehension"))
+    return "VARC";
+  if (key === "dilr" || key.includes("data interpretation") || key.includes("logical reasoning"))
+    return "DILR";
+  if (key === "qa" || key === "quantitative ability" || key === "quantitative aptitude")
+    return "QA";
   return String(raw || "").trim() || "General";
 };
 
@@ -581,32 +587,85 @@ const getJeeAdvancedChemistryTopics = () => {
 };
 
 const neetTopicCache = {};
-const getNeetSyllabusTopics = (subject) => {
-  const norm = normalizeSubject(subject);
-  if (neetTopicCache[norm]) return neetTopicCache[norm];
-  const fileMap = {
-    Botany: "neet_syllabus_botany.json",
-    Zoology: "neet_syllabus_zoology.json",
-    Physics: "neet_syllabus_physics.json",
-    Chemistry: "neet_syllabus_chemistry.json",
-  };
-  const fileName = fileMap[norm];
-  if (!fileName) return [];
+const neetNcertCache = { loaded: false, byId: {} };
+
+const loadNeetNcertById = () => {
+  if (neetNcertCache.loaded) return neetNcertCache.byId;
   const candidates = [
-    join(PIPELINE_DIR, "..", "..", "NEET EXAM ALL SEED REQUIRED FILES", fileName),
-    join(process.cwd(), "NEET EXAM ALL SEED REQUIRED FILES", fileName),
+    join(PIPELINE_DIR, "..", "..", "NEET UG LATEST SEED FILE", "neet_ncert_context.json"),
+    join(process.cwd(), "NEET UG LATEST SEED FILE", "neet_ncert_context.json"),
   ];
   for (const p of candidates) {
     try {
       const raw = JSON.parse(readFileSync(p, "utf8"));
-      const list = (raw.topics || []).map((t) => ({
-        topicId: t.topic_id || t.topicId,
-        chapter: t.chapter,
-        subtopics: t.subtopics || [],
-        hardArchetypes: t.subtopics || [],
-        allowed: t.subtopics || [],
-        ncert: { concepts: t.subtopics || [], hard_archetypes: t.subtopics || [] },
-      }));
+      if (raw?.topics && typeof raw.topics === "object") {
+        neetNcertCache.byId = raw.topics;
+        neetNcertCache.loaded = true;
+        return neetNcertCache.byId;
+      }
+    } catch {
+      // try next
+    }
+  }
+  neetNcertCache.loaded = true;
+  return neetNcertCache.byId;
+};
+
+const getNeetSyllabusTopics = (subject) => {
+  const norm = normalizeSubject(subject);
+  if (neetTopicCache[norm]) return neetTopicCache[norm];
+
+  const ncertById = loadNeetNcertById();
+  const candidates = [
+    join(PIPELINE_DIR, "..", "..", "NEET UG LATEST SEED FILE", "neet_syllabus.json"),
+    join(process.cwd(), "NEET UG LATEST SEED FILE", "neet_syllabus.json"),
+  ];
+
+  const isBotanyChapter = (chapter) =>
+    /plant physiology|plant growth|photosynthesis|mineral nutrition|transport in plants/.test(
+      String(chapter || "").toLowerCase()
+    );
+  const isZoologyChapter = (chapter) =>
+    /human physiology|animal|locomotion|neural|digestion|breathing|body fluids|excretory|biology and human welfare/.test(
+      String(chapter || "").toLowerCase()
+    );
+
+  for (const p of candidates) {
+    try {
+      const raw = JSON.parse(readFileSync(p, "utf8"));
+      const filtered = (raw.topics || []).filter((t) => {
+        const sub = String(t.subject || "").trim();
+        if (norm === "Physics") return sub === "Physics";
+        if (norm === "Chemistry") return sub === "Chemistry";
+        if (norm === "Botany") {
+          if (sub === "Botany") return true;
+          if (sub !== "Biology") return false;
+          if (isZoologyChapter(t.chapter) && !isBotanyChapter(t.chapter)) return false;
+          return true;
+        }
+        if (norm === "Zoology") {
+          if (sub === "Zoology") return true;
+          if (sub !== "Biology") return false;
+          if (isBotanyChapter(t.chapter) && !isZoologyChapter(t.chapter)) return false;
+          return true;
+        }
+        return false;
+      });
+      const list = filtered.map((t) => {
+        const topicId = t.topic_id || t.topicId;
+        const ncert = ncertById[topicId] || {
+          concepts: t.subtopics || [],
+          hard_archetypes: t.subtopics || [],
+        };
+        return {
+          topicId,
+          chapter: t.chapter,
+          subtopics: t.subtopics || [],
+          hardArchetypes: ncert.hard_archetypes || t.subtopics || [],
+          allowed: ncert.concepts || t.subtopics || [],
+          ncert,
+        };
+      });
       if (list.length) {
         neetTopicCache[norm] = list;
         return list;
@@ -618,7 +677,79 @@ const getNeetSyllabusTopics = (subject) => {
   return [];
 };
 
+const catTopicCache = {};
+const catConceptCache = { loaded: false, byId: {} };
+
+const loadCatConceptById = () => {
+  if (catConceptCache.loaded) return catConceptCache.byId;
+  const candidates = [
+    join(PIPELINE_DIR, "..", "..", "CAT EXAM LATAETS SEED FILE", "cat_concept_context.json"),
+    join(process.cwd(), "CAT EXAM LATAETS SEED FILE", "cat_concept_context.json"),
+  ];
+  for (const p of candidates) {
+    try {
+      const raw = JSON.parse(readFileSync(p, "utf8"));
+      if (raw?.topics && typeof raw.topics === "object") {
+        catConceptCache.byId = raw.topics;
+        catConceptCache.loaded = true;
+        return catConceptCache.byId;
+      }
+    } catch {
+      // try next
+    }
+  }
+  catConceptCache.loaded = true;
+  return catConceptCache.byId;
+};
+
+const getCatSyllabusTopics = (subject) => {
+  const norm = normalizeSubject(subject);
+  if (catTopicCache[norm]) return catTopicCache[norm];
+
+  const conceptById = loadCatConceptById();
+  const candidates = [
+    join(PIPELINE_DIR, "..", "..", "CAT EXAM LATAETS SEED FILE", "cat_syllabus.json"),
+    join(process.cwd(), "CAT EXAM LATAETS SEED FILE", "cat_syllabus.json"),
+  ];
+
+  for (const p of candidates) {
+    try {
+      const raw = JSON.parse(readFileSync(p, "utf8"));
+      const filtered = (raw.topics || []).filter((t) => {
+        const section = normalizeSubject(t.section || t.subject || "");
+        return section === norm;
+      });
+      const list = filtered.map((t) => {
+        const topicId = t.topic_id || t.topicId;
+        const ncert = conceptById[topicId] || {
+          concepts: t.subtopics || [],
+          hard_archetypes: t.subtopics || [],
+        };
+        return {
+          topicId,
+          chapter: t.topic_name || t.chapter || topicId,
+          subtopics: t.subtopics || [],
+          hardArchetypes: ncert.hard_archetypes || t.subtopics || [],
+          allowed: ncert.concepts || t.subtopics || [],
+          ncert,
+        };
+      });
+      if (list.length) {
+        catTopicCache[norm] = list;
+        return list;
+      }
+    } catch {
+      // try next candidate
+    }
+  }
+  return [];
+};
+
 const lookupNcert = (subject, topicId) => {
+  const neetHit = loadNeetNcertById()?.[topicId];
+  if (neetHit) return neetHit;
+  const catHit = loadCatConceptById()?.[topicId];
+  if (catHit) return catHit;
   const pack =
     subject === "Physics"
       ? getJeeAdvancedPhysicsTopics()
@@ -1023,11 +1154,18 @@ export const planPipelineSlots = (config = {}) => {
       const neetList = getNeetSyllabusTopics(s);
       if (neetList.length) return neetList;
     }
+    if (examTypeNorm === "cat") {
+      const catList = getCatSyllabusTopics(s);
+      if (catList.length) return catList;
+    }
     if (s === "Physics") return getJeeAdvancedPhysicsTopics();
     if (s === "Mathematics") return getJeeAdvancedMathTopics();
     if (s === "Chemistry") return getJeeAdvancedChemistryTopics();
     if (s === "Botany" || s === "Zoology" || s === "Biology") {
       return getNeetSyllabusTopics(s);
+    }
+    if (s === "VARC" || s === "DILR" || s === "QA") {
+      return getCatSyllabusTopics(s);
     }
     return [];
   };
@@ -1282,21 +1420,22 @@ const generateBatch = async ({
         ? `Generate exactly ${count} ${hardWord} INTEGER / NUMERICAL questions. Answer is an integer. NO options.`
         : type === "match"
           ? `Generate exactly ${count} ${hardWord} MATCH THE FOLLOWING questions with exactly 4 List-I items, all chapter-locked.`
-          : `Generate exactly ${count} ${hardWord} SINGLE-CORRECT MCQs. Exactly one of A–D is correct.`;
+          : `Generate exactly ${count} ${hardWord} SINGLE-CORRECT MCQs. Exactly one of A–D is correct. Place the correct option randomly among A–D (do NOT always put the correct answer in A).`;
   const exampleScore =
     exam.examType === "jee_advanced"
       ? 85
       : exam.examType === "jee_main" || exam.examType === "neet"
         ? 76
         : 78;
+  const exampleLetter = ["A", "B", "C", "D"][Math.floor(Math.random() * 4)];
   const schema =
     type === "multiple"
       ? `{"questions":[{"questionType":"multiple","conceptSlot":"string","chapter":"string","questionText":"string","options":["A","B","C","D"],"correctLetters":["A","C"],"insightOneLiner":"string","difficultySelfScore":${exampleScore}}]}`
       : type === "integer"
         ? `{"questions":[{"questionType":"integer","conceptSlot":"string","chapter":"string","questionText":"string","finalAnswer":42,"answerDisplay":"42","insightOneLiner":"string","difficultySelfScore":${exampleScore}}]}`
         : type === "match"
-          ? `{"questions":[{"questionType":"match","conceptSlot":"string","chapter":"string","questionText":"string","listI":["...","...","...","..."],"listII":["...","...","...","..."],"options":["1-P, 2-Q, 3-R, 4-S","1-Q, 2-P, 3-S, 4-R","1-P, 2-R, 3-Q, 4-S","1-S, 2-Q, 3-P, 4-R"],"correctAnswer":"A","insightOneLiner":"string","difficultySelfScore":${exampleScore},"listIChapterIds":["same","same","same","same"]}]}`
-          : `{"questions":[{"questionType":"single","conceptSlot":"string","chapter":"string","questionText":"string","options":["A","B","C","D"],"correctLetters":["A"],"insightOneLiner":"string","difficultySelfScore":${exampleScore}}]}`;
+          ? `{"questions":[{"questionType":"match","conceptSlot":"string","chapter":"string","questionText":"string","listI":["...","...","...","..."],"listII":["...","...","...","..."],"options":["1-P, 2-Q, 3-R, 4-S","1-Q, 2-P, 3-S, 4-R","1-P, 2-R, 3-Q, 4-S","1-S, 2-Q, 3-P, 4-R"],"correctAnswer":"${exampleLetter}","insightOneLiner":"string","difficultySelfScore":${exampleScore},"listIChapterIds":["same","same","same","same"]}]}`
+          : `{"questions":[{"questionType":"single","conceptSlot":"string","chapter":"string","questionText":"string","options":["optA","optB","optC","optD"],"correctLetters":["${exampleLetter}"],"insightOneLiner":"string","difficultySelfScore":${exampleScore}}]}`;
 
   const matchLockBlock =
     type === "match"
@@ -1942,6 +2081,30 @@ const optionPlainText = (o) => {
   return text.replace(/^[A-D][).:\s]+/, "").trim();
 };
 
+/** Repair common Gemini/o3 LaTeX corruptions before UI/bank save. */
+export const sanitizeExplanationLatex = (raw) => {
+  let text = String(raw || "");
+  if (!text) return text;
+  text = text
+    .replace(/Long\)arrow/gi, "\\rightarrow")
+    .replace(/\)arrow/gi, "\\rightarrow")
+    .replace(/\bLongrightarrow\b/g, "\\longrightarrow")
+    .replace(/\bdll\b/g, "")
+    .replace(/\bdfrac\b/g, "\\dfrac")
+    .replace(/\bfrac\b(?![a-zA-Z])/g, "\\frac")
+    .replace(/\btextbf\b/g, "\\textbf")
+    .replace(/(?<![\\])<=(?=[\s$\d])/g, "\\le ")
+    .replace(/(?<![\\])>=(?=[\s$\d])/g, "\\ge ")
+    .replace(/\[dfrac\{([^}\]]+)\](\d+)\}/gi, "\\dfrac{$1}{$2}")
+    .replace(/\[frac\{([^}\]]+)\](\d+)\}/gi, "\\frac{$1}{$2}")
+    .replace(/\(\s*i\s*\)/gi, "\\mathrm{i}")
+    .replace(/\(\s*a\s*\)/gi, "\\mathrm{a}")
+    .replace(/\(\s*w\s*\)/gi, "\\omega")
+    .replace(/\(\s*r\s*\)/gi, "\\mathrm{r}")
+    .replace(/\(\s*m\s*\)/gi, "\\mathrm{m}");
+  return text;
+};
+
 const toUiQuestion = (q, config = {}) => {
   const type = q._advancedType || q.questionType;
   const letters = "ABCD".split("");
@@ -1972,10 +2135,15 @@ const toUiQuestion = (q, config = {}) => {
     correctIndex: q.correctIndex ?? indices[0] ?? 0,
     correctIndices: indices,
     multipleCorrectIndexes: type === "multiple" ? indices : [],
-    explanation: q.explanation,
+    explanation: sanitizeExplanationLatex(q.explanation),
     marks: config.marksByType?.[type] ?? 4,
     negativeMarks: config.negativeMarks ?? 1,
     difficulty: "Hard",
+    // First-class metadata for bank save / paper export (not only underscore fields).
+    subject: q._subject || q.subject || "",
+    topic: q._chapter || q.chapter || q.topic || "",
+    chapter: q._chapter || q.chapter || "",
+    topicId: q._topicId || q.topicId || "",
     _conceptSlot: q._conceptSlot,
     _chapter: q._chapter,
     _topicId: q._topicId,

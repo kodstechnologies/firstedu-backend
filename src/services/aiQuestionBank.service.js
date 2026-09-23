@@ -266,6 +266,10 @@ export const createAiQuestionBankWithQuestions = async (data, createdBy) => {
         overallDifficulty,
         useSectionWise,
         negativeMarks: useSectionWise ? 0 : bankNegativeMarks,
+        durationMinutes:
+          Number(data.durationMinutes) > 0
+            ? Number(data.durationMinutes)
+            : null,
         sections: sections.map((s, idx) => ({
           id: s.id ?? idx + 1,
           name: s.name || `Section ${idx + 1}`,
@@ -302,7 +306,8 @@ export const createAiQuestionBankWithQuestions = async (data, createdBy) => {
         bankNegativeMarks,
       });
       const baseFields = {
-        topic: q.topic,
+        subject: q.subject || undefined,
+        topic: q.topic || q.chapter || undefined,
         difficulty,
         tags: q.tags,
         aiBatchNumber: q.aiBatchNumber ?? null,
