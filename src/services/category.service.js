@@ -276,6 +276,20 @@ export const getCategoryTree = async (filter = {}) => {
   };
   attachHasTests(fullTree);
 
+  // Competitive: also flag exam nodes that have seeded *CompetitivePaper docs
+  // so the pillar taxonomy can hide empty exams / subject leaves without papers.
+  try {
+    const { annotateTreeWithSeededPapers } = await import(
+      "./seededCompetitivePapers.service.js"
+    );
+    await annotateTreeWithSeededPapers(fullTree);
+  } catch (err) {
+    console.warn(
+      "getCategoryTree: seeded-paper annotate skipped:",
+      err?.message || err
+    );
+  }
+
   if (filter && filter.rootType) {
     const requestedRoot = fullTree.find(n => n.rootType === filter.rootType);
     return requestedRoot ? [requestedRoot] : [];

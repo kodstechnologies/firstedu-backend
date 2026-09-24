@@ -242,9 +242,47 @@ export const listAllSeededPaperSummaries = async () => {
   return results;
 };
 
+/** Exam keys that currently have ≥1 active seeded competitive paper. */
+export const getExamKeysWithSeededPapers = async () => {
+  const withPapers = new Set();
+  for (const exam of EXAM_REGISTRY) {
+    const count = await exam.Paper.countDocuments({ isActive: { $ne: false } });
+    if (count > 0) withPapers.add(exam.examKey);
+  }
+  return withPapers;
+};
+
+/** Match a category name to a seeded exam key (or null). */
+export const matchExamKeyFromCategoryName = (name) => {
+  for (const exam of EXAM_REGISTRY) {
+    if (exam.match(name)) return exam.examKey;
+  }
+  return null;
+};
+
+/**
+ * Mark Competitive category nodes with `hasSeededPapers` when the node is an
+ * exam that has seeded papers in its *CompetitivePaper collection.
+ */
+export const annotateTreeWithSeededPapers = async (nodes = []) => {
+  const keys = await getExamKeysWithSeededPapers();
+  const walk = (list) => {
+    for (const node of list || []) {
+      const examKey = matchExamKeyFromCategoryName(node?.name);
+      node.hasSeededPapers = Boolean(examKey && keys.has(examKey));
+      if (node.children?.length) walk(node.children);
+    }
+  };
+  walk(nodes);
+  return nodes;
+};
+
 export default {
   resolveSeededExamFromCategory,
   listSeededPapersForExam,
   listSeededPapersForCategory,
   listAllSeededPaperSummaries,
+  getExamKeysWithSeededPapers,
+  matchExamKeyFromCategoryName,
+  annotateTreeWithSeededPapers,
 };
