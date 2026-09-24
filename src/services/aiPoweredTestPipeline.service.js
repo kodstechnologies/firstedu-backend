@@ -19,6 +19,15 @@ import { fileURLToPath } from "url";
 import { GoogleGenAI } from "@google/genai";
 import { randomUUID } from "crypto";
 import { ApiError } from "../utils/ApiError.js";
+import {
+  isProviderCreditsExhausted,
+  providerCreditsError,
+  PROVIDER_CREDITS_CODE,
+  markProviderFatalAbort,
+  clearProviderFatalAbort,
+  getProviderFatalAbort,
+} from "../utils/aiProviderErrors.js";
+import { alignExplanationToMarkedAnswer } from "../utils/explanationAnswerAlign.js";
 import { safeJsonParse } from "../utils/aiJsonRepair.js";
 import { dedupePaperQuestionsByStem } from "../utils/paperQuestionDedupe.js";
 import { callOpenAIReasoningJson } from "./openaiReasoningChat.service.js";
@@ -137,16 +146,22 @@ const logPromptPayload = (prompt) => {
 };
 
 const pipelineLog = (event, payload = {}) => {
+  const jobId =
+    currentJobId ||
+    payload?.jobId ||
+    getQuestionContext()?.jobId ||
+    getProviderFatalAbort()?.jobId ||
+    null;
   const body = {
     ts: new Date().toISOString(),
-    jobId: currentJobId,
+    jobId,
     event,
     ...payload,
   };
   if (payload.error) body.error = serializeError(payload.error);
-  if (currentJobId) {
+  if (jobId) {
     try {
-      appendPaperLog(currentJobId, event, {
+      appendPaperLog(jobId, event, {
         ...payload,
         error: payload.error ? serializeError(payload.error) : undefined,
       });
@@ -160,6 +175,31 @@ const pipelineLog = (event, payload = {}) => {
   } catch {
     console.log(LOG, event, inspect(body, { depth: 6 }));
   }
+};
+
+/** Fail the paper job immediately so UI polling sees credits error without waiting for unwind. */
+const failJobForProviderCredits = (jobId, creditsErr) => {
+  if (!jobId || !creditsErr) return;
+  markProviderFatalAbort(jobId, creditsErr);
+  try {
+    updateGenerationJob(jobId, {
+      status: "failed",
+      phase: "error",
+      error: creditsErr.message,
+      errorCode: PROVIDER_CREDITS_CODE,
+      message: creditsErr.message,
+      resumable: false,
+    });
+  } catch {
+    // non-fatal
+  }
+  persistJobRecord(jobId, {
+    status: "failed",
+    phase: "error",
+    error: creditsErr.message,
+    message: creditsErr.message,
+    resumable: false,
+  }).catch(() => {});
 };
 
 /**
@@ -182,7 +222,11 @@ const isAbortError = (err) =>
   /aborted|AbortError/i.test(String(err?.message || err || ""));
 
 const isTransientGeminiError = (err) => {
+  // Billing / prepaid credits are never transient — fail the job immediately.
+  if (isProviderCreditsExhausted(err)) return false;
   const msg = String(err?.message || err || "");
+  const status = Number(err?.status || err?.response?.status || 0);
+  if (status === 402) return false;
   return (
     isAbortError(err) ||
     /503|UNAVAILABLE|429|rate.?limit|timeout|ETIMEDOUT|ECONNRESET|ECONNABORTED|JSON|fetch failed/i.test(
@@ -268,7 +312,17 @@ const callGeminiJson = async (prompt, { kind = "generate" } = {}) => {
   };
   lastCallContext = { provider: "gemini", ...requestPayload };
   let lastErr;
+
+  // If another parallel seat already hit billing exhaustion, stop immediately.
+  const priorAbort = getProviderFatalAbort(currentJobId);
+  if (priorAbort?.error) {
+    throw priorAbort.error;
+  }
+
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    if (getProviderFatalAbort(currentJobId)?.error) {
+      throw getProviderFatalAbort(currentJobId).error;
+    }
     const startedAt = Date.now();
     pipelineLog("GEMINI_REQUEST", {
       ...requestPayload,
@@ -332,6 +386,26 @@ const callGeminiJson = async (prompt, { kind = "generate" } = {}) => {
         aborted,
         diagnosis,
       };
+
+      if (isProviderCreditsExhausted(err)) {
+        const creditsErr = providerCreditsError(err, "gemini");
+        creditsErr.pipeline = lastCallContext;
+        // First seat wins — mark job failed immediately and latch abort.
+        const already = getProviderFatalAbort(currentJobId);
+        if (!already) {
+          pipelineLog("PROVIDER_CREDITS_EXHAUSTED", {
+            kind,
+            model,
+            provider: "gemini",
+            status: 402,
+            message: creditsErr.message,
+            jobId: currentJobId,
+          });
+          failJobForProviderCredits(currentJobId, creditsErr);
+        }
+        throw already?.error || creditsErr;
+      }
+
       pipelineLog("GEMINI_ERROR", {
         kind,
         model,
@@ -2135,7 +2209,10 @@ const toUiQuestion = (q, config = {}) => {
     correctIndex: q.correctIndex ?? indices[0] ?? 0,
     correctIndices: indices,
     multipleCorrectIndexes: type === "multiple" ? indices : [],
-    explanation: sanitizeExplanationLatex(q.explanation),
+    explanation: alignExplanationToMarkedAnswer(
+      sanitizeExplanationLatex(q.explanation),
+      q.correctAnswer
+    ),
     marks: config.marksByType?.[type] ?? 4,
     negativeMarks: config.negativeMarks ?? 1,
     difficulty: "Hard",
@@ -2685,12 +2762,21 @@ const applyJobProgress = (jobId, evt) => {
 const runJobLoop = async (jobId, config, { resume = false } = {}) => {
   if (runningJobs.has(jobId)) return getGenerationJob(jobId);
   const current = getGenerationJob(jobId);
-  if (String(current?.status || "").toLowerCase() === "cancelled") {
+  const currentStatus = String(current?.status || "").toLowerCase();
+  if (currentStatus === "cancelled") {
+    return current;
+  }
+  if (
+    currentStatus === "failed" &&
+    (current?.errorCode === PROVIDER_CREDITS_CODE ||
+      isProviderCreditsExhausted({ message: current?.error }))
+  ) {
     return current;
   }
   runningJobs.add(jobId);
   currentJobId = jobId;
   lastCallContext = null;
+  clearProviderFatalAbort(jobId);
   bindPaperJob(jobId);
   try {
     updateGenerationJob(jobId, {
@@ -2700,6 +2786,7 @@ const runJobLoop = async (jobId, config, { resume = false } = {}) => {
         ? "Resuming from last locked question"
         : "Planning slots",
       error: "",
+      errorCode: "",
       resumable: false,
     });
     const resumeJob = resume ? getGenerationJob(jobId) : null;
@@ -2707,7 +2794,11 @@ const runJobLoop = async (jobId, config, { resume = false } = {}) => {
       resumeJob,
       onProgress: (evt) => applyJobProgress(jobId, evt),
     });
-    if (String(getGenerationJob(jobId)?.status || "").toLowerCase() === "cancelled") {
+    const afterStatus = String(
+      getGenerationJob(jobId)?.status || ""
+    ).toLowerCase();
+    // Credits abort may have already marked the job failed mid-flight.
+    if (afterStatus === "cancelled" || afterStatus === "failed") {
       return getGenerationJob(jobId);
     }
     const tokens = readTokenSummary(jobId);
@@ -2770,13 +2861,18 @@ const runJobLoop = async (jobId, config, { resume = false } = {}) => {
   } catch (err) {
     const errorDetail = serializeError(err);
     const payload = err?.pipeline || lastCallContext;
-    const reason = err?.message || String(err);
+    const credits = isProviderCreditsExhausted(err);
+    const reason = credits
+      ? err?.message || providerCreditsError(err, err?.provider || "gemini").message
+      : err?.message || String(err);
     pipelineLog("JOB_FAILED", {
       error: err,
       errorDetail,
       lastCall: payload,
       cause: err?.cause ? serializeError(err.cause) : null,
       reason,
+      fatal: credits || Boolean(err?.fatal),
+      errorCode: credits ? PROVIDER_CREDITS_CODE : err?.code || null,
     });
     const existing = getGenerationJob(jobId) || {};
     const tokens = readTokenSummary(jobId);
@@ -2784,10 +2880,12 @@ const runJobLoop = async (jobId, config, { resume = false } = {}) => {
       status: "failed",
       phase: "error",
       error: reason,
+      errorCode: credits ? PROVIDER_CREDITS_CODE : err?.code || null,
       errorDetail,
       lastCall: payload,
       message: reason,
-      resumable: true,
+      // Credits exhaustion cannot resume until billing is topped up.
+      resumable: credits ? false : true,
       tokenUsage: tokens.byModel,
       logDir: `temp/paper-jobs/${jobId}`,
     });
@@ -2797,12 +2895,13 @@ const runJobLoop = async (jobId, config, { resume = false } = {}) => {
       error: reason,
       errorDetail,
       message: reason,
-      resumable: true,
+      resumable: credits ? false : true,
       counts: existing.counts || {},
       failures: existing.failures || [],
     });
   } finally {
     runningJobs.delete(jobId);
+    clearProviderFatalAbort(jobId);
     if (currentJobId === jobId) currentJobId = null;
   }
   return getGenerationJob(jobId);

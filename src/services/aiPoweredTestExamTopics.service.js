@@ -361,7 +361,14 @@ export const inferExamAndSubject = ({
   let finalSubject = null;
   let finalSubjects = uniqueSubjects;
 
-  if (uniqueSubjects.length === 1) {
+  // Explicit canonical subject (e.g. wizard subject=Chemistry) wins over a
+  // conflicting leaf in categoryPath (e.g. "... > Physics").
+  if (explicitSubject && CANONICAL_SUBJECT_VALUES.has(explicitSubject)) {
+    finalSubject = explicitSubject;
+    finalSubjects = uniqueSubjects.includes(explicitSubject)
+      ? uniqueSubjects
+      : [explicitSubject, ...uniqueSubjects];
+  } else if (uniqueSubjects.length === 1) {
     finalSubject = uniqueSubjects[0];
   } else if (uniqueSubjects.length > 1) {
     // Multiple distinct subjects selected

@@ -200,27 +200,37 @@ export const validateExplanation = (question, explanationIn) => {
     }
   }
 
-  // Contradictory alternate keys (heuristic)
-  if (
-    type !== "integer" &&
-    /correct option(?:\(s\))?\s*:\s*[A-D]/i.test(explanation)
-  ) {
-    const m = explanation.match(/correct option(?:\(s\))?\s*:\s*([A-D,\s]+)/i);
-    if (m && lockedKey) {
-      const claimed = m[1]
-        .toUpperCase()
-        .split(/[^A-D]+/)
-        .filter(Boolean)
-        .sort()
-        .join(",");
-      const want = String(lockedKey)
-        .toUpperCase()
-        .split(/[^A-D]+/)
-        .filter(Boolean)
-        .sort()
-        .join(",");
-      if (claimed && want && claimed !== want) {
-        errors.push("EXPLANATION_CONTRADICTS_KEY");
+  // Contradictory alternate keys (heuristic) — broader closing patterns
+  if (type !== "integer" && explanation && lockedKey) {
+    const want = String(lockedKey)
+      .toUpperCase()
+      .split(/[^A-D]+/)
+      .filter((s) => /^[A-D]$/.test(s))
+      .sort()
+      .join(",");
+    if (want) {
+      const closingClaims = [
+        ...explanation.matchAll(
+          /\b(?:correct|right|Dorrect)\s+(?:option|answer|choice)\s*(?:is|:|=)\s*[\[\(]?([A-D])[\]\)]?/gi
+        ),
+        ...explanation.matchAll(
+          /\b(?:Hence|Therefore|Thus),?\s+(?:the\s+)?(?:correct\s+)?(?:option|answer|choice)\s*(?:is|:|=)?\s*[\[\(]?([A-D])[\]\)]?/gi
+        ),
+        ...explanation.matchAll(
+          /correct option(?:\(s\))?\s*:\s*([A-D,\s]+)/gi
+        ),
+      ];
+      for (const m of closingClaims) {
+        const claimed = String(m[1] || "")
+          .toUpperCase()
+          .split(/[^A-D]+/)
+          .filter(Boolean)
+          .sort()
+          .join(",");
+        if (claimed && claimed !== want) {
+          errors.push("EXPLANATION_CONTRADICTS_KEY");
+          break;
+        }
       }
     }
   }
