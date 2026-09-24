@@ -65,18 +65,23 @@ export const getCompetitiveTests = async (options = {}) => {
   const skip = (pageNum - 1) * limitNum;
 
   const query = {};
+  let subjectScoped = false;
   if (categoryId) {
-    const descendantIds = await categoryRepository.findDescendantIds(categoryId);
-    const categoryIds = new Set(descendantIds.map(String));
-
-    // Seeded papers are linked on the exam category (e.g. JEE Mains), while the
-    // pillar UI often selects a subject leaf under it — include that exam node.
     const seededExam = await resolveSeededExamFromCategory(categoryId);
-    if (seededExam?.categoryId) {
-      categoryIds.add(String(seededExam.categoryId));
-    }
+    subjectScoped = Boolean(seededExam?.isSubjectSelection);
 
-    query.categoryId = { $in: [...categoryIds] };
+    if (subjectScoped) {
+      // Subject leaf: only Tests linked directly to this subject category.
+      // Full exam papers come from seeded subject-scoped listing below.
+      query.categoryId = categoryId;
+    } else {
+      const descendantIds = await categoryRepository.findDescendantIds(categoryId);
+      const categoryIds = new Set(descendantIds.map(String));
+      if (seededExam?.categoryId) {
+        categoryIds.add(String(seededExam.categoryId));
+      }
+      query.categoryId = { $in: [...categoryIds] };
+    }
   }
   // When isPublished flag is provided, filter by publish status.
   // Student routes pass isPublished: true so draft tests are never exposed.

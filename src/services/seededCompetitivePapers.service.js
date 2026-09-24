@@ -1,27 +1,45 @@
 import Category from "../models/Category.js";
 import Test from "../models/Test.js";
 import JeeMainCompetitivePaper from "../models/JeeMainCompetitivePaper.js";
+import JeeMainCompetitiveQuestion from "../models/JeeMainCompetitiveQuestion.js";
 import JeeAdvancedCompetitivePaper from "../models/JeeAdvancedCompetitivePaper.js";
+import JeeAdvancedCompetitiveQuestion from "../models/JeeAdvancedCompetitiveQuestion.js";
 import NeetCompetitivePaper from "../models/NeetCompetitivePaper.js";
+import NeetCompetitiveQuestion from "../models/NeetCompetitiveQuestion.js";
 import ClatCompetitivePaper from "../models/ClatCompetitivePaper.js";
+import ClatCompetitiveQuestion from "../models/ClatCompetitiveQuestion.js";
 import IbpsCompetitivePaper from "../models/IbpsCompetitivePaper.js";
+import IbpsCompetitiveQuestion from "../models/IbpsCompetitiveQuestion.js";
 import GmatCompetitivePaper from "../models/GmatCompetitivePaper.js";
-import CatCompetitivePaper from "../models/CatCompetitivePaper.js";
-import SscCglTier1CompetitivePaper from "../models/SscCglTier1CompetitivePaper.js";
-import SscCglTier2CompetitivePaper from "../models/SscCglTier2CompetitivePaper.js";
-import UpscCompetitivePaper from "../models/UpscCompetitivePaper.js";
+import GmatCompetitiveQuestion from "../models/GmatCompetitiveQuestion.js";
+import CatCompetitivePaper, {
+  CatCompetitiveQuestion,
+} from "../models/CatCompetitivePaper.js";
+import SscCglTier1CompetitivePaper, {
+  SscCglTier1CompetitiveQuestion,
+} from "../models/SscCglTier1CompetitivePaper.js";
+import SscCglTier2CompetitivePaper, {
+  SscCglTier2CompetitiveQuestion,
+} from "../models/SscCglTier2CompetitivePaper.js";
+import UpscCompetitivePaper, {
+  UpscCompetitiveQuestion,
+} from "../models/UpscCompetitivePaper.js";
 
 const EXAM_REGISTRY = [
   {
     examKey: "jee_main",
     label: "JEE Main",
     Paper: JeeMainCompetitivePaper,
+    Question: JeeMainCompetitiveQuestion,
+    subjects: ["Mathematics", "Physics", "Chemistry"],
     match: (name) => /^jee\s*mains?$/i.test(String(name || "").trim()),
   },
   {
     examKey: "jee_advanced",
     label: "JEE Advanced",
     Paper: JeeAdvancedCompetitivePaper,
+    Question: JeeAdvancedCompetitiveQuestion,
+    subjects: ["Mathematics", "Physics", "Chemistry"],
     match: (name) => {
       const n = String(name || "").trim();
       if (/^jee\s*advanc(?:e|ed)\s*[12]$/i.test(n)) return false;
@@ -32,6 +50,8 @@ const EXAM_REGISTRY = [
     examKey: "neet",
     label: "NEET",
     Paper: NeetCompetitivePaper,
+    Question: NeetCompetitiveQuestion,
+    subjects: ["Physics", "Chemistry", "Botany", "Zoology"],
     match: (name) => {
       const n = String(name || "").trim();
       return /\bneet\b/i.test(n) && !/\bpg\b/i.test(n);
@@ -41,6 +61,14 @@ const EXAM_REGISTRY = [
     examKey: "clat",
     label: "CLAT",
     Paper: ClatCompetitivePaper,
+    Question: ClatCompetitiveQuestion,
+    subjects: [
+      "English",
+      "Current Affairs",
+      "Legal Reasoning",
+      "Logical Reasoning",
+      "Quantitative Techniques",
+    ],
     match: (name) => {
       const n = String(name || "").trim();
       if (/^clat[\s_-]*20\d{2}$/i.test(n)) return false;
@@ -51,18 +79,28 @@ const EXAM_REGISTRY = [
     examKey: "ibps",
     label: "IBPS PO Prelims",
     Paper: IbpsCompetitivePaper,
+    Question: IbpsCompetitiveQuestion,
+    subjects: ["English", "Quantitative Aptitude", "Reasoning Ability"],
     match: (name) => /ibps(\s*po)?(\s*prelims)?/i.test(String(name || "")),
   },
   {
     examKey: "gmat",
     label: "GMAT",
     Paper: GmatCompetitivePaper,
+    Question: GmatCompetitiveQuestion,
+    subjects: ["Quant", "Verbal", "Data Insights"],
     match: (name) => /\bgmat\b/i.test(String(name || "")),
   },
   {
     examKey: "cat",
     label: "CAT",
     Paper: CatCompetitivePaper,
+    Question: CatCompetitiveQuestion,
+    subjects: [
+      "Verbal Ability and Reading Comprehension",
+      "Data Interpretation and Logical Reasoning",
+      "Quantitative Ability",
+    ],
     match: (name) =>
       /^cat$/i.test(String(name || "").trim()) ||
       /\bcommon\s+admission\s+test\b/i.test(String(name || "")),
@@ -71,6 +109,14 @@ const EXAM_REGISTRY = [
     examKey: "ssc_cgl_tier2",
     label: "SSC CGL Tier 2",
     Paper: SscCglTier2CompetitivePaper,
+    Question: SscCglTier2CompetitiveQuestion,
+    subjects: [
+      "Mathematical Abilities",
+      "Reasoning and General Intelligence",
+      "English Language and Comprehension",
+      "General Awareness",
+      "Computer Knowledge",
+    ],
     match: (name) =>
       /ssc\s*cgl.*tier\s*(2|ii)\b|\bcgl\s*tier\s*(2|ii)\b/i.test(
         String(name || "")
@@ -80,6 +126,13 @@ const EXAM_REGISTRY = [
     examKey: "ssc_cgl_tier1",
     label: "SSC CGL Tier 1",
     Paper: SscCglTier1CompetitivePaper,
+    Question: SscCglTier1CompetitiveQuestion,
+    subjects: [
+      "General Intelligence and Reasoning",
+      "General Awareness",
+      "Quantitative Aptitude",
+      "English Comprehension",
+    ],
     match: (name) =>
       /ssc\s*cgl\b|\bcgl\s*tier\s*[i1]\b/i.test(String(name || "")) &&
       !/tier\s*(2|ii)\b/i.test(String(name || "")),
@@ -88,9 +141,56 @@ const EXAM_REGISTRY = [
     examKey: "upsc",
     label: "UPSC Prelims",
     Paper: UpscCompetitivePaper,
+    Question: UpscCompetitiveQuestion,
+    subjects: [
+      "History",
+      "Polity",
+      "Geography",
+      "Economy",
+      "Environment",
+      "Science",
+      "Current Affairs",
+    ],
     match: (name) => /\bupsc\b/i.test(String(name || "")),
   },
 ];
+
+/** Used by seed-competitive-exam-subjects.mjs */
+export const COMPETITIVE_EXAM_SUBJECT_SEED = EXAM_REGISTRY.map((e) => ({
+  examKey: e.examKey,
+  subjects: e.subjects,
+  match: e.match,
+}));
+
+/** Normalize subject labels so Maths ≡ Mathematics, etc. */
+export const normalizeSubjectKey = (label = "") => {
+  const n = String(label || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+  if (!n) return "";
+  if (/^(maths|mathematics|mathematical\s+abilities|quantitative\s+aptitude|quantitative\s+ability|quant)$/.test(n))
+    return "math";
+  if (/^(physics)$/.test(n)) return "physics";
+  if (/^(chemistry)$/.test(n)) return "chemistry";
+  if (/reason/.test(n)) return "reasoning";
+  if (/english|verbal|varc|comprehension/.test(n) && !/general\s+awareness/.test(n))
+    return "english";
+  if (/general\s+awareness|^ga$/.test(n)) return "ga";
+  if (/computer/.test(n)) return "computer";
+  if (/botany/.test(n)) return "botany";
+  if (/zoology/.test(n)) return "zoology";
+  if (/dilr|data\s+interpretation|logical\s+reasoning/.test(n) && !/legal/.test(n))
+    return "dilr";
+  if (/legal/.test(n)) return "legal";
+  if (/current\s+affairs/.test(n)) return "ca";
+  if (/data\s+insights/.test(n)) return "di";
+  return n;
+};
+
+const subjectsMatch = (a, b) =>
+  normalizeSubjectKey(a) &&
+  normalizeSubjectKey(a) === normalizeSubjectKey(b);
 
 const walkCategoryAncestors = async (startId) => {
   const nodes = [];
@@ -122,6 +222,12 @@ export const resolveSeededExamFromCategory = async (categoryId) => {
           categoryId: node._id,
           categoryName: node.name,
           Paper: exam.Paper,
+          Question: exam.Question || null,
+          subjects: exam.subjects || [],
+          selectedNode: ancestors[0],
+          isSubjectSelection:
+            String(ancestors[0]?._id) !== String(node._id) &&
+            !EXAM_REGISTRY.some((e) => e.match(ancestors[0]?.name)),
         };
       }
     }
@@ -129,14 +235,36 @@ export const resolveSeededExamFromCategory = async (categoryId) => {
   return null;
 };
 
-const mapPaperAsTest = (paper, { categoryId, categoryPath, linkedTest } = {}) => {
+const mapPaperAsTest = (
+  paper,
+  { categoryId, categoryPath, linkedTest, subjectFilter = null, subjectQuestionCount = null } = {}
+) => {
   const testId = linkedTest?._id || null;
+  const scoped =
+    subjectFilter && Number.isFinite(subjectQuestionCount)
+      ? {
+          title: `${paper.title} — ${subjectFilter}`,
+          description: `${paper.title} — ${subjectFilter} only (${subjectQuestionCount} questions).`,
+          totalQuestions: subjectQuestionCount,
+          subjects: [subjectFilter],
+          filterSubject: subjectFilter,
+        }
+      : {
+          title: paper.title,
+          description:
+            paper.description ||
+            `${paper.title} — seeded competitive paper (${paper.examType || "exam"}).`,
+          totalQuestions: paper.totalQuestions ?? 0,
+          subjects: paper.subjects || [],
+          filterSubject: null,
+        };
+
   return {
-    _id: testId || paper._id,
-    title: paper.title,
-    description:
-      paper.description ||
-      `${paper.title} — seeded competitive paper (${paper.examType || "exam"}).`,
+    _id: subjectFilter
+      ? `${paper._id}:${normalizeSubjectKey(subjectFilter)}`
+      : testId || paper._id,
+    title: scoped.title,
+    description: scoped.description,
     durationMinutes: paper.durationMinutes || linkedTest?.durationMinutes || 0,
     price: linkedTest?.price ?? 0,
     originalPrice: linkedTest?.price ?? 0,
@@ -149,14 +277,14 @@ const mapPaperAsTest = (paper, { categoryId, categoryPath, linkedTest } = {}) =>
     examType: paper.examType || null,
     paperKey: paper.paperKey,
     paperId: paper._id,
-    totalQuestions: paper.totalQuestions ?? 0,
+    totalQuestions: scoped.totalQuestions,
     totalMarks: paper.totalMarks ?? 0,
-    subjects: paper.subjects || [],
+    subjects: scoped.subjects,
+    filterSubject: scoped.filterSubject,
     isSeededPaper: true,
-    // Pillar edit URL uses testId when present; seeded-only papers are view-only.
     testId: testId
       ? {
-          _id: testId,
+          _id: linkedTest._id,
           title: linkedTest.title,
           durationMinutes: linkedTest.durationMinutes,
           price: linkedTest.price ?? 0,
@@ -188,9 +316,13 @@ export const listSeededPapersForCategory = async (
     .sort({ sortOrder: 1, createdAt: 1 })
     .lean();
 
+  const subjectName = resolved.isSubjectSelection
+    ? resolved.selectedNode?.name
+    : null;
+
   const paperIds = papers.map((p) => p._id);
   const linkedTests =
-    resolved.examKey === "jee_main" && paperIds.length
+    resolved.examKey === "jee_main" && paperIds.length && !subjectName
       ? await Test.find({
           jeeMainPaper: { $in: paperIds },
           applicableFor: "Competitive",
@@ -203,13 +335,66 @@ export const listSeededPapersForCategory = async (
     linkedTests.map((t) => [String(t.jeeMainPaper), t])
   );
 
-  const tests = papers.map((paper) =>
-    mapPaperAsTest(paper, {
-      categoryId: resolved.categoryId,
-      categoryPath,
-      linkedTest: testByPaper.get(String(paper._id)) || null,
-    })
-  );
+  const tests = [];
+  for (const paper of papers) {
+    if (subjectName && resolved.Question) {
+      const count = await resolved.Question.countDocuments({
+        paper: paper._id,
+        isActive: { $ne: false },
+        subject: {
+          $regex: new RegExp(
+            `^${String(subjectName).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
+            "i"
+          ),
+        },
+      });
+      // Also try alias match (Maths ↔ Mathematics) via scanning distinct if zero
+      let finalCount = count;
+      let matchedSubject = subjectName;
+      if (finalCount === 0) {
+        const distinct = await resolved.Question.distinct("subject", {
+          paper: paper._id,
+          isActive: { $ne: false },
+        });
+        const alias = distinct.find((s) => subjectsMatch(s, subjectName));
+        if (alias) {
+          matchedSubject = alias;
+          finalCount = await resolved.Question.countDocuments({
+            paper: paper._id,
+            isActive: { $ne: false },
+            subject: alias,
+          });
+        }
+      }
+      if (finalCount <= 0) continue;
+      tests.push(
+        mapPaperAsTest(paper, {
+          categoryId,
+          categoryPath,
+          linkedTest: null,
+          subjectFilter: matchedSubject,
+          subjectQuestionCount: finalCount,
+        })
+      );
+      continue;
+    }
+
+    // Exam-level (or subject without Question model): full papers
+    if (subjectName && !resolved.Question) {
+      const listed = (paper.subjects || []).some((s) =>
+        subjectsMatch(s, subjectName)
+      );
+      if (!listed) continue;
+    }
+
+    tests.push(
+      mapPaperAsTest(paper, {
+        categoryId: subjectName ? categoryId : resolved.categoryId,
+        categoryPath,
+        linkedTest: testByPaper.get(String(paper._id)) || null,
+      })
+    );
+  }
 
   return {
     exam: {
@@ -217,6 +402,7 @@ export const listSeededPapersForCategory = async (
       label: resolved.label,
       categoryId: resolved.categoryId,
       categoryName: resolved.categoryName,
+      subjectFilter: subjectName || null,
     },
     papers,
     tests,
@@ -242,7 +428,6 @@ export const listAllSeededPaperSummaries = async () => {
   return results;
 };
 
-/** Exam keys that currently have ≥1 active seeded competitive paper. */
 export const getExamKeysWithSeededPapers = async () => {
   const withPapers = new Set();
   for (const exam of EXAM_REGISTRY) {
@@ -252,7 +437,6 @@ export const getExamKeysWithSeededPapers = async () => {
   return withPapers;
 };
 
-/** Match a category name to a seeded exam key (or null). */
 export const matchExamKeyFromCategoryName = (name) => {
   for (const exam of EXAM_REGISTRY) {
     if (exam.match(name)) return exam.examKey;
@@ -260,17 +444,62 @@ export const matchExamKeyFromCategoryName = (name) => {
   return null;
 };
 
+/** Subjects that have ≥1 seeded question under an exam key. */
+const subjectKeysWithQuestionsByExam = async () => {
+  const map = new Map(); // examKey -> Set(normalized subject keys + raw names)
+  for (const exam of EXAM_REGISTRY) {
+    const set = new Set();
+    if (exam.Question) {
+      const subjects = await exam.Question.distinct("subject", {
+        isActive: { $ne: false },
+      });
+      for (const s of subjects || []) {
+        if (!s) continue;
+        set.add(String(s).trim().toLowerCase());
+        set.add(normalizeSubjectKey(s));
+      }
+    } else {
+      const papers = await exam.Paper.find({ isActive: { $ne: false } })
+        .select("subjects")
+        .lean();
+      for (const p of papers) {
+        for (const s of p.subjects || exam.subjects || []) {
+          set.add(String(s).trim().toLowerCase());
+          set.add(normalizeSubjectKey(s));
+        }
+      }
+    }
+    map.set(exam.examKey, set);
+  }
+  return map;
+};
+
 /**
- * Mark Competitive category nodes with `hasSeededPapers` when the node is an
- * exam that has seeded papers in its *CompetitivePaper collection.
+ * Mark exam nodes with hasSeededPapers and subject children with
+ * hasSeededSubjectPapers when that subject has questions in the seed DB.
  */
 export const annotateTreeWithSeededPapers = async (nodes = []) => {
   const keys = await getExamKeysWithSeededPapers();
-  const walk = (list) => {
+  const subjectMap = await subjectKeysWithQuestionsByExam();
+
+  const walk = (list, parentExamKey = null) => {
     for (const node of list || []) {
       const examKey = matchExamKeyFromCategoryName(node?.name);
       node.hasSeededPapers = Boolean(examKey && keys.has(examKey));
-      if (node.children?.length) walk(node.children);
+
+      if (parentExamKey && !examKey) {
+        const set = subjectMap.get(parentExamKey) || new Set();
+        const raw = String(node?.name || "")
+          .trim()
+          .toLowerCase();
+        const norm = normalizeSubjectKey(node?.name);
+        node.hasSeededSubjectPapers = set.has(raw) || set.has(norm);
+      } else {
+        node.hasSeededSubjectPapers = false;
+      }
+
+      const nextExam = examKey || parentExamKey;
+      if (node.children?.length) walk(node.children, nextExam);
     }
   };
   walk(nodes);
@@ -285,4 +514,6 @@ export default {
   getExamKeysWithSeededPapers,
   matchExamKeyFromCategoryName,
   annotateTreeWithSeededPapers,
+  COMPETITIVE_EXAM_SUBJECT_SEED,
+  normalizeSubjectKey,
 };
