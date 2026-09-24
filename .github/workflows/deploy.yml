@@ -47,20 +47,25 @@ jobs:
 
             npm install
 
+            # Resilient PM2 restart — avoids "Process with pid already exists"
+            # when a stale PM2 god-daemon entry conflicts with restart.
+            restart_or_start() {
+              local name="$1"
+              local entry="$2"
+              pm2 stop "$name" >/dev/null 2>&1 || true
+              pm2 delete "$name" >/dev/null 2>&1 || true
+              pm2 start "$entry" --name "$name" --update-env
+            }
+
             # API process (enqueues paper jobs when PAPER_JOB_RUNNER=worker)
-            if pm2 describe backend > /dev/null; then
-              pm2 restart backend --update-env
-            else
-              pm2 start src/server.js --name backend
-            fi
+            restart_or_start backend src/server.js
 
             # Dedicated paper worker — required when PAPER_JOB_RUNNER=worker
             # (API alone will leave jobs stuck in pending forever).
-            if pm2 describe paper-worker > /dev/null; then
-              pm2 restart paper-worker --update-env
-            else
-              pm2 start scripts/paper-job-worker.mjs --name paper-worker
-            fi
+            restart_or_start paper-worker scripts/paper-job-worker.mjs
+
+            # Ensure subject taxonomy under competitive exams (idempotent).
+            node scripts/seed-competitive-exam-subjects.mjs || true
 
             pm2 save
             pm2 status
