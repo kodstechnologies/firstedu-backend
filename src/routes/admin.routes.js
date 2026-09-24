@@ -186,6 +186,10 @@ import {
   deleteCompetitiveTest,
 } from "../controllers/competitiveTest.controller.js";
 import {
+  listSeededCompetitivePapersAdmin,
+  resolveSeededExamAdmin,
+} from "../controllers/seededCompetitivePapers.controller.js";
+import {
   createOlympiadTest,
   getOlympiadTests,
   getOlympiadTestById,
@@ -736,6 +740,10 @@ router.get('/competitive/jee-main/papers', verifyJWT, listJeeMainPapersAdmin);
 router.get('/competitive/jee-main/papers/:id', verifyJWT, getJeeMainPaperAdmin);
 router.get('/competitive/jee-syllabus', verifyJWT, listJeeExamSyllabus);
 router.get('/competitive/jee-syllabus/:examType', verifyJWT, getJeeExamSyllabusByExam);
+
+/* ==================== SEEDED COMPETITIVE PAPERS (ALL EXAMS) ==================== */
+router.get('/competitive/seeded-papers', verifyJWT, listSeededCompetitivePapersAdmin);
+router.get('/competitive/seeded-exam', verifyJWT, resolveSeededExamAdmin);
 
 /* ==================== AI POWERED TEST ====================
    The whole flow (exam topics, blueprint, topic plan, generation, review)

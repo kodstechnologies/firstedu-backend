@@ -2,6 +2,10 @@ import Test from "../models/Test.js";
 import Category from "../models/Category.js";
 import { attachOfferToList } from "../utils/offerUtils.js";
 import categoryRepository from "../repository/category.repository.js";
+import {
+  listSeededPapersForCategory,
+  resolveSeededExamFromCategory,
+} from "./seededCompetitivePapers.service.js";
 
 /**
  * Walk the category tree upward from `startId` and return a
@@ -48,7 +52,14 @@ export const createCompetitiveTest = async (data) => {
 };
 
 export const getCompetitiveTests = async (options = {}) => {
-  const { categoryId, page = 1, limit = 10, search, isPublished } = options;
+  const {
+    categoryId,
+    page = 1,
+    limit = 10,
+    search,
+    isPublished,
+    includeSeededPapers = false,
+  } = options;
   const pageNum = parseInt(page);
   const limitNum = parseInt(limit);
   const skip = (pageNum - 1) * limitNum;
@@ -56,7 +67,16 @@ export const getCompetitiveTests = async (options = {}) => {
   const query = {};
   if (categoryId) {
     const descendantIds = await categoryRepository.findDescendantIds(categoryId);
-    query.categoryId = { $in: descendantIds };
+    const categoryIds = new Set(descendantIds.map(String));
+
+    // Seeded papers are linked on the exam category (e.g. JEE Mains), while the
+    // pillar UI often selects a subject leaf under it — include that exam node.
+    const seededExam = await resolveSeededExamFromCategory(categoryId);
+    if (seededExam?.categoryId) {
+      categoryIds.add(String(seededExam.categoryId));
+    }
+
+    query.categoryId = { $in: [...categoryIds] };
   }
   // When isPublished flag is provided, filter by publish status.
   // Student routes pass isPublished: true so draft tests are never exposed.
@@ -71,19 +91,71 @@ export const getCompetitiveTests = async (options = {}) => {
   // Build the full ancestor path once (all tests on this page share the same category)
   const categoryPath = await buildCategoryPath(categoryId);
 
-  const [rawTests, total] = await Promise.all([
-    Test.find(query)
-      .skip(skip)
-      .limit(limitNum)
-      .sort({ createdAt: -1 }),
+  const [rawTests, manualTotal] = await Promise.all([
+    Test.find(query).sort({ createdAt: -1 }).lean(),
     Test.countDocuments(query),
   ]);
 
-  let tests = rawTests.map(t => {
-    const obj = t.toObject ? t.toObject() : { ...t };
-    obj.categoryPath = categoryPath;
-    return obj;
+  let tests = rawTests.map((t) => ({
+    ...t,
+    categoryPath,
+    isSeededPaper: Boolean(t.jeeMainPaper) || String(t.paperSource || "").endsWith("_db"),
+    paperId: t.jeeMainPaper || t.paperId || null,
+    testId: {
+      _id: t._id,
+      title: t.title,
+      durationMinutes: t.durationMinutes,
+      price: t.price ?? 0,
+      originalPrice: t.price ?? 0,
+      effectivePrice: t.price ?? 0,
+    },
+  }));
+
+  // Admin competitive pillar: also surface seeded papers that only live in
+  // *competitivepapers collections (NEET, CAT, …) and are not yet Test docs.
+  if (includeSeededPapers && categoryId) {
+    const seeded = await listSeededPapersForCategory(categoryId, {
+      categoryPath,
+    });
+    if (seeded.tests?.length) {
+      const seen = new Set(
+        tests.map((t) => {
+          if (t.jeeMainPaper) return `paper:${t.jeeMainPaper}`;
+          if (t.paperId) return `paper:${t.paperId}`;
+          return `test:${t._id}`;
+        })
+      );
+
+      for (const seededTest of seeded.tests) {
+        const paperKey = seededTest.paperId
+          ? `paper:${seededTest.paperId}`
+          : `test:${seededTest._id}`;
+        if (seen.has(paperKey)) continue;
+        if (seen.has(`test:${seededTest._id}`)) continue;
+        if (search) {
+          const hay = String(seededTest.title || "").toLowerCase();
+          if (!hay.includes(String(search).toLowerCase())) continue;
+        }
+        if (
+          isPublished !== undefined &&
+          Boolean(seededTest.isPublished) !== Boolean(isPublished)
+        ) {
+          continue;
+        }
+        seen.add(paperKey);
+        tests.push(seededTest);
+      }
+    }
+  }
+
+  tests.sort((a, b) => {
+    const aTime = new Date(a.createdAt || 0).getTime();
+    const bTime = new Date(b.createdAt || 0).getTime();
+    return bTime - aTime;
   });
+
+  const total = Math.max(manualTotal, tests.length);
+  tests = tests.slice(skip, skip + limitNum);
 
   if (tests.length > 0 && categoryId) {
     const category = await Category.findById(categoryId).lean();
