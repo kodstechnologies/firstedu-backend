@@ -192,20 +192,26 @@ export const createAiQuestionBankWithQuestions = async (data, createdBy) => {
   const bankName = String(data.name || "").trim();
   if (!bankName) throw new ApiError(400, "Bank name is required");
 
-  const questionsInput = dedupePaperQuestionsByStem(data.questions || []);
-  if (questionsInput.length < (data.questions || []).length) {
+  const rawQuestions = Array.isArray(data.questions) ? data.questions : [];
+  const questionsInput = dedupePaperQuestionsByStem(rawQuestions);
+  const droppedDupes = rawQuestions.length - questionsInput.length;
+  if (droppedDupes > 0) {
     console.warn(
-      `[ai-question-bank] dropped ${
-        (data.questions || []).length - questionsInput.length
-      } duplicate stem(s) before save`
+      `[ai-question-bank] dropped ${droppedDupes} duplicate stem(s) before save`
     );
   }
 
   const expectedTotal = Number(data.expectedTotal) || 0;
-  if (expectedTotal > 0 && questionsInput.length < expectedTotal) {
-    throw new ApiError(
-      409,
-      `Paper has ${questionsInput.length}/${expectedTotal} questions. Cannot save until paper generation reaches full target (${expectedTotal}).`
+  // Never hard-block confirm on count shortfall. Generation may stop early
+  // (credits, partial paper, near-dupe prune). Save whatever unique stems arrived.
+  if (
+    expectedTotal > 0 &&
+    questionsInput.length < expectedTotal
+  ) {
+    console.warn(
+      `[ai-question-bank] saving ${questionsInput.length}/${expectedTotal} unique` +
+        (droppedDupes > 0 ? ` (dropped ${droppedDupes} near-duplicate(s))` : '') +
+        `; client may resume generation later to top up`
     );
   }
 
@@ -307,7 +313,7 @@ export const createAiQuestionBankWithQuestions = async (data, createdBy) => {
       });
       const baseFields = {
         subject: q.subject || undefined,
-        topic: q.topic || q.chapter || undefined,
+        topic: q.topic || q.chapter || q.topicId || undefined,
         difficulty,
         tags: q.tags,
         aiBatchNumber: q.aiBatchNumber ?? null,

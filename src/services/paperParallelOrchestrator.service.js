@@ -14,10 +14,20 @@
  * Removed from this path: hard Code QC stage, Gemini Expand, Luna paper audit.
  */
 
+import { randomUUID } from "crypto";
 import { callOpenAIReasoningJson } from "./openaiReasoningChat.service.js";
 import { isDuplicateStem } from "./paperCodeValidation.service.js";
-import { dedupePaperQuestionsByStem } from "../utils/paperQuestionDedupe.js";
+import {
+  dedupePaperQuestionsByStem,
+  isNearDuplicateOfAny,
+} from "../utils/paperQuestionDedupe.js";
+import {
+  isProviderCreditsExhausted,
+  providerCreditsError,
+  getProviderFatalAbort,
+} from "../utils/aiProviderErrors.js";
 import { resolvePaperExam } from "./paperExamIdentity.service.js";
+import { alignExplanationToMarkedAnswer } from "../utils/explanationAnswerAlign.js";
 import { getGenerationJob } from "./questionBankGenerationJobStore.js";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -26,12 +36,21 @@ export const mapPool = async (items, concurrency, fn) => {
   const n = Math.max(1, Math.min(Number(concurrency) || 1, items.length || 1));
   const results = new Array(items.length);
   let cursor = 0;
+  let fatal = null;
   const worker = async () => {
     while (true) {
+      if (fatal) return;
       const i = cursor;
       cursor += 1;
       if (i >= items.length) return;
-      results[i] = await fn(items[i], i);
+      try {
+        results[i] = await fn(items[i], i);
+      } catch (err) {
+        if (isProviderCreditsExhausted(err) || err?.fatal) {
+          fatal = err;
+        }
+        throw err;
+      }
     }
   };
   await Promise.all(
@@ -119,6 +138,7 @@ const qualityReplaceMax = (needSeats) => {
 };
 
 const isInfraError = (err) => {
+  if (isProviderCreditsExhausted(err) || err?.fatal) return false;
   const code = String(err?.code || "");
   const msg = String(err?.message || err || "");
   const status = Number(err?.response?.status || err?.status || 0);
@@ -349,12 +369,31 @@ const callOpenAiJson = async ({
   pipelineLog,
   recordUsage,
   jobId,
+  /** Correlate parallel REQUEST/RESPONSE logs — never match by arrival order. */
+  requestId: requestIdIn,
+  seq,
+  topicId,
+  subject,
+  chapter,
+  questionType,
+  stemPreview,
 }) => {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("missing_OPENAI_API_KEY");
+  const requestId = requestIdIn || randomUUID();
+  const correlate = {
+    requestId,
+    ...(seq != null ? { seq } : {}),
+    ...(topicId ? { topicId } : {}),
+    ...(subject ? { subject } : {}),
+    ...(chapter ? { chapter } : {}),
+    ...(questionType ? { type: questionType } : {}),
+    ...(stemPreview ? { stemPreview: String(stemPreview).slice(0, 160) } : {}),
+  };
   pipelineLog?.(
     kind === "solve" ? "OPENAI_SOLVE_REQUEST" : "OPENAI_VERIFY_REQUEST",
     {
+      ...correlate,
       model,
       kind,
       timeoutMs,
@@ -366,6 +405,8 @@ const callOpenAiJson = async ({
   );
   const started = Date.now();
   try {
+    // Await is per-call; returned text belongs to THIS requestId even when
+    // other seats finish earlier and their RESPONSE logs print first.
     const packed = await callOpenAIReasoningJson({
       apiKey,
       prompt,
@@ -393,6 +434,7 @@ const callOpenAiJson = async ({
     pipelineLog?.(
       kind === "solve" ? "OPENAI_SOLVE_RESPONSE" : "OPENAI_VERIFY_RESPONSE",
       {
+        ...correlate,
         model: packed?.model || model,
         kind,
         elapsedMs: Date.now() - started,
@@ -401,11 +443,33 @@ const callOpenAiJson = async ({
         tokens: usage,
       }
     );
-    return text;
+    return { text, requestId };
   } catch (err) {
+    if (isProviderCreditsExhausted(err)) {
+      const creditsErr = providerCreditsError(err, "openai");
+      pipelineLog?.(
+        kind === "solve" ? "OPENAI_SOLVE_ERROR" : "OPENAI_VERIFY_ERROR",
+        {
+          ...correlate,
+          model,
+          kind,
+          elapsedMs: Date.now() - started,
+          timeoutMs,
+          fatal: true,
+          errorCode: creditsErr.code,
+          error: {
+            message: creditsErr.message,
+            code: creditsErr.code,
+            status: 402,
+          },
+        }
+      );
+      throw creditsErr;
+    }
     pipelineLog?.(
       kind === "solve" ? "OPENAI_SOLVE_ERROR" : "OPENAI_VERIFY_ERROR",
       {
+        ...correlate,
         model,
         kind,
         elapsedMs: Date.now() - started,
@@ -480,9 +544,15 @@ Rules:
 
 export const o3VerifyCompact = async (q, type, ctx) => {
   const proposed = proposedKeyOf(q, type);
+  const requestId = randomUUID();
+  const stemPreview = String(q?.questionText || q?.text || "").slice(0, 160);
+  const seatMeta = {
+    requestId,
+    seq: ctx?.seq,
+  };
   let raw;
   try {
-    raw = await withInfraRetries(
+    const packed = await withInfraRetries(
       async (attempt) =>
         callOpenAiJson({
           kind: "solve",
@@ -496,10 +566,23 @@ export const o3VerifyCompact = async (q, type, ctx) => {
           pipelineLog: ctx.pipelineLog,
           recordUsage: ctx.recordUsage,
           jobId: ctx.jobId,
+          // Same requestId across infra retries so logs stay joinable to this seat.
+          requestId,
+          seq: ctx.seq,
+          topicId: ctx.topicId || q?._topicId || q?.topicId,
+          subject: ctx.subject || q?.subject || q?._subject,
+          chapter: ctx.chapter || q?.chapter || q?._chapter,
+          questionType: type,
+          stemPreview,
         }),
       { label: "o3_verify", pipelineLog: ctx.pipelineLog }
     );
+    // callOpenAiJson returns { text, requestId }; tolerate legacy string.
+    raw = typeof packed === "string" ? packed : packed?.text;
   } catch (err) {
+    if (isProviderCreditsExhausted(err)) {
+      throw providerCreditsError(err, "openai");
+    }
     return {
       pass: false,
       infra: true,
@@ -514,6 +597,7 @@ export const o3VerifyCompact = async (q, type, ctx) => {
         issues: [err?.message || "o3_infra_error"],
         proposedKey: proposed,
         empty: true,
+        ...seatMeta,
       },
     };
   }
@@ -533,6 +617,7 @@ export const o3VerifyCompact = async (q, type, ctx) => {
         issues: ["empty_o3_response"],
         proposedKey: proposed,
         empty: true,
+        ...seatMeta,
       },
     };
   }
@@ -553,6 +638,7 @@ export const o3VerifyCompact = async (q, type, ctx) => {
         issues: ["unparseable_o3_response"],
         proposedKey: proposed,
         empty: true,
+        ...seatMeta,
       },
     };
   }
@@ -599,6 +685,7 @@ export const o3VerifyCompact = async (q, type, ctx) => {
         issues: ["o3_missing_independent_answer"],
         proposedKey: proposed,
         empty: true,
+        ...seatMeta,
       },
     };
   }
@@ -638,6 +725,7 @@ export const o3VerifyCompact = async (q, type, ctx) => {
       verifiedSolution,
       issues: Array.isArray(parsed.issues) ? parsed.issues : [],
       proposedKey: proposed,
+      ...seatMeta,
     },
   };
 };
@@ -791,68 +879,13 @@ const remapExplanationOptionLetters = (text, letterMap) => {
     (_full, L) => `\\mathbf{${subst(L)}}`
   );
 
+  // Bracketed verdicts: [B] / (C)
+  out = out.replace(
+    /([\[\(/])([A-D])([\]\)])/gi,
+    (_full, open, L, close) => `${open}${subst(L)}${close}`
+  );
+
   return out.replace(/\uE000([A-D])\uE001/g, "$1");
-};
-
-/**
- * Belt-and-suspenders: if the closing "option X is correct" still disagrees
- * with the marked key (all exams), rewrite those closing phrases.
- * Does not touch mid-explanation "option B is false" style critiques.
- */
-const alignExplanationToMarkedAnswer = (text, marked) => {
-  const ans = String(marked || "")
-    .trim()
-    .toUpperCase()
-    .slice(0, 1);
-  if (!text || !/^[A-D]$/.test(ans)) return text;
-
-  const closing = [
-    /\b(?:Hence|Therefore|Thus),?\s+option[\s\-]*\(?[A-D]\)?\b/gi,
-    /\boption[\s\-]*\(?[A-D]\)?\s+is\s+(?:therefore\s+)?correct\b/gi,
-    /\b(?:correct|right)\s+(?:option|answer)\s+is\s*\(?[A-D]\)?\b/gi,
-    /\bcorresponds\s+to\s+option\s*\(?[A-D]\)?\b/gi,
-    /\bcorresponding\s+to\s+(?:choice|option)\s*\(?[A-D]\)?\b/gi,
-    /\bFINAL_ANSWER:\s*[A-D]\b/gi,
-    /\bLocked answer:\s*[A-D]\b/gi,
-  ];
-
-  let out = String(text);
-  let lastClosingLetter = null;
-  for (const re of closing) {
-    let m;
-    const r = new RegExp(re.source, re.flags);
-    while ((m = r.exec(out)) !== null) {
-      const letter = (m[0].match(/[A-D]/i) || [])[0];
-      if (letter) lastClosingLetter = letter.toUpperCase();
-    }
-  }
-  if (!lastClosingLetter || lastClosingLetter === ans) return out;
-
-  // Rewrite only closing-style phrases that still name the wrong letter.
-  out = out.replace(
-    /\b((?:Hence|Therefore|Thus),?\s+option[\s\-]*)\(?[A-D]\)?\b/gi,
-    `$1${ans}`
-  );
-  out = out.replace(
-    /\boption[\s\-]*\(?[A-D]\)?(\s+is\s+(?:therefore\s+)?correct)\b/gi,
-    `option ${ans}$1`
-  );
-  out = out.replace(
-    /\b((?:correct|right)\s+(?:option|answer)\s+is\s*)\(?[A-D]\)?\b/gi,
-    `$1${ans}`
-  );
-  out = out.replace(
-    /\b(corresponds\s+to\s+option\s*)\(?[A-D]\)?\b/gi,
-    `$1${ans}`
-  );
-  out = out.replace(
-    /\b(corresponding\s+to\s+(?:choice|option)\s*)\(?[A-D]\)?\b/gi,
-    `$1${ans}`
-  );
-  out = out.replace(/\bFINAL_ANSWER:\s*[A-D]\b/gi, `FINAL_ANSWER: ${ans}`);
-  out = out.replace(/\bLocked answer:\s*[A-D]\b/gi, `Locked answer: ${ans}`);
-  out = out.replace(/\\mathbf\{[A-D]\}/g, `\\mathbf{${ans}}`);
-  return out;
 };
 
 /** Fisher–Yates shuffle of MCQ options; updates correctIndex / letter + explanation. */
@@ -935,13 +968,23 @@ const sanitizeExplanationText = (raw) => {
 const verifySeatWithO3Budget = async (item, ctx, stampTrust) => {
   const maxAttempts = 1 + o3SameSeatRetries();
   let lastOut = null;
+  // Seat-scoped ctx so parallel o3 calls never share ambiguous log identity.
+  const seatCtx = {
+    ...ctx,
+    seq: item.seq,
+    topicId: item.topicId,
+    subject: item.subject,
+    chapter: item.chapter,
+    type: item.type,
+  };
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     item.stage = "validating";
     await ctx.checkpointItem?.(item);
-    const out = await o3VerifyCompact(item.locked, item.type, ctx);
+    const out = await o3VerifyCompact(item.locked, item.type, seatCtx);
     lastOut = out;
     item.o3 = out.result;
     item.o3Attempts = attempt;
+    item.o3RequestId = out.result?.requestId;
 
     if (out.pass) {
       applyO3Lock(item, out, stampTrust, { rekeyed: false });
@@ -962,6 +1005,7 @@ const verifySeatWithO3Budget = async (item, ctx, stampTrust) => {
     if (canTier1Rekey) {
       ctx.pipelineLog?.("TIER1_REKEY", {
         seq: item.seq,
+        requestId: out.result?.requestId,
         type: item.type,
         topicId: item.topicId,
         chapter: item.chapter,
@@ -976,12 +1020,22 @@ const verifySeatWithO3Budget = async (item, ctx, stampTrust) => {
     }
 
     if (out.infra) {
+      if (
+        isProviderCreditsExhausted(out.result) ||
+        isProviderCreditsExhausted({ message: out.result?.issues?.[0] })
+      ) {
+        throw providerCreditsError(
+          new Error(out.result?.issues?.[0] || "credits exhausted"),
+          "openai"
+        );
+      }
       return { ok: false, item, kind: "infra", detail: out.result };
     }
 
     if (out.uncertain && attempt < maxAttempts) {
       ctx.pipelineLog?.("O3_SAME_SEAT", {
         seq: item.seq,
+        requestId: out.result?.requestId,
         attempt,
         maxAttempts,
         infra: false,
@@ -1162,15 +1216,45 @@ export const runParallelPaperPipeline = async ({
     attempt,
   });
 
+  onProgress?.({
+    phase: "generate",
+    message: `Parallel Gemini generate ×${seatQueue.length} (then o3 solve+solution)`,
+    plan,
+  });
+
+  let working = [];
+  let preVerified = [];
+  let unusedCursor = 0;
+  const o3CtxEarly = {
+    pipelineLog,
+    recordUsage,
+    jobId,
+    examType: config?.examType,
+    examLabel: config?.examLabel,
+    checkpointItem,
+  };
+
   const generateOne = async (seat, seqNum, attempt, excludeTexts) => {
     const item = makeItem(seat.type, seat.slot, seqNum, attempt);
     return runQuestionContext(item, async () => {
+      const prior = getProviderFatalAbort(jobId);
+      if (prior?.error) {
+        throw prior.error;
+      }
+      const jobStatus = String(getGenerationJob(jobId)?.status || "").toLowerCase();
+      if (jobStatus === "failed" || jobStatus === "cancelled") {
+        throw (
+          prior?.error ||
+          providerCreditsError(new Error(`job_${jobStatus || "aborted"}`), "gemini")
+        );
+      }
       pipelineLog("QUESTION_START", {
         seq: seqNum,
         type: seat.type,
         topicId: item.topicId,
         attempt,
         phase: "gemini_then_o3",
+        jobId,
       });
       item.stage = "generating";
       await checkpointItem(item);
@@ -1178,6 +1262,9 @@ export const runParallelPaperPipeline = async ({
       try {
         generated = await withInfraRetries(
           async () => {
+            if (getProviderFatalAbort(jobId)?.error) {
+              throw getProviderFatalAbort(jobId).error;
+            }
             const part = await generateBatch({
               type: seat.type,
               count: 1,
@@ -1191,12 +1278,20 @@ export const runParallelPaperPipeline = async ({
             if (q) {
               q._examType = config?.examType;
               q._examLabel = config?.examLabel;
+              q._topicId = q._topicId || seat.slot?.topicId || item.topicId;
+              q.topicId = q.topicId || seat.slot?.topicId || item.topicId;
+              q.subject = q.subject || item.subject || seat.slot?.subject;
             }
             return q;
           },
           { label: `gemini_generate_seq_${seqNum}`, pipelineLog }
         );
       } catch (err) {
+        // Prepaid / billing exhaustion: abort the whole paper job immediately
+        // (do not quality-replace loop forever).
+        if (isProviderCreditsExhausted(err)) {
+          throw providerCreditsError(err, "gemini");
+        }
         return failItem(
           item,
           isInfraError(err) ? "generate_timeout" : "generate_error",
@@ -1214,6 +1309,19 @@ export const runParallelPaperPipeline = async ({
       if (isDuplicateStem(generated.questionText, excludeTexts)) {
         return failItem(item, "duplicate_stem", "near-duplicate stem");
       }
+      // Catch same-subject template clones (e.g. rail+capacitor across topic codes).
+      const lockedPeers = [
+        ...[...keptBySeq.values()].map((it) => it.locked),
+        ...working.map((it) => it.locked),
+        ...preVerified.map((it) => it.locked),
+      ].filter(Boolean);
+      if (isNearDuplicateOfAny(generated, lockedPeers)) {
+        return failItem(
+          item,
+          "duplicate_stem",
+          "near-duplicate of an already locked question — regenerating"
+        );
+      }
       const schema = schemaOkForO3(generated, seat.type);
       if (!schema.ok) {
         return failItem(item, "schema_invalid", schema.issues);
@@ -1223,24 +1331,6 @@ export const runParallelPaperPipeline = async ({
       await checkpointItem(item);
       return item;
     });
-  };
-
-  onProgress?.({
-    phase: "generate",
-    message: `Parallel Gemini generate ×${seatQueue.length} (then o3 solve+solution)`,
-    plan,
-  });
-
-  let working = [];
-  let preVerified = [];
-  let unusedCursor = 0;
-  const o3CtxEarly = {
-    pipelineLog,
-    recordUsage,
-    jobId,
-    examType: config?.examType,
-    examLabel: config?.examLabel,
-    checkpointItem,
   };
 
   const initial = await mapPool(seatQueue, genConcurrency(), async (seat, i) => {
@@ -1401,6 +1491,48 @@ export const runParallelPaperPipeline = async ({
     }
   }
 
+  // Parallel Gemini can land same-template clones with different topic codes.
+  // Drop extras now and requeue seats so the replace loop fills unique slots.
+  {
+    const uniqueLocked = dedupePaperQuestionsByStem(
+      working.map((it) => it.locked).filter(Boolean)
+    );
+    const keepLocked = new Set(uniqueLocked);
+    const pruned = [];
+    for (const it of working) {
+      if (it?.locked && keepLocked.has(it.locked)) {
+        pruned.push(it);
+        continue;
+      }
+      failures.push(
+        await failItem(
+          it,
+          "duplicate_stem",
+          "near-duplicate collapsed after verify — regenerating unique replacement"
+        )
+      );
+      pendingSeats.push({
+        type: it.type,
+        slot: {
+          subject: it.subject,
+          topicId: it.topicId,
+          chapter: it.chapter,
+          conceptSlot: it.conceptSlot,
+        },
+        failedCount: 1,
+      });
+      exclude.push(stemSnippet(it.locked || it.raw));
+    }
+    if (pruned.length < working.length) {
+      pipelineLog?.("NEAR_DUPE_PRUNE", {
+        before: working.length,
+        after: pruned.length,
+        requeued: working.length - pruned.length,
+      });
+    }
+    working = pruned;
+  }
+
   let qualityReplacesUsed = 0;
   let replaceAttempts = 0;
   const maxReplaceAttempts = Math.max(replaceBudget * 3, expectedTotal * 3, 100);
@@ -1411,9 +1543,11 @@ export const runParallelPaperPipeline = async ({
     ).length;
 
   const isCancelled = () => {
+    if (getProviderFatalAbort(jobId)?.error) return true;
     if (!jobId) return false;
     const j = getGenerationJob(jobId);
-    return String(j?.status || "").toLowerCase() === "cancelled";
+    const status = String(j?.status || "").toLowerCase();
+    return status === "cancelled" || status === "failed";
   };
 
   while (

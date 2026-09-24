@@ -118,11 +118,40 @@ const jaccard = (a = [], b = []) => {
   return union ? inter / union : 0;
 };
 
-const isNearDuplicate = (a, b) => {
-  const topicA = String(a?._topicId || a?.topicId || "").toLowerCase();
-  const topicB = String(b?._topicId || b?.topicId || "").toLowerCase();
-  if (topicA && topicB && topicA !== topicB) return false;
-  return jaccard(contentTokens(a), contentTokens(b)) >= 0.72;
+const topicKey = (q) =>
+  String(q?._topicId || q?.topicId || q?.topic || q?.chapter || "")
+    .toLowerCase()
+    .trim();
+
+const subjectKey = (q) => String(q?.subject || q?._subject || "").toLowerCase().trim();
+
+/**
+ * Near-duplicate detection.
+ * - Same topic: collapse at Jaccard ≥ 0.72
+ * - Same subject, different/missing topic: collapse template clones (e.g. conducting
+ *   rail + capacitor rewritten across M16/M17/M19) at ≥ 0.78
+ * - Missing topic ids (save payload): use 0.72 so UI/save matches generation
+ * - Cross-subject: only collapse at very high overlap (≥ 0.90)
+ */
+export const isNearDuplicate = (a, b) => {
+  const score = jaccard(contentTokens(a), contentTokens(b));
+  if (score < 0.72) return false;
+
+  const topicA = topicKey(a);
+  const topicB = topicKey(b);
+  const subjectA = subjectKey(a);
+  const subjectB = subjectKey(b);
+
+  if (topicA && topicB && topicA === topicB) return score >= 0.72;
+  if (subjectA && subjectB && subjectA === subjectB) return score >= 0.78;
+  if (!topicA || !topicB) return score >= 0.72;
+  return score >= 0.9;
+};
+
+/** True if `q` is a near-duplicate of any peer (excluding itself by reference). */
+export const isNearDuplicateOfAny = (q, peers = []) => {
+  if (!q || !Array.isArray(peers) || !peers.length) return false;
+  return peers.some((other) => other && other !== q && isNearDuplicate(q, other));
 };
 
 const explanationScore = (q) => String(q?.explanation || "").length;
@@ -231,4 +260,6 @@ export const pickAuthoritativePaperQuestions = ({
 export default {
   dedupePaperQuestionsByStem,
   pickAuthoritativePaperQuestions,
+  isNearDuplicate,
+  isNearDuplicateOfAny,
 };

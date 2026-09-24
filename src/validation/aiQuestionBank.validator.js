@@ -87,10 +87,12 @@ const aiQuestionItemSchema = Joi.object({
   explanation: Joi.string().when("questionType", {
     is: "connected",
     then: Joi.string().trim().allow("").optional(),
-    otherwise: Joi.string().trim().required(),
+    otherwise: Joi.string().trim().allow("").required(),
   }),
   subject: Joi.string().trim().optional(),
   topic: Joi.string().trim().optional(),
+  topicId: Joi.string().trim().optional().allow("", null),
+  chapter: Joi.string().trim().optional().allow("", null),
   difficulty: Joi.string()
     .valid("easy", "medium", "hard")
     .optional()
@@ -100,11 +102,11 @@ const aiQuestionItemSchema = Joi.object({
   tags: Joi.array().items(Joi.string().trim()).optional(),
   aiBatchNumber: Joi.number().integer().min(1).optional().allow(null),
   sectionIndex: Joi.number().integer().min(0).optional().allow(null),
-  imageUrl: Joi.string().trim().uri().optional().allow("", null),
+  imageUrl: Joi.string().trim().optional().allow("", null),
   passage: Joi.string().trim().optional().allow("", null),
   subQuestions: Joi.array().items(connectedSubQuestionSchema).optional(),
   connectedQuestions: Joi.array().items(connectedSubQuestionSchema).optional(),
-}).custom((value, helpers) => {
+}).unknown(true).custom((value, helpers) => {
   if (value.questionType !== "connected") return value;
 
   const reading =
@@ -161,7 +163,7 @@ const createAiQuestionBankWithQuestions = Joi.object({
     .optional(),
   questions: Joi.array().items(aiQuestionItemSchema).min(1).required(),
   expectedTotal: Joi.number().min(1).optional(),
-});
+}).unknown(true);
 
 const updateAiQuestion = aiQuestionItemSchema
   .fork(
