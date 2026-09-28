@@ -4,6 +4,9 @@ import { createRazorpayOrder } from "../utils/razorpayUtils.js";
 import razorpayOrderIntentRepository from "../repository/razorpayOrderIntent.repository.js";
 import { verifyPaymentSignature } from "../utils/razorpayUtils.js";
 
+/** Starting rupee balance for a newly created student wallet. */
+export const INITIAL_STUDENT_WALLET_BALANCE = 20000;
+
 /**
  * Get or create wallet for a user
  */
@@ -14,7 +17,7 @@ export const getOrCreateWallet = async (userId, userType = "User") => {
     wallet = await walletRepository.createWallet({
       user: userId,
       userType,
-      monetaryBalance: 500,
+      monetaryBalance: userType === "User" ? INITIAL_STUDENT_WALLET_BALANCE : 0,
       rewardPoints: 0,
     });
   }

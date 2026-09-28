@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import Student from '../models/Student.js';
 import Wallet from '../models/Wallet.js';
 import walletRepository from '../repository/wallet.repository.js';
+import { INITIAL_STUDENT_WALLET_BALANCE } from './wallet.service.js';
 import studentRepository from '../repository/student.repository.js';
 import StudentSession from '../models/StudentSession.js';
 import PointsTransaction from '../models/PointsTransaction.js';
@@ -118,7 +119,7 @@ export const ensureWalletExists = async (userId, userType = 'User') => {
       await walletRepository.createWallet({
         user: userId,
         userType,
-        monetaryBalance: 0,
+        monetaryBalance: userType === 'User' ? INITIAL_STUDENT_WALLET_BALANCE : 0,
         rewardPoints: 0,
       });
       console.log(`Wallet created for ${userType} ${userId}`);
@@ -163,7 +164,7 @@ export const processReferralReward = async (referrerId, referredUserId) => {
       await walletRepository.createWallet({
         user: referrerId,
         userType: 'User',
-        monetaryBalance: 0,
+        monetaryBalance: INITIAL_STUDENT_WALLET_BALANCE,
         rewardPoints: rewardAmount,
       });
 
