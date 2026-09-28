@@ -26,7 +26,7 @@ const schema = new mongoose.Schema(
     failedQuestions: { type: Number, default: 0 },
     status: {
       type: String,
-      enum: ["pending", "queued", "running", "completed", "failed"],
+      enum: ["pending", "queued", "running", "completed", "failed", "paused"],
       default: "pending",
       index: true,
     },

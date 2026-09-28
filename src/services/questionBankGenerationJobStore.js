@@ -113,6 +113,7 @@ const isTerminalJobStatus = (status) => {
         s === "completed" ||
         s === "partially_completed" ||
         s === "failed" ||
+        s === "paused" ||
         s === "cancelled"
     );
 };

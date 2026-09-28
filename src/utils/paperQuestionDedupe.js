@@ -220,7 +220,7 @@ export const pickAuthoritativePaperQuestions = ({
     : [];
   const status = String(jobStatus || "").toLowerCase();
   const dStatus = String(draftStatus || "").toLowerCase();
-  const terminal = ["completed", "partially_completed", "failed"].includes(
+  const terminal = ["completed", "partially_completed", "failed", "paused"].includes(
     status
   );
 

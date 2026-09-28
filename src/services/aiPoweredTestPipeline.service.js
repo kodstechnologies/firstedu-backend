@@ -21,8 +21,11 @@ import { randomUUID } from "crypto";
 import { ApiError } from "../utils/ApiError.js";
 import {
   isProviderCreditsExhausted,
+  isOpenAiAuthError,
   providerCreditsError,
   PROVIDER_CREDITS_CODE,
+  OPENAI_AUTH_CODE,
+  OPENAI_AUTH_USER_MESSAGE,
   markProviderFatalAbort,
   clearProviderFatalAbort,
   getProviderFatalAbort,
@@ -2862,36 +2865,46 @@ const runJobLoop = async (jobId, config, { resume = false } = {}) => {
     const errorDetail = serializeError(err);
     const payload = err?.pipeline || lastCallContext;
     const credits = isProviderCreditsExhausted(err);
-    const reason = credits
-      ? err?.message || providerCreditsError(err, err?.provider || "gemini").message
-      : err?.message || String(err);
-    pipelineLog("JOB_FAILED", {
+    const auth = !credits && isOpenAiAuthError(err);
+    const reason = auth
+      ? OPENAI_AUTH_USER_MESSAGE
+      : credits
+        ? err?.message || providerCreditsError(err, err?.provider || "gemini").message
+        : err?.message || String(err);
+    const errorCode = auth
+      ? OPENAI_AUTH_CODE
+      : credits
+        ? PROVIDER_CREDITS_CODE
+        : err?.code || null;
+    const status = auth ? "paused" : "failed";
+    pipelineLog(auth ? "JOB_PAUSED" : "JOB_FAILED", {
       error: err,
       errorDetail,
       lastCall: payload,
       cause: err?.cause ? serializeError(err.cause) : null,
       reason,
-      fatal: credits || Boolean(err?.fatal),
-      errorCode: credits ? PROVIDER_CREDITS_CODE : err?.code || null,
+      fatal: credits || auth || Boolean(err?.fatal),
+      errorCode,
     });
     const existing = getGenerationJob(jobId) || {};
     const tokens = readTokenSummary(jobId);
     updateGenerationJob(jobId, {
-      status: "failed",
-      phase: "error",
+      status,
+      phase: auth ? "paused" : "error",
       error: reason,
-      errorCode: credits ? PROVIDER_CREDITS_CODE : err?.code || null,
+      errorCode,
       errorDetail,
       lastCall: payload,
       message: reason,
       // Credits exhaustion cannot resume until billing is topped up.
+      // Auth pause can resume after OPENAI_API_KEY is corrected.
       resumable: credits ? false : true,
       tokenUsage: tokens.byModel,
       logDir: `temp/paper-jobs/${jobId}`,
     });
     await persistJobRecord(jobId, {
-      status: "failed",
-      phase: "error",
+      status,
+      phase: auth ? "paused" : "error",
       error: reason,
       errorDetail,
       message: reason,

@@ -23,8 +23,11 @@ import {
 } from "../utils/paperQuestionDedupe.js";
 import {
   isProviderCreditsExhausted,
+  isOpenAiAuthError,
+  openAiAuthError,
   providerCreditsError,
   getProviderFatalAbort,
+  markProviderFatalAbort,
 } from "../utils/aiProviderErrors.js";
 import { resolvePaperExam } from "./paperExamIdentity.service.js";
 import { alignExplanationToMarkedAnswer } from "../utils/explanationAnswerAlign.js";
@@ -445,6 +448,28 @@ const callOpenAiJson = async ({
     );
     return { text, requestId };
   } catch (err) {
+    if (isOpenAiAuthError(err)) {
+      const authErr = openAiAuthError(err);
+      markProviderFatalAbort(jobId, authErr);
+      pipelineLog?.(
+        kind === "solve" ? "OPENAI_SOLVE_ERROR" : "OPENAI_VERIFY_ERROR",
+        {
+          ...correlate,
+          model,
+          kind,
+          elapsedMs: Date.now() - started,
+          timeoutMs,
+          fatal: true,
+          errorCode: authErr.code,
+          error: {
+            message: authErr.message,
+            code: authErr.code,
+            status: authErr.status,
+          },
+        }
+      );
+      throw authErr;
+    }
     if (isProviderCreditsExhausted(err)) {
       const creditsErr = providerCreditsError(err, "openai");
       pipelineLog?.(
@@ -580,6 +605,11 @@ export const o3VerifyCompact = async (q, type, ctx) => {
     // callOpenAiJson returns { text, requestId }; tolerate legacy string.
     raw = typeof packed === "string" ? packed : packed?.text;
   } catch (err) {
+    if (isOpenAiAuthError(err)) {
+      throw isOpenAiAuthError(err) && err?.code === "OPENAI_AUTH_FAILURE"
+        ? err
+        : openAiAuthError(err);
+    }
     if (isProviderCreditsExhausted(err)) {
       throw providerCreditsError(err, "openai");
     }
@@ -1021,6 +1051,17 @@ const verifySeatWithO3Budget = async (item, ctx, stampTrust) => {
 
     if (out.infra) {
       if (
+        isOpenAiAuthError({
+          message: out.result?.issues?.[0],
+          status: out.result?.status,
+          code: out.result?.code,
+        })
+      ) {
+        throw openAiAuthError(
+          new Error(out.result?.issues?.[0] || "OpenAI authentication failed")
+        );
+      }
+      if (
         isProviderCreditsExhausted(out.result) ||
         isProviderCreditsExhausted({ message: out.result?.issues?.[0] })
       ) {
@@ -1373,6 +1414,9 @@ export const runParallelPaperPipeline = async ({
           return { __preVerified: true, item: res.item };
         }
       } catch (err) {
+        if (isOpenAiAuthError(err) || isProviderCreditsExhausted(err) || err?.fatal) {
+          throw err;
+        }
         pipelineLog?.("QUESTION_RESUME_REVERIFY_FAIL", {
           seq: seqNum,
           error: err?.message || String(err),
@@ -1453,6 +1497,9 @@ export const runParallelPaperPipeline = async ({
     try {
       return await verifySeatWithO3Budget(item, o3Ctx, stampTrust);
     } catch (err) {
+      if (isOpenAiAuthError(err) || isProviderCreditsExhausted(err) || err?.fatal) {
+        throw err;
+      }
       return {
         ok: false,
         item,
@@ -1547,7 +1594,7 @@ export const runParallelPaperPipeline = async ({
     if (!jobId) return false;
     const j = getGenerationJob(jobId);
     const status = String(j?.status || "").toLowerCase();
-    return status === "cancelled" || status === "failed";
+    return status === "cancelled" || status === "failed" || status === "paused";
   };
 
   while (

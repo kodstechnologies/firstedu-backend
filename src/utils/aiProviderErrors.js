@@ -4,6 +4,10 @@
  */
 
 export const PROVIDER_CREDITS_CODE = "PROVIDER_CREDITS_EXHAUSTED";
+export const OPENAI_AUTH_CODE = "OPENAI_AUTH_FAILURE";
+
+export const OPENAI_AUTH_USER_MESSAGE =
+  "Question verification is temporarily unavailable. OpenAI rejected the API key (HTTP 401). Update OPENAI_API_KEY for the paper worker, then resume.";
 
 export const GEMINI_CREDITS_USER_MESSAGE =
   "Gemini API credits are depleted. Add prepaid credits in Google AI Studio (https://aistudio.google.com/projects), then start a new paper generation.";
@@ -52,8 +56,39 @@ const errBlob = (err) => {
   return parts.filter(Boolean).join(" ");
 };
 
+export const httpStatusOf = (err) =>
+  Number(
+    err?.status ||
+      err?.response?.status ||
+      err?.cause?.status ||
+      err?.cause?.response?.status ||
+      0
+  );
+
+export const isOpenAiAuthError = (err) => {
+  if (!err) return false;
+  if (err.code === OPENAI_AUTH_CODE) return true;
+  const status = httpStatusOf(err);
+  if (status === 401 || status === 403) return true;
+  const blob = errBlob(err);
+  return /status code 40[13]\b|invalid_api_key|incorrect api key/i.test(blob);
+};
+
+export const openAiAuthError = (err) => {
+  const e = new Error(OPENAI_AUTH_USER_MESSAGE);
+  e.name = "OpenAiAuthError";
+  e.code = OPENAI_AUTH_CODE;
+  e.status = httpStatusOf(err) || 401;
+  e.fatal = true;
+  e.resumable = true;
+  e.provider = "openai";
+  e.cause = err;
+  return e;
+};
+
 export const isProviderCreditsExhausted = (err) => {
   if (!err) return false;
+  if (err.code === OPENAI_AUTH_CODE) return false;
   if (err.code === PROVIDER_CREDITS_CODE || err.fatal === true) return true;
   const status = Number(
     err.status || err.response?.status || err.cause?.status || 0
