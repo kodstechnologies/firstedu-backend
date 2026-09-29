@@ -17,7 +17,7 @@ export const getOrCreateWallet = async (userId, userType = "User") => {
     wallet = await walletRepository.createWallet({
       user: userId,
       userType,
-      monetaryBalance: userType === "User" ? INITIAL_STUDENT_WALLET_BALANCE : 0,
+      monetaryBalance:0,
       rewardPoints: 0,
     });
   }

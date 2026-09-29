@@ -119,7 +119,7 @@ export const ensureWalletExists = async (userId, userType = 'User') => {
       await walletRepository.createWallet({
         user: userId,
         userType,
-        monetaryBalance: userType === 'User' ? INITIAL_STUDENT_WALLET_BALANCE : 0,
+        monetaryBalance: 0,
         rewardPoints: 0,
       });
       console.log(`Wallet created for ${userType} ${userId}`);
@@ -164,7 +164,7 @@ export const processReferralReward = async (referrerId, referredUserId) => {
       await walletRepository.createWallet({
         user: referrerId,
         userType: 'User',
-        monetaryBalance: INITIAL_STUDENT_WALLET_BALANCE,
+        monetaryBalance: 0,
         rewardPoints: rewardAmount,
       });
 
