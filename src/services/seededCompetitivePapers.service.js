@@ -169,22 +169,28 @@ export const normalizeSubjectKey = (label = "") => {
     .toLowerCase()
     .replace(/\s+/g, " ");
   if (!n) return "";
-  if (/^(maths|mathematics|mathematical\s+abilities|quantitative\s+aptitude|quantitative\s+ability|quant)$/.test(n))
+  if (/data\s+insights/.test(n)) return "di";
+  if (
+    /^(maths|mathematics|mathematical\s+abilities|quantitative\s+aptitude|quantitative\s+ability|quant)$/.test(n) ||
+    /quantitative\s+reasoning/.test(n)
+  ) {
     return "math";
+  }
   if (/^(physics)$/.test(n)) return "physics";
   if (/^(chemistry)$/.test(n)) return "chemistry";
+  // Before the broad "reason" match, so "Verbal Reasoning" stays Verbal.
+  if (/verbal|varc/.test(n)) return "english";
+  if (/dilr|data\s+interpretation|logical\s+reasoning/.test(n) && !/legal/.test(n))
+    return "dilr";
+  if (/legal/.test(n)) return "legal";
   if (/reason/.test(n)) return "reasoning";
-  if (/english|verbal|varc|comprehension/.test(n) && !/general\s+awareness/.test(n))
+  if (/english|comprehension/.test(n) && !/general\s+awareness/.test(n))
     return "english";
   if (/general\s+awareness|^ga$/.test(n)) return "ga";
   if (/computer/.test(n)) return "computer";
   if (/botany/.test(n)) return "botany";
   if (/zoology/.test(n)) return "zoology";
-  if (/dilr|data\s+interpretation|logical\s+reasoning/.test(n) && !/legal/.test(n))
-    return "dilr";
-  if (/legal/.test(n)) return "legal";
   if (/current\s+affairs/.test(n)) return "ca";
-  if (/data\s+insights/.test(n)) return "di";
   return n;
 };
 

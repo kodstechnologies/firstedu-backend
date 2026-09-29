@@ -53,12 +53,19 @@ const questionBankSchema = new mongoose.Schema(
       ref: "Admin",
       required: true,
     },
+    /** Set only when this bank was copied from a seeded competitive paper. */
+    seedPaperKey: {
+      type: String,
+      trim: true,
+      default: null,
+    },
   },
   { timestamps: true }
 );
 
 questionBankSchema.index({ categories: 1 });
 questionBankSchema.index({ createdBy: 1, createdAt: -1 });
+questionBankSchema.index({ seedPaperKey: 1 }, { unique: true, sparse: true });
 
 export default mongoose.models.QuestionBank ||
   mongoose.model("QuestionBank", questionBankSchema);

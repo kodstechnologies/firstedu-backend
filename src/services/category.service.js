@@ -283,6 +283,10 @@ export const getCategoryTree = async (filter = {}) => {
       "./seededCompetitivePapers.service.js"
     );
     await annotateTreeWithSeededPapers(fullTree);
+    const { annotateCompetitiveSubjectTests } = await import(
+      "./competitiveTest.service.js"
+    );
+    await annotateCompetitiveSubjectTests(fullTree);
   } catch (err) {
     console.warn(
       "getCategoryTree: seeded-paper annotate skipped:",

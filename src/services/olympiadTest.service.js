@@ -86,7 +86,7 @@ export const getOlympiadTests = async (options = {}) => {
 
   const [tests, total] = await Promise.all([
     OlympiadTest.find(query)
-      .populate("testId", "title description durationMinutes price discountType discountValue")
+      .populate("testId", "title description durationMinutes price discountType discountValue questionBank aiQuestionBank paperSource")
       .skip(skip)
       .limit(limitNum)
       .sort({ createdAt: -1 }),
