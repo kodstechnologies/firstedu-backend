@@ -15,12 +15,13 @@ export const createCompetitiveTest = asyncHandler(async (req, res) => {
 });
 
 export const getCompetitiveTests = asyncHandler(async (req, res) => {
-  const { categoryId, page, limit } = req.query;
+  const { categoryId, page, limit, overview } = req.query;
   const result = await competitiveTestService.getCompetitiveTests({
     categoryId,
     page,
     limit,
     includeSeededPapers: true,
+    overview: overview === "true" || overview === "1",
   });
   return res.status(200).json(ApiResponse.success(result.tests, "Competitive tests fetched successfully", result.pagination));
 });

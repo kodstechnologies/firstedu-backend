@@ -220,6 +220,41 @@ async function loadBanksById(tests = []) {
   return byId;
 }
 
+async function attachQuestionCounts(tests = []) {
+  const manualIds = [];
+  const aiIds = [];
+  for (const test of tests) {
+    if (!test || test.isSeededPaper || test.totalQuestions) continue;
+    if (test.questionBank) manualIds.push(test.questionBank);
+    if (test.aiQuestionBank) aiIds.push(test.aiQuestionBank);
+  }
+  if (!manualIds.length && !aiIds.length) return tests;
+
+  const [manual, ai] = await Promise.all([
+    manualIds.length
+      ? Question.aggregate([
+          { $match: { questionBank: { $in: manualIds } } },
+          { $group: { _id: "$questionBank", total: { $sum: 1 } } },
+        ])
+      : [],
+    aiIds.length
+      ? AiQuestion.aggregate([
+          { $match: { aiQuestionBank: { $in: aiIds } } },
+          { $group: { _id: "$aiQuestionBank", total: { $sum: 1 } } },
+        ])
+      : [],
+  ]);
+  const counts = new Map();
+  for (const row of [...manual, ...ai]) {
+    counts.set(String(row._id), row.total || 0);
+  }
+  return tests.map((test) => {
+    if (!test || test.totalQuestions) return test;
+    const bankId = String(test.aiQuestionBank || test.questionBank || "");
+    return { ...test, totalQuestions: counts.get(bankId) || 0 };
+  });
+}
+
 export async function alignCompetitiveTestCategory(data = {}) {
   if (!data?.categoryId || (!data.questionBank && !data.aiQuestionBank)) {
     return data;
@@ -382,6 +417,7 @@ export const getCompetitiveTests = async (options = {}) => {
     search,
     isPublished,
     includeSeededPapers = false,
+    overview = false,
   } = options;
   const pageNum = parseInt(page);
   const limitNum = parseInt(limit);
@@ -397,9 +433,8 @@ export const getCompetitiveTests = async (options = {}) => {
       seededExam && String(seededExam.categoryId) === String(categoryId);
     const subjectScoped = Boolean(seededExam?.isSubjectSelection);
 
-    if (seededExam && (subjectScoped || isExamNode)) {
-      // Subject click: only that subject's banks.
-      // Exam click: only full papers (several sections), not a single subject.
+    if (seededExam && subjectScoped) {
+      // Subject click stays on that subject only.
       scopeHomeToCategory = true;
       examForScope = seededExam;
       subjectNodesForScope = await Category.find({ parent: seededExam.categoryId })
@@ -411,6 +446,19 @@ export const getCompetitiveTests = async (options = {}) => {
           ...subjectNodesForScope.map((node) => node._id),
         ],
       };
+    } else if (seededExam && isExamNode) {
+      examForScope = seededExam;
+      subjectNodesForScope = await Category.find({ parent: seededExam.categoryId })
+        .select("_id name")
+        .lean();
+      query.categoryId = {
+        $in: [
+          seededExam.categoryId,
+          ...subjectNodesForScope.map((node) => node._id),
+        ],
+      };
+      // Exam overview includes every section. The default exam list stays full papers.
+      scopeHomeToCategory = !overview;
     } else {
       const descendantIds = await categoryRepository.findDescendantIds(categoryId);
       const categoryIds = new Set(descendantIds.map(String));
@@ -524,6 +572,7 @@ export const getCompetitiveTests = async (options = {}) => {
 
   const total = Math.max(manualTotal, tests.length);
   tests = tests.slice(skip, skip + limitNum);
+  tests = await attachQuestionCounts(tests);
 
   if (tests.length > 0 && categoryId) {
     const category = await Category.findById(categoryId).lean();
