@@ -57,7 +57,6 @@ const questionBankSchema = new mongoose.Schema(
     seedPaperKey: {
       type: String,
       trim: true,
-      default: null,
     },
   },
   { timestamps: true }
@@ -65,7 +64,13 @@ const questionBankSchema = new mongoose.Schema(
 
 questionBankSchema.index({ categories: 1 });
 questionBankSchema.index({ createdBy: 1, createdAt: -1 });
-questionBankSchema.index({ seedPaperKey: 1 }, { unique: true, sparse: true });
+questionBankSchema.index(
+  { seedPaperKey: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { seedPaperKey: { $type: "string" } },
+  }
+);
 
 export default mongoose.models.QuestionBank ||
   mongoose.model("QuestionBank", questionBankSchema);
