@@ -445,19 +445,37 @@ export const createAiQuestionBankWithQuestions = async (data, createdBy) => {
 };
 
 export const getAiQuestionBanks = async (options = {}) => {
-  return aiQuestionBankRepository.findAll({}, options);
+  const result = await aiQuestionBankRepository.findAll({}, options);
+  return {
+    ...result,
+    items: result.items.map((b) => ({ ...(b.toJSON ? b.toJSON() : b), sourceType: "ai" })),
+  };
 };
 
 export const getAiQuestionBankById = async (id) => {
   const bank = await aiQuestionBankRepository.findById(id);
   if (!bank) throw new ApiError(404, "AI question bank not found");
-  return bank;
+  return { ...(bank.toJSON ? bank.toJSON() : bank), sourceType: "ai" };
 };
 
 export const getAiQuestionsByBankId = async (bankId, options = {}) => {
   const bank = await aiQuestionBankRepository.findById(bankId, false);
   if (!bank) throw new ApiError(404, "AI question bank not found");
-  return aiQuestionBankRepository.getQuestionsByBankId(bankId, options);
+  const result = await aiQuestionBankRepository.getQuestionsByBankId(bankId, options);
+  
+  if (Array.isArray(result)) {
+    return result.map((q) => {
+      const mapped = { ...(q.toObject ? q.toObject({ virtuals: true }) : q), sourceType: "ai" };
+      if (mapped.childQuestions && Array.isArray(mapped.childQuestions)) {
+        mapped.childQuestions = mapped.childQuestions.map(cq => ({
+          ...(cq.toObject ? cq.toObject({ virtuals: true }) : cq),
+          sourceType: "ai"
+        }));
+      }
+      return mapped;
+    });
+  }
+  return result;
 };
 
 export const deleteAiQuestionBank = async (id) => {

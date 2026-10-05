@@ -26,7 +26,9 @@ const validateQuestionOptions = (questionType, options) => {
 
 const toQuestionPlain = (doc) => {
   if (!doc) return null;
-  return doc.toObject ? doc.toObject({ virtuals: true }) : { ...doc };
+  const obj = doc.toObject ? doc.toObject({ virtuals: true }) : { ...doc };
+  obj.sourceType = "manual";
+  return obj;
 };
 
 /**
@@ -409,14 +411,14 @@ export const getQuestionBanks = async (options = {}) => {
   const result = await questionBankRepository.findAll({}, options);
   return {
     ...result,
-    items: result.items.map(appendTotalTime),
+    items: result.items.map(b => ({ ...appendTotalTime(b), sourceType: "manual" })),
   };
 };
 
 export const getQuestionBankById = async (id) => {
   const bank = await questionBankRepository.findById(id);
   if (!bank) throw new ApiError(404, "Question bank not found");
-  return appendTotalTime(bank);
+  return { ...appendTotalTime(bank), sourceType: "manual" };
 };
 
 export const getQuestionsByBankId = async (bankId) => {

@@ -95,6 +95,7 @@ export const getSchoolTests = async (options = {}) => {
     const obj = test.toObject ? test.toObject() : { ...test };
     // Attach the pre-built full path, e.g. "School > Class 1 > Biology"
     obj.categoryPath = categoryPath;
+    obj.sourceType = (obj.paperSource === "ai" || Boolean(obj.aiQuestionBank)) ? "ai" : "manual";
     return obj;
   });
 

@@ -97,6 +97,7 @@ const enrichTestsWithBankStats = async (tests) => {
   ]);
 
   items.forEach((t) => {
+    t.sourceType = (t.paperSource === "ai" || Boolean(t.aiQuestionBank)) ? "ai" : "manual";
     if (t?.questionBank?._id || t?.questionBank) {
       const key = (t.questionBank._id || t.questionBank).toString();
       const stats = manualStatsMap.get(key) || { totalQuestions: 0, totalMarks: 0 };
