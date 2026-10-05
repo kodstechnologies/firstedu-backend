@@ -1012,6 +1012,7 @@ export const getExamInstructions = async (testId, studentId, options = {}) => {
       proctoringInstructions: test.proctoringInstructions,
       questionBankName: getBankDisplayName(test),
       paperSource: test.paperSource || getTestBankType(test),
+      sourceType: (test.paperSource === "ai" || Boolean(test.aiQuestionBank)) ? "ai" : "manual",
       categories,
     },
     stats: {
@@ -1056,7 +1057,7 @@ export const getExamSession = async (sessionId, studentId) => {
       student: studentId,
     },
     {
-      test: "title description durationMinutes applicableFor questionBank",
+      test: "title description durationMinutes applicableFor questionBank aiQuestionBank paperSource",
       answers: {
         select:
           "questionText questionType options subject topic marks negativeMarks difficulty isParent passage parentQuestionId childQuestions connectedQuestions imageUrl sectionIndex orderInBank",
@@ -1099,7 +1100,7 @@ export const getExamSession = async (sessionId, studentId) => {
           student: studentId,
         },
         {
-          test: "title description durationMinutes applicableFor questionBank",
+          test: "title description durationMinutes applicableFor questionBank aiQuestionBank paperSource",
           answers: {
             select:
               "questionText questionType options subject topic marks negativeMarks difficulty isParent passage parentQuestionId childQuestions connectedQuestions imageUrl sectionIndex orderInBank",
@@ -1154,8 +1155,22 @@ export const getExamSession = async (sessionId, studentId) => {
       .filter(Boolean)
   );
 
+  const isAi =
+    session.test?.paperSource === "ai" ||
+    Boolean(session.test?.aiQuestionBank) ||
+    session.answers?.some((a) => a.questionModel === "AiQuestion");
+  const sessionSourceType = isAi ? "ai" : "manual";
+
+  const baseTest = session.test?.toJSON ? session.test.toJSON() : (session.test || {});
+  const enhancedTest = {
+    ...baseTest,
+    sourceType: sessionSourceType,
+  };
+  enhancedTest.paperSource = enhancedTest.paperSource || sessionSourceType;
+
   // Remove correct answers from questions (for security)
   const questions = session.answers.map((answer) => {
+    const questionSourceType = answer?.questionModel === "AiQuestion" ? "ai" : sessionSourceType;
     const question = answer.questionId;
     if (!question) return null;
     if (isChildQuestion(question)) return null;
@@ -1163,14 +1178,14 @@ export const getExamSession = async (sessionId, studentId) => {
     // For connected questions, remove child correct answers first.
     if (question.isParent && question.childQuestions) {
       question.childQuestions = question.childQuestions.map((child) => {
-        const childObj = child.toObject ? child.toObject() : child;
+        const childObj = child.toJSON ? child.toJSON() : child.toObject ? child.toObject({ virtuals: true }) : child;
         delete childObj.correctAnswer;
         childObj.options = sanitizeOptionsForExamResponse(childObj.options);
         return childObj;
       });
     }
 
-    let questionObj = question.toObject ? question.toObject() : question;
+    let questionObj = question.toJSON ? question.toJSON() : question.toObject ? question.toObject({ virtuals: true }) : question;
     delete questionObj.correctAnswer;
     questionObj.options = sanitizeOptionsForExamResponse(questionObj.options);
     if (questionObj.isParent && questionObj.questionType === "connected") {
@@ -1194,6 +1209,7 @@ export const getExamSession = async (sessionId, studentId) => {
             return {
               _id: childObj._id,
               questionId: childObj._id,
+              sourceType: questionSourceType,
               questionText: childObj.questionText || "",
               questionType: childObj.questionType || "single",
               options: sanitizeOptionsForExamResponse(childObj.options),
@@ -1223,7 +1239,11 @@ export const getExamSession = async (sessionId, studentId) => {
     const remainingQuestionTimeMs = getAnswerRemainingTimeMs(answer, now);
     const basePayload = {
       questionId: questionObj._id || questionObj.id,
-      question: questionObj,
+      sourceType: questionSourceType,
+      question: {
+        ...questionObj,
+        sourceType: questionSourceType,
+      },
       answer: answer.answer,
       status: answer.status,
       answeredAt: answer.answeredAt,
@@ -1410,7 +1430,8 @@ export const getExamSession = async (sessionId, studentId) => {
   return {
     session: {
       id: session._id,
-      test: session.test,
+      sourceType: sessionSourceType,
+      test: enhancedTest,
       startTime: session.startTime,
       endTime: session.endTime,
       status: session.status,
@@ -2011,7 +2032,7 @@ const checkAnswerCorrectness = (question, studentAnswer) => {
  */
 export const getExamResults = async (sessionId, studentId) => {
   const populateOptions = {
-    test: "title description durationMinutes applicableFor questionBank",
+    test: "title description durationMinutes applicableFor questionBank aiQuestionBank paperSource",
     answers: {
       select: "questionText questionType options correctAnswer explanation subject topic marks negativeMarks sectionIndex isParent passage parentQuestionId childQuestions connectedQuestions imageUrl",
       populate: {
@@ -2164,6 +2185,19 @@ export const getExamResults = async (sessionId, studentId) => {
     };
   }
 
+  const isAi =
+    session.test?.paperSource === "ai" ||
+    Boolean(session.test?.aiQuestionBank) ||
+    session.answers?.some((a) => a.questionModel === "AiQuestion");
+  const sessionSourceType = isAi ? "ai" : "manual";
+
+  const baseTest = session.test?.toJSON ? session.test.toJSON() : (session.test || {});
+  const enhancedTest = {
+    ...baseTest,
+    sourceType: sessionSourceType,
+  };
+  enhancedTest.paperSource = enhancedTest.paperSource || sessionSourceType;
+
   const answerQuestionById = new Map(
     session.answers
       .map((entry) => {
@@ -2182,6 +2216,8 @@ export const getExamResults = async (sessionId, studentId) => {
 
     // For connected questions, include child questions with answers
     let childQuestions = null;
+    const questionSourceType = answer?.questionModel === "AiQuestion" ? "ai" : sessionSourceType;
+    
     if (question.isParent && question.childQuestions) {
       childQuestions = question.childQuestions
         .map((child) => {
@@ -2194,6 +2230,7 @@ export const getExamResults = async (sessionId, studentId) => {
           const childObj = populatedChild || answerQuestionById.get(childId) || { _id: childId };
           return {
             _id: childObj._id,
+            sourceType: questionSourceType,
             questionText: childObj.questionText || "",
             questionType: childObj.questionType || "single",
             options: childObj.options || [],
@@ -2212,8 +2249,10 @@ export const getExamResults = async (sessionId, studentId) => {
 
     return {
       questionId: questionObj._id,
+      sourceType: questionSourceType,
       question: {
         ...questionObj,
+        sourceType: questionSourceType,
         childQuestions,
       },
       studentAnswer: answer.answer,
@@ -2381,7 +2420,8 @@ export const getExamResults = async (sessionId, studentId) => {
   return {
     session: {
       id: session._id,
-      test: session.test,
+      sourceType: sessionSourceType,
+      test: enhancedTest,
       challengeId: session.challenge || null,
       startTime: session.startTime,
       endTime: session.endTime,

@@ -489,6 +489,7 @@ export const getCompetitiveTests = async (options = {}) => {
   let tests = rawTests.map((t) => ({
     ...t,
     categoryPath,
+    sourceType: (t.paperSource === "ai" || Boolean(t.aiQuestionBank)) ? "ai" : "manual",
     isSeededPaper: Boolean(t.jeeMainPaper) || String(t.paperSource || "").endsWith("_db"),
     paperId: t.jeeMainPaper || t.paperId || null,
     testId: {

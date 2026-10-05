@@ -77,6 +77,7 @@ export const getSkillTests = async (options = {}) => {
   let processedTests = rawTests.map(test => {
     const obj = test.toObject ? test.toObject() : { ...test };
     obj.categoryPath = categoryPath;
+    obj.sourceType = (obj.paperSource === "ai" || Boolean(obj.aiQuestionBank)) ? "ai" : "manual";
     return obj;
   });
 
