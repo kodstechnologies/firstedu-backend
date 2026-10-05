@@ -41,7 +41,7 @@ const findAll = async (filter = {}, options = {}) => {
       subject,
     } = options;
 
-    const query = { ...filter,status:status  };
+    const query = { ...filter};
 
     if (search) {
       query.$or = [
@@ -56,7 +56,9 @@ const findAll = async (filter = {}, options = {}) => {
     if (type) {
       query.creatorModel = type;
     }
-    
+    if(status){
+      query.status=status
+    }
     if(subject){
       query.subject= subject || "general"
     }
