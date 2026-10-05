@@ -41,7 +41,7 @@ const findAll = async (filter = {}, options = {}) => {
       subject,
     } = options;
 
-    const query = { ...filter,status:status || "approved" };
+    const query = { ...filter,status:status  };
 
     if (search) {
       query.$or = [
