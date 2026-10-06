@@ -31,9 +31,9 @@ const normalizeIndianPhone = phone => {
  * @returns {Promise<object>}
  */
 export const sendOtpSms = async (phone, otp) => {
-  const apiKey = process.env.EDUMARC_API_KEY;
-  const templateId = process.env.EDUMARC_TEMPLATE_ID;
-  const senderId = process.env.EDUMARC_SENDER_ID;
+  const apiKey = (process.env.EDUMARC_API_KEY || '').trim();
+  const templateId = (process.env.EDUMARC_TEMPLATE_ID || '').trim();
+  const senderId = (process.env.EDUMARC_SENDER_ID || '').trim();
   const templateMsg =
     DEFAULT_TEMPLATE_MESSAGE;
 
@@ -74,6 +74,16 @@ export const sendOtpSms = async (phone, otp) => {
   } catch (error) {
     const errorMessage =
       error.response?.data?.message || error.response?.data || error.message;
+
+    if (String(errorMessage).toLowerCase() === 'unauthenticated') {
+      console.error(
+        `[SMS Error] EduMarc rejected the API key for ${recipient}. Update EDUMARC_API_KEY on the running server and restart.`
+      );
+      throw new Error(
+        'SMS gateway authentication failed. Please contact support.'
+      );
+    }
+
     console.error(`[SMS Error] Failed to send OTP to ${recipient}:`, errorMessage);
     throw new Error(`EduMarc SMS error: ${JSON.stringify(errorMessage)}`);
   }
