@@ -11,6 +11,16 @@ import axios from 'axios';
 
 const EDUMARC_BASE_URL = 'https://smsapi.edumarcsms.com/api/v1/sendsms';
 
+const DEFAULT_TEMPLATE_MESSAGE =
+  'Your login OTP for First Step Edutech TestLadr App is {#var#}. Please do not share it with anyone.';
+
+const normalizeIndianPhone = phone => {
+  const digits = String(phone || '').replace(/\D/g, '');
+  if (digits.length === 10) return `91${digits}`;
+  if (digits.length === 12 && digits.startsWith('91')) return digits;
+  return digits;
+};
+
 /**
  * Sends a 4-digit OTP to the given mobile number via EduMarc.
  *
@@ -23,6 +33,8 @@ export const sendOtpSms = async (phone, otp) => {
   const apiKey = process.env.EDUMARC_API_KEY;
   const templateId = process.env.EDUMARC_TEMPLATE_ID;
   const senderId = process.env.EDUMARC_SENDER_ID;
+  const templateMsg =
+    process.env.EDUMARC_TEMPLATE_MESSAGE || DEFAULT_TEMPLATE_MESSAGE;
 
   if (!apiKey || !templateId || !senderId) {
     throw new Error(
@@ -30,19 +42,18 @@ export const sendOtpSms = async (phone, otp) => {
     );
   }
 
-  // Exact template message hardcoded as requested
-  const templateMsg = 'Your login OTP for First Step Edutech TestLadr App is {#var#}. Please do not share it with anyone.';
+  const recipient = normalizeIndianPhone(phone);
 
-  // Replace {#var#} placeholder with actual OTP
-  const finalMessage = templateMsg.replace('{#var#}', otp);
   try {
     const response = await axios.post(
       EDUMARC_BASE_URL,
       {
-        message: finalMessage,
-        senderId: senderId,
-        number: [phone], // Array of numbers
-        templateId: templateId,
+        // Keep {#var#} in the DLT template text; pass OTP separately.
+        message: templateMsg,
+        senderId,
+        number: [recipient],
+        templateId,
+        variables: [String(otp)],
       },
       {
         headers: {
@@ -52,15 +63,17 @@ export const sendOtpSms = async (phone, otp) => {
       }
     );
 
-    console.log(`[SMS] OTP sent to ${phone} via EduMarc. Response:`, response.data);
+    const transactionId = response.data?.data?.transactionId;
+    console.log(
+      `[SMS] OTP queued for ${recipient} via EduMarc.`,
+      transactionId ? `transactionId=${transactionId}` : response.data
+    );
 
-    // Assuming success depends on HTTP status 200, though EduMarc might return a specific field
     return response.data;
   } catch (error) {
-    // Handle error correctly
     const errorMessage =
       error.response?.data?.message || error.response?.data || error.message;
-    console.error(`[SMS Error] Failed to send OTP to ${phone}:`, errorMessage);
+    console.error(`[SMS Error] Failed to send OTP to ${recipient}:`, errorMessage);
     throw new Error(`EduMarc SMS error: ${JSON.stringify(errorMessage)}`);
   }
 };
