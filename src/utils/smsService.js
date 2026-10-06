@@ -1,10 +1,12 @@
 /**
- * SMS Service — EduMarc SMS Integration
- *
- * Always sends a real SMS via EduMarc SMS regardless of environment.
- * Credentials are read from environment variables.
+ * SMS Service — EduMarc / ComBirds SMS Integration
  *
  * API endpoint: https://smsapi.edumarcsms.com/api/v1/sendsms
+ *
+ * DLT note: for India, the final `message` must exactly match the approved
+ * template with {#var#} replaced by the OTP. Delivery failures such as
+ * SMSC 5601 are usually DLT PE-TM chain / sender-header issues on the
+ * provider side, not application code.
  */
 
 import axios from 'axios';
@@ -26,15 +28,14 @@ const normalizeIndianPhone = phone => {
  *
  * @param {string} phone  - 10-digit Indian mobile number (no country code)
  * @param {string} otp    - The 4-digit OTP string to send
- * @returns {Promise<void>}
- * @throws  {Error}        if credentials are missing or EduMarc returns an error
+ * @returns {Promise<object>}
  */
 export const sendOtpSms = async (phone, otp) => {
   const apiKey = process.env.EDUMARC_API_KEY;
   const templateId = process.env.EDUMARC_TEMPLATE_ID;
   const senderId = process.env.EDUMARC_SENDER_ID;
   const templateMsg =
-    process.env.EDUMARC_TEMPLATE_MESSAGE || DEFAULT_TEMPLATE_MESSAGE;
+    DEFAULT_TEMPLATE_MESSAGE;
 
   if (!apiKey || !templateId || !senderId) {
     throw new Error(
@@ -43,17 +44,16 @@ export const sendOtpSms = async (phone, otp) => {
   }
 
   const recipient = normalizeIndianPhone(phone);
+  const finalMessage = templateMsg.replace('{#var#}', String(otp));
 
   try {
     const response = await axios.post(
       EDUMARC_BASE_URL,
       {
-        // Keep {#var#} in the DLT template text; pass OTP separately.
-        message: templateMsg,
+        message: finalMessage,
         senderId,
         number: [recipient],
         templateId,
-        variables: [String(otp)],
       },
       {
         headers: {
