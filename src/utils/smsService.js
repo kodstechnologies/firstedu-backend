@@ -23,9 +23,7 @@ export const sendOtpSms = async (phone, otp) => {
   const apiKey = process.env.EDUMARC_API_KEY;
   const templateId = process.env.EDUMARC_TEMPLATE_ID;
   const senderId = process.env.EDUMARC_SENDER_ID;
-console.log('apiKey', apiKey);
-console.log('templateId', templateId);
-console.log('senderId', senderId);
+
   if (!apiKey || !templateId || !senderId) {
     throw new Error(
       'EduMarc credentials missing. Check EDUMARC_API_KEY, EDUMARC_TEMPLATE_ID, EDUMARC_SENDER_ID in .env'
@@ -34,7 +32,7 @@ console.log('senderId', senderId);
 
   // Exact template message hardcoded as requested
   const templateMsg = 'Your login OTP for First Step Edutech TestLadr App is {#var#}. Please do not share it with anyone.';
-  console.log('templateMsg', templateMsg);
+
   // Replace {#var#} placeholder with actual OTP
   const finalMessage = templateMsg.replace('{#var#}', otp);
   try {
