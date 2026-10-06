@@ -54,6 +54,7 @@ export const sendOtpSms = async (phone, otp) => {
         senderId,
         number: [recipient],
         templateId,
+        smsType: 'OTP',
       },
       {
         headers: {
