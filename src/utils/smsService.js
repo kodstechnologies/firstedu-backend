@@ -32,10 +32,9 @@ export const sendOtpSms = async (phone, otp) => {
 
   // Exact template message hardcoded as requested
   const templateMsg = 'Your login OTP for First Step Edutech TestLadr App is {#var#}. Please do not share it with anyone.';
-
+  console.log('templateMsg', templateMsg);
   // Replace {#var#} placeholder with actual OTP
   const finalMessage = templateMsg.replace('{#var#}', otp);
-
   try {
     const response = await axios.post(
       EDUMARC_BASE_URL,
