@@ -126,6 +126,26 @@ export const getGamificationCategoryByType = asyncHandler(async (req, res) => {
   return res.status(200).json(ApiResponse.success(cleaned, "Gamification category fetched successfully"));
 });
 
+/**
+ * Normalizes a category slug or name for URL/path resolution.
+ * Decodes URL encodings (e.g. %28, %29), strips accents, and replaces
+ * any sequence of non-alphanumeric characters with a single hyphen.
+ */
+export const normalizeCategorySlug = (str) => {
+  if (!str || typeof str !== "string") return "";
+  let clean = str;
+  try {
+    clean = decodeURIComponent(clean);
+  } catch (_) {}
+  return clean
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+};
+
 export const resolveCategoryPathForStudent = asyncHandler(async (req, res) => {
   const { path, rootType } = req.query; // e.g. path = 'engineering/jee', rootType = 'Competitive'
 
@@ -148,6 +168,7 @@ export const resolveCategoryPathForStudent = asyncHandler(async (req, res) => {
       rest.childCount = childNodes.length;
       rest.isLeaf = rest.childCount === 0;
       rest.isSecondSubcategory = isSecondSubcategory;
+      rest.slug = normalizeCategorySlug(rest.name);
       return stripDeprecatedFields(rest);
     }) : [];
 
@@ -172,10 +193,23 @@ export const resolveCategoryPathForStudent = asyncHandler(async (req, res) => {
   const breadcrumb = [];
 
   for (const slug of slugs) {
-    const slugName = slug.toLowerCase();
-    const found = currentLayer.find(n =>
-      (n.name || "").toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') === slugName
-    );
+    const normalizedInputSlug = normalizeCategorySlug(slug);
+    const rawLowerSlug = slug.toLowerCase().trim();
+
+    const found = currentLayer.find((n) => {
+      if (!n) return false;
+      const nId = n._id ? n._id.toString() : "";
+      if (nId && (nId === slug || nId === rawLowerSlug)) return true;
+
+      const normalizedNodeSlug = normalizeCategorySlug(n.name || "");
+      if (normalizedInputSlug && normalizedNodeSlug === normalizedInputSlug) return true;
+
+      // Fallback: match raw lowercase or if client passed space-to-dash name
+      const nodeLowerName = (n.name || "").toLowerCase().trim();
+      if (rawLowerSlug && (nodeLowerName === rawLowerSlug || nodeLowerName.replace(/\s+/g, '-') === rawLowerSlug)) return true;
+
+      return false;
+    });
 
     if (!found) {
       return res.status(404).json(ApiResponse.error({}, "Path not found"));
@@ -183,7 +217,8 @@ export const resolveCategoryPathForStudent = asyncHandler(async (req, res) => {
 
     currentNode = found;
     currentLayer = found.children || [];
-    breadcrumb.push({ _id: found._id, name: found.name, slug });
+    const canonicalSlug = normalizeCategorySlug(found.name) || slug;
+    breadcrumb.push({ _id: found._id, name: found.name, slug: canonicalSlug });
   }
 
   // Optimize payload: Strip deep children off to ensure network responsiveness
@@ -196,6 +231,7 @@ export const resolveCategoryPathForStudent = asyncHandler(async (req, res) => {
     rest.childCount = childNodes.length;
     rest.isLeaf = rest.childCount === 0;
     rest.isSecondSubcategory = isSecondSubcategory;
+    rest.slug = normalizeCategorySlug(rest.name);
     return stripDeprecatedFields(rest);
   });
 
@@ -216,6 +252,7 @@ export const resolveCategoryPathForStudent = asyncHandler(async (req, res) => {
 
   if (enrichedNode) {
     delete enrichedNode.children;
+    enrichedNode.slug = normalizeCategorySlug(enrichedNode.name);
     stripDeprecatedFields(enrichedNode);
   }
 
