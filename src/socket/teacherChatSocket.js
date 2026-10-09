@@ -170,7 +170,11 @@ const startChatBilling = (namespace, sessionId) => {
       timestamp: new Date(),
     };
     namespace.to(`session:${key}`).emit("chat_second_billed", billedPayload);
-    namespace.to(`session:${key}`).emit("chat_minute_billed", billedPayload);
+    
+    // Only emit chat_minute_billed when a full minute (60 seconds) has elapsed
+    if (result.durationSeconds > 0 && result.durationSeconds % 60 === 0) {
+      namespace.to(`session:${key}`).emit("chat_minute_billed", billedPayload);
+    }
   };
 
   tick().catch((err) => console.error("Chat billing tick error:", err));
