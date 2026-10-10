@@ -426,6 +426,13 @@ export const logTransaction = async ({
       finalSubCatName = subCategoryName || resolved.subCategoryName;
     }
 
+    if (paymentId && paymentId !== "unknown") {
+      const existingTx = await RevenueTransaction.findOne({ paymentId });
+      if (existingTx) {
+        return existingTx;
+      }
+    }
+
     const transaction = await RevenueTransaction.create({
       student: studentId,
       amount: finalAmount,

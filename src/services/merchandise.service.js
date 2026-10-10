@@ -6,6 +6,7 @@ import offerRepository from "../repository/offer.repository.js";
 import couponService from "./coupon.service.js";
 import { createRazorpayOrder, verifyPaymentSignature } from "../utils/razorpayUtils.js";
 import razorpayOrderIntentRepository from "../repository/razorpayOrderIntent.repository.js";
+import { logTransaction } from "./adminRevenue.service.js";
 
 /**
  * Get all merchandise items (admin - includes inactive)
@@ -325,6 +326,15 @@ export const confirmMerchandisePayment = async (itemId, studentId, { razorpayOrd
   if (item.stockQuantity !== null) {
     await merchandiseRepository.updateMerchandise(itemId, { stockQuantity: item.stockQuantity - 1 });
   }
+
+  await logTransaction({
+    studentId,
+    amount: moneyPaid,
+    sourceType: "other",
+    itemId,
+    itemName: item.name || "Merchandise",
+    paymentId: razorpayPaymentId,
+  });
 
   return await merchandiseRepository.findMerchandiseClaimById(claim._id);
 };

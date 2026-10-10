@@ -3,6 +3,7 @@ import walletRepository from "../repository/wallet.repository.js";
 import { createRazorpayOrder } from "../utils/razorpayUtils.js";
 import razorpayOrderIntentRepository from "../repository/razorpayOrderIntent.repository.js";
 import { verifyPaymentSignature } from "../utils/razorpayUtils.js";
+import { logTransaction } from "./adminRevenue.service.js";
 
 /** Starting rupee balance for a newly created student wallet. */
 export const INITIAL_STUDENT_WALLET_BALANCE = 20000;
@@ -113,6 +114,14 @@ export const completeWalletRecharge = async (userId, razorpayOrderId, razorpayPa
   if (!intent.reconciled) {
     await addMonetaryBalance(userId, amountRupees, razorpayPaymentId, "User");
     await razorpayOrderIntentRepository.markReconciled(razorpayOrderId, razorpayPaymentId);
+    await logTransaction({
+      studentId: userId,
+      amount: amountRupees,
+      sourceType: "wallet",
+      itemId: userId,
+      itemName: "Wallet Recharge",
+      paymentId: razorpayPaymentId,
+    });
   }
 
   const wallet = await getOrCreateWallet(userId, "User");

@@ -15,6 +15,7 @@ import {
   isStudentQualifiedAfterStage,
   studentMeetsStageScoreThreshold,
 } from "./tournament.service.js";
+import { logTransaction } from "./adminRevenue.service.js";
 
 const EVENT_MODEL_MAP = {
   tournament: "Tournament",
@@ -158,6 +159,14 @@ export const registerForEvent = async (
       });
       await razorpayOrderIntentRepository.markReconciled(razorpayOrderId, razorpayPaymentId);
       if (intent.couponId) await couponService.incrementCouponUsedCount(intent.couponId);
+      await logTransaction({
+        studentId,
+        amount: intent.amountPaise / 100,
+        sourceType: eventType,
+        itemId: eventId,
+        itemName: event.title || `${eventType} Registration`,
+        paymentId: razorpayPaymentId,
+      });
       (async () => {
         try {
           const student = await studentRepository.findById(studentId);
