@@ -1519,7 +1519,7 @@ const unwrapMathSpans = text =>
   );
 
 const LATEX_N_COMMANDS =
-  'u|abla|eq|e|eg|ot|otin|i|mid|leq|geq|subseteq|parallel|exists|ewline|olimits';
+  'u|abla|eq|eg|ot|otin|i|mid|leq|geq|subseteq|parallel|exists|ewline|olimits';
 
 const DOUBLE_ESCAPED_COMMAND = new RegExp(
   String.raw`\\\\(?=(?:${[
