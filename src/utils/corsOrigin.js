@@ -35,15 +35,29 @@ function originAliases(origin) {
 }
 
 export function getAllowedCorsOrigins() {
-  const fromEnv = process.env.CORS_ORIGIN?.split(",")
-    .map((o) => o.trim())
-    .filter(Boolean);
-  return fromEnv?.length ? fromEnv : DEFAULT_ORIGINS;
+  return DEFAULT_ORIGINS;
 }
 
 /** Allow explicit list + www/non-www alias + private-LAN in non-production. */
 export function isCorsOriginAllowed(origin) {
   if (!origin) return true;
+
+  try {
+    const { hostname, protocol } = new URL(origin);
+    if (protocol === "http:" || protocol === "https:") {
+      // Allow any official testladr.com or iscorre.com domain and subdomain
+      if (
+        hostname === "testladr.com" ||
+        hostname.endsWith(".testladr.com") ||
+        hostname === "iscorre.com" ||
+        hostname.endsWith(".iscorre.com")
+      ) {
+        return true;
+      }
+    }
+  } catch {
+    /* ignore invalid URL */
+  }
 
   const allowed = getAllowedCorsOrigins();
   if (allowed.includes(origin)) return true;
