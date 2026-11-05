@@ -13,14 +13,16 @@ export const verifyJWT = asyncHandler(async (req, _, next) => {
     return next();
   }
 
-  const rawToken =
-    req.cookies?.accessToken ||
+  // Prefer the Bearer token from this app. The shared API cookie is the last
+  // login on this browser (often a student) and must not replace admin/teacher tokens.
+  const headerToken = normalizeSocketAuthToken(
     req.header("Authorization") ||
-    req.header("authorization") ||
-    req.headers?.authorization ||
-    "";
-
-  const token = normalizeSocketAuthToken(rawToken);
+      req.header("authorization") ||
+      req.headers?.authorization ||
+      "",
+  );
+  const cookieToken = normalizeSocketAuthToken(req.cookies?.accessToken || "");
+  const token = headerToken || cookieToken;
 
   if (!token) {
     // If no token is present, throw an unauthorized error.
@@ -53,16 +55,28 @@ export const verifyJWT = asyncHandler(async (req, _, next) => {
       throw new ApiError(403, "You are banned by the admin");
     }
 
-    if (decodedToken.sessionId) {
+    const tokenUserType = String(decodedToken.userType || "").toLowerCase();
+    const isStaffToken =
+      tokenUserType === "teacher" ||
+      tokenUserType === "admin" ||
+      decodedToken.role === "teacher" ||
+      decodedToken.role === "admin" ||
+      decodedToken.role === "subadmin" ||
+      decodedToken.role === "superadmin";
+
+    // Single-device session checks apply to student tokens only.
+    if (decodedToken.sessionId && !isStaffToken) {
       const session = await studentSessionRepository.findById(
         decodedToken.sessionId,
       );
       if (!session || session.student.toString() !== user._id.toString()) {
         throw new ApiError(401, "Session invalidated. Please login again.");
       }
+      req.user = user;
+      req.user.sessionId = decodedToken.sessionId;
+      return next();
     }
     req.user = user;
-    if (decodedToken.sessionId) req.user.sessionId = decodedToken.sessionId;
     next();
   } catch (error) {
     // Handle specific JWT errors

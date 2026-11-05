@@ -93,7 +93,12 @@ teacherSchema.methods.comparePassword = async function (password) {
 // Method to generate Access Token
 teacherSchema.methods.generateAccessToken = function () {
   return jwt.sign(
-    { _id: this._id, email: this.email, userType: "teacher" },
+    {
+      _id: this._id,
+      email: this.email,
+      userType: "teacher",
+      role: "teacher",
+    },
     process.env.ACCESS_TOKEN_SECRET,
     { expiresIn: "2d" }
   );
@@ -102,7 +107,12 @@ teacherSchema.methods.generateAccessToken = function () {
 // Method to generate Refresh Token
 teacherSchema.methods.generateRefreshToken = function () {
   return jwt.sign(
-    { _id: this._id, email: this.email, userType: "teacher" },
+    {
+      _id: this._id,
+      email: this.email,
+      userType: "teacher",
+      role: "teacher",
+    },
     process.env.REFRESH_TOKEN_SECRET,
     { expiresIn: "7d" }
   );
